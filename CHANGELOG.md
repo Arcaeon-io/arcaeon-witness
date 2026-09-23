@@ -1,5 +1,13 @@
 # Changelog — arcaeon-witness
 
+## 2026-09-23 — the hosted completeness verdict: `POST /api/reconcile` and the `/reconcile` page (branch `reconcile-endpoint-2026-09-23` from `9bbf79a`, local only, NOT deployed)
+
+- **`lib/_reconcile_tapes.js`**: a Node port of `arcaeon_ledger.reconcile` (arcaeon-ledger 0.8.0) and the strict `verify_file` it rests on, with Python-faithful reading (errors="replace" decoding with the BOM kept, universal newlines, `str.strip()`, json.loads's int/float split, BigInt ints, the 4300-digit limit, NaN/Infinity, lone surrogates, duplicate keys raised on object close) and the chain's exact `json.dumps` + surrogatepass. Ported rather than shelled out: no Python on the Node runtime and no function slot for a second one. Where reconcile.py raises (three input classes, found here), the port says COULD NOT LOOK and why; nesting past 512 is COULD NOT LOOK; pins are refused, not ported.
+- **`lib/_reconcile_http.js`** (+ dispatch in `api/verify.js`, two rewrites in `vercel.json`; `api/` stays at 12): JSON (text or base64) or multipart, 1 MB per tape and 3 MB per request, typed 4xx refusals, no persistence, the verify rate limiter. Returns reconcile.py's dict key for key, the signed receipt, and the service's limits.
+- **`lib/_reconcile_receipt.js`**: "these two tapes, as submitted, compared like this at this time", signed Ed25519 over json-c14n with the checkpoint key shape under its own variable `WITNESS_RECONCILE_SIGNER_KEY` (unsigned and saying so when unset; never the log key). Binds both tapes' sha256, the verdict and its digest, the method and the time; the disclaimers are inside the signed bytes.
+- **`lib/_reconcile_page.js`**: the `/reconcile` page, completeness.html's style, textContent-only rendering, the legend and the honest limits.
+- **Tests**: conformance against 493 cases written by the real reconcile.py (156 harvested from the cross-repo suites, 21 ledger, 96 edge, 220 fuzz), the same through the endpoint, a live Python differential (skips without Python), receipt and endpoint suites with break arms. Suite 718 -> 776, 0 fail. See `RELEASE_NOTES_reconcile_2026-09-23.md`.
+
 ## 2026-09-23 — D1 literal: the result goes in the check record's file name (branch `release-candidate-2026-09-23b`, local only, NOT deployed, nothing published)
 
 The helm's ruling on D20: per-key newest 3 stands, and a BROKEN must stay permanent however many later records its own key publishes.

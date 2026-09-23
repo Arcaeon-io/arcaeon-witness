@@ -1,0 +1,129 @@
+// test/reconcile_conformance.test.js — lib/_reconcile_tapes.js against the
+// REAL arcaeon_ledger.reconcile, case by case, byte for byte.
+//
+// Every expected answer in test/fixtures/reconcile/cases.json was written by
+// reconcile.py itself (test/fixtures/reconcile/make_fixtures.py): the cross-
+// repo tapes the adapter and call_proxy suites leave behind (FIFO duplicate
+// ids, invalid ids, a 202 answered later, gzip/deflate answers), the ledger's
+// own reconcile cases, edge inputs where a naive port lies, and seeded fuzz.
+// The port's answer, serialized the way the fixture's Python answer was
+// (json.dumps(d, sort_keys=True, ensure_ascii=True, separators=(",", ":"))),
+// must be the same string.
+//
+// Break arm: a reconcile that always says MATCHED is run through the same
+// checker and must be caught; so must one that files every ALTERED as MISSING.
+// A conformance suite never watched failing has not been shown to test anything.
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fixtures = require("./fixtures/reconcile/cases.json");
+const R = require("../lib/_reconcile_tapes.js");
+
+function bytesOf(b64) {
+  return Buffer.from(b64, "base64");
+}
+
+// Returns the list of disagreements between a reconcile function and the fixture.
+function disagreements(reconcileFn, cases = fixtures.cases) {
+  const bad = [];
+  for (const c of cases) {
+    let got;
+    try {
+      got = reconcileFn(bytesOf(c.a_b64), bytesOf(c.b_b64));
+    } catch (e) {
+      bad.push({ name: c.name, why: `port threw ${e && e.message}` });
+      continue;
+    }
+    if (c.port_expect || c.python_raises) {
+      // The reference raised (or the port refuses on purpose): the port must
+      // say COULD NOT LOOK, never a finding and never MATCHED.
+      if (got.verdict !== R.COULD_NOT_LOOK || got.exit_code !== 2) {
+        bad.push({ name: c.name, why: `expected COULD_NOT_LOOK, got ${got.verdict}` });
+      }
+      continue;
+    }
+    const mine = R.conformanceJson(got);
+    if (mine !== c.python) bad.push({ name: c.name, why: "differs", mine, python: c.python });
+  }
+  return bad;
+}
+
+test("CONFORMANCE: the fixture was made from the reconcile.py this port names", () => {
+  assert.equal(fixtures.reference.package, R.REFERENCE.package);
+  assert.equal(fixtures.reference.version, R.REFERENCE.version);
+  assert.equal(fixtures.reference.reconcile_sha256, R.REFERENCE.reconcile_sha256);
+  assert.equal(fixtures.reference.ledger_init_sha256, R.REFERENCE.ledger_init_sha256);
+});
+
+test("CONFORMANCE: the fixture covers every source it claims", () => {
+  const by = {};
+  for (const c of fixtures.cases) by[c.source] = (by[c.source] || 0) + 1;
+  for (const s of ["crossrepo", "ledger", "edge", "fuzz"]) assert.ok(by[s] > 0, `no ${s} cases`);
+  const verdicts = new Set(fixtures.cases.filter((c) => c.python).map((c) => JSON.parse(c.python).verdict));
+  for (const v of ["MATCHED", "MISSING", "ALTERED", "COULD_NOT_LOOK"]) assert.ok(verdicts.has(v), `no ${v} case`);
+  const names = fixtures.cases.filter((c) => c.source === "crossrepo").map((c) => c.name).join("\n");
+  // The runs the tapes came from (pytest cuts a basetemp dir name at 30
+  // characters, hence the stems): the two-recorder cross-repo chains, FIFO
+  // duplicate ids, invalid ids, a 202 answered later, compressed answers.
+  for (const run of ["test_cross_repo_adapter_tape_a", "test_cross_repo_no_bridge_matc", "test_cross_repo_duplicate_ids_",
+    "test_cross_repo_invalid_ids", "test_cross_repo_a_202_answered", "test_a_compressed_answer_is_re",
+    "test_a_202_answered_later_on_t", "test_duplicate_ids_in_a_batch_", "test_invalid_ids_are_taped_inv"]) {
+    assert.ok(names.includes(run), `no tape harvested from a ${run} run`);
+  }
+  assert.ok(/test_cross_repo[^\n]*: agent vs tool/.test(names), "cross-repo agent/tool pairs are present");
+});
+
+for (const source of ["crossrepo", "ledger", "edge", "fuzz"]) {
+  test(`CONFORMANCE: every ${source} case gives reconcile.py's answer, byte for byte`, () => {
+    const cases = fixtures.cases.filter((c) => c.source === source);
+    const bad = disagreements(R.reconcileTapes, cases);
+    assert.deepEqual(bad.slice(0, 3), [], `${bad.length} of ${cases.length} ${source} cases disagree`);
+  });
+}
+
+test("CONFORMANCE: where reconcile.py raises, the port says COULD NOT LOOK and names why", () => {
+  const raising = fixtures.cases.filter((c) => c.python_raises);
+  assert.ok(raising.length >= 2, "the two reference crash classes are in the fixture");
+  for (const c of raising) {
+    const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
+    assert.equal(got.verdict, "COULD_NOT_LOOK", c.name);
+    assert.match(got.reason, /reference implementation raises/, c.name);
+  }
+});
+
+// -- break arms ---------------------------------------------------------------
+
+function alwaysMatched(a, b) {
+  const r = R.reconcileTapes(a, b);
+  return { ...r, verdict: "MATCHED", summary: `MATCHED ${r.matched} of ${r.matched}`, at: null, side: null,
+    findings: [], could_not_look: [], exit_code: 0 };
+}
+
+function alteredFiledAsMissing(a, b) {
+  const r = R.reconcileTapes(a, b);
+  if (r.verdict !== "ALTERED") return r;
+  return { ...r, verdict: "MISSING", summary: r.summary.replace(/^ALTERED/, "MISSING") };
+}
+
+test("BREAK ARM: a lying reconcile that always says MATCHED is caught", () => {
+  const bad = disagreements(alwaysMatched);
+  const nonGreen = fixtures.cases.filter((c) => c.python_raises || c.port_expect ||
+    JSON.parse(c.python).verdict !== "MATCHED").length;
+  assert.ok(nonGreen > 100, "enough non-green cases to catch it");
+  assert.equal(bad.length, nonGreen, "every non-green case catches the liar");
+});
+
+test("BREAK ARM: a reconcile that files every ALTERED as MISSING is caught", () => {
+  const bad = disagreements(alteredFiledAsMissing);
+  assert.ok(bad.length > 20, `only ${bad.length} cases caught it`);
+});
+
+test("BREAK ARM: a port that parses with JSON.parse (floats lose their type) is caught", () => {
+  // The obvious shortcut: read `idx: 1.0` as the call index 1. Python does not.
+  const c = fixtures.cases.find((x) => x.name === "idx_float_rechained");
+  assert.ok(c, "fixture has the float-idx case");
+  assert.equal(JSON.parse(c.python).verdict, "COULD_NOT_LOOK");
+  const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
+  assert.equal(R.conformanceJson(got), c.python);
+});

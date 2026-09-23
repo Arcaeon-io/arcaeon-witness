@@ -23,6 +23,14 @@
     {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
+    },
+    {
+      "source": "/api/reconcile",
+      "destination": "/api/verify?op=reconcile"
+    },
+    {
+      "source": "/reconcile",
+      "destination": "/api/verify?op=reconcile-page"
     }
   ],
   "functions": {

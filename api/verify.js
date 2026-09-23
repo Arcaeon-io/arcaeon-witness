@@ -49,6 +49,7 @@ const verdict = require("../lib/_verdict.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
+const reconcileHttp = require("../lib/_reconcile_http.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 const RAW_BASE = `https://raw.githubusercontent.com/${store.REPO}/${store.BRANCH}`;
@@ -472,6 +473,21 @@ module.exports = async (req, res) => {
   // limiter and its own daily cap. See lib/_stamp.js.
   if (String((req.query || {}).op || "") === "stamp") {
     return stamp.handleStamp(req, res);
+  }
+
+  // --- co-hosted mode: POST /api/reconcile and GET /reconcile (vercel.json
+  // rewrites -> ?op=reconcile / ?op=reconcile-page) ---
+  // The hosted two-tapes completeness verdict (lib/_reconcile_http.js). Here
+  // for the same reason as stamp: the 12-function cap. It reads no store,
+  // takes no key, writes nothing, and keeps neither tape. Dispatched before
+  // the GET-only CORS helper: the page posts to it from the same origin, and
+  // no cross-origin POST is opened.
+  const op = String((req.query || {}).op || "");
+  if (op === "reconcile") {
+    return reconcileHttp.handleReconcile(req, res);
+  }
+  if (op === "reconcile-page") {
+    return reconcileHttp.handlePage(req, res);
   }
 
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every
