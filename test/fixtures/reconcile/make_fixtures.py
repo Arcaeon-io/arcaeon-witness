@@ -24,19 +24,26 @@ Sources, in order:
      tapes and no pin (imported, not copied).
   3. edge: inputs where a naive port lies (floats, NaN, huge ints, lone
      surrogates, duplicate keys, BOM, CRLF, invalid UTF-8, Python-only
-     whitespace, a float or boolean idx, the 4300-digit int limit), and the
-     inputs on which reconcile.py itself raises.
+     whitespace, a float or boolean idx, the 4300-digit int limit), the three
+     inputs on which reconcile.py 0.8.0 raised (duplicate key then junk,
+     whitespace json.loads does not strip, nesting past the C guard), which
+     the hardened reconcile.py answers COULD NOT LOOK, and the 512-level
+     nesting bound it shares with the port.
   4. fuzz: seeded mutations of honest pairs (drop, duplicate, swap, truncate,
      edit with and without re-chaining, junk lines, side swaps ...).
 
-A case where reconcile.py raises is recorded as `python_raises`; the port must
-answer COULD_NOT_LOOK there, never a finding and never MATCHED. A case the port
-refuses on purpose (nesting deeper than lib/_reconcile_tapes.js MAX_DEPTH) is
-recorded with `port_expect` and its reason.
+The reference is the HARDENED reconcile.py (arcaeon-ledger branch
+reconcile-hardening-2026-09-23, sha256 REFERENCE_SHA256 below): it never
+raises, so every case carries a `python` answer and the port must give the same
+bytes, including the COULD NOT LOOK reasons ending [nesting_too_deep],
+[duplicate_key_unparseable] and [whitespace_outside_json]. If reconcile.py
+raises anyway, this script stops: that is a bug to report, not a case.
 
     ARCAEON_LEDGER_REPO=<arcaeon-ledger checkout> ARCAEON_RECEIPT_REPO=<arcaeon-receipt checkout> \\
         py test/fixtures/reconcile/make_fixtures.py
 
+Without ARCAEON_LEDGER_REPO it looks for a sibling arcaeon-ledger-rel080, then
+arcaeon-ledger, and takes the first whose reconcile.py has REFERENCE_SHA256.
 Rerun it when reconcile.py changes; the conformance test refuses a fixture made
 from a different reconcile.py than the port names.
 """
@@ -57,21 +64,36 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "cases.json"
 ROOT = HERE.parents[2]
 
-LEDGER = Path(os.environ.get("ARCAEON_LEDGER_REPO", ROOT.parent / "arcaeon-ledger"))
+# The hardened reconcile.py (arcaeon-ledger a31402f, branch
+# reconcile-hardening-2026-09-23), CRLF folded to LF. lib/_reconcile_tapes.js
+# REFERENCE.reconcile_sha256 names the same digest.
+REFERENCE_SHA256 = "42e8231b5289ca6ea835634e6049d490b786a400b1cd341e9786e4d42632a918"
+
+
+def lf_sha256(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _find_ledger() -> Path:
+    env = os.environ.get("ARCAEON_LEDGER_REPO")
+    cands = [Path(env)] if env else [ROOT.parent / "arcaeon-ledger-rel080", ROOT.parent / "arcaeon-ledger"]
+    for c in cands:
+        p = c / "arcaeon_ledger" / "reconcile.py"
+        if p.exists() and lf_sha256(p) == REFERENCE_SHA256:
+            return c
+    sys.exit(f"no arcaeon-ledger checkout with the hardened reconcile.py (sha256 {REFERENCE_SHA256}) "
+             f"among {[str(c) for c in cands]}; set ARCAEON_LEDGER_REPO")
+
+
+LEDGER = _find_ledger()
 RECEIPT = Path(os.environ.get("ARCAEON_RECEIPT_REPO", ROOT.parent / "arcaeon-receipt"))
-if not (LEDGER / "arcaeon_ledger" / "reconcile.py").exists():
-    sys.exit(f"arcaeon-ledger with reconcile not found at {LEDGER}; set ARCAEON_LEDGER_REPO")
 sys.path.insert(0, str(LEDGER))
 
 import arcaeon_ledger as L  # noqa: E402
 import arcaeon_ledger.reconcile as R  # noqa: E402
 from arcaeon_ledger import digest_json  # noqa: E402
 
-MAX_DEPTH = 512  # lib/_reconcile_tapes.js MAX_DEPTH
-
-
-def lf_sha256(p: Path) -> str:
-    return hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+MAX_DEPTH = R.MAX_DEPTH  # 512, the same as lib/_reconcile_tapes.js MAX_DEPTH
 
 
 def expect_of(a: bytes, b: bytes) -> dict:
@@ -80,41 +102,12 @@ def expect_of(a: bytes, b: bytes) -> dict:
         pa, pb = Path(d) / "a.tape.jsonl", Path(d) / "b.tape.jsonl"
         pa.write_bytes(a)
         pb.write_bytes(b)
-        try:
-            r = R.reconcile(pa, pb)
-        except Exception as e:  # the reference raised instead of answering
-            return {"python_raises": f"{type(e).__name__}: {e}"[:300]}
+        r = R.reconcile(pa, pb)  # the hardened reconcile never raises; if it does, stop
         out = r.to_dict()
         text = json.dumps(out, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
         if d in text or "a.tape.jsonl" in text or "b.tape.jsonl" in text:
             return {"skip": "the answer names a local path"}
         return {"python": text}
-
-
-def nest_depth_over(data: bytes) -> bool:
-    """True when some line nests deeper than the port reads (it says COULD NOT LOOK)."""
-    for line in data.split(b"\n"):
-        depth = best = 0
-        in_str = esc = False
-        for ch in line:
-            c = chr(ch)
-            if in_str:
-                if esc:
-                    esc = False
-                elif c == "\\":
-                    esc = True
-                elif c == '"':
-                    in_str = False
-            elif c == '"':
-                in_str = True
-            elif c in "[{":
-                depth += 1
-                best = max(best, depth)
-            elif c in "]}":
-                depth -= 1
-        if best > MAX_DEPTH:
-            return True
-    return False
 
 
 CASES: list = []
@@ -132,11 +125,6 @@ def add(source: str, name: str, a: bytes, b: bytes, note: str = "") -> None:
     case = {"source": source, "name": name,
             "a_b64": base64.b64encode(a).decode(), "b_b64": base64.b64encode(b).decode()}
     case.update(exp)
-    if nest_depth_over(a) or nest_depth_over(b):
-        case["port_expect"] = "COULD_NOT_LOOK"
-        case["why"] = (f"a line nests deeper than {MAX_DEPTH} levels; CPython's own limit is a "
-                       "C-stack guard that moves with the platform, so the port refuses "
-                       "rather than guess")
     if note:
         case["note"] = note
     CASES.append(case)
@@ -315,7 +303,7 @@ def edge() -> None:
         ("dup_key_nested", lines[1].replace(b'{"evt"', b'{"n": {"q": 1, "q": 2}, "evt"', 1)),
         ("dup_key_nonascii", lines[1].replace(b'{"evt"', "{\"é'\\\"\": 1, \"é'\\\"\": 2, \"evt\"".encode(), 1)),
         ("dup_key_in_array", b'[{"a": 1, "a": 2}]'),
-        ("dup_key_then_junk_python_raises", b'{"a": 1, "a": 2} x'),
+        ("dup_key_then_junk", b'{"a": 1, "a": 2} x'),
     ]:
         ls = list(lines)
         ls[1] = l1
@@ -389,6 +377,38 @@ def edge() -> None:
     for depth in (100, MAX_DEPTH - 2, MAX_DEPTH + 10):
         deep = [dict(r, deep=json.loads("[" * depth + "]" * depth)) for r in A]
         add("edge", f"nested_{depth}_both", chained(deep), chained([dict(r, deep=json.loads("[" * depth + "]" * depth)) for r in T]))
+
+    # The 512-level bound, line by line, as the hardened reconcile.py counts it:
+    # the deepest nesting the parser opens before it stops (the end when the
+    # line parses, the error position when it does not, the whole line when the
+    # stop is a 4300-digit int). Brackets inside strings do not count.
+    def deep_obj(depth):
+        return ('{"k":' * depth + "1" + "}" * depth).encode()
+
+    def deep_mixed(depth):
+        return ('[{"k":' * (depth // 2) + "[" * (depth % 2) + "1" + "]" * (depth % 2) + "}]" * (depth // 2)).encode()
+    for d in (MAX_DEPTH, MAX_DEPTH + 1):
+        add("edge", f"line_arrays_{d}", a + b"[" * d + b"]" * d + b"\n", t)
+        add("edge", f"line_objects_{d}", a + deep_obj(d) + b"\n", t)
+        add("edge", f"line_mixed_{d}", a + deep_mixed(d) + b"\n", t)
+    add("edge", "line_brackets_in_string_600", a + b'{"s": "' + b"[" * 600 + b'"}\n', t)
+    add("edge", "line_syntax_error_before_600", a + b"[1,,]" + b"[" * 600 + b"\n", t)
+    add("edge", "line_unclosed_513", a + b"[" * 513 + b"\n", t)
+    add("edge", "line_unclosed_512_then_junk", a + b"[" * 512 + b"x" + b"[" * 100 + b"\n", t)
+    add("edge", "line_deep_600_then_syntax_error", a + b"[" * 600 + b"1,,\n", t)
+    add("edge", "deep_first_wins_over_dup", a + b"[" * 600 + b"\n" + b'{"a":1,"a":2} x\n', t)
+    add("edge", "dup_first_wins_over_deep", a + b'{"a":1,"a":2} x\n' + b"[" * 600 + b"\n", t)
+    add("edge", "dup_key_then_deep_same_line", a + b'[{"a":1,"a":2},' + b"[" * 600 + b"\n", t)
+    add("edge", "deep_in_tool_tape_only", a, t + b"[" * 600 + b"]" * 600 + b"\n")
+    add("edge", "deep_line_after_blank_lines", a + b"\n\n  \n" + b"[" * 600 + b"\n", t)
+    add("edge", "deep_line_wrapped_in_U+000B", a + b"\x0b" + b"[" * 600 + b"]" * 600 + b"\x0b\n", t)
+    # A 4300+-digit int stops json.loads with a plain ValueError, not a
+    # JSONDecodeError: reconcile.py then counts the WHOLE line.
+    for nd in (4300, 4301):
+        big = b"7" * nd
+        add("edge", f"int_{nd}_digits_then_deep_600", a + b"[" + big + b"," + b"[" * 600 + b"]" * 600 + b"]\n", t)
+        add("edge", f"int_{nd}_digits_then_junk_then_deep_600", a + b"[" + big + b",,x" + b"[" * 600 + b"\n", t)
+    add("edge", "deep_600_then_int_4301", a + b"[" + b"[" * 600 + b"]" * 600 + b"," + b"7" * 4301 + b"]\n", t)
 
     # swap the argument order on a finding
     add("edge", "altered_swapped", t, chained([dict(r, resp=resp(r["idx"], "!")) if r["idx"] == 2 else r for r in A]))
@@ -509,8 +529,7 @@ def main() -> int:
     by = {}
     for c in CASES:
         by[c["source"]] = by.get(c["source"], 0) + 1
-    raises = sum(1 for c in CASES if "python_raises" in c)
-    print(f"{len(CASES)} cases {by}; python raises on {raises} -> {OUT}")
+    print(f"{len(CASES)} cases {by} -> {OUT}")
     return 0
 
 

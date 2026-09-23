@@ -103,10 +103,9 @@ test("LIVE DIFFERENTIAL: 150 fresh byte-level mutations, judged by reconcile.py 
     let compared = 0;
     for (let i = 0; i < pairs.length; i++) {
       const mine = T.reconcileTapes(bufs[i][0], bufs[i][1]);
-      if (out[i].startsWith("RAISES ")) {
-        assert.equal(mine.verdict, "COULD_NOT_LOOK", `case ${i}: reconcile.py ${out[i]}`);
-        continue;
-      }
+      // The hardened reconcile.py never raises; if it does, that is a bug in
+      // the reference to report, not a case to excuse.
+      assert.ok(!out[i].startsWith("RAISES "), `case ${i}: reconcile.py ${out[i]}`);
       if (out[i].includes(dir.replace(/\\/g, "\\\\")) || out[i].includes("jsonl")) continue; // names a local path
       assert.equal(T.conformanceJson(mine), out[i], `case ${i}`);
       compared += 1;

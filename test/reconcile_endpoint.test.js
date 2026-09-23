@@ -92,7 +92,7 @@ test("POSITIVE CONTROL: the clean cross-repo pair is MATCHED 5 of 5, as reconcil
 test("CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair", async () => {
   let n = 0;
   for (const c of fixtures.cases) {
-    if (!c.python || c.port_expect) continue;
+    assert.equal(typeof c.python, "string", c.name);
     const req = jsonReq({ agent_tape_b64: c.a_b64, tool_tape_b64: c.b_b64 });
     const { status, raw } = await call(req);
     assert.equal(status, 200, c.name);

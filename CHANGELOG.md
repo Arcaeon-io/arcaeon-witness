@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-09-23 — reconcile port tracks the hardened reconcile.py (branch `reconcile-endpoint-2026-09-23`, local only, NOT deployed)
+
+- **Why.** arcaeon-ledger `reconcile-hardening-2026-09-23` (a31402f) made reconcile.py answer COULD NOT LOOK on the three inputs it used to raise on, with the cause in brackets, and bounded nesting at 512. The port must say the same bytes.
+- **`lib/_reconcile_tapes.js`**: `REFERENCE.reconcile_sha256` -> `42e8231b...a918`; a `cannotRead` pre-pass mirroring `_cannot_read` (nesting counted before the parser's stop, whole line after a 4300-digit int; duplicate key that does not parse); the three messages in the Python's words; `peekSide` skips any unreadable line.
+- **Fixture**: `make_fixtures.py` pins the hardened file and drops `python_raises`/`port_expect`; 517 cases, 10 expected answers changed (9 former raises, `nested_522_both`). Conformance test drops the "reference implementation raises" assertion. `npm test` 777/777; live differential green on 6 seeds.
+
 ## 2026-09-23 — the hosted completeness verdict: `POST /api/reconcile` and the `/reconcile` page (branch `reconcile-endpoint-2026-09-23` from `9bbf79a`, local only, NOT deployed)
 
 - **`lib/_reconcile_tapes.js`**: a Node port of `arcaeon_ledger.reconcile` (arcaeon-ledger 0.8.0) and the strict `verify_file` it rests on, with Python-faithful reading (errors="replace" decoding with the BOM kept, universal newlines, `str.strip()`, json.loads's int/float split, BigInt ints, the 4300-digit limit, NaN/Infinity, lone surrogates, duplicate keys raised on object close) and the chain's exact `json.dumps` + surrogatepass. Ported rather than shelled out: no Python on the Node runtime and no function slot for a second one. Where reconcile.py raises (three input classes, found here), the port says COULD NOT LOOK and why; nesting past 512 is COULD NOT LOOK; pins are refused, not ported.

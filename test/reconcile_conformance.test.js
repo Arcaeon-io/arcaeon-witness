@@ -2,7 +2,8 @@
 // REAL arcaeon_ledger.reconcile, case by case, byte for byte.
 //
 // Every expected answer in test/fixtures/reconcile/cases.json was written by
-// reconcile.py itself (test/fixtures/reconcile/make_fixtures.py): the cross-
+// reconcile.py itself (the hardened one: it never raises, so every case has an
+// answer, COULD NOT LOOK with a bracketed cause included) (test/fixtures/reconcile/make_fixtures.py): the cross-
 // repo tapes the adapter and call_proxy suites leave behind (FIFO duplicate
 // ids, invalid ids, a 202 answered later, gzip/deflate answers), the ledger's
 // own reconcile cases, edge inputs where a naive port lies, and seeded fuzz.
@@ -35,12 +36,8 @@ function disagreements(reconcileFn, cases = fixtures.cases) {
       bad.push({ name: c.name, why: `port threw ${e && e.message}` });
       continue;
     }
-    if (c.port_expect || c.python_raises) {
-      // The reference raised (or the port refuses on purpose): the port must
-      // say COULD NOT LOOK, never a finding and never MATCHED.
-      if (got.verdict !== R.COULD_NOT_LOOK || got.exit_code !== 2) {
-        bad.push({ name: c.name, why: `expected COULD_NOT_LOOK, got ${got.verdict}` });
-      }
+    if (typeof c.python !== "string") {
+      bad.push({ name: c.name, why: "fixture case has no reconcile.py answer" });
       continue;
     }
     const mine = R.conformanceJson(got);
@@ -82,14 +79,39 @@ for (const source of ["crossrepo", "ledger", "edge", "fuzz"]) {
   });
 }
 
-test("CONFORMANCE: where reconcile.py raises, the port says COULD NOT LOOK and names why", () => {
-  const raising = fixtures.cases.filter((c) => c.python_raises);
-  assert.ok(raising.length >= 2, "the two reference crash classes are in the fixture");
-  for (const c of raising) {
-    const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
-    assert.equal(got.verdict, "COULD_NOT_LOOK", c.name);
-    assert.match(got.reason, /reference implementation raises/, c.name);
+test("CONFORMANCE: every case carries reconcile.py's answer; none is excused", () => {
+  for (const c of fixtures.cases) {
+    assert.equal(typeof c.python, "string", c.name);
+    assert.ok(!("python_raises" in c) && !("port_expect" in c), `${c.name} is excused from byte-for-byte`);
   }
+});
+
+test("CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words", () => {
+  const expect = {
+    dup_key_then_junk: /^tape_a line 2 holds a duplicate key and does not parse \[duplicate_key_unparseable\]$/,
+    "row_wrapped_in_U+000B": /^tape_a row 2 verifies but does not read a second time \(whitespace json\.loads does not strip\) \[whitespace_outside_json\]$/,
+    nested_522_both: /^tape_a line 1 is nested deeper than 512 levels \[nesting_too_deep\]$/,
+    line_arrays_513: /is nested deeper than 512 levels \[nesting_too_deep\]$/,
+    int_4301_digits_then_deep_600: /is nested deeper than 512 levels \[nesting_too_deep\]$/,
+  };
+  for (const [name, re] of Object.entries(expect)) {
+    const c = fixtures.cases.find((x) => x.name === name);
+    assert.ok(c, `fixture has ${name}`);
+    const py = JSON.parse(c.python);
+    assert.equal(py.verdict, "COULD_NOT_LOOK", name);
+    assert.match(py.reason, re, name);
+    const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
+    assert.equal(R.conformanceJson(got), c.python, name);
+  }
+  // inside the bound nothing is refused
+  for (const name of ["line_arrays_512", "line_objects_512", "nested_510_both", "line_brackets_in_string_600",
+    "line_syntax_error_before_600", "line_unclosed_512_then_junk"]) {
+    const c = fixtures.cases.find((x) => x.name === name);
+    assert.ok(c, `fixture has ${name}`);
+    assert.ok(!c.python.includes("nesting_too_deep"), name);
+  }
+  // No case says the reference raises any more.
+  for (const c of fixtures.cases) assert.ok(!c.python.includes("reference implementation"), c.name);
 });
 
 // -- break arms ---------------------------------------------------------------
@@ -108,8 +130,7 @@ function alteredFiledAsMissing(a, b) {
 
 test("BREAK ARM: a lying reconcile that always says MATCHED is caught", () => {
   const bad = disagreements(alwaysMatched);
-  const nonGreen = fixtures.cases.filter((c) => c.python_raises || c.port_expect ||
-    JSON.parse(c.python).verdict !== "MATCHED").length;
+  const nonGreen = fixtures.cases.filter((c) => JSON.parse(c.python).verdict !== "MATCHED").length;
   assert.ok(nonGreen > 100, "enough non-green cases to catch it");
   assert.equal(bad.length, nonGreen, "every non-green case catches the liar");
 });
