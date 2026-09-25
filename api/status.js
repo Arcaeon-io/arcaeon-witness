@@ -17,7 +17,7 @@
 const store = require("../lib/_store.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
-const { gatherStatusData, humanDuration, BLOB, TREE, REPO_URL } = require("../lib/_status_data.js");
+const { gatherStatusData, conflictLine, humanDuration, BLOB, TREE, REPO_URL } = require("../lib/_status_data.js");
 // Audit-state column (design page part B, slice 1). Behind WITNESS_AUDIT_STATE
 // (default off): with the flag off nothing below this line changes what the
 // page renders. See lib/_audit_status.js.
@@ -160,14 +160,13 @@ module.exports = async (req, res) => {
       }).join("\n")
     : `<tr><td colspan="7">${nsErr ? `namespace listing failed: ${esc(nsErr)}` : "no namespaces pinned yet"}</td></tr>`;
 
+  // One line per observed conflict (B080): what it was and how it resolved,
+  // from lib/_status_data.js's conflictLine, so the page and the JSON twin
+  // say the same sentence.
   const obsListHtml = obsSample.length
     ? `<ul class="obs-list">${obsSample.map((o) => {
-        const v = o.obs;
-        const label = v
-          ? `<code>${esc(v.claimed && v.claimed.namespace)}</code> at rows=${esc(v.claimed && v.claimed.rows)} &mdash; ${esc(v.verdict || "conflict")}`
-          : "(could not read record content)";
-        return `<li>${label} &middot; <a href="${esc(o.url)}">raw record</a></li>`;
-      }).join("\n")}</ul>${obsCount !== null && obsCount > obsSample.length ? `<p class="muted">${obsCount - obsSample.length} more not sampled here &mdash; see the full folder.</p>` : ""}`
+        return `<li>${esc(conflictLine(o.obs))} &middot; <a href="${esc(o.url)}">raw record</a></li>`;
+      }).join("\n")}</ul>${obsCount !== null && obsCount > obsSample.length ? `<p class="muted">${obsCount - obsSample.length} more not sampled here. See the full folder.</p>` : ""}`
     : "";
 
   let anchorHtml;
