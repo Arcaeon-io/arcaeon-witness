@@ -1,5 +1,13 @@
 # Changelog — arcaeon-witness
 
+## 2026-09-25: batch lane H, B077 to B080 (branch reconcile-endpoint-2026-09-23, local only, NOT deployed)
+
+- **B077.** test/logtree_keygen.test.js skips the .gitignore check outside a git checkout and prints why; in a checkout it runs as before.
+- **B078.** README says the credit packs are sold (listed, checkout works, no real purchase yet). The welcome email and the fulfil page name the Stripe receipt link as how a lost key is recovered. Render only, no sender wired.
+- **B079.** lib/_ratelimit.js counts in a shared store (Vercel KV or Upstash REST, chosen by env) instead of per instance; memory store is the test stub and the fallback. check() is async and every call site awaits it. Shared counting is off in production until the KV env vars are set.
+- **B080.** Status data carries one line per observed conflict, what it was and how it resolved; /status and /api/status.json print the same sentences.
+- **Tests.** node --test "test/*.test.js": 820/820.
+
 ## 2026-09-23 (late night): the battery plants a record each fence must refuse (branch `reconcile-endpoint-2026-09-23`, local only, NOT deployed, nothing published)
 
 - **Why.** The battery line says a check is DEFINED and was CALLED. Neither can see a check that ran and saw nothing: a fence whose refusal is removed is still defined, still called, and on a clean day every record passes it anyway (a correspondent measured the class as "0 of 17 probes noticed a guard removed"). This is the third guard, promised publicly for 2026-09-24.
