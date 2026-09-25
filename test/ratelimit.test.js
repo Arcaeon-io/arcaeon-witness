@@ -1,5 +1,6 @@
-// test/ratelimit.test.js — api/_ratelimit.js: naive per-IP fixed-window
-// limiter backing /api/verify's rate limit (Stage-0, per-instance).
+// test/ratelimit.test.js — lib/_ratelimit.js: per-IP fixed-window limiter
+// backing the public read endpoints' rate limit. Since B079 the count lives in
+// a shared store; these tests use the in-memory store stub, never a network.
 "use strict";
 
 const { test } = require("node:test");
@@ -8,7 +9,7 @@ const assert = require("node:assert/strict");
 const ratelimit = require("../lib/_ratelimit.js");
 
 // Every test below uses its OWN fake IP so tests never interfere with each
-// other's bucket state (the module holds one process-wide Map on purpose —
+// other's bucket state (the module holds one process-wide limiter on purpose;
 // that's the real behavior under test, not something to work around).
 let ipCounter = 0;
 function freshReq(overrides) {
@@ -23,13 +24,13 @@ function freshReq(overrides) {
   );
 }
 
-test("CONTRACT: allows exactly LIMIT calls from one IP, then blocks the next", () => {
+test("CONTRACT: allows exactly LIMIT calls from one IP, then blocks the next", async () => {
   const req = freshReq();
   for (let i = 0; i < ratelimit.LIMIT; i++) {
-    const r = ratelimit.check(req);
+    const r = await ratelimit.check(req);
     assert.equal(r.limited, false, `call ${i + 1} of ${ratelimit.LIMIT} should be allowed`);
   }
-  const blocked = ratelimit.check(req);
+  const blocked = await ratelimit.check(req);
   assert.equal(blocked.limited, true, "the call past LIMIT must be blocked");
   assert.ok(
     Number.isInteger(blocked.retryAfterSeconds) && blocked.retryAfterSeconds > 0 && blocked.retryAfterSeconds <= ratelimit.WINDOW_MS / 1000,
@@ -37,12 +38,12 @@ test("CONTRACT: allows exactly LIMIT calls from one IP, then blocks the next", (
   );
 });
 
-test("CONTRACT: two different IPs get two independent buckets", () => {
+test("CONTRACT: two different IPs get two independent buckets", async () => {
   const reqA = freshReq();
   const reqB = freshReq();
-  for (let i = 0; i < ratelimit.LIMIT; i++) ratelimit.check(reqA);
-  const blockedA = ratelimit.check(reqA);
-  const okB = ratelimit.check(reqB);
+  for (let i = 0; i < ratelimit.LIMIT; i++) await ratelimit.check(reqA);
+  const blockedA = await ratelimit.check(reqA);
+  const okB = await ratelimit.check(reqB);
   assert.equal(blockedA.limited, true, "IP A is over its own limit");
   assert.equal(okB.limited, false, "IP B's budget must be untouched by IP A's usage");
 });
@@ -64,9 +65,88 @@ test("CONTRACT: with neither header nor socket address, every such caller collap
   assert.equal(ratelimit.callerIp(reqY), "unknown");
 });
 
-test("REGRESSION: a caller exactly at LIMIT is still allowed (off-by-one — the 429 must trigger on the (LIMIT+1)th call, not the LIMIT-th)", () => {
+test("REGRESSION: a caller exactly at LIMIT is still allowed (off-by-one — the 429 must trigger on the (LIMIT+1)th call, not the LIMIT-th)", async () => {
   const req = freshReq();
   let last;
-  for (let i = 0; i < ratelimit.LIMIT; i++) last = ratelimit.check(req);
+  for (let i = 0; i < ratelimit.LIMIT; i++) last = await ratelimit.check(req);
   assert.equal(last.limited, false, "the LIMIT-th call itself must still be allowed");
+});
+
+// ---- B079: the count lives in the shared store, not per instance ----
+
+// Fire `n` calls from one IP, alternating between the given limiters (two
+// warm instances taking one burst between them), concurrently.
+async function burst(limiters, req, n) {
+  const calls = [];
+  for (let i = 0; i < n; i++) calls.push(limiters[i % limiters.length].check(req));
+  const results = await Promise.all(calls);
+  return results.filter((r) => !r.limited).length;
+}
+
+test("SHARED: a burst split across two instances on one shared store is held to LIMIT in total", async () => {
+  const shared = ratelimit.memoryStore(); // the in-memory stub standing in for the shared store
+  const a = ratelimit.createLimiter({ store: shared });
+  const b = ratelimit.createLimiter({ store: shared });
+  const admitted = await burst([a, b], freshReq(), ratelimit.LIMIT * 2);
+  assert.equal(admitted, ratelimit.LIMIT, "two instances sharing a store must admit LIMIT calls, not 2 x LIMIT");
+});
+
+test("MUST-FAIL ARM: the pre-B079 shape (each instance its own count) lets the same burst through twice", async () => {
+  const a = ratelimit.createLimiter({ store: null }); // own memory fallback
+  const b = ratelimit.createLimiter({ store: null }); // a second, independent one
+  const admitted = await burst([a, b], freshReq(), ratelimit.LIMIT * 2);
+  assert.equal(admitted, ratelimit.LIMIT * 2,
+    "per-instance counting must admit 2 x LIMIT here; if it does not, the SHARED test above does not discriminate");
+});
+
+test("SHARED: a store failure degrades to this instance's own count, never to unlimited", async () => {
+  const broken = { kind: "kv", async hit() { throw new Error("store down"); } };
+  const errors = [];
+  const lim = ratelimit.createLimiter({ store: broken, onStoreError: (e) => errors.push(e.message) });
+  const req = freshReq();
+  let admitted = 0;
+  for (let i = 0; i < ratelimit.LIMIT + 5; i++) if (!(await lim.check(req)).limited) admitted++;
+  assert.equal(admitted, ratelimit.LIMIT, "fallback count must still cap at LIMIT");
+  assert.equal(errors.length, ratelimit.LIMIT + 5, "every store failure is reported to onStoreError");
+});
+
+test("KV STORE: one pipelined INCRBY + PEXPIRE on a window-aligned key; the count comes from the store", async () => {
+  const seen = [];
+  const counts = new Map();
+  const fakeFetch = async (url, init) => {
+    const cmds = JSON.parse(init.body);
+    seen.push({ url, auth: init.headers.authorization, cmds });
+    const [[op, key, by]] = cmds;
+    assert.equal(op, "INCRBY");
+    counts.set(key, (counts.get(key) || 0) + Number(by));
+    return { ok: true, json: async () => [{ result: counts.get(key) }, { result: 1 }] };
+  };
+  const store = ratelimit.kvStore({ url: "https://kv.example/", token: "t0k", fetchImpl: fakeFetch });
+  const now = 1_700_000_123_456;
+  const r1 = await store.hit("198.51.100.9", 1, now);
+  const r2 = await store.hit("198.51.100.9", 4, now + 1000);
+  assert.equal(r1.count, 1);
+  assert.equal(r2.count, 5, "the second hit sees the first: the count lives in the store");
+  const windowStart = Math.floor(now / ratelimit.WINDOW_MS) * ratelimit.WINDOW_MS;
+  assert.equal(r1.windowStart, windowStart);
+  assert.equal(seen[0].url, "https://kv.example/pipeline");
+  assert.equal(seen[0].auth, "Bearer t0k");
+  assert.deepEqual(seen[0].cmds, [
+    ["INCRBY", `rl:198.51.100.9:${windowStart}`, "1"],
+    ["PEXPIRE", `rl:198.51.100.9:${windowStart}`, String(ratelimit.WINDOW_MS * 2)],
+  ]);
+});
+
+test("KV STORE: a non-2xx or countless reply throws, so the limiter falls back instead of trusting it", async () => {
+  const bad = ratelimit.kvStore({ url: "https://kv.example", token: "x", fetchImpl: async () => ({ ok: false, status: 500 }) });
+  await assert.rejects(bad.hit("a", 1, Date.now()), /500/);
+  const empty = ratelimit.kvStore({ url: "https://kv.example", token: "x", fetchImpl: async () => ({ ok: true, json: async () => [{ error: "ERR" }] }) });
+  await assert.rejects(empty.hit("a", 1, Date.now()), /no count/);
+});
+
+test("ENV: the shared store is chosen only when both URL and token are set (Vercel KV or Upstash names)", () => {
+  assert.equal(ratelimit.storeFromEnv({}), null);
+  assert.equal(ratelimit.storeFromEnv({ KV_REST_API_URL: "https://x" }), null);
+  assert.equal(ratelimit.storeFromEnv({ KV_REST_API_URL: "https://x", KV_REST_API_TOKEN: "t" }).kind, "kv");
+  assert.equal(ratelimit.storeFromEnv({ UPSTASH_REDIS_REST_URL: "https://x", UPSTASH_REDIS_REST_TOKEN: "t" }).kind, "kv");
 });
