@@ -89,7 +89,15 @@ test("refuses: an existing file (left byte-identical), a path .gitignore would n
   assert.equal(run([]).status, 1);
 });
 
-test(".gitignore covers the suffix the tool insists on", () => {
+// Needs a git checkout: `git check-ignore` has nothing to ask outside one
+// (a tarball, an npm pack, a Vercel build dir). Skip, and say why, rather
+// than fail a copy that was never meant to carry .git.
+const REPO_ROOT = path.join(__dirname, "..");
+const NO_GIT_REASON = fs.existsSync(path.join(REPO_ROOT, ".git"))
+  ? false
+  : "no .git at the repo root: this is not a git checkout, so git check-ignore cannot answer";
+
+test(".gitignore covers the suffix the tool insists on", { skip: NO_GIT_REASON }, () => {
   const gi = fs.readFileSync(path.join(__dirname, "..", ".gitignore"), "utf8");
   assert.ok(gi.split(/\r?\n/).includes("*.signer.key"));
   const r = spawnSync("git", ["-C", path.join(__dirname, ".."), "check-ignore", "-q", "somewhere/witness-log.signer.key"]);
