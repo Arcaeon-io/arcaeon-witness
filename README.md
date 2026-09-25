@@ -83,20 +83,19 @@ this is an acceptable gap, not a hidden one. The real fix, when it's
 warranted, is a Stage-2 KV (Vercel KV / Upstash) with an atomic `INCR` and
 no CAS loop at all.
 
-### Credit balance — the decrementing balance behind prepaid packs (mechanism only, not yet sold)
+### Credit balance: the decrementing balance behind prepaid packs
 
-Built 2026-08-14 per `COUNCIL_PRICING_REVIEW_2026-08-14.md` §4 decision #5 (the hard
-gate): the free-tier meter above resets monthly and can't honestly back a
-prepaid, non-expiring per-pin credit promise. This is the mechanism that makes
-one real. **Naming the pack sizes here is not the same as selling them.**
-Nothing described in this section is for sale today — the Stripe path is
-unwired (see `api/stripe-webhook.js`'s own header), so there is no live
-purchase surface and therefore no live source of truth to point at. A
-prior version of this README claimed `.well-known/offers.json` was that
-source of truth; that file has never existed (confirmed live, pre-invite
-audit 2026-08-23) and the claim was deleted rather than left pointing at
-a 404 in a document meant to be checked. When a real purchase path ships,
-its source of truth gets named here, and not before.
+The credit packs are sold. They are listed on https://arcaeon.io/pricing and in
+the site's offers note: Mini $5 for 1,000 pins, Starter $15 for 3,000, Standard
+$50 for 12,000, Bulk $150 for 40,000. Stripe checkout for each pack works: it
+lands on the fulfil page (`api/fulfill.js`), which verifies the session with
+Stripe, mints the key, and applies the credits; `api/stripe-webhook.js` is
+built as the backstop for slower payment methods (its setup steps are below). No real purchase has gone through
+yet. If a buyer loses their key, the link in their Stripe receipt is how they
+recover it: it reopens the fulfil page, which shows the same key again.
+
+The balance exists because the free-tier meter above resets monthly and can't
+honestly back a prepaid, non-expiring per-pin credit promise (built 2026-08-14).
 
 - Free 100/mo stays the default and is unaffected: a key that has never
   purchased credits behaves exactly as before this build.
