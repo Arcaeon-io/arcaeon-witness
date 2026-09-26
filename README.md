@@ -85,13 +85,13 @@ no CAS loop at all.
 
 ### Credit balance: the decrementing balance behind prepaid packs
 
-The credit packs are sold. They are listed on https://arcaeon.io/pricing and in
-the site's offers note: Mini $5 for 1,000 pins, Starter $15 for 3,000, Standard
-$50 for 12,000, Bulk $150 for 40,000. Stripe checkout for each pack works: it
-lands on the fulfil page (`api/fulfill.js`), which verifies the session with
-Stripe, mints the key, and applies the credits; `api/stripe-webhook.js` is
-built as the backstop for slower payment methods (its setup steps are below). No real purchase has gone through
-yet. If a buyer loses their key, the link in their Stripe receipt is how they
+The credit packs are listed and Stripe checkout is live; credits are applied by the fulfilment page after checkout. The Stripe webhook backstop is not yet configured, and no real purchase has completed yet.
+The packs are listed on https://arcaeon.io/pricing and in the site's offers
+note: Mini $5 for 1,000 pins, Starter $15 for 3,000, Standard $50 for 12,000,
+Bulk $150 for 40,000. Each pack's checkout lands on the fulfil page
+(`api/fulfill.js`), which is built to verify the session with Stripe, mint the
+key, and apply the credits; `api/stripe-webhook.js` is built as the backstop
+for slower payment methods (its setup steps are below). If a buyer loses their key, the link in their Stripe receipt is how they
 recover it: it reopens the fulfil page, which shows the same key again.
 
 The balance exists because the free-tier meter above resets monthly and can't
@@ -157,7 +157,7 @@ logic itself is already built and tested via `/api/credit`.
 `{credit_balance, credit_ever_purchased, free_tier:{plan, used, cap, month}}`.
 Never consumes a pin (reads via `meter.peek()`, not `meter.check()`).
 
-Pack sizes (LIVE and buyable as of 2026-08-16; credits applied by hand within ~a day. Corrected 2026-08-19: this line still said "not yet offered" while the Stripe links were returning 200 and would take a customer's money): Mini $5/1,000 pins · Starter
+Pack sizes (The credit packs are listed and Stripe checkout exists, but the Stripe webhook is not yet configured, so credits are added by hand after purchase, and no real purchase has completed yet): Mini $5/1,000 pins · Starter
 $15/3,000 pins · Standard $50/12,000 pins · Bulk $150/40,000 pins
 (`api/_balance.js` `PACKS`).
 
