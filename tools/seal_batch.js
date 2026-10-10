@@ -63,6 +63,10 @@
 // sealed case whose pin did not land at its reveal (lib/_sealer.js, CASE
 // ANCHORS), reported in the JSON as `cases`. It does not change the exit
 // code: a case the pass could not pin is listed there and retried next run.
+// Since item 2c the pass also judges pinned cases (a squatter or an
+// unreadable pin is listed under `conflict` or `unreadable`), refuses a
+// case whose own signature the key document does not confirm, and skips
+// withdrawn and expired cases (`terminal`, `withdrawn_skipped`).
 //
 // It writes to the PUBLIC pin repo. It never deploys anything, never touches
 // the OTS anchor path, and reads the pending document from the private usage

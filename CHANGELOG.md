@@ -1,5 +1,44 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the case protocol, item 2c: six fixes, authorized withdrawal, the reference row, the per-key open quota, the public case page (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** The GPT-5.6 and Gemini 3.1 Pro reviews of 2b found six holes, all accepted (velouria `projects/arcaeon/CASE_PROTOCOL_DESIGN_2026-10-10.md`, "After item 2b"). Withdrawal, the addendum, the open quota and the page were the rest of item two.
+- **Fix 1: the anchor retry checks the case's own signature.** `anchorCase` verifies a signed stored case under the verifier its `signed_by` names in the key document before it pins. The entry must be listed and not revoked (a retired key's cases stay trusted). A replaced `sig` is refused `case_signature_invalid`, and no pin is written. An unsigned seal is still pinned.
+- **Fix 2: signing fails closed unless the key is published.** `lib/_case_seal.js` loads `.well-known/arcaeon/case-signing-keys.json` with `require()` when it loads, so the function bundle carries it, and freezes it. After the separation rules, the case key must be an ACTIVE entry holding exactly its verifier. Otherwise the seal is unsigned with `key_unpublished`. The document lists no key, so every seal is unsigned until item three mints one.
+- **Fix 3: the status row reads nothing but the tree.** `caseAnchorSummary` counts from paths alone: case files, anchored (both registrations and a pin pointer), pending (both registrations, no pin, no withdrawn marker), and withdrawn. It fetches no case file and no pin. `lib/_store.js` `getTree` now carries GitHub's `truncated` flag as a non-enumerable property of the array it returns, and a truncated tree makes the row `partial` on `/status` and in `/api/status.json`. The row's `sealed`, `conflict`, `unreadable`, `read` and `unread` fields are gone.
+- **Fix 4.** `checkKeyDocument` refuses an unknown top-level field (`unknown_field`).
+- **Fix 5: pinned cases stay in the sealer's window.** The sealer's rotating window includes pinned cases. Their `latest.json` is judged with the `case_seal` judge, and a squatter or an unreadable pin is reported (`conflict`, `unreadable`), including a pin under a case that is not sealed. Nothing is written over.
+- **Fix 6: terminal states are skipped.** A case with the marker `cases/<id>/withdrawn` is not considered, by the tree alone. A root read as WITHDRAWN, or as OPEN or COMMITTED past its deadline, is skipped and reported as `terminal`.
+- **`POST ?op=case-withdraw`** `{case_id, role, tape_sha256, salt}`.
+  - The role proves itself by its commitment preimage. The commitment is recomputed under the named role and must equal the registration file; otherwise 403 `withdraw_unauthorized`.
+  - The case is refused if it is VERDICT (`case_sealed`), already WITHDRAWN (`case_withdrawn`), or past its deadline (`expired`).
+  - The case object is replaced by the redacted record `{v, case_id, protocol_version, status, opened_at, withdrawal: {by_role, at, salt_sha256}, limits, signed_by, sig, sig_reason}`, signed with the case key or unsigned with its reason. No label and no commitment. `salt_sha256` is the only trace of the preimage kept.
+  - Then the marker `cases/<id>/withdrawn` is written, create-only.
+  - The CAS on the root decides a race with a reveal; the loser answers 409 (`case_withdrawn` or `case_sealed`). Tested both ways, for real.
+  - Registration files stay, public, and the answer says so in words.
+- **`POST ?op=case-reference`** `{case_id, cross_reference, role?, tape_sha256?, salt?}`.
+  - It writes a create-only signed row, `cases/<id>/references/<8-digit seq>.json`, of record type `case_reference`, with its own judge (`judgeReferenceRow`). The row has no pin of its own and says in words that its anchor is the pins-repository commit and the daily head anchor.
+  - Only a sealed case takes a row.
+  - The row is appended by a registered role proving itself with its preimage, or by the operator's key (`Authorization: Bearer <WITNESS_ADMIN_KEY>`, compared in constant time). The row records which (`appended_by`).
+  - The sealed case's `records` never changes. `liveRecords` derives the live count: 2 when the seal carries a cross_reference or a valid row exists.
+  - A row that lands first at the next seq is never written over; the append moves on.
+- **The open quota.** Twenty opens per key per UTC day; the twenty-first is 429 `open_quota_exceeded`, with `retry-after` until 00:00 UTC, and writes nothing.
+  - The count is a store record in the private usage repository, `case_opens/<sha256 of the key>/<day>.json`, created or updated through the CAS. It is not a per-instance Map.
+  - An unreadable counter is 503 `open_quota_unreadable`, never zero.
+  - A duplicate opening is refused `case_exists` by a read before the quota is taken, so it spends nothing.
+- **The page.** `GET /case/<case_id>`: a `vercel.json` rewrite to `/api/verify?op=case-page&case_id=:case_id`, rendered by the new `lib/_case_page.js` (no thirteenth function).
+  - It shows exactly the design's list: the status, the protocol and policy versions, both labels with "Labels are recorded, not verified", the registration times with the derived stamp-commit and registration-record links, the reveal time, the verdict word and the first divergence, and records in words (sealed and live).
+  - It also shows the cross-reference, the anchor state computed from the pin ("sealed, not yet anchored" when it is absent), the four limits, and `signed_by` looked up in the key document, which it links.
+  - A WITHDRAWN case shows the redacted record and the sentence about its registrations. An EXPIRED case shows the opening and the word.
+  - It never shows a tape, a tape hash, a salt, a salt hash or the scope digest. Every value is escaped, the page has no script, and its CSP allows none.
+- **Shared.** One signing routine for every record the case key signs (`signRecord`), and one signature check against the document (`publishedSignatureReason`). `admit` returns the resolved open key, which is held in memory only.
+- **Tests.**
+  - `test/case_item2c.test.js` (new, 18): the six fixes with GPT's two planted tests; design test 10; the withdrawal proof and nothing-kept checks; the race both ways; design test 11; invalid rows; refusals; create-only seqs; the quota; every status of the page; and nothing secret on any page.
+  - Existing tests, fixtures: `KEYS_DOC` handed to the seal, the retry and the sealer; the WITHDRAWN fixtures moved to the new redacted form.
+  - Existing tests, expectations changed where 2c's rules change the behaviour: the status row (fix 3), the sealer's second run (fix 5), and the dispatched op list. Three of those tests were renamed.
+  - A must-fail pass on a scratch copy (harness not committed) planted 37 defects one at a time. The case suites caught all 37.
+  - Suite 889 -> 907 tests: 906 pass, 1 named skip, 0 fail.
+
 ## 2026-10-10: the case protocol, item 2b: three fixes, the readers, the case_seal record type, signed_by and the key document, the sealer trigger, the key on case-open and the deadline horizon (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** GPT-5.6's code review of 2a found three holes and named four departures to settle before any deploy (velouria `projects/arcaeon/CASE_PROTOCOL_DESIGN_2026-10-10.md`, "After item 2a"). Decisions 5 and 12 were still unbuilt. Withdrawal, the addendum and the page are item 2c.

@@ -161,19 +161,20 @@ module.exports = async (req, res) => {
       }).join("\n")
     : `<tr><td colspan="7">${nsErr ? `namespace listing failed: ${esc(nsErr)}` : "no namespaces pinned yet"}</td></tr>`;
 
-  // Case anchors: their own row, not a namespace (case protocol item 2b; see
-  // lib/_status_data.js). Feeds no verdict.
+  // Case anchors: their own row, not a namespace (case protocol items 2b and
+  // 2c; see lib/_status_data.js). Counted from the tree alone; feeds no
+  // verdict.
   const caseRowHtml = caseAnchors
     ? `<tr>
           <td><code>pins/case/</code> <a class="src" href="${esc(TREE("pins/case"))}" title="every case seal pin">tree</a></td>
-          <td>${esc(caseAnchors.sealed)}</td>
+          <td>${esc(caseAnchors.case_files)}</td>
           <td>${esc(caseAnchors.anchored)}</td>
           <td>${esc(caseAnchors.pending)}</td>
-          <td>${esc(caseAnchors.conflict + caseAnchors.unreadable)}</td>
+          <td>${esc(caseAnchors.withdrawn)}</td>
         </tr>`
     : `<tr class="row-error"><td><code>pins/case/</code></td><td colspan="4">case anchors not counted: ${esc(caseErr || "unknown")}</td></tr>`;
   const casePartialHtml = caseAnchors && caseAnchors.partial
-    ? `<p class="muted">Counted from the first ${esc(caseAnchors.read)} case files that could be sealed; ${esc(caseAnchors.unread)} more were not read on this render.</p>`
+    ? `<p class="muted"><strong>Partial.</strong> The repository tree came back truncated on this read, so these counts may be short. They are not a full count.</p>`
     : "";
 
   // One line per observed conflict (B080): what it was and how it resolved,
@@ -353,10 +354,10 @@ ${brandMark.FAVICON_LINK}
   </div>
 
   <h2>Case seals</h2>
-  <p class="muted">A sealed case (the case protocol) is anchored by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. <em>Pending</em> means the case file is sealed and its pin is not written yet; the operator's sealer run writes it. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <p class="muted">A sealed case (the case protocol) is anchored by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Anchored</em> means the case has both registration files and its pin. <em>Pending</em> means it has both registration files and no pin yet: a sealed case waiting for the operator's sealer run to write its pin, a case not yet revealed, or one past its deadline with no reveal. The tree alone cannot tell those apart; the case's own page can. <em>Withdrawn</em> cases carry the withdrawal marker and are never pending. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
   <div class="panel scroll">
     <table>
-      <thead><tr><th>where</th><th>sealed</th><th>anchored</th><th>pending</th><th>conflict or unreadable</th></tr></thead>
+      <thead><tr><th>where</th><th>case files</th><th>anchored</th><th>pending</th><th>withdrawn</th></tr></thead>
       <tbody>${caseRowHtml}</tbody>
     </table>
     ${casePartialHtml}

@@ -22,7 +22,13 @@
 // since the case key signs only when it can be shown different from both
 // other keys; and a hand-unsigned copy of a signed case carries signed_by
 // null. TEST 8's squatter is now a well-formed case_seal record (still a
-// conflict), with an added arm for a malformed one (unreadable). Each test
+// conflict), with an added arm for a malformed one (unreadable). Item 2c
+// (test/case_item2c.test.js) changed two fixtures here, no expectation: the
+// reveal and the anchor retries are handed KEYS_DOC (the committed key
+// document plus the test key), because the case key now signs only as an
+// active entry of the key document and the retry checks a stored case's
+// signature against it; and the planted WITHDRAWN record is in the 2c
+// redacted form (signed_by, withdrawal.salt_sha256). Each test
 // plants the failure it exists to catch; MUST-FAIL ARMs run the wrong behaviour through the same
 // check. Every store is the in-memory mock: no network.
 "use strict";
@@ -69,6 +75,13 @@ const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 // Item 2b: the case key signs only when it can be shown different from BOTH
 // other keys, so the signing environment carries all three.
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
+// Item 2c: the case key signs only when it is an ACTIVE entry of the key
+// document (lib/_case_seal.js, PUBLICATION FAILS CLOSED), and the anchor
+// retry checks a stored case's signature against that document. The
+// committed document lists no key, so these tests hand the seal and the
+// retry a copy that lists the test key, the way they hand the seal the test
+// env. (loadCaseSigner's key_unpublished answer carries the public half.)
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" })] });
 
 // The clean cross-repo pair (MATCHED 5 of 5 under reconcile.py), and a pair
 // that is ALTERED at call 2.
@@ -160,9 +173,9 @@ function revealBody(id, a, b, extra = {}) {
     ...extra,
   };
 }
-async function reveal(body, { now = REVEAL_AT, env = SIGNED, request } = {}) {
+async function reveal(body, { now = REVEAL_AT, env = SIGNED, request, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(request || req("case-reveal", body), res, { now, env });
+  await H.handleCaseReveal(request || req("case-reveal", body), res, { now, env, keyDocument });
   return { status: res._status, body: parsed(res), res };
 }
 function storedCase(id) {
@@ -369,7 +382,8 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
   plant("withdrawn", 409, "case_withdrawn", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("withdrawn") } });
     gh.seed(PINS, C.casePath(id), { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
-      withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z" }, limits: C.LIMITS.slice(), sig: null, sig_reason: "withdrawn in this test" });
+      withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("the withdrawing salt") }, limits: C.LIMITS.slice(), signed_by: null, sig: null,
+      sig_reason: "withdrawn in this test" });
     return revealBody(id, a, b);
   });
   plant("unknown case", 404, "case_not_found", async () => {
@@ -734,7 +748,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   assert.equal(chain, S.caseChain(k));
 
   // the retry, an hour later
-  const retry = await S.anchorCase(id, { now: REVEAL_AT + 3600000 });
+  const retry = await S.anchorCase(id, { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC });
   assert.equal(retry.ok, true);
   assert.equal(retry.pin, "anchored");
   assert.equal(retry.chain, chain, "the retry's chain is the seal's");
@@ -748,7 +762,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   assert.deepEqual(storedCase(id), k, "the sealed case was not touched");
   // a repeat writes nothing
   const writes = gh.putLog.length;
-  const again = await S.anchorCase(id);
+  const again = await S.anchorCase(id, { keyDocument: KEYS_DOC });
   assert.equal(again.pin, "anchored");
   assert.equal(again.existing, true);
   assert.equal(again.chain, chain);
@@ -764,7 +778,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   assert.equal(r2.body.pin, "pending");
   const orphan = gh.read(PINS, p2.seq);
   assert.equal(orphan.chain, r2.body.chain);
-  const retry2 = await S.anchorCase(c2.id, { now: REVEAL_AT + 7200000 });
+  const retry2 = await S.anchorCase(c2.id, { now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
   assert.equal(retry2.pin, "anchored");
   assert.equal(retry2.chain, r2.body.chain);
   assert.deepEqual(gh.read(PINS, p2.latest), orphan, "adopted as it was, its first pinned_at kept");
@@ -783,13 +797,13 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   const squatter = { ...S._internal.pinRecord(c3.id, "e".repeat(64), Date.parse("2026-10-10T09:00:00Z")) };
   gh.seed(PINS, p3.seq, squatter);
   const w3 = gh.putLog.length;
-  const retry3 = await S.anchorCase(c3.id);
+  const retry3 = await S.anchorCase(c3.id, { keyDocument: KEYS_DOC });
   assert.equal(retry3.pin, "conflict");
   assert.equal(gh.putLog.length, w3, "nothing written over");
   assert.deepEqual(gh.read(PINS, p3.seq), squatter);
   const { auth_level, auth_note, ...partial } = squatter; // eslint-disable-line no-unused-vars
   gh.seed(PINS, p3.seq, partial);
-  const retry3b = await S.anchorCase(c3.id);
+  const retry3b = await S.anchorCase(c3.id, { keyDocument: KEYS_DOC });
   assert.equal(retry3b.pin, "unreadable");
   assert.equal(retry3b.reason, "case_seal_missing_field");
   assert.equal(gh.putLog.length, w3, "nothing written over");

@@ -51,6 +51,7 @@ const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
 const reconcileHttp = require("../lib/_reconcile_http.js");
 const caseHttp = require("../lib/_case_http.js");
+const casePage = require("../lib/_case_page.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 const RAW_BASE = `https://raw.githubusercontent.com/${store.REPO}/${store.BRANCH}`;
@@ -500,7 +501,13 @@ module.exports = async (req, res) => {
   // thirteenth function. Every new route is ?op=case-<verb> on verify.js",
   // CASE_PROTOCOL_DESIGN_2026-10-10.md). Writes go to the pins repository's
   // cases/ tree and the seal's pin; the stamps repository is only read. No
-  // tape, no salt is kept.
+  // tape, no salt is kept. Item 2c adds three: POST ?op=case-withdraw (a
+  // registered role, proving itself with its commitment preimage, withdraws
+  // an unsealed case), POST ?op=case-reference (a create-only signed
+  // reference row appended to a sealed case), and GET ?op=case-page, the
+  // public case page (GET /case/<case_id>, a vercel.json rewrite, like
+  // /reconcile). The open quota (20 a key a UTC day) is counted in the
+  // private usage repository.
   if (op === "case-open") {
     return caseHttp.handleCaseOpen(req, res);
   }
@@ -509,6 +516,15 @@ module.exports = async (req, res) => {
   }
   if (op === "case-reveal") {
     return caseHttp.handleCaseReveal(req, res);
+  }
+  if (op === "case-withdraw") {
+    return caseHttp.handleCaseWithdraw(req, res);
+  }
+  if (op === "case-reference") {
+    return caseHttp.handleCaseReference(req, res);
+  }
+  if (op === "case-page") {
+    return casePage.handleCasePage(req, res);
   }
 
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every

@@ -1,14 +1,14 @@
 {
   "schema": "arcaeon-signing-keys/1",
   "issuer": "arcaeon.io",
-  "description": "Ed25519 public keys used to sign sealed cases of the Arcaeon witness case protocol (arcaeon-case/1). A sealed case names its key in signed_by, the key id <key name>+<8 hex>; find that key id here and check the case's signature with the verifier string beside it. The signature is Ed25519 over the json-c14n:v1 bytes of the whole case object minus sig. This key is never the witness log's key or the reconcile receipt's key.",
+  "description": "Ed25519 public keys used to sign the records of the Arcaeon witness case protocol (arcaeon-case/1): sealed cases, withdrawal records and reference rows. Each signed record names its key in signed_by, the key id <key name>+<8 hex>; find that key id here and check the record's signature with the verifier string beside it. The signature is Ed25519 over the json-c14n:v1 bytes of the whole record minus sig. This key is never the witness log's key or the reconcile receipt's key.",
   "matching": "Match on key_id, then use verifier: <key name>+<8 lowercase hex of sha256(name || 0x0a || 0x01 || public key)[0:4]>+<base64(0x01 || 32-byte Ed25519 public key)>, the signed-note verifier format of the witness log. key_id is the verifier without its base64 tail. Compare key bytes, not names.",
   "status_meaning": {
     "active": "currently used for signing; trusted",
     "retired": "rotated out; cases it signed while current remain trusted",
     "revoked": "withdrawn; do not trust cases signed by this key"
   },
-  "rotation": "Rotation adds a new key with status active and moves the previous key to retired, so cases sealed before the rotation keep verifying. A key is marked revoked only if its private half is believed exposed. This document is the single place either change is announced. No case-signing key has been provisioned yet: until a key is listed here, a sealed case either carries sig null with its sig_reason, or a signature no entry here can confirm, and should be read as unsigned.",
+  "rotation": "Rotation adds a new key with status active and moves the previous key to retired, so records signed before the rotation keep verifying. A key is marked revoked only if its private half is believed exposed. This document is the single place either change is announced. The service signs only with a key listed here as active (it carries this document in its own deployment and checks the configured key against it); a configured key that is not listed is not used. No case-signing key has been provisioned yet: until a key is listed here, every case record carries sig null with its sig_reason (key_unpublished).",
   "updated": "2026-10-10",
   "keys": []
 }

@@ -31,6 +31,10 @@
     {
       "source": "/reconcile",
       "destination": "/api/verify?op=reconcile-page"
+    },
+    {
+      "source": "/case/:case_id",
+      "destination": "/api/verify?op=case-page&case_id=:case_id"
     }
   ],
   "functions": {

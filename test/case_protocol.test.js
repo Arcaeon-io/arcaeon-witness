@@ -25,7 +25,10 @@
 // they pinned: the same-hash replay is now 200, and stamp_commit is filled.
 // Item 2b: ?op=case-open requires a bearer key, so every case-open request
 // here carries OPEN_AUTH (an env key); no expectation changed. Item 2b's own
-// tests are in test/case_item2b.test.js.
+// tests are in test/case_item2b.test.js. Item 2c: the three planted WITHDRAWN
+// records are in the 2c redacted form (signed_by null,
+// withdrawal.salt_sha256); no expectation changed. Item 2c's own tests are
+// in test/case_item2c.test.js.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -592,7 +595,7 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
   gh.seed(PINS, C.casePath(vid), verdictCase);
   const wid = C.deriveCaseId(C.validateOpening(opening({ scope_digest: sha("withdrawn case") })).opening);
   const withdrawn = { v: 1, case_id: wid, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
-    withdrawal: { by_role: "b", at: "2026-10-10T07:55:00Z" }, limits: C.LIMITS.slice(), sig: null, sig_reason: "unsigned in this test" };
+    withdrawal: { by_role: "b", at: "2026-10-10T07:55:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "unsigned in this test" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: the planted WITHDRAWN record is valid");
   gh.seed(PINS, C.casePath(wid), withdrawn);
   for (const [cid, status] of [[vid, "VERDICT"], [wid, "WITHDRAWN"]]) {
@@ -1214,7 +1217,7 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
   plantStamp(a.commitment_sha256);
   const cpath = C.casePath(id);
   const withdrawn = { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
-    withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z" }, limits: C.LIMITS.slice(), sig: null, sig_reason: "withdrawn in this test" };
+    withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "withdrawn in this test" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: a valid redacted record");
   const viaMock = global.fetch;
   let landed = false;
@@ -1303,7 +1306,7 @@ test("SCHEMA: an unknown field, an altered limit, a stored EXPIRED, a wrong id, 
   }
   // a redacted withdrawal that still carries a label is not the redacted form
   const withdrawn = { v: 1, case_id: good.case_id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: good.opened_at,
-    withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z" }, limits: C.LIMITS.slice(), sig: null, sig_reason: "x" };
+    withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "x" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true });
   assert.equal(C.validateCase({ ...withdrawn, party_a: good.party_a }).code, "unknown_field");
   assert.equal(C.validateCase({ ...withdrawn, commitments: good.commitments }).code, "unknown_field");

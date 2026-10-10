@@ -29,6 +29,21 @@
 // Each test plants the failure it exists to catch; MUST-FAIL ARMs show the
 // wrong behaviour caught by the same check. Every store is the in-memory
 // mock: no network.
+//
+// ITEM 2C CHANGED THIS FILE (test/case_item2c.test.js holds 2c's own tests):
+//   - fixture: KEYS_DOC (the committed key document plus the test key) is
+//     handed to the reveal, the anchor retry, the sealer and the direct
+//     loadCaseSigner calls, because the case key now signs only as an active
+//     entry of the key document (fix 2) and the retry checks a stored
+//     case's signature against it (fix 1);
+//   - expectations, where 2c's rules change the pinned behaviour: the status
+//     row is counted from the tree alone (fix 3), so `sealed`, `conflict`,
+//     `unreadable`, `read` and `unread` are gone, `withdrawn` is new, and a
+//     committed case counts as pending; a damaged case file is no longer
+//     read, so it no longer shows as unreadable (both STATUS tests renamed
+//     to say so); the sealer's second run keeps the pinned case as a
+//     candidate and reads it as already anchored (fix 5); verify.js
+//     dispatches six case ops, not three (renamed).
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -83,6 +98,11 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const LOG_ENV = "WITNESS_LOG_SIGNER_KEY";
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer });
+// Item 2c: the case key signs only as an ACTIVE entry of the key document,
+// and the anchor retry checks a stored signature against it; the committed
+// document lists no key, so the signing tests hand the seal, the retry and
+// the sealer a copy that lists the test key (see test/case_reveal.test.js).
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" })] });
 const OPEN_KEY = "case-test-open-key-0003";
 const OPEN_AUTH = Object.freeze({ authorization: `Bearer ${OPEN_KEY}` });
 
@@ -168,9 +188,9 @@ function revealBody(id, a, b) {
     tape_b_b64: b.tape.toString("base64"),
   };
 }
-async function reveal(body, { now = REVEAL_AT, env = SIGNED } = {}) {
+async function reveal(body, { now = REVEAL_AT, env = SIGNED, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", body), res, { now, env });
+  await H.handleCaseReveal(req("case-reveal", body), res, { now, env, keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 // A sealed case; `pinFails` leaves it sealed with pin: pending.
@@ -227,7 +247,7 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
     assert.deepEqual(C.validateCase(bad), { ok: true }, `${name}: fixture is schema-valid`);
     gh.seed(PINS, C.casePath(id), bad);
     const writes = gh.putLog.length;
-    const got = await S.anchorCase(id, { now: REVEAL_AT + 60000 });
+    const got = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
     assert.equal(got.ok, false, name);
     assert.equal(got.code, "verdict_unbound", `${name}: ${JSON.stringify(got)}`);
     reasons[name] = got.reason;
@@ -245,7 +265,7 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
   assert.equal(S.checkSealedReceipt(plants.receipt_altered), null, "the binding alone does not see an altered count");
   // control: the case as sealed anchors
   gh.seed(PINS, C.casePath(id), good);
-  const ok = await S.anchorCase(id, { now: REVEAL_AT + 60000 });
+  const ok = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
   assert.equal(ok.ok, true);
   assert.equal(ok.pin, "anchored");
   assert.equal(ok.chain, S.caseChain(good));
@@ -296,7 +316,7 @@ test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS
 });
 
 test("FIX 2: a legitimately separate case key signs when both other keys are present; one key under another name is still the same key", async () => {
-  const loaded = S.loadCaseSigner(SIGNED);
+  const loaded = S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC });
   assert.equal(loaded.ok, true);
   assert.equal(loaded.verifier, CASE_KEY.verifier);
   const { id, r } = await sealedCase();
@@ -382,18 +402,19 @@ function verdictOf(d) {
   return { degraded: d.degraded, indeterminate: d.indeterminate, overallOk: d.overallOk, namespaces: d.namespaces, errCount: d.errCount };
 }
 
-test("STATUS: a store holding a sealed case does not degrade /status; pins/case is not a namespace; case anchors are their own row (sealed, anchored, pending)", async (t) => {
+test("STATUS: a store holding a sealed case does not degrade /status; pins/case is not a namespace; case anchors are their own row (case files, anchored, pending, from the tree)", async (t) => {
   healthyBoard(t);
   const before = await gatherStatusData();
   assert.equal(before.overallOk, true, `fixture: a healthy board (${JSON.stringify(verdictOf(before))})`);
-  assert.deepEqual(before.caseAnchors, { case_files: 0, sealed: 0, anchored: 0, pending: 0, conflict: 0, unreadable: 0, read: 0, unread: 0, partial: false });
+  // item 2c (fix 3): the row is counted from the tree alone
+  assert.deepEqual(before.caseAnchors, { case_files: 0, anchored: 0, pending: 0, withdrawn: 0, partial: false });
 
   const one = await sealedCase();
   const withOne = await gatherStatusData();
   assert.deepEqual(verdictOf(withOne), verdictOf(before), "the sealed case changed nothing in the verdict");
   assert.deepEqual(withOne.namespaces, ["acme-prod"]);
   assert.ok(!withOne.rows.some((r) => r.ns === "case"), "no namespace row for pins/case");
-  assert.equal(withOne.caseAnchors.sealed, 1);
+  assert.equal(withOne.caseAnchors.case_files, 1);
   assert.equal(withOne.caseAnchors.anchored, 1);
   assert.equal(withOne.caseAnchors.pending, 0);
 
@@ -403,10 +424,11 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   const withThree = await gatherStatusData();
   assert.deepEqual(verdictOf(withThree), verdictOf(before), "a pending anchor changes nothing in the verdict either");
   assert.equal(withThree.caseAnchors.case_files, 3);
-  assert.equal(withThree.caseAnchors.sealed, 2);
   assert.equal(withThree.caseAnchors.anchored, 1);
-  assert.equal(withThree.caseAnchors.pending, 1);
-  assert.equal(withThree.caseAnchors.conflict + withThree.caseAnchors.unreadable, 0);
+  // item 2c (fix 3): by the tree alone the committed case and the sealed one
+  // waiting for its pin are both pending (both registration files, no pin)
+  assert.equal(withThree.caseAnchors.pending, 2);
+  assert.equal(withThree.caseAnchors.withdrawn, 0);
 
   // the page and the JSON twin say the same
   const html = makeRes();
@@ -420,7 +442,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   await statusHandler(makeReq({ method: "GET", query: { format: "json" }, headers: { "x-forwarded-for": freshIp() } }), json);
   const j = parsed(json);
   assert.equal(j.status, "ok");
-  assert.deepEqual([j.case_anchors.sealed, j.case_anchors.anchored, j.case_anchors.pending], [2, 1, 1]);
+  assert.deepEqual([j.case_anchors.case_files, j.case_anchors.anchored, j.case_anchors.pending], [3, 1, 2]);
   assert.equal(j.case_anchors.feeds_status, false);
   assert.ok(!j.namespaces.some((n) => n.namespace === "case"));
 
@@ -434,7 +456,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   assert.equal(verdict.judgePin(casePin, { what: "x", namespace: S.pinNamespace(one.id) }).reason, "case_seal_not_a_generic_pin");
 });
 
-test("STATUS: a case file that cannot be read, or a tree that cannot be read, is shown in the case row and still feeds no verdict; nothing is read when no case exists", async (t) => {
+test("STATUS: a damaged case file changes nothing in the case row, which reads no case file; a tree that cannot be read is shown as not counted; neither feeds a verdict; nothing is read when no case exists", async (t) => {
   healthyBoard(t);
   const base = verdictOf(await gatherStatusData());
   const reads = gh.getLog.length;
@@ -442,9 +464,12 @@ test("STATUS: a case file that cannot be read, or a tree that cannot be read, is
   assert.ok(!gh.getLog.slice(reads).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case read without a case");
   const { id } = await sealedCase();
   gh.seed(PINS, C.casePath(id), { ...storedCase(id), anchor: "pending" });
+  const before = gh.getLog.length;
   const d = await gatherStatusData();
-  assert.equal(d.caseAnchors.unreadable, 1);
-  assert.equal(d.caseAnchors.sealed, 0);
+  // item 2c (fix 3): the row never reads the case file, so the damage is not
+  // seen here; by path the case is anchored (both registrations and a pin)
+  assert.ok(!gh.getLog.slice(before).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case file or case pin read");
+  assert.equal(d.caseAnchors.anchored, 1);
   assert.deepEqual(verdictOf(d), base);
   // the tree unreadable: the conflicts are uncounted (indeterminate, as
   // before) and the case row says it was not counted, never zero
@@ -561,7 +586,7 @@ test("SIGNED_BY: the reveal writes the case signer's key id inside the signed by
   // altering signed_by breaks the signature (it is signed), and a case signed
   // by the right key that names another is refused as a signer mismatch
   assert.equal(S.verifyCase({ ...k, signed_by: "arcaeon.io/other+12345678" }, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "bad_signature");
-  const lying = S.signCase({ ...k, sig: null, sig_reason: null }, { ...S.loadCaseSigner(SIGNED), keyId: "arcaeon.io/other+12345678" });
+  const lying = S.signCase({ ...k, sig: null, sig_reason: null }, { ...S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }), keyId: "arcaeon.io/other+12345678" });
   assert.equal(S.verifyCase(lying, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "signer_mismatch");
   // unsigned seals carry null
   const u = await sealedCase({ over: { scope_digest: sha("unsigned signed_by") }, env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
@@ -647,7 +672,7 @@ test("SEALER: a sealer run with one pending case pins it once; a second run pins
   assert.deepEqual(await S.anchorState(id, chain), { pin: "pending" });
 
   const writes = gh.putLog.length;
-  const run1 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000) });
+  const run1 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });
   assert.equal(run1.reason, "no_open_batch", "the batch pass is what it was");
   assert.equal(run1.cases.ok, true, JSON.stringify(run1.cases));
   assert.deepEqual(run1.cases.anchored, [id]);
@@ -659,9 +684,12 @@ test("SEALER: a sealer run with one pending case pins it once; a second run pins
   assert.equal(pinned.pinned_at, new Date(REVEAL_AT + 120000).toISOString());
   assert.deepEqual(storedCase(id), sealed, "the sealed case is untouched");
 
-  const run2 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 180000) });
+  const run2 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 180000), keyDocument: KEYS_DOC });
   assert.equal(run2.cases.ok, true);
-  assert.equal(run2.cases.candidates, 0);
+  // item 2c (fix 5): a pinned case stays in the window and its pin is judged
+  assert.equal(run2.cases.candidates, 1);
+  assert.equal(run2.cases.pinned, 1);
+  assert.deepEqual(run2.cases.already, [id]);
   assert.deepEqual(run2.cases.anchored, []);
   assert.equal(gh.putLog.length, writes + 2, "nothing new");
   assert.equal(gh.read(PINS, S.pinPaths(id).latest).chain, chain, "the chain is identical");
@@ -674,14 +702,14 @@ test("SEALER: a committed case is passed over, an unbound verdict is refused, a 
   const k = storedCase(bad.id);
   gh.seed(PINS, C.casePath(bad.id), { ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T09:00:01Z" } });
   const writes = gh.putLog.length;
-  const run = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000) });
+  const run = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000), keyDocument: KEYS_DOC });
   assert.equal(run.cases.ok, true);
   assert.equal(run.cases.candidates, 2);
   assert.equal(run.cases.not_sealed, 1);
   assert.deepEqual(run.cases.refused, [{ case_id: bad.id, code: "verdict_unbound", reason: "receipt_time_mismatch" }]);
   assert.equal(gh.putLog.length, writes);
   gh.treeStatus = 502;
-  const blind = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000) });
+  const blind = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });
   assert.equal(blind.reason, "no_open_batch");
   assert.equal(blind.cases.ok, false);
   assert.equal(blind.cases.reason, "tree_unreadable");
@@ -693,7 +721,7 @@ test("SEALER: with more pending cases than one run reads, the window moves on ea
   for (let i = 0; i < 3; i += 1) ids.push((await sealedCase({ over: { scope_digest: sha(`window ${i}`) }, pinFails: true })).id);
   const pinnedNow = new Set();
   for (let minute = 0; minute < 3; minute += 1) {
-    const out = await S.anchorPending({ now: REVEAL_AT + 60000 * (minute + 1), maxReads: 1 });
+    const out = await S.anchorPending({ now: REVEAL_AT + 60000 * (minute + 1), maxReads: 1, keyDocument: KEYS_DOC });
     assert.equal(out.read, 1);
     for (const id of out.anchored) pinnedNow.add(id);
   }
@@ -707,10 +735,11 @@ test("SEALER: with more pending cases than one run reads, the window moves on ea
   assert.deepEqual(W(["a", "b"], 5, 0), ["a", "b"]);
 });
 
-test("SEALER: no public op writes a pin; verify.js dispatches exactly the three case ops", async () => {
+test("SEALER: no public op writes a pin; verify.js dispatches exactly the six case ops", async () => {
   const src = fs.readFileSync(path.join(ROOT, "api", "verify.js"), "utf-8");
   const ops = [...src.matchAll(/op === "(case-[a-z-]+)"/g)].map((m) => m[1]).sort();
-  assert.deepEqual(ops, ["case-commit", "case-open", "case-reveal"]);
+  // item 2c adds case-withdraw, case-reference and case-page; none of them pins
+  assert.deepEqual(ops, ["case-commit", "case-open", "case-page", "case-reference", "case-reveal", "case-withdraw"]);
   const { id } = await sealedCase({ pinFails: true });
   const writes = gh.putLog.length;
   for (const op of ["case-anchor", "case-pin", "case-page"]) {
