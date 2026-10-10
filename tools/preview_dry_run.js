@@ -41,10 +41,15 @@
 // USAGE
 //
 //   node tools/preview_dry_run.js --base <preview URL> --key <issued key>
-//        [--operator-key <k>] [--pin-token <t>] [--exhaust-quota]
+//        [--bypass <secret>] [--operator-key <k>] [--pin-token <t>] [--exhaust-quota]
 //
 //   --base <url>        the preview's origin, https://<deployment>.vercel.app
 //                       (no path, no query).
+//   --bypass <secret>   the Vercel project's Protection Bypass for Automation
+//                       secret. Read from VERCEL_AUTOMATION_BYPASS_SECRET when
+//                       the flag is absent. Sent as x-vercel-protection-bypass
+//                       on every request to the preview, with
+//                       x-vercel-set-bypass-cookie: true on the first.
 //   --key <key>         an issued key (ARCAEON_KEY). Sent only as the bearer of
 //                       case-open and of the two stamps. Use a key that has not
 //                       opened a case today if --exhaust-quota is given.
@@ -58,10 +63,22 @@
 //   --exhaust-quota     run the quota half of (c): up to 21 opens.
 //   --help              this text
 //
-// NOTHING SECRET IS PRINTED. Neither key, the operator key nor the pin token
-// appears on stdout or stderr: every line is checked for each of them and
-// any occurrence is replaced before it is written. stdout carries the seven
-// lines and nothing else; progress goes to stderr.
+// A PROTECTED PREVIEW. The project protects its previews with Vercel
+// Authentication, so a request without the bypass is answered 401 with
+// Vercel's SSO page before any function runs. The first request is the
+// GET of (a). When it answers 401 with that page, nothing more is asked of
+// the preview and every check is COULD NOT LOOK, with the reason "protected
+// preview, no bypass given", or, when a bypass was given, "protected
+// preview, the bypass given was refused". Exit 3. The page is told from any
+// other 401 by Vercel's marks on it: a link to vercel.com/sso-api, a
+// _vercel_sso_nonce cookie, or the title "Authentication Required" served by
+// Vercel. Another 401 leaves the checks to run, and each reads it as
+// COULD NOT LOOK on its own.
+//
+// NOTHING SECRET IS PRINTED. Neither key, the bypass secret, the operator
+// key nor the pin token appears on stdout or stderr: every line is checked
+// for each of them and any occurrence is replaced before it is written.
+// stdout carries the seven lines and nothing else; progress goes to stderr.
 //
 // IT WRITES TO THE PREVIEW'S STORES. A dry run is real traffic: one case (21
 // with --exhaust-quota) is opened in the preview's pins store, two stamps go
@@ -113,6 +130,10 @@ const TAPES_FIXTURE = "test/fixtures/reconcile/cases.json";
 const TAPES_NAME = /^receipt-test_call_proxy_tape\/test_cross_repo_adapter_tape_a0: agent vs tool$/;
 const REVEAL_CHUNKS = 4;
 const TIMEOUT_MS = 30000;
+// A PROTECTED PREVIEW, above.
+const BYPASS_ENV = "VERCEL_AUTOMATION_BYPASS_SECRET";
+const BYPASS_HEADER = "x-vercel-protection-bypass";
+const BYPASS_COOKIE_HEADER = "x-vercel-set-bypass-cookie";
 
 function helpText() {
   const src = fs.readFileSync(__filename, "utf8").split("\n");
@@ -135,6 +156,7 @@ function parseArgs(argv) {
     if (t === "--help" || t === "-h") a.help = true;
     else if (t === "--base") a.base = next();
     else if (t === "--key") a.key = next();
+    else if (t === "--bypass") a.bypass = next();
     else if (t === "--operator-key") a.operatorKey = next();
     else if (t === "--pin-token") a.pinToken = next();
     else if (t === "--exhaust-quota") a.exhaustQuota = true;
@@ -212,6 +234,33 @@ function request(base, method, target, { headers = {}, body = null, chunks = nul
   });
 }
 
+// Every request to the preview: `request` with the bypass, when one was
+// given, as x-vercel-protection-bypass, and x-vercel-set-bypass-cookie: true
+// on the run's first request (A PROTECTED PREVIEW, above).
+function send(ctx, method, target, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (ctx.bypass) {
+    headers[BYPASS_HEADER] = ctx.bypass;
+    if (!ctx.bypassCookieAsked) {
+      ctx.bypassCookieAsked = true;
+      headers[BYPASS_COOKIE_HEADER] = "true";
+    }
+  }
+  return request(ctx.base, method, target, { ...opts, headers });
+}
+
+// Vercel's SSO page: a 401 carrying a link to vercel.com/sso-api, a
+// _vercel_sso_nonce cookie, or the title "Authentication Required" served
+// by Vercel (A PROTECTED PREVIEW, above).
+function vercelSso(ans) {
+  if (ans.error || ans.status !== 401) return false;
+  const html = ans.body.toString("utf8");
+  const cookies = [].concat(ans.headers["set-cookie"] || []).join("\n");
+  const byVercel = /vercel/i.test(String(ans.headers.server || "")) || /vercel/i.test(html);
+  return /vercel\.com\/sso-api/i.test(html) || /_vercel_sso_nonce=/i.test(cookies) ||
+    (byVercel && /<title>\s*Authentication Required\s*<\/title>/i.test(html));
+}
+
 // Why an answer is not one the check can judge, or null when it is the
 // function's own answer to judge. A 429, a 502/503/504 that is not a
 // deployment saying it is not configured, and a 401/403 that is not the
@@ -276,7 +325,7 @@ function opening(ctx, n) {
 function postJson(ctx, target, obj, { bearer = null } = {}) {
   const headers = { "content-type": "application/json" };
   if (bearer) headers.authorization = `Bearer ${bearer}`;
-  return request(ctx.base, "POST", target, { headers, body: JSON.stringify(obj) });
+  return send(ctx, "POST", target, { headers, body: JSON.stringify(obj) });
 }
 
 async function open(ctx, n) {
@@ -333,8 +382,9 @@ async function checkKeyDocument(ctx) {
     return couldNotLook(`the committed ${rel} could not be read in this checkout (${e.code || e.name})`);
   }
   const want = sha256hex(local);
-  ctx.log(`(a) GET /${rel}`);
-  const ans = await request(ctx.base, "GET", `/${rel}`);
+  // The run's first request is this GET (run, below); its answer is read here.
+  const ans = ctx.keysDocAnswer || (await send(ctx, "GET", `/${rel}`));
+  ctx.keysDocAnswer = null;
   if (ans.error) return couldNotLook(`GET /${rel}: ${ans.error}`);
   if (ans.status === 200) {
     const got = sha256hex(ans.body);
@@ -375,7 +425,7 @@ async function checkCasePage(ctx) {
   }
   const id = o.caseId;
   ctx.log(`(b) GET /case/${id}`);
-  const ans = await request(ctx.base, "GET", `/case/${id}`);
+  const ans = await send(ctx, "GET", `/case/${id}`);
   if (!rw) return broken(`this checkout's vercel.json has no rewrite for ${CASE_PAGE_SOURCE}; GET /case/${id}: ${said(ans)}`);
   const via = `vercel.json rewrites ${rw.source} to ${rw.destination}`;
   if (ans.error) return couldNotLook(`${via}; GET /case/${id}: ${ans.error}`);
@@ -484,7 +534,7 @@ async function checkChunkedReveal(ctx) {
   const chunks = [];
   for (let i = 0; i < bytes.length; i += size) chunks.push(bytes.subarray(i, i + size));
   ctx.log(`(e) case-reveal, chunked, ${bytes.length} bytes in ${chunks.length} chunks`);
-  const ans = await request(ctx.base, "POST", "/api/verify?op=case-reveal", { headers: { "content-type": "application/json" }, chunks });
+  const ans = await send(ctx, "POST", "/api/verify?op=case-reveal", { headers: { "content-type": "application/json" }, chunks });
   const sent = `a JSON body of ${bytes.length} bytes sent in ${chunks.length} chunks with no content-length`;
   const json = ans.error ? null : tryJson(ans.body);
   if (ans.status === 201 && json && json.case_id === id && json.status === "VERDICT") {
@@ -592,7 +642,7 @@ async function checkExposure(ctx) {
       const i = next;
       next += 1;
       const target = `/${paths[i].split("/").map(encodeURIComponent).join("/")}`;
-      results[i] = await request(ctx.base, "GET", target, { timeoutMs: 15000 });
+      results[i] = await send(ctx, "GET", target, { timeoutMs: 15000 });
     }
   };
   await Promise.all(Array.from({ length: Math.min(EXPOSURE_CONCURRENCY, paths.length) }, worker));
@@ -641,12 +691,12 @@ function redactor(secrets) {
   };
 }
 
-// opts: {base, key, operatorKey, pinToken, exhaustQuota, root, vercel,
-// stdout(line), stderr(line)}. root defaults to this checkout and vercel to
-// its vercel.json. -> {code, results: [{id, title, word, text, line}]}.
+// opts: {base, key, bypass, operatorKey, pinToken, exhaustQuota, root,
+// vercel, stdout(line), stderr(line)}. root defaults to this checkout and
+// vercel to its vercel.json. -> {code, results: [{id, title, word, text, line}]}.
 async function run(opts) {
   const root = opts.root || ROOT;
-  const redact = redactor([opts.key, opts.operatorKey, opts.pinToken]);
+  const redact = redactor([opts.key, opts.bypass, opts.operatorKey, opts.pinToken]);
   const stdout = opts.stdout || ((l) => process.stdout.write(`${l}\n`));
   const stderr = opts.stderr || ((l) => process.stderr.write(`${l}\n`));
   let vercel = opts.vercel;
@@ -660,6 +710,9 @@ async function run(opts) {
   const ctx = {
     base: opts.base,
     key: opts.key,
+    bypass: opts.bypass || null,
+    bypassCookieAsked: false,
+    keysDocAnswer: null,
     pinToken: opts.pinToken || null,
     exhaustQuota: opts.exhaustQuota === true,
     root,
@@ -671,14 +724,26 @@ async function run(opts) {
     sealed: null,
     log: (l) => stderr(redact(`dry run: ${l}`)),
   };
-  ctx.log(`preview ${ctx.base}, run ${ctx.runId}`);
+  ctx.log(`preview ${ctx.base}, run ${ctx.runId}, ${ctx.bypass ? "with" : "without"} a protection bypass`);
+  // The first request, (a)'s GET (A PROTECTED PREVIEW, above). Vercel's SSO
+  // page here means nothing else would be answered either: every check is
+  // COULD NOT LOOK and nothing more is asked of the preview.
+  ctx.log(`(a) GET /${S.CASE_KEYS_DOC}`);
+  ctx.keysDocAnswer = await send(ctx, "GET", `/${S.CASE_KEYS_DOC}`);
+  const shut = vercelSso(ctx.keysDocAnswer)
+    ? couldNotLook(`${ctx.bypass ? "protected preview, the bypass given was refused" : "protected preview, no bypass given"} ` +
+      `(the first request, GET /${S.CASE_KEYS_DOC}, answered HTTP 401 with Vercel's SSO page; ` +
+      `${ctx.bypass ? "check the project's Protection Bypass for Automation secret" : `give --bypass or set ${BYPASS_ENV}`})`)
+    : null;
   const results = [];
   for (const [id, title] of CHECKS) {
-    let r;
-    try {
-      r = await RUNNERS[id](ctx);
-    } catch (e) {
-      r = couldNotLook(`the check itself failed (${e && e.name}: ${e && e.message})`);
+    let r = shut;
+    if (!r) {
+      try {
+        r = await RUNNERS[id](ctx);
+      } catch (e) {
+        r = couldNotLook(`the check itself failed (${e && e.name}: ${e && e.message})`);
+      }
     }
     const line = redact(`${r.word} (${id}) ${title}: ${r.text}`).replace(/[\r\n]+/g, " ");
     stdout(line);
@@ -714,15 +779,19 @@ async function main(argv) {
     process.stderr.write("usage: --base must be the preview's origin, http(s)://host[:port], with no path, query or credentials\n");
     return 1;
   }
-  for (const [flag, v] of [["--key", a.key], ["--operator-key", a.operatorKey], ["--pin-token", a.pinToken]]) {
+  for (const [flag, v] of [["--key", a.key], ["--bypass", a.bypass], ["--operator-key", a.operatorKey], ["--pin-token", a.pinToken]]) {
     if (v !== undefined && !String(v).trim()) {
       process.stderr.write(`usage: ${flag} must not be empty\n`);
       return 1;
     }
   }
+  // The flag, else the environment; an empty variable is no bypass.
+  const fromEnv = process.env[BYPASS_ENV];
+  const bypass = a.bypass !== undefined ? a.bypass : fromEnv && fromEnv.trim() ? fromEnv : undefined;
   const { code } = await run({
     base: u.origin,
     key: a.key,
+    bypass,
     operatorKey: a.operatorKey,
     pinToken: a.pinToken,
     exhaustQuota: a.exhaustQuota,
@@ -736,4 +805,4 @@ if (require.main === module) {
     process.exit(3);
   });
 }
-module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, CHECKS, QUOTA_PER_DAY };
+module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, vercelSso, CHECKS, QUOTA_PER_DAY, BYPASS_ENV };

@@ -21,8 +21,15 @@
 //      each server gets its own per-IP limiter budget. `wrap(fn)` may stand
 //      a handler in front of the function (a platform that misbehaves).
 //   4. anything else is 404.
-// `protect: true` answers every request 401 text/html before any of that:
-// Vercel's deployment protection. `requests` records what arrived.
+// `protect` stands Vercel Authentication in front of all of that: a request
+// is answered 401 before anything above runs, unless it carries
+// x-vercel-protection-bypass equal to `protect.secret` (Protection Bypass
+// for Automation). The 401 is a stand-in for Vercel's SSO page (server:
+// Vercel, a _vercel_sso_nonce cookie, the title "Authentication Required",
+// a link to vercel.com/sso-api), modelled on it, not copied from a live
+// one; `protect: {page: "plain"}` answers a bare 401 with none of those
+// marks instead. `protect: true` is protection with no secret that passes.
+// `requests` records what arrived, headers included.
 "use strict";
 
 const http = require("http");
@@ -113,11 +120,21 @@ function vercelResponse(res) {
   return res;
 }
 
+function ssoPage(res, url) {
+  const nonce = Math.random().toString(36).slice(2);
+  res.setHeader("server", "Vercel");
+  res.setHeader("set-cookie", `_vercel_sso_nonce=${nonce}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax`);
+  const to = `https://vercel.com/sso-api?url=${encodeURIComponent(url)}&nonce=${nonce}`;
+  return send(res, 401, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Authentication Required</title></head>` +
+    `<body><p>Vercel Authentication</p><p>Redirecting to <a href="${to}">${to}</a></p></body></html>`, "text/html; charset=utf-8");
+}
+
 let serverSeq = 0;
 
 async function startPreview({ vercel = readVercel(), serves = publicOnly, files = {}, wrap = null, bodyParser = vercelBody, protect = false } = {}) {
   serverSeq += 1;
   const ip = `10.77.${(serverSeq >> 8) & 255}.${serverSeq & 255}`;
+  const guard = protect === true ? { page: "sso" } : protect || null;
   const requests = [];
   const fns = new Map();
   const fnFor = (name) => {
@@ -132,7 +149,10 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
       const raw = await readAll(req);
       const u = new URL(req.url, "http://preview.invalid");
       requests.push({ method: req.method, path: u.pathname, search: u.search, headers: { ...req.headers }, bytes: raw.length });
-      if (protect) return send(res, 401, "<!doctype html><title>Authentication Required</title>", "text/html; charset=utf-8");
+      if (guard && !(guard.secret && req.headers["x-vercel-protection-bypass"] === guard.secret)) {
+        if (guard.page === "plain") return send(res, 401, "Unauthorized\n", "text/plain; charset=utf-8");
+        return ssoPage(res, `https://preview.invalid${req.url}`);
+      }
       let pathname = decodeURIComponent(u.pathname);
       if (Object.prototype.hasOwnProperty.call(files, pathname)) return send(res, 200, files[pathname], "application/octet-stream");
       const rel = pathname.replace(/^\/+/, "");

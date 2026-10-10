@@ -19,14 +19,20 @@
 //   (e) a platform that loses a chunked body, one that wants a length;
 //   (f) no --pin-token, a pins store that does not hold the preview's case,
 //       a pass that refuses a case, a pin that failed at the reveal;
-//   (g) a deployment serving the whole root, and deployment protection.
+//   (g) a deployment serving the whole root.
+// And Vercel Authentication in front of the whole preview, both ways: the
+// right bypass secret and the checks run; a wrong or missing one and every
+// check is COULD NOT LOOK after one request, saying which; a 401 that is not
+// Vercel's SSO page left to the checks, as before.
 // What cannot run against the mock is the live preview itself: Vercel's own
-// body parser, its static serving, its deployment protection and GitHub's
-// read-after-write. The stand-in plants each one's two behaviours; the real
-// answer is the dry run's to read.
+// body parser, its static serving, its real SSO page and bypass, and
+// GitHub's read-after-write. The stand-in plants each one's two behaviours;
+// the real answer is the dry run's to read.
 // And the CLI: seven lines on stdout and nothing else, exit 0/2/3 (3 wins
-// over 2), usage 1, and no key, operator key or pin token on either stream,
-// nor the operator key or pin token in any request the preview received.
+// over 2), usage 1, the bypass from VERCEL_AUTOMATION_BYPASS_SECRET when the
+// flag is absent, and no key, bypass, operator key or pin token on either
+// stream, nor the operator key or pin token in any request the preview
+// received.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -67,7 +73,9 @@ const USAGE = process.env.GITHUB_USAGE_REPO;
 const KEY = "dry-run-issued-key-0001";
 const OPERATOR_KEY = "dry-run-operator-key-0001-never-sent";
 const PIN_TOKEN = "dry-run-pin-token-0001-never-sent";
-const SECRETS = [KEY, OPERATOR_KEY, PIN_TOKEN];
+const BYPASS = "dry-run-bypass-secret-0001-right";
+const WRONG_BYPASS = "dry-run-bypass-secret-0002-wrong";
+const SECRETS = [KEY, OPERATOR_KEY, PIN_TOKEN, BYPASS, WRONG_BYPASS];
 
 let gh;
 let restore;
@@ -355,7 +363,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
 });
 
 // =============================================================================
-// (g) root-file exposure, and deployment protection
+// (g) root-file exposure
 // =============================================================================
 
 test("(g) BROKEN with the paths when the whole root is served; the paths asked are every lib/, tools/ and test/ file of this checkout", async (t) => {
@@ -375,18 +383,72 @@ test("(g) BROKEN with the paths when the whole root is served; the paths asked a
   }
 });
 
-test("DEPLOYMENT PROTECTION: a preview that answers 401 before any function makes every check COULD NOT LOOK, never BROKEN or VERIFIED", async (t) => {
-  const r = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: true } });
+// =============================================================================
+// a protected preview: Vercel Authentication and the automation bypass
+// =============================================================================
+
+test("PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret, the first alone asks for the bypass cookie", async (t) => {
+  const r = await dryRun(t, { bypass: BYPASS, exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { secret: BYPASS } } });
+  for (const id of "abcdefg") assert.equal(word(r, id), "VERIFIED", r.show);
+  assert.equal(r.code, 0);
+  const qs = r.preview.requests;
+  assert.ok(qs.length > 150, `the whole run went through: ${qs.length} requests`);
+  for (const q of qs) assert.equal(q.headers["x-vercel-protection-bypass"], BYPASS, `${q.method} ${q.path}${q.search}`);
+  assert.equal(qs[0].path, `/${S.CASE_KEYS_DOC}`, "the first request is (a)'s GET");
+  assert.equal(qs[0].headers["x-vercel-set-bypass-cookie"], "true");
+  assert.equal(qs.slice(1).some((q) => Object.prototype.hasOwnProperty.call(q.headers, "x-vercel-set-bypass-cookie")), false, "on the first request only");
+
+  // A bypass sent to a preview that is not protected changes nothing (a
+  // fresh store: the arm above spent the key's opens for today).
+  gh = new MockGitHubStore();
+  restore();
+  restore = install(gh);
+  const open = await dryRun(t, { bypass: BYPASS });
+  for (const id of "abdeg") assert.equal(word(open, id), "VERIFIED", open.show);
+});
+
+test("PROTECTED, NO BYPASS OR A WRONG ONE: Vercel's SSO 401 on the first request makes every check COULD NOT LOOK, saying which; nothing more is asked or written; exit 3", async (t) => {
+  const none = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { secret: BYPASS } } });
+  for (const id of "abcdefg") {
+    assert.equal(word(none, id), "COULD NOT LOOK", none.show);
+    assert.match(none.by[id].line, new RegExp(`^COULD NOT LOOK \\(${id}\\) [^:]+: protected preview, no bypass given \\(the first request, ` +
+      "GET /\\.well-known/arcaeon/case-signing-keys\\.json, answered HTTP 401 with Vercel's SSO page; give --bypass or set VERCEL_AUTOMATION_BYPASS_SECRET\\)$"));
+  }
+  assert.equal(none.code, 3);
+  assert.equal(none.preview.requests.length, 1, "one request, then nothing");
+  assert.equal(Object.prototype.hasOwnProperty.call(none.preview.requests[0].headers, "x-vercel-protection-bypass"), false);
+
+  const wrong = await dryRun(t, { bypass: WRONG_BYPASS, exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { secret: BYPASS } } });
+  for (const id of "abcdefg") assert.match(wrong.by[id].line, new RegExp(`^COULD NOT LOOK \\(${id}\\) [^:]+: protected preview, the bypass given was refused `), wrong.show);
+  assert.equal(wrong.code, 3);
+  assert.equal(wrong.preview.requests.length, 1);
+  assert.equal(gh.putLog.length, 0, "no case, stamp or counter was written");
+});
+
+test("A 401 THAT IS NOT VERCEL'S SSO PAGE is left to the checks: each reads it as COULD NOT LOOK on its own, never BROKEN or VERIFIED", async (t) => {
+  const r = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { page: "plain" } } });
   for (const id of "abcdefg") assert.equal(word(r, id), "COULD NOT LOOK", r.show);
   assert.match(r.by.a.line, /HTTP 401 before any function answered/);
+  assert.equal(r.by.a.line.includes("protected preview"), false);
   assert.equal(r.code, 3);
 });
 
-test("REDACTION: a preview that echoes the bearer key in its refusal code is printed with [redacted], never the key", async (t) => {
-  const r = await dryRun(t, { preview: { wrap: onOp("case-open", (req, res) =>
-    res.status(401).json({ ok: false, error_code: `echo ${String(req.headers.authorization).slice(7)}`, error: "echoed" })) } });
+test("vercelSso: Vercel's page is told by its sso-api link, its nonce cookie, or its title served by Vercel; a bare 401, another server's page or a 200 is not it", () => {
+  const ans = (status, html, headers = {}) => ({ status, headers, body: Buffer.from(html) });
+  assert.equal(tool.vercelSso(ans(401, '<a href="https://vercel.com/sso-api?url=x&nonce=y">')), true);
+  assert.equal(tool.vercelSso(ans(401, "", { "set-cookie": ["_vercel_sso_nonce=abc; Path=/"] })), true);
+  assert.equal(tool.vercelSso(ans(401, "<title>Authentication Required</title>", { server: "Vercel" })), true);
+  assert.equal(tool.vercelSso(ans(401, "Unauthorized")), false);
+  assert.equal(tool.vercelSso(ans(401, "<title>Authentication Required</title>", { server: "nginx" })), false);
+  assert.equal(tool.vercelSso(ans(200, '<a href="https://vercel.com/sso-api?url=x">')), false);
+  assert.equal(tool.vercelSso({ error: "no answer (ECONNREFUSED)" }), false);
+});
+
+test("REDACTION: a preview that echoes the bearer key and the bypass secret in its refusal code is printed with [redacted], never either", async (t) => {
+  const r = await dryRun(t, { bypass: BYPASS, preview: { wrap: onOp("case-open", (req, res) =>
+    res.status(401).json({ ok: false, error_code: `echo ${String(req.headers.authorization).slice(7)} ${req.headers["x-vercel-protection-bypass"]}`, error: "echoed" })) } });
   assert.equal(word(r, "c"), "BROKEN");
-  assert.match(r.by.c.line, /answered HTTP 401 echo \[redacted\], not 201/);
+  assert.match(r.by.c.line, /answered HTTP 401 echo \[redacted\] \[redacted\], not 201/);
 });
 
 // =============================================================================
@@ -408,9 +470,9 @@ test("EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anyth
   assert.equal(three.code, 3);
 });
 
-function runCli(args) {
+function runCli(args, extraEnv = {}) {
   return new Promise((resolve) => {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GITHUB_|STAMP_|WITNESS_)/.test(k)));
+    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GITHUB_|STAMP_|WITNESS_|VERCEL_)/.test(k))), ...extraEnv };
     const child = spawn(process.execPath, [TOOL, ...args], { env });
     let stdout = "";
     let stderr = "";
@@ -444,7 +506,7 @@ test("CLI: seven lines on stdout and nothing else, in order; no key, operator ke
     assert.equal(r.stdout.includes(s), false);
     assert.equal(r.stderr.includes(s), false);
   }
-  assert.match(r.stderr, /^dry run: preview http:\/\/127\.0\.0\.1:\d+, run [0-9a-f]{16}$/m, "progress goes to stderr");
+  assert.match(r.stderr, /^dry run: preview http:\/\/127\.0\.0\.1:\d+, run [0-9a-f]{16}, without a protection bypass$/m, "progress goes to stderr");
 
   // Nothing listening: every check that needs the preview COULD NOT LOOK, and the pin token is still never printed.
   const port = await closedPort();
@@ -456,11 +518,39 @@ test("CLI: seven lines on stdout and nothing else, in order; no key, operator ke
   for (const s of SECRETS) assert.equal((dead.stdout + dead.stderr).includes(s), false);
 });
 
+test("CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET when the flag is absent, the flag wins over it, an empty variable is no bypass; never printed", async (t) => {
+  const p = await startPreview({ protect: { secret: BYPASS } });
+  t.after(() => p.close());
+  const words = (r) => r.stdout.trim().split("\n").map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`);
+
+  const fromEnv = await runCli(["--base", p.base, "--key", KEY], { VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS });
+  assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "VERIFIED e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
+  assert.equal(fromEnv.code, 3);
+  assert.match(fromEnv.stderr, /, with a protection bypass$/m);
+  const seen = p.requests.length;
+  assert.ok(seen > 130, `the whole run went through: ${seen} requests`);
+  assert.ok(p.requests.every((q) => q.headers["x-vercel-protection-bypass"] === BYPASS));
+
+  const flagWins = await runCli(["--base", p.base, "--key", KEY, "--bypass", WRONG_BYPASS], { VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS });
+  for (const l of flagWins.stdout.trim().split("\n")) assert.match(l, /^COULD NOT LOOK \([a-g]\) [^:]+: protected preview, the bypass given was refused /, l);
+  assert.equal(flagWins.code, 3);
+  assert.equal(p.requests.length, seen + 1, "one request, then nothing");
+
+  for (const env of [{}, { VERCEL_AUTOMATION_BYPASS_SECRET: "" }]) {
+    const none = await runCli(["--base", p.base, "--key", KEY], env);
+    const lines = none.stdout.trim().split("\n");
+    assert.equal(lines.length, 7);
+    for (const l of lines) assert.match(l, /^COULD NOT LOOK \([a-g]\) [^:]+: protected preview, no bypass given /, l);
+    assert.equal(none.code, 3);
+  }
+  for (const r of [fromEnv, flagWins]) for (const s of SECRETS) assert.equal((r.stdout + r.stderr).includes(s), false);
+});
+
 test("CLI usage: --base and --key are required, --base is an origin, no flag is empty, an unknown flag is refused (exit 1, nothing on stdout); --help prints the header", async () => {
   for (const args of [[], ["--base", "https://x.example"], ["--key", KEY], ["--base", "not a url", "--key", KEY],
     ["--base", "https://x.example/some/path", "--key", KEY], ["--base", "https://x.example?q=1", "--key", KEY], ["--base", "ftp://x.example", "--key", KEY],
     ["--base", "https://x.example", "--key", " "], ["--base", "https://x.example", "--key", KEY, "--pin-token", ""], ["--base", "https://x.example", "--key", KEY, "--what"],
-    ["--base", "https://x.example", "--key"]]) {
+    ["--base", "https://x.example", "--key"], ["--base", "https://x.example", "--key", KEY, "--bypass", ""], ["--base", "https://x.example", "--key", KEY, "--bypass"]]) {
     const r = await runCli(args);
     assert.equal(r.code, 1, JSON.stringify(args));
     assert.equal(r.stdout, "", JSON.stringify(args));
@@ -469,4 +559,6 @@ test("CLI usage: --base and --key are required, --base is an origin, no flag is 
   assert.equal(h.code, 0);
   assert.match(h.stdout, /^tools\/preview_dry_run\.js — a dry run of the case protocol/);
   assert.match(h.stdout, /EXIT CODES: 0 every check VERIFIED; 2 a check BROKEN; 3 a check COULD NOT/);
+  assert.match(h.stdout, /\[--bypass <secret>\] \[--operator-key <k>\] \[--pin-token <t>\] \[--exhaust-quota\]/);
+  assert.match(h.stdout, /VERCEL_AUTOMATION_BYPASS_SECRET/);
 });
