@@ -8,7 +8,9 @@
 //   PRIVATE+KEY+<name>+<8 hex>+<base64(0x01 || seed)>
 //
 // writes that PRIVATE half to --out and nowhere else, and prints to stdout
-// ONLY the public entry for .well-known/arcaeon/case-signing-keys.json:
+// ONLY the public entry for the case key document, committed at
+// public/.well-known/arcaeon/case-signing-keys.json and served at
+// /.well-known/arcaeon/case-signing-keys.json:
 //
 //   {"key_id", "verifier", "since", "note", "status": "active"}
 //
@@ -48,14 +50,14 @@
 // exactly this. Then the tool refuses (exit 2, file removed, nothing on
 // stdout) unless all of these hold:
 //   - the entry, added to the keys array of the committed
-//     .well-known/arcaeon/case-signing-keys.json, passes checkKeyDocument;
+//     public/.well-known/arcaeon/case-signing-keys.json, passes checkKeyDocument;
 //   - loadCaseSigner, given that document, loads the key (PUBLICATION FAILS
 //     CLOSED is satisfied), with the key_id and verifier printed;
 //   - a signature made with the loaded key verifies under the printed verifier.
 // The operator's real log and reconcile keys are never read.
 //
 // AFTER IT RUNS. Add the printed entry to the keys array of
-// .well-known/arcaeon/case-signing-keys.json (and its `updated` date), and set
+// public/.well-known/arcaeon/case-signing-keys.json (and its `updated` date), and set
 // WITNESS_CASE_SIGNER_KEY on the witness project's Vercel environment to the
 // file's contents. The file IS the env value: no trailing newline.
 "use strict";
@@ -193,7 +195,7 @@ function main(argv) {
   const acl = restrictOnWindows(out);
   process.stderr.write(`self-check: the entry passes checkKeyDocument in the committed document; with it published, loadCaseSigner loads ${entry.key_id}; it signs what the verifier accepts\n`);
   process.stderr.write(`windows acl: ${acl.tried ? (acl.ok ? "restricted" : `NOT restricted: ${acl.detail}`) : "n/a (mode 0600)"}\n`);
-  process.stderr.write(`next: add the entry on stdout to the keys array of ${S.CASE_KEYS_DOC}; set ${S.CASE_SIGNER_ENV} from the file\n`);
+  process.stderr.write(`next: add the entry on stdout to the keys array of ${S.CASE_KEYS_FILE}; set ${S.CASE_SIGNER_ENV} from the file\n`);
   process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
   return 0;
 }

@@ -1,5 +1,27 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the deploy shape, declared: public/ is the output directory (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** The owner read the real deployments' file trees through the Vercel API. Production went out PREBUILT with no static file at all (1 source file, 12 functions), so it answers 404 for `/.well-known/arcaeon/snapshot-keys.json` and would answer 404 for the case key document. The first preview uploaded the raw tree and serves 148 static files, `lib/`, `test/` and `CHANGELOG.md` among them. A local `vercel build` of the previous commit puts the same 148 files in `.vercel/output/static` (reproduced here with Vercel CLI 63.1.2 on a scratch copy). The shape depended on who deployed, and nothing in the repository declared it.
+- **The declaration.**
+  - `vercel.json` sets `"outputDirectory": "public"`. The domain serves `public/<path>` at `/<path>` and nothing else statically.
+  - `public/` holds exactly `.well-known/arcaeon/case-signing-keys.json`, `favicon.svg` and `PRACTICES.md`, each moved with `git mv` so its history follows. The key document's contents are unchanged.
+  - `PRACTICES.md` moved too because readers fetch it from the domain: the `/status` footer links `/PRACTICES.md` ("the standing challenge to break this"), and the brand-mark test named it with `/favicon.svg` as the root files a deployment serves. Production, with no static files, already answers 404 for that link today.
+  - `/.well-known/arcaeon/snapshot-keys.json` is not in this repository, nor anywhere in its history, so nothing was moved or created for it. The README says so.
+- **The readers.**
+  - `lib/_case_seal.js` loads the document from `public/.well-known/arcaeon/case-signing-keys.json` (`CASE_KEYS_FILE`, new). `CASE_KEYS_DOC` stays the served path, the name every message, `sig_reason` and the case page use, so no stored or served wording changes.
+  - The three functions whose require graph reaches it, `api/verify.js`, `api/status.js` and `api/badge.js`, name `public/.well-known/**` in `vercel.json` `includeFiles`.
+  - In the scratch build, those three bundles carry the committed file through `filePathMap` with `includeFiles`. Without it, the `require()` trace copies the same file in, so `includeFiles` is the declared second fence.
+  - `api/` stays at 12 functions.
+- **The tools.** Check (a) of `tools/preview_dry_run.js` compares the served document with `public/.well-known/arcaeon/case-signing-keys.json`, and so do (e) and (f) and their evidence lines. `tools/mint_case_key.js` names that file as the one to edit.
+- **README "Deploy shape".** How to deploy (`vercel pull`, `vercel build`, `vercel deploy --prebuilt`; `--prod` on both build and deploy for production only) and the exact list of what the domain serves statically.
+- **The scratch build of this tree.** `.vercel/output/static` holds exactly the three files, and there are 12 functions. This is the check the owner's own local build repeats.
+- **Tests.**
+  - `test/deploy_shape.test.js` (new, 2). It checks the declaration: `outputDirectory`; `public/`'s exact files and none left at the root; `includeFiles` on every function whose require graph reaches the document and on no other; every root-relative static link in the pages served; the README's list equal to `public/`; `api/` at 12. Eight break arms, each named.
+  - The stand-in serves static files from `vercel.json`'s `outputDirectory`. `rawTree: true` is the first preview's shape; there, (g) and now (a) read BROKEN, since the document sits at `/public/.well-known/...`.
+  - Expectations changed by design: the 2b KEY DOCUMENT test and the brand-mark FAVICON test asserted that no `public/` directory exists; they now assert the declared shape. Other tests read the committed file at its new path, and the dry run's evidence names it. The exit-code test's "only (g) BROKEN" arm plants one served `README.md` instead of the raw tree.
+  - Suite 938 -> 940 tests, 0 fail. Here: 938 pass and the 2 environment skips.
+
 ## 2026-10-10: the preview dry run, after its first real run: no bypass cookie; a note on root files served on the preview (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** The owner ran the dry run against a protected preview deployment of this branch. The bypass worked and the functions answered. On the first request, though, `x-vercel-set-bypass-cookie: true` drew Vercel's cookie handshake: a 307 whose `location` is the same URL. So (a) read COULD NOT LOOK (HTTP 307, neither the file nor a 404). With only `x-vercel-protection-bypass`, the key document came back 200 `application/json`, 2055 bytes, with the committed file's sha256.

@@ -316,8 +316,8 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
 
 test("FIX 2: the committed key document is loaded with require() at module load, frozen, and is the default", () => {
   const src = fs.readFileSync(path.join(ROOT, "lib", "_case_seal.js"), "utf-8");
-  assert.ok(src.includes('require("../.well-known/arcaeon/case-signing-keys.json")'), "a require, so the function bundle carries it");
-  const onDisk = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf-8"));
+  assert.ok(src.includes('require("../public/.well-known/arcaeon/case-signing-keys.json")'), "a require, so the function bundle carries it");
+  const onDisk = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf-8"));
   assert.deepEqual(S.PUBLISHED_KEYS, onDisk);
   assert.ok(Object.isFrozen(S.PUBLISHED_KEYS) && Object.isFrozen(S.PUBLISHED_KEYS.keys), "frozen: nothing can change the trust anchor at runtime");
   assert.throws(() => { S.PUBLISHED_KEYS.keys.push(ENTRY); }, TypeError);
@@ -391,7 +391,7 @@ test("FIX 4: checkKeyDocument refuses an unknown top-level field by name; the co
   }
   // The committed document passes, with its one active entry: the
   // production case key, holding the verifier the file holds.
-  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf-8"));
+  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf-8"));
   const checked = S.checkKeyDocument(doc);
   assert.equal(checked.ok, true, JSON.stringify(checked));
   assert.equal(checked.keys.length, 1);

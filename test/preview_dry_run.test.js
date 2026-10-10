@@ -90,7 +90,7 @@ const SIGNING_ENV = Object.freeze({
   WITNESS_RECONCILE_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-reconcile").signer,
   WITNESS_LOG_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-log").signer,
 });
-const COMMITTED_DOC = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf8"));
+const COMMITTED_DOC = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf8"));
 const CASE_ENTRY = S.keyDocumentEntry({ keyId: CASE_KEY.verifier.split("+").slice(0, 2).join("+"), verifier: CASE_KEY.verifier },
   { since: "2026-10-10", note: "the dry-run tests' case key" });
 const TEST_DOC = { ...COMMITTED_DOC, keys: [...COMMITTED_DOC.keys, CASE_ENTRY] };
@@ -176,7 +176,7 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   for (const id of "abcdefg") assert.equal(word(r, id), "VERIFIED", r.show);
   assert.equal(r.code, 0);
 
-  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")));
+  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")));
   assert.match(r.by.a.line, new RegExp(`HTTP 200, ${doc.length} bytes, sha256 ${crypto.createHash("sha256").update(doc).digest("hex")}`));
   const id = /case_id ([0-9a-f]{64})/.exec(r.by.b.line)[1];
   assert.match(r.by.b.line, /rewrites \/case\/:case_id to \/api\/verify\?op=case-page/);
@@ -189,7 +189,7 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   assert.equal(sealed.status, "VERDICT");
   assert.equal(sealed.signed_by, CASE_ENTRY.key_id, "the stand-in signs with the published case key");
   assert.match(r.by.e.line, new RegExp(`no content-length answered HTTP 201 VERDICT for case_id ${id}, verdict MATCHED: signed by ` +
-    `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in \\.well-known/arcaeon/case-signing-keys\\.json; ` +
+    `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in public/\\.well-known/arcaeon/case-signing-keys\\.json; ` +
     `chain ${S.caseChain(sealed)}, the case's own, pin anchored$`));
   assert.match(r.by.f.line, new RegExp(`case ${id} is anchored, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\)`));
   assert.match(r.by.g.line, /README\.md, package\.json, package-lock\.json, lib\/ \d+, tools\/ \d+, test\/ \d+\): every one answered HTTP 404/);
@@ -219,7 +219,7 @@ test("DEFAULT RUN: without --exhaust-quota and --pin-token, (c) and (f) are COUL
 // =============================================================================
 
 test("(a) BROKEN when the served document differs by one byte or is not served; the evidence carries both digests", async (t) => {
-  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")));
+  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")));
   const altered = Buffer.concat([doc, Buffer.from(" ")]);
   const r = await dryRun(t, { preview: { files: { [`/${S.CASE_KEYS_DOC}`]: altered } } });
   assert.equal(word(r, "a"), "BROKEN");
@@ -366,10 +366,10 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   // Signed, but by a key this checkout's document does not list, or lists retired.
   const unlisted = await dryRun(t, { keyDocument: COMMITTED_DOC });
   assert.equal(word(unlisted, "e"), "BROKEN");
-  assert.match(unlisted.by.e.line, /its sealed record does not hold against this checkout's \.well-known\/arcaeon\/case-signing-keys\.json \(case_signature_invalid: signer_unpublished\)/);
+  assert.match(unlisted.by.e.line, /its sealed record does not hold against this checkout's public\/\.well-known\/arcaeon\/case-signing-keys\.json \(case_signature_invalid: signer_unpublished\)/);
   const retired = await dryRun(t, { keyDocument: { ...COMMITTED_DOC, keys: [{ ...CASE_ENTRY, status: "retired" }] } });
   assert.equal(word(retired, "e"), "BROKEN");
-  assert.match(retired.by.e.line, /which \.well-known\/arcaeon\/case-signing-keys\.json lists as retired, not active/);
+  assert.match(retired.by.e.line, /which public\/\.well-known\/arcaeon\/case-signing-keys\.json lists as retired, not active/);
 
   // The answer altered on its way out.
   const arms = [
@@ -492,10 +492,16 @@ test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own cha
 // =============================================================================
 
 test("(g) BROKEN with the paths when the whole root is served, and (REVIEW FIX 2) for any answer but a 404, redirects and a 403 included; COULD NOT LOOK only for no answer; the paths asked are every lib/, tools/ and test/ file of this checkout", async (t) => {
-  const r = await dryRun(t, { preview: { serves: () => true } });
+  // The raw tree served as-is (a deployment that ignores vercel.json's
+  // outputDirectory, the first real preview's shape): the source is exposed,
+  // and the key document sits at /public/.well-known/..., not where readers
+  // fetch it, so (a) is BROKEN too.
+  const r = await dryRun(t, { preview: { rawTree: true } });
   assert.equal(word(r, "g"), "BROKEN");
   assert.match(r.by.g.line, /answered other than 404: README\.md \(HTTP 200, \d+ bytes\), package\.json \(HTTP 200, \d+ bytes\), lib\//);
   assert.equal(r.by.g.line.includes("package-lock.json ("), false, "a file this checkout does not have is not served");
+  assert.equal(word(r, "a"), "BROKEN");
+  assert.match(r.by.a.line, /HTTP 404, not served/);
 
   // REVIEW FIX 2: any answer but a 404 is BROKEN, redirects and a 403
   // included, each with its path; a request that got no answer alone is
@@ -548,7 +554,7 @@ test("PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); ev
   // The handshake the tool must not trigger is live in the stand-in, as the
   // first real dry run saw it: with the cookie header, a 307 to the same URL;
   // with the bypass alone, the document.
-  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")));
+  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")));
   const handshake = await tool._internal.request(r.preview.base, "GET", `/${S.CASE_KEYS_DOC}`,
     { headers: { "x-vercel-protection-bypass": BYPASS, "x-vercel-set-bypass-cookie": "true" } });
   assert.equal(handshake.status, 307);
@@ -623,10 +629,10 @@ test("EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anyth
   assert.equal(tool.exitCodeOf([w("BROKEN"), w("COULD NOT LOOK")]), 3);
   assert.equal(tool.exitCodeOf([w("COULD NOT LOOK"), w("BROKEN")]), 3);
 
-  const two = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { serves: () => true } });
+  const two = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { answers: { "/README.md": { status: 200, body: "served" } } } });
   assert.deepEqual(two.results.map((x) => x.word), ["VERIFIED", "VERIFIED", "VERIFIED", "VERIFIED", "VERIFIED", "VERIFIED", "BROKEN"], two.show);
   assert.equal(two.code, 2);
-  const three = await dryRun(t, { preview: { serves: () => true } });
+  const three = await dryRun(t, { preview: { rawTree: true } });
   assert.equal(word(three, "g"), "BROKEN");
   assert.equal(three.code, 3);
 });

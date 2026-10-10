@@ -604,8 +604,9 @@ test("SIGNED_BY: the reveal writes the case signer's key id inside the signed by
 });
 
 test("KEY DOCUMENT: .well-known/arcaeon/case-signing-keys.json is valid JSON with the required fields, served the snapshot keys' way; an entry for the seal's key is what the seal signs with", async () => {
-  const file = path.join(ROOT, ...S.CASE_KEYS_DOC.split("/"));
-  assert.equal(S.CASE_KEYS_DOC, ".well-known/arcaeon/case-signing-keys.json");
+  const file = path.join(ROOT, ...S.CASE_KEYS_FILE.split("/"));
+  assert.equal(S.CASE_KEYS_DOC, ".well-known/arcaeon/case-signing-keys.json", "where the domain serves it");
+  assert.equal(S.CASE_KEYS_FILE, "public/.well-known/arcaeon/case-signing-keys.json", "where it is committed");
   const text = fs.readFileSync(file, "utf-8");
   const doc = JSON.parse(text);
   const checked = S.checkKeyDocument(doc);
@@ -613,11 +614,12 @@ test("KEY DOCUMENT: .well-known/arcaeon/case-signing-keys.json is valid JSON wit
   assert.equal(doc.schema, "arcaeon-signing-keys/1", "the snapshot keys' schema");
   assert.ok(Array.isArray(doc.keys));
   for (const e of doc.keys) for (const f of ["key_id", "verifier", "since", "note"]) assert.ok(Object.prototype.hasOwnProperty.call(e, f), f);
-  // Served as a static file from the project root, as favicon.svg is: no
-  // public/ directory (one would become Vercel's output directory and stop
-  // serving the root), not a function under api/.
-  assert.equal(fs.existsSync(path.join(ROOT, "public")), false);
-  assert.ok(fs.existsSync(path.join(ROOT, "favicon.svg")));
+  // Served as a static file, as favicon.svg is, not a function under api/:
+  // public/ is vercel.json's declared outputDirectory (README "Deploy
+  // shape"), and nothing of it is left at the repository root.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf-8")).outputDirectory, "public");
+  assert.ok(fs.existsSync(path.join(ROOT, "public", "favicon.svg")));
+  assert.equal(fs.existsSync(path.join(ROOT, ".well-known")), false);
 
   // In the test environment: the entry the document carries for the seal's
   // key is exactly the key the seal names and signs with.
@@ -650,7 +652,7 @@ test("KEY DOCUMENT: .well-known/arcaeon/case-signing-keys.json is valid JSON wit
 test("KEY DOCUMENT, THIS ENVIRONMENT: the case key configured where the suite runs is an active entry of the committed document",
   { skip: process.env.WITNESS_CASE_SIGNER_KEY ? false : "WITNESS_CASE_SIGNER_KEY is not set where the suite runs (no case key provisioned here), so there is no configured key to look up" },
   () => {
-    const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf-8"));
+    const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf-8"));
     const k = checkpoint.parseSignerKey(String(process.env.WITNESS_CASE_SIGNER_KEY).trim());
     assert.equal(k.ok, true, "the configured case key parses");
     const e = S.publishedEntry(doc, `${k.name}+${k.hash}`);

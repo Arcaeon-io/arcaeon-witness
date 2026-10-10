@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/",
@@ -38,11 +39,18 @@
     }
   ],
   "functions": {
+    "api/badge.js": {
+      "includeFiles": "public/.well-known/**"
+    },
     "api/pin.js": {
       "maxDuration": 30
     },
+    "api/status.js": {
+      "includeFiles": "public/.well-known/**"
+    },
     "api/verify.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "public/.well-known/**"
     }
   }
 }

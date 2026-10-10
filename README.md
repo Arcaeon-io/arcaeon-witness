@@ -724,6 +724,51 @@ namespace when unset or malformed) and holds no secrets, but lives with the
 others for one reason: it's operational policy, not code — changing it
 shouldn't require a redeploy.
 
+## Deploy shape
+
+What the domain serves is declared here, in the repository, not decided by
+whoever deploys. `vercel.json` sets `"outputDirectory": "public"`: the domain
+serves `public/<path>` at `/<path>`, nothing else statically, and everything
+else it answers is one of the 12 functions under `api/`, reached directly or
+through a `vercel.json` rewrite.
+
+Served statically, exactly these, and nothing more:
+
+- `/.well-known/arcaeon/case-signing-keys.json`
+- `/favicon.svg`
+- `/PRACTICES.md`
+
+They are committed as `public/.well-known/arcaeon/case-signing-keys.json`
+(the case key document), `public/favicon.svg` and `public/PRACTICES.md` (linked
+from the `/status` footer). Not served: the source and the notes (`api/`,
+`lib/`, `tools/`, `test/`, `README.md`, `package.json`, `CHANGELOG.md`, the
+design documents); check (g) of `tools/preview_dry_run.js` probes for them.
+This project serves no `/.well-known/arcaeon/snapshot-keys.json`: that
+document is not in this repository.
+
+The functions that load the case key document (`api/verify.js`,
+`api/status.js`, `api/badge.js`, through `lib/_case_seal.js`) name
+`public/.well-known/**` in their `vercel.json` `includeFiles`, so each bundle
+carries the same bytes the domain serves. `test/deploy_shape.test.js` holds
+the repository to all of this, this list included.
+
+How to deploy: build locally, then deploy that build, so what is uploaded is
+what was built and checked here.
+
+```
+npx vercel pull --yes --environment=preview
+npx vercel build
+npx vercel deploy --prebuilt                   # a preview
+
+npx vercel pull --yes --environment=production
+npx vercel build --prod
+npx vercel deploy --prebuilt --prod            # production, and only production
+```
+
+After `npx vercel build`, `.vercel/output/static` must hold exactly the three
+files above. `.vercel/` is gitignored, and stays local: `vercel pull` writes
+the environment's variables into it.
+
 ## Testing
 
 `npm test` (or `node --test "test/*.test.js"`) — a no-framework harness on

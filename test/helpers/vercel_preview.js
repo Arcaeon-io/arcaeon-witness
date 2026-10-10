@@ -6,11 +6,13 @@
 // against whatever store the test installed (test/helpers/mock_store.js).
 //
 // What it does, in Vercel's order:
-//   1. the filesystem: a path in `files` is served as given; otherwise a
-//      root-relative path `serves` allows is served from this checkout. The
-//      default allows .well-known/ and favicon.svg only, which is what a
-//      deployment should serve; `serves: () => true` is one that serves the
-//      whole root (test (g) plants it).
+//   1. the filesystem: a path in `files` is served as given; otherwise the
+//      file at that path under the static root, when `serves` allows it. The
+//      static root is `vercel`'s outputDirectory (public/, README "Deploy
+//      shape"), as a build of this checkout declares it; `rawTree: true` is
+//      instead the whole checkout, served as-is, the shape of a deployment
+//      that uploaded the raw tree (the first real preview; test (g) plants
+//      it).
 //   2. the rewrites of `vercel` (this checkout's vercel.json unless a test
 //      hands another), ":name" segments substituted into the destination,
 //      the request's own query kept.
@@ -55,8 +57,9 @@ function readVercel() {
   return JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
 }
 
-function publicOnly(rel) {
-  return rel.startsWith(".well-known/") || rel === "favicon.svg";
+// Everything under the static root is served, unless a test narrows it.
+function servesAll() {
+  return true;
 }
 
 // The destination for `pathname` under the first rewrite whose source
@@ -144,10 +147,11 @@ function ssoPage(res, url) {
 
 let serverSeq = 0;
 
-async function startPreview({ vercel = readVercel(), serves = publicOnly, files = {}, answers = {}, wrap = null, bodyParser = vercelBody, protect = false, signer = null } = {}) {
+async function startPreview({ vercel = readVercel(), rawTree = false, serves = servesAll, files = {}, answers = {}, wrap = null, bodyParser = vercelBody, protect = false, signer = null } = {}) {
   serverSeq += 1;
   const ip = `10.77.${(serverSeq >> 8) & 255}.${serverSeq & 255}`;
   const guard = protect === true ? { page: "sso" } : protect || null;
+  const staticRoot = rawTree || !vercel.outputDirectory ? ROOT : path.join(ROOT, vercel.outputDirectory);
   const requests = [];
   const fns = new Map();
   const fnFor = (name) => {
@@ -181,8 +185,8 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
       if (Object.prototype.hasOwnProperty.call(files, pathname)) return send(res, 200, files[pathname], "application/octet-stream");
       const rel = pathname.replace(/^\/+/, "");
       if (rel && serves(rel)) {
-        const abs = path.join(ROOT, rel);
-        if (abs.startsWith(ROOT + path.sep) && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+        const abs = path.join(staticRoot, rel);
+        if (abs.startsWith(staticRoot + path.sep) && fs.existsSync(abs) && fs.statSync(abs).isFile()) {
           return send(res, 200, fs.readFileSync(abs), "application/octet-stream");
         }
       }
@@ -229,4 +233,4 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
   };
 }
 
-module.exports = { startPreview, readVercel, publicOnly, vercelBody };
+module.exports = { startPreview, readVercel, vercelBody };

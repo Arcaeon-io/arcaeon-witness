@@ -67,13 +67,16 @@ test("MARK: the helper draws the locked C2 geometry on each ground", () => {
 });
 
 test("FAVICON: favicon.svg is served from the deployment root: the mark on navy, rounded 20 percent corners", () => {
-  const svg = fs.readFileSync(path.join(ROOT, "favicon.svg"), "utf8");
+  const svg = fs.readFileSync(path.join(ROOT, "public", "favicon.svg"), "utf8");
   assert.ok(svg.includes('<rect width="100" height="100" rx="20" ry="20" fill="#13233A"/>'));
   assert.equal(count(svg, OUTER), 1);
   assert.equal(count(svg, INNER), 1);
   assert.ok(svg.includes('stroke="#e0a73c"') && svg.includes('stroke="#e8eef3"'));
-  assert.ok(!fs.existsSync(path.join(ROOT, "public")),
-    "no public/ directory: on Vercel's no-framework preset it would become the output directory and stop serving the root files (/PRACTICES.md, /favicon.svg)");
+  // The deployment root is public/, declared (README "Deploy shape"): it is
+  // where /favicon.svg and /PRACTICES.md are served from, and neither is
+  // left at the repository root.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8")).outputDirectory, "public");
+  assert.ok(!fs.existsSync(path.join(ROOT, "favicon.svg")) && !fs.existsSync(path.join(ROOT, "PRACTICES.md")));
 });
 
 test("PAGE /status: mark twice, favicon once", async () => {

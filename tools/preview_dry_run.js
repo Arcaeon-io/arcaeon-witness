@@ -9,7 +9,8 @@
 // it could not look):
 //
 //   (a) /.well-known/arcaeon/case-signing-keys.json is served byte-identical
-//       to the committed file in this checkout (sha256 compared).
+//       to the committed file in this checkout,
+//       public/.well-known/arcaeon/case-signing-keys.json (sha256 compared).
 //   (b) the /case/:case_id rewrite in this checkout's vercel.json delivers
 //       the case page: GET /case/<case_id> for a case this run opened answers
 //       200 text/html naming that case_id, with the status OPEN.
@@ -401,9 +402,9 @@ async function checkKeyDocument(ctx) {
   const rel = S.CASE_KEYS_DOC;
   let local;
   try {
-    local = fs.readFileSync(path.join(ctx.root, ...rel.split("/")));
+    local = fs.readFileSync(path.join(ctx.root, ...S.CASE_KEYS_FILE.split("/")));
   } catch (e) {
-    return couldNotLook(`the committed ${rel} could not be read in this checkout (${e.code || e.name})`);
+    return couldNotLook(`the committed ${S.CASE_KEYS_FILE} could not be read in this checkout (${e.code || e.name})`);
   }
   const want = sha256hex(local);
   // The run's first request is this GET (run, below); its answer is read here.
@@ -552,15 +553,15 @@ function sealedAnswer(ctx, id, json) {
   if (!v.ok) return broken(`its sealed case is not a valid arcaeon-case/1 record (${v.code} at ${v.field})`);
   if (k.status !== "VERDICT" || k.case_id !== id) return broken(`its sealed case is ${k.status} for case_id ${k.case_id}, not this case's VERDICT`);
   const doc = S.checkKeyDocument(ctx.keyDocument);
-  if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_DOC} does not read (${doc.reason} at ${doc.at}), so the signature cannot be checked`);
+  if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the signature cannot be checked`);
   const unsealed = S.sealedRecordReason(k, ctx.keyDocument);
-  if (unsealed) return broken(`its sealed record does not hold against this checkout's ${S.CASE_KEYS_DOC} (${unsealed.code}: ${unsealed.reason})`);
+  if (unsealed) return broken(`its sealed record does not hold against this checkout's ${S.CASE_KEYS_FILE} (${unsealed.code}: ${unsealed.reason})`);
   const entry = doc.keys.find((e) => e.key_id === k.signed_by);
-  if (entry.status !== "active") return broken(`it is signed by ${k.signed_by}, which ${S.CASE_KEYS_DOC} lists as ${entry.status}, not active`);
+  if (entry.status !== "active") return broken(`it is signed by ${k.signed_by}, which ${S.CASE_KEYS_FILE} lists as ${entry.status}, not active`);
   if (typeof json.chain !== "string" || !HEX64.test(json.chain)) return broken(`its chain ${JSON.stringify(json.chain)} is not 64 hex`);
   const own = S.caseChain(k);
   if (json.chain !== own) return broken(`its chain ${json.chain} is not the sealed case's own (${own})`);
-  return verified(`signed by ${k.signed_by}, verified under its active entry in ${S.CASE_KEYS_DOC}; chain ${json.chain}, the case's own`);
+  return verified(`signed by ${k.signed_by}, verified under its active entry in ${S.CASE_KEYS_FILE}; chain ${json.chain}, the case's own`);
 }
 
 async function checkChunkedReveal(ctx) {
@@ -629,7 +630,7 @@ async function checkSealerPass(ctx) {
         "store (set GITHUB_PIN_REPO and GITHUB_PIN_BRANCH to the preview's)");
     }
     const doc = S.checkKeyDocument(ctx.keyDocument);
-    if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_DOC} does not read (${doc.reason} at ${doc.at}), so the pass could not check a seal's signature`);
+    if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the pass could not check a seal's signature`);
     const sealer = require("../lib/_sealer.js");
     const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument });
     if (!rep.ok) {
@@ -764,7 +765,7 @@ function redactor(secrets) {
 // opts: {base, key, bypass, operatorKey, pinToken, exhaustQuota, root,
 // vercel, keyDocument, stdout(line), stderr(line)}. root defaults to this
 // checkout, vercel to its vercel.json, and keyDocument to its
-// .well-known/arcaeon/case-signing-keys.json, parsed (null when it does not
+// public/.well-known/arcaeon/case-signing-keys.json, parsed (null when it does not
 // read); the CLI never passes another, a test may (lib/_case_seal.js's own
 // rule for keyDocument). -> {code, results: [{id, title, word, text, line}]}.
 async function run(opts) {
@@ -783,7 +784,7 @@ async function run(opts) {
   let keyDocument = opts.keyDocument;
   if (keyDocument === undefined) {
     try {
-      keyDocument = JSON.parse(fs.readFileSync(path.join(root, ...S.CASE_KEYS_DOC.split("/")), "utf8"));
+      keyDocument = JSON.parse(fs.readFileSync(path.join(root, ...S.CASE_KEYS_FILE.split("/")), "utf8"));
     } catch {
       keyDocument = null;
     }

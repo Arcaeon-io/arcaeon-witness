@@ -2,7 +2,7 @@
 // 3a): the private half goes to --out and NOWHERE else (not stdout, not
 // stderr), stdout is exactly the public document entry, that entry passes
 // lib/_case_seal.js checkKeyDocument inside a copy of the committed
-// .well-known/arcaeon/case-signing-keys.json, loadCaseSigner given the file
+// public/.well-known/arcaeon/case-signing-keys.json, loadCaseSigner given the file
 // resolves the same key_id and verifier (key_unpublished against the
 // committed document, which does not list it; loaded once the copy with the
 // entry is handed to it), and an existing file is refused and left
@@ -25,7 +25,7 @@ const cp = require("../lib/_checkpoint.js");
 const S = require("../lib/_case_seal.js");
 
 const TOOL = path.join(__dirname, "..", "tools", "mint_case_key.js");
-const DOC = path.join(__dirname, "..", ...S.CASE_KEYS_DOC.split("/"));
+const DOC = path.join(__dirname, "..", ...S.CASE_KEYS_FILE.split("/"));
 // The child never sees a real signing key from the environment it runs in.
 const CLEAN_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/SIGNER_KEY$/.test(k)));
 const run = (args) => spawnSync(process.execPath, [TOOL, ...args], { encoding: "utf8", env: CLEAN_ENV });
@@ -151,7 +151,7 @@ test("a self-check that fails (a committed key document that does not read) refu
   fs.mkdirSync(path.join(root, "tools"));
   fs.copyFileSync(TOOL, path.join(root, "tools", "mint_case_key.js"));
   fs.cpSync(path.join(repo, "lib"), path.join(root, "lib"), { recursive: true });
-  const docPath = path.join(root, ...S.CASE_KEYS_DOC.split("/"));
+  const docPath = path.join(root, ...S.CASE_KEYS_FILE.split("/"));
   fs.mkdirSync(path.dirname(docPath), { recursive: true });
   fs.writeFileSync(docPath, JSON.stringify({ ...committedDoc(), private_note: "a field nobody checks" }, null, 2));
   const out = path.join(root, "case.signer.key");
