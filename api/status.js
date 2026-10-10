@@ -94,6 +94,7 @@ module.exports = async (req, res) => {
     retiredCount, retiredNamespaces,
     degraded, indeterminate, overallOk,
     namespaces,
+    caseAnchors, caseErr, caseAnchorNote,
   } = await gatherStatusData();
 
   // Audit states, only when the flag is on. A namespace nobody has ever
@@ -159,6 +160,21 @@ module.exports = async (req, res) => {
         </tr>`;
       }).join("\n")
     : `<tr><td colspan="7">${nsErr ? `namespace listing failed: ${esc(nsErr)}` : "no namespaces pinned yet"}</td></tr>`;
+
+  // Case anchors: their own row, not a namespace (case protocol item 2b; see
+  // lib/_status_data.js). Feeds no verdict.
+  const caseRowHtml = caseAnchors
+    ? `<tr>
+          <td><code>pins/case/</code> <a class="src" href="${esc(TREE("pins/case"))}" title="every case seal pin">tree</a></td>
+          <td>${esc(caseAnchors.sealed)}</td>
+          <td>${esc(caseAnchors.anchored)}</td>
+          <td>${esc(caseAnchors.pending)}</td>
+          <td>${esc(caseAnchors.conflict + caseAnchors.unreadable)}</td>
+        </tr>`
+    : `<tr class="row-error"><td><code>pins/case/</code></td><td colspan="4">case anchors not counted: ${esc(caseErr || "unknown")}</td></tr>`;
+  const casePartialHtml = caseAnchors && caseAnchors.partial
+    ? `<p class="muted">Counted from the first ${esc(caseAnchors.read)} case files that could be sealed; ${esc(caseAnchors.unread)} more were not read on this render.</p>`
+    : "";
 
   // One line per observed conflict (B080): what it was and how it resolved,
   // from lib/_status_data.js's conflictLine, so the page and the JSON twin
@@ -334,6 +350,16 @@ ${brandMark.FAVICON_LINK}
       <thead><tr><th>namespace</th><th>digest</th><th>rows</th><th>pinned at</th><th>next due by</th><th>${auditOn ? "audit state / cadence" : "status"}</th><th>live check</th></tr></thead>
       <tbody>${nsRowsHtml}</tbody>
     </table>
+  </div>
+
+  <h2>Case seals</h2>
+  <p class="muted">A sealed case (the case protocol) is anchored by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. <em>Pending</em> means the case file is sealed and its pin is not written yet; the operator's sealer run writes it. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>where</th><th>sealed</th><th>anchored</th><th>pending</th><th>conflict or unreadable</th></tr></thead>
+      <tbody>${caseRowHtml}</tbody>
+    </table>
+    ${casePartialHtml}
   </div>
 
   <h2>Conflict observations</h2>

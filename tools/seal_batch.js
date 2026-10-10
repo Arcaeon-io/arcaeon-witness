@@ -59,6 +59,11 @@
 //   2  the seal itself failed after the batch was closed. No root published;
 //      the leaves are held and the next run absorbs them (§10 T4).
 //
+// CASE ANCHORS (2026-10-10, case protocol item 2b): every run also pins any
+// sealed case whose pin did not land at its reveal (lib/_sealer.js, CASE
+// ANCHORS), reported in the JSON as `cases`. It does not change the exit
+// code: a case the pass could not pin is listed there and retried next run.
+//
 // It writes to the PUBLIC pin repo. It never deploys anything, never touches
 // the OTS anchor path, and reads the pending document from the private usage
 // repo the meter and balance already use.

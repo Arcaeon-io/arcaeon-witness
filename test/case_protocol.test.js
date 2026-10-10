@@ -23,6 +23,9 @@
 // reveal and the seal are in test/case_reveal.test.js. Two item-one tests
 // changed their bodies, not their names, because 2a changes the behaviour
 // they pinned: the same-hash replay is now 200, and stamp_commit is filled.
+// Item 2b: ?op=case-open requires a bearer key, so every case-open request
+// here carries OPEN_AUTH (an env key); no expectation changed. Item 2b's own
+// tests are in test/case_item2b.test.js.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -31,6 +34,8 @@ process.env.GITHUB_PIN_TOKEN = "test-token";
 process.env.STAMP_REPO = "test-owner/test-stamps";
 process.env.STAMP_BRANCH = "main";
 process.env.STAMP_TOKEN = "test-stamp-token";
+// ?op=case-open requires a bearer key (item 2b): one env key for the tests.
+process.env.WITNESS_KEYS = "case-test-open-key-0001:case-test-";
 
 const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
@@ -54,6 +59,8 @@ const STAMPS = process.env.STAMP_REPO;
 const NOW = Date.parse("2026-10-10T08:00:00Z");
 const DEADLINE = "2026-10-10T20:00:00Z";
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// The bearer key ?op=case-open requires (item 2b); case-commit takes none.
+const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0001" });
 
 let gh;
 let restore;
@@ -79,7 +86,7 @@ function req(op, body, extra = {}) {
   return makeReq({
     method: "POST",
     query: { op },
-    headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...(extra.headers || {}) },
+    headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...(op === "case-open" ? OPEN_AUTH : {}), ...(extra.headers || {}) },
     body,
   });
 }
@@ -615,7 +622,7 @@ test("TEST 3: a malformed request is a typed 4xx, never a 500 and never a write"
   const writes = gh.putLog.length;
   const raw = async (handler, body, headers) => {
     const res = makeRes();
-    await handler(makeReq({ method: "POST", headers: { "x-forwarded-for": freshIp(), ...headers }, body }), res, { now: NOW });
+    await handler(makeReq({ method: "POST", headers: { "x-forwarded-for": freshIp(), ...OPEN_AUTH, ...headers }, body }), res, { now: NOW });
     return res;
   };
   const cases = [
@@ -652,7 +659,7 @@ test("TEST 3, ITEM 1B: a body that arrives already parsed (Vercel's application/
   const CAP = H.BODY_MAX_BYTES;
   const writes = gh.putLog.length;
   const parsed = async (handler, body) => {
-    const r = makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp() }, body });
+    const r = makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...OPEN_AUTH }, body });
     assert.equal(r.headers["content-length"], undefined, "fixture: no content-length header");
     assert.equal(typeof r.body, "object", "fixture: the body is already an object, not a string");
     const res = makeRes();
@@ -688,7 +695,7 @@ test("TEST 3, ITEM 1B: a body that arrives already parsed (Vercel's application/
   }
   // and the string path gives the same typed refusal for the same size
   const sres = makeRes();
-  await H.handleCaseOpen(makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp() },
+  await H.handleCaseOpen(makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...OPEN_AUTH },
     body: JSON.stringify({ ...opening(), pad: "x".repeat(CAP) }) }), sres, { now: NOW });
   assert.equal(sres._status, 413);
   assert.equal(sres._body.error_code, "too_large");

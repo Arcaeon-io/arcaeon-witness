@@ -16,8 +16,14 @@
 // path), plus the reveal halves of tests 4 and 5, policy_unavailable, the
 // receipt deep check on a tampered receipt, and the stamp-size reveal path
 // (design, "After the fix pass"). Tests 10 and 11 (withdrawal, the
-// addendum) and the page are item 2b. Each test plants the failure it
-// exists to catch; MUST-FAIL ARMs run the wrong behaviour through the same
+// addendum) and the page are item 2c. Item 2b (test/case_item2b.test.js)
+// changed three fixtures here, no expectation: case-open now needs a bearer
+// key (OPEN_AUTH below); the signing environment carries the log key too,
+// since the case key signs only when it can be shown different from both
+// other keys; and a hand-unsigned copy of a signed case carries signed_by
+// null. TEST 8's squatter is now a well-formed case_seal record (still a
+// conflict), with an added arm for a malformed one (unreadable). Each test
+// plants the failure it exists to catch; MUST-FAIL ARMs run the wrong behaviour through the same
 // check. Every store is the in-memory mock: no network.
 "use strict";
 
@@ -27,6 +33,8 @@ process.env.GITHUB_PIN_TOKEN = "test-token";
 process.env.STAMP_REPO = "test-owner/test-stamps";
 process.env.STAMP_BRANCH = "main";
 process.env.STAMP_TOKEN = "test-stamp-token";
+// ?op=case-open requires a bearer key (item 2b): one env key for the tests.
+process.env.WITNESS_KEYS = "case-test-open-key-0002:case-test-";
 
 const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
@@ -58,7 +66,9 @@ const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
 const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
-const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer });
+// Item 2b: the case key signs only when it can be shown different from BOTH
+// other keys, so the signing environment carries all three.
+const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
 
 // The clean cross-repo pair (MATCHED 5 of 5 under reconcile.py), and a pair
 // that is ALTERED at call 2.
@@ -89,8 +99,11 @@ function freshIp() {
   ipSeq += 1;
   return `10.66.${(ipSeq >> 8) & 255}.${ipSeq & 255}`;
 }
+// The bearer key ?op=case-open requires (item 2b); commit and reveal take none.
+const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0002" });
 function req(op, body, headers = {}) {
-  return makeReq({ method: "POST", query: { op }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...headers }, body });
+  return makeReq({ method: "POST", query: { op }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp(),
+    ...(op === "case-open" ? OPEN_AUTH : {}), ...headers }, body });
 }
 function parsed(res) {
   return typeof res._body === "string" ? JSON.parse(res._body) : res._body;
@@ -764,13 +777,23 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   gh.forceFailure(PINS, p3.seq, 1, 502);
   const r3 = await reveal(revealBody(c3.id, c3.a, c3.b));
   assert.equal(r3.body.pin, "pending");
-  const squatter = { namespace: p3.ns, rows: 3, chain: "e".repeat(64), pinned_at: "2026-10-10T09:00:00.000Z", seq: 1, record_kind: "case_seal" };
+  // Item 2b: the squatter is a well-formed case_seal record (lib/_verdict.js
+  // judgeCaseSeal) holding another chain, so it reads as a conflict; one
+  // missing the type's auth fields reads as unreadable. Neither is written over.
+  const squatter = { ...S._internal.pinRecord(c3.id, "e".repeat(64), Date.parse("2026-10-10T09:00:00Z")) };
   gh.seed(PINS, p3.seq, squatter);
   const w3 = gh.putLog.length;
   const retry3 = await S.anchorCase(c3.id);
   assert.equal(retry3.pin, "conflict");
   assert.equal(gh.putLog.length, w3, "nothing written over");
   assert.deepEqual(gh.read(PINS, p3.seq), squatter);
+  const { auth_level, auth_note, ...partial } = squatter; // eslint-disable-line no-unused-vars
+  gh.seed(PINS, p3.seq, partial);
+  const retry3b = await S.anchorCase(c3.id);
+  assert.equal(retry3b.pin, "unreadable");
+  assert.equal(retry3b.reason, "case_seal_missing_field");
+  assert.equal(gh.putLog.length, w3, "nothing written over");
+  assert.deepEqual(gh.read(PINS, p3.seq), partial);
 });
 
 test("SEAL: a case is sealed once; a reveal that loses the race to another is refused and seals nothing", async () => {
@@ -844,7 +867,8 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
   // shown alone on a record no signature judges: an unsigned seal with an
   // extra field is refused unknown_field, never reported as merely unsigned.
   assert.equal(crypto.verify(null, checkRecord.preimage({ ...k, anchor: "pending" }), vk.publicKey, Buffer.from(k.sig, "base64")), false);
-  const unsignedWithExtra = { ...k, sig: null, sig_reason: "unsigned in this test", anchor: "pending" };
+  // (item 2b: an unsigned case carries signed_by null, so the hand-unsigned copy does too)
+  const unsignedWithExtra = { ...k, signed_by: null, sig: null, sig_reason: "unsigned in this test", anchor: "pending" };
   assert.equal(S.verifyCase(unsignedWithExtra, CASE_KEY.verifier).reason, "unknown_field");
   const { anchor, ...unsignedClean } = unsignedWithExtra; // eslint-disable-line no-unused-vars
   assert.equal(S.verifyCase(unsignedClean, CASE_KEY.verifier).reason, "unsigned", "control: without the field it is merely unsigned");
