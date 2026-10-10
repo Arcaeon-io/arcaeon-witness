@@ -1,5 +1,37 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the case protocol, item 2d: a fix pass after the code review of 2c: the sealed check on the reference and the page, no count from a truncated read, the operator's own key, the open quota on a fresh day (no fix needed), a partial conflict count (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** A code review of 2c raised five points. Four were real and are fixed here. The fifth, about the open quota, did not reproduce: its planted test passes on the 2c code, so that code is unchanged.
+- **Fix 1: the reference and the page run the full sealed check.** One routine, `lib/_case_seal.js` `sealedRecordReason`, now holds every stored VERDICT to the same check before anything treats it as sealed.
+  - It checks the receipt binding (`checkStoredReceipt`; a failure is `verdict_unbound`).
+  - Then, if the case is signed, it checks the case's signature under the verifier its `signed_by` names in the key document (`publishedSignatureReason`; a failure is `case_signature_invalid`). An unsigned seal passes, as before.
+  - `anchorCase` now calls the same routine instead of running its own two steps, with the same codes.
+  - `?op=case-reference` refuses a record that fails with a 409 named by those same two codes plus a `reason`. The check runs before the proof is read and before any row is built, so nothing is written.
+  - The case page shows a new state, SEALED RECORD DOES NOT VERIFY, instead of a verdict. It shows the id, the stored status, the failed check and its reason, the key the record names, links to the case file and its history, and the four limits. It shows no verdict word, records, cross-reference, anchor, labels or registrations, and reads no pin or reference row.
+- **Fix 2: `liveRecords` never states a count from a truncated read.**
+  - The count is 2 as soon as the seal carries its `cross_reference` or one valid row is read.
+  - It is 1 only when every listed row was read and judged and none is valid.
+  - When the read ends without a valid row and some listed row was not seen (left past the 20-row window, or a row whose read failed), the answer is `indeterminate: true` and `records: null`.
+  - A failed row read is now listed in `unreadable` and is no longer counted as an invalid row (`row_unreadable`).
+  - The page says "the live count could not be established on this request". Its `recordsWords` throws on anything but 1 or 2, so a null can never fall through to "one record".
+  - `?op=case-reference` answers `records_live: null` in that case.
+- **Fix 3: the operator's own key.** The operator path for references reads `WITNESS_CASE_OPERATOR_KEY` (`OPERATOR_KEY_ENV`) and never `WITNESS_ADMIN_KEY`. With it unset, the code does what it did before, now documented: a request with no role proof and no bearer is 401 `reference_unauthorized` (the missing bearer is checked first), and one with a bearer is 503 `operator_key_not_configured`. The refusal names the new variable. Deploying the operator path needs `WITNESS_CASE_OPERATOR_KEY` set; until then, no bearer can append as the operator.
+- **Fix 4: no change.** The review said `takeOpenQuota` passes the `getFile` wrapper or null into `judgeCounter` and throws on a fresh day. The test was planted first: the first open of a UTC day for a key that has never opened, through the real read path. It passes on the 2c code.
+  - `getFile` returns null for a 404, and `judgeCounter` mints a verified empty with value 0 for it.
+  - The present `{json, sha}` wrapper is the shape `judgeCounter` reads.
+  - The CAS rebuild hook was tested with both shapes (the counter moved, the counter gone).
+- **Fix 5: the conflict count carries `partial`.** `lib/_status_data.js` returns `obsPartial`: true when the tree came back truncated, false when it came back whole, null when there is no count.
+  - `/status` says "Partial" in the conflict panel.
+  - `/api/status.json` carries `conflict_observations.partial` and says so in its `note`.
+  - Like the case row's flag, it feeds no verdict.
+- **Tests.**
+  - `test/case_item2d.test.js` (new, 5): fix 1 with both planted records through both operations; fix 2 with twenty invalid rows then a valid one, plus controls; fix 3 unset and set, through the handler and through the real `verify.js` dispatch; fix 4 planted first; fix 5 on the page and in the JSON.
+  - Existing tests, fixtures: `test/case_item2c.test.js` sets the operator's key as `WITNESS_CASE_OPERATOR_KEY` and deletes it from the environment at the top.
+  - Existing tests, one expectation changed by fix 1: the 2c page test's real-dispatch arm read a test-key-signed case against the committed key document, which lists no key. It now expects the does-not-verify state (`signer_unpublished`) instead of the verdict with "not listed in the key document". Its verdict assertions moved to the arm whose document lists the key, and an unsigned seal now carries the "verdict through the real dispatch" check. No test was renamed or removed.
+  - A must-fail pass on a scratch copy (harness not committed) made 11 mutations, one at a time, across fixes 1, 2, 3 and 5. Each was caught by its own fix's test and by no other.
+  - Suite 907 -> 912 tests, 0 fail. Where this was run: 905 -> 910 pass and 2 skips, the named `KEY DOCUMENT, THIS ENVIRONMENT` skip and `LIVE DIFFERENTIAL`, which needs an arcaeon-ledger checkout. Where that checkout is present (the 2c entry's 906 pass, 1 named skip), the expected figure is 911 pass and 1 named skip; that was not run here.
+
 ## 2026-10-10: the case protocol, item 2c: six fixes, authorized withdrawal, the reference row, the per-key open quota, the public case page (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** The GPT-5.6 and Gemini 3.1 Pro reviews of 2b found six holes, all accepted (velouria `projects/arcaeon/CASE_PROTOCOL_DESIGN_2026-10-10.md`, "After item 2b"). Withdrawal, the addendum, the open quota and the page were the rest of item two.

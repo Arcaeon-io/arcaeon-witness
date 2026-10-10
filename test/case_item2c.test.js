@@ -20,6 +20,17 @@
 //   FIX 6  the sealer skips terminal root states: a withdrawn marker by the
 //          tree alone, an expired or withdrawn root after one read.
 //
+// Item 2d (test/case_item2d.test.js) changed two fixtures here and one
+// expectation. Fixtures: the operator's key is WITNESS_CASE_OPERATOR_KEY
+// (OPERATOR_ENV below, and the env deleted at the top), no longer
+// WITNESS_ADMIN_KEY. Expectation: the page test's real-dispatch arm, where
+// a case signed by the test key is read against the committed key document,
+// which lists no key. 2c rendered its verdict with "not listed in the key
+// document"; since 2d the case page holds a VERDICT to the sealed check, so
+// that case shows the does-not-verify state (signer_unpublished). The
+// verdict assertions moved to the arm whose document lists the key, and an
+// unsigned seal now carries "a verdict through the real dispatch".
+//
 // The fixtures are 2a's and 2b's (the same tape pair, opening, party and
 // stamp helpers), repeated because a test file cannot require another test
 // file without running it. Each test plants the failure it exists to catch;
@@ -38,6 +49,7 @@ process.env.STAMP_TOKEN = "test-stamp-token";
 process.env.WITNESS_KEYS = "case-test-open-key-0004:case-test-,case-test-open-key-0005:case-test2-";
 delete process.env.WITNESS_BATCH_SHADOW;
 delete process.env.WITNESS_ADMIN_KEY;
+delete process.env.WITNESS_CASE_OPERATOR_KEY;
 
 const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
@@ -465,7 +477,9 @@ const CP = require("../lib/_case_page.js");
 const verifyHandler = require("../api/verify.js");
 const USAGE = process.env.GITHUB_USAGE_REPO;
 const ADMIN_KEY = "case-test-operator-admin-key-0001";
-const OPERATOR_ENV = Object.freeze({ ...SIGNED, WITNESS_ADMIN_KEY: ADMIN_KEY });
+// The operator's key for references is its own variable since item 2d
+// (lib/_case_http.js, THE OPERATOR'S KEY), never WITNESS_ADMIN_KEY.
+const OPERATOR_ENV = Object.freeze({ ...SIGNED, [H.OPERATOR_KEY_ENV]: ADMIN_KEY });
 const [ALT_AGENT, ALT_TOOL] = pairNamed(/^receipt-test_call_proxy_tape\/test_cross_repo_answer_changed0: agent vs tool$/);
 const XREF = Object.freeze({ operator: "second-operator.example", reference: "case-ref-0042", url: "https://second-operator.example/cases/0042" });
 
@@ -945,12 +959,11 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
     assert.ok(pc.html.includes(`https://github.com/${PINS}/commits/main/${C.registrationPath(c.id, r)}`), `${r}: the registration record`);
   }
 
-  // VERDICT, anchored, signed, through the real dispatch (the committed key document, the service clock)
+  // VERDICT, anchored, signed, with the test key listed in the key document
   const s = await sealedCase({ over: { scope_digest: sha("page sealed") } });
-  const res = makeRes();
-  await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: s.id }, headers: { "x-forwarded-for": freshIp() } }), res);
-  assert.equal(res._status, 200);
-  const pv = String(res._body);
+  const listed = await casePage(s.id);
+  assert.equal(listed.status, 200);
+  const pv = listed.html;
   assert.match(pv, /<h1>Case: VERDICT<\/h1>/);
   assert.ok(pv.includes("2026-10-10T09:00:00Z"), "the reveal time");
   assert.match(pv, /<span class="word pass">MATCHED<\/span>/);
@@ -960,10 +973,28 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pv.includes(S.ANCHOR_NOTE.replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;")), "the anchor sentence");
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
   assert.ok(pv.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
-  assert.match(pv, /not listed in the key document/, "looked up in the committed document, which lists no key");
-  // and with the test key listed, the page says it verifies
-  const listed = await casePage(s.id);
-  assert.match(listed.html, /listed in the key document as active; the signature verifies under the published verifier/);
+  assert.match(pv, /listed in the key document as active; the signature verifies under the published verifier/);
+  // the same case through the real dispatch (the committed key document, the
+  // service clock): that document lists no key, so the case's signature is
+  // not confirmed, and since item 2d the page shows the does-not-verify state
+  // instead of the verdict (test/case_item2d.test.js, FIX 1)
+  const res = makeRes();
+  await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: s.id }, headers: { "x-forwarded-for": freshIp() } }), res);
+  assert.equal(res._status, 200);
+  const pd = String(res._body);
+  assert.match(pd, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.match(pd, /signer_unpublished/);
+  assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
+  assert.ok(pd.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
+  assert.ok(!pd.includes(">MATCHED<") && !pd.includes("anchored: its pin"), "no verdict and no anchor state");
+  // an unsigned seal verifies through the real dispatch and shows its verdict
+  const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: S.PUBLISHED_KEYS });
+  const ru = makeRes();
+  await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: u.id }, headers: { "x-forwarded-for": freshIp() } }), ru);
+  assert.equal(ru._status, 200);
+  assert.match(String(ru._body), /<h1>Case: VERDICT<\/h1>/);
+  assert.match(String(ru._body), /<span class="word pass">MATCHED<\/span>/);
+  assert.match(String(ru._body), /unsigned: This case is sealed and not signed \(key_unpublished\)/);
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
   assert.match((await casePage(p.id)).html, /sealed, not yet anchored/);

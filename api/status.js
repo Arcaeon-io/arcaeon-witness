@@ -88,7 +88,7 @@ module.exports = async (req, res) => {
   const {
     renderedAt, reachable, healthErr,
     rows, nsErr,
-    obsCount, obsSample, obsErr,
+    obsCount, obsPartial, obsSample, obsErr,
     anchor, anchorErr,
     overdueCount, currentCount, heartbeatCount, ungradeableCount, missedEverCount,
     retiredCount, retiredNamespaces,
@@ -369,6 +369,9 @@ ${brandMark.FAVICON_LINK}
     ${obsCount === null
       ? `<p><strong>Conflicts could not be counted on this render</strong>${obsErr ? `: ${esc(obsErr)}` : ""}. That is not zero &mdash; browse the folder directly.</p>`
       : `<p><strong>${obsCount}</strong> conflict${obsCount === 1 ? "" : "s"} observed, ever.${obsErr ? ` (count may be incomplete: ${esc(obsErr)})` : ""}</p>`}
+    ${obsPartial === true
+      ? `<p class="muted"><strong>Partial.</strong> The repository tree came back truncated on this read, so this count may be short. It is not a full count.</p>`
+      : ""}
     ${obsListHtml}
   </div>
 
