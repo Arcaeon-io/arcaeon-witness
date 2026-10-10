@@ -8,6 +8,12 @@
 // cap). Tests 6 to 12 belong to item two. Each test plants the failure it
 // exists to catch; the break arms run a wrong implementation through the same
 // check and demand it be caught. Every store is the in-memory mock: no network.
+//
+// Tests titled ITEM 1B are the fix pass's four (2026-10-10, after the Gemini
+// 3.1 Pro and GPT-5.6 code reviews): the projection rebuilt from both
+// registration files, the stamp's size, a body that arrives already parsed,
+// and one label on two sides. Each carries a MUST-FAIL ARM: the item-one
+// behaviour run through the same check, shown to be caught.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -263,6 +269,55 @@ test("TEST 1 THROUGH THE ENDPOINT: each party opening with itself first gets one
   assert.deepEqual(storedCase(id), k, "the first case is untouched");
 });
 
+test("TEST 1, ITEM 1B: one label on two sides is ordered agent before tool and accepted, never parties_not_distinct; one label on one side is refused", async () => {
+  const LABEL = "one-operator@example.com";
+  const agent = { side: "agent", label: LABEL };
+  const tool = { side: "tool", label: LABEL };
+  // MUST-FAIL ARM: by label alone the two parties tie, so a rule that stopped
+  // at the label would refuse this opening. The side is what orders them.
+  assert.equal(C.compareCodePoints(agent.label, tool.label), 0, "the labels tie");
+  assert.ok(C.compareCodePoints("agent", "tool") < 0, "agent sorts before tool by code point");
+
+  // the rule, from both orders: accepted, agent first, one id
+  for (const [first, second] of [[agent, tool], [tool, agent]]) {
+    let got;
+    assert.doesNotThrow(() => {
+      got = C.validateOpening(opening({ party_a: { ...first }, party_b: { ...second } }));
+    }, `${first.side} listed first`);
+    assert.deepEqual(got.opening.party_a, agent, `${first.side} listed first: role a is the agent`);
+    assert.deepEqual(got.opening.party_b, tool);
+    assert.equal(got.parties_reordered, first.side === "tool");
+  }
+  assert.equal(
+    C.deriveCaseId(opening({ party_a: { ...agent }, party_b: { ...tool } })),
+    C.deriveCaseId(opening({ party_a: { ...tool }, party_b: { ...agent } })),
+    "one case id from both orders",
+  );
+
+  // through the endpoint, the tool listing itself first
+  const res = await open(opening({ party_a: { ...tool }, party_b: { ...agent } }));
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  assert.equal(res._body.ok, true);
+  assert.notEqual(res._body.error_code, "parties_not_distinct");
+  assert.equal(res._body.parties_reordered, true);
+  const k = storedCase(res._body.case_id);
+  assert.deepEqual(k.party_a, agent, "stored in canonical order: agent, then tool");
+  assert.deepEqual(k.party_b, tool);
+  assert.deepEqual(C.validateCase(k), { ok: true });
+
+  // the mirror: one label on one side cannot be ordered, and is refused
+  const writes = gh.putLog.length;
+  for (const side of ["agent", "tool"]) {
+    const same = opening({ party_a: { side, label: LABEL }, party_b: { side, label: LABEL }, scope_digest: sha(`mirror ${side}`) });
+    assert.throws(() => C.validateOpening(same), (e) => e instanceof C.CaseError && e.code === "parties_not_distinct" && e.field === "party_b", side);
+    const r = await open(same);
+    assert.equal(r._status, 400, side);
+    assert.equal(r._body.error_code, "parties_not_distinct", side);
+    assert.equal(r._body.field, "party_b", side);
+  }
+  assert.equal(gh.putLog.length, writes, "a refused opening writes nothing");
+});
+
 // =============================================================================
 // TEST 2: the commitment
 // =============================================================================
@@ -448,6 +503,43 @@ test("TEST 3: a stored stamp that is not a file-stamp for this hash is refused, 
   assert.equal(gh.putLog.length, writes);
 });
 
+test("TEST 3, ITEM 1B: a file-stamp of the matching hash whose size is not a commitment's (64, a tape's byte length, none) is refused stamp_size_mismatch and writes nothing", async () => {
+  const id = await openCase();
+  const TAPE = '{"seq":1,"event":"call","tool":"search"}\n'.repeat(12);
+  const a = party(id, "a", TAPE);
+  const tapeBytes = Buffer.byteLength(TAPE, "utf-8");
+  assert.notEqual(tapeBytes, C.COMMITMENT_BYTES_LENGTH, "fixture: the tape's length is not a commitment's");
+  assert.equal(C.COMMITMENT_BYTES_LENGTH, 272);
+  // valid-looking file-stamps of the matching commitment hash: only the size is wrong
+  const plant = (size) => ({ kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size, stamped_at: "2026-10-10T07:45:00.123Z" });
+
+  // MUST-FAIL ARM: the item-one judgement (kind, v, hash, time) passes every
+  // one of these, so without the size check each would have registered.
+  for (const size of [64, tapeBytes, null]) {
+    assert.equal(H._internal.judgeStampRecord({ json: plant(size), sha: "x" }, a.commitment_sha256).ok, true, `size ${size}`);
+  }
+
+  const writes = gh.putLog.length;
+  for (const size of [64, tapeBytes, null]) {
+    gh.seed(STAMPS, stamp.stampPath(a.commitment_sha256), plant(size));
+    const res = await commit(reg(id, a));
+    assert.equal(res._status, 409, `size ${size}: ${JSON.stringify(res._body)}`);
+    assert.equal(res._body.ok, false);
+    assert.equal(res._body.error_code, "stamp_size_mismatch", `size ${size}`);
+    assert.equal(res._body.stamped_size, size);
+    assert.equal(res._body.expected_size, C.COMMITMENT_BYTES_LENGTH);
+  }
+  assert.equal(gh.putLog.length, writes, "neither the registration nor the case update was written");
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.deepEqual(storedCase(id).commitments, { a: null, b: null });
+  assert.equal(storedCase(id).status, "OPEN");
+
+  // control: the same hash stamped with a commitment's canonical length registers
+  plantStamp(a.commitment_sha256);
+  const ok = await commit(reg(id, a));
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+});
+
 test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, a damaged case: each typed, none writes", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
@@ -536,6 +628,54 @@ test("TEST 3: a malformed request is a typed 4xx, never a 500 and never a write"
   assert.equal(gh.putLog.length, writes);
 });
 
+test("TEST 3, ITEM 1B: a body that arrives already parsed (Vercel's application/json), over the cap and with no content-length, is refused too_large", async () => {
+  const CAP = H.BODY_MAX_BYTES;
+  const writes = gh.putLog.length;
+  const parsed = async (handler, body) => {
+    const r = makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp() }, body });
+    assert.equal(r.headers["content-length"], undefined, "fixture: no content-length header");
+    assert.equal(typeof r.body, "object", "fixture: the body is already an object, not a string");
+    const res = makeRes();
+    await handler(r, res, { now: NOW });
+    return res;
+  };
+  const bytes = (o) => Buffer.byteLength(JSON.stringify(o), "utf-8");
+  const shapes = [
+    [H.handleCaseOpen, (pad) => ({ ...opening(), pad })],
+    [H.handleCaseCommit, (pad) => ({ case_id: "1".repeat(64), role: "a", commitment_sha256: "2".repeat(64), pad })],
+  ];
+  for (const [handler, shape] of shapes) {
+    const big = shape("x".repeat(CAP));
+    // wide: under the cap in characters, over it in UTF-8 bytes
+    const wide = shape("\u00e9".repeat(Math.ceil(CAP / 2) + 1));
+    assert.ok(bytes(big) > CAP && bytes(wide) > CAP, "fixture: both plants are over the cap in bytes");
+    assert.ok(JSON.stringify(wide).length < CAP, "fixture: the wide plant is under the cap in characters");
+    for (const [what, body] of [["big", big], ["wide", wide]]) {
+      const res = await parsed(handler, body);
+      assert.equal(res._status, 413, `${handler.name} ${what}: ${JSON.stringify(res._body).slice(0, 200)}`);
+      assert.equal(res._body.ok, false);
+      assert.equal(res._body.error_code, "too_large", `${handler.name} ${what}`);
+      assert.equal(res._body.cap_bytes, CAP);
+    }
+    // MUST-FAIL ARM: the same shape under the cap is not refused for its size.
+    // It reaches the schema, which refuses the pad, so the 413s above came
+    // from the size and nothing else; the item-one reader let the big ones
+    // through to exactly this refusal.
+    const small = await parsed(handler, shape("x".repeat(100)));
+    assert.equal(small._status, 400, handler.name);
+    assert.equal(small._body.error_code, "unknown_field", handler.name);
+    assert.equal(small._body.field, "pad", handler.name);
+  }
+  // and the string path gives the same typed refusal for the same size
+  const sres = makeRes();
+  await H.handleCaseOpen(makeReq({ method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": freshIp() },
+    body: JSON.stringify({ ...opening(), pad: "x".repeat(CAP) }) }), sres, { now: NOW });
+  assert.equal(sres._status, 413);
+  assert.equal(sres._body.error_code, "too_large");
+  assert.equal(sres._body.cap_bytes, CAP);
+  assert.equal(gh.putLog.length, writes, "no refusal wrote anything");
+});
+
 test("TEST 3, TWO WRITES: a registration whose case update fails is recorded and says so; the same registration completes it, a different one is refused", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
@@ -598,6 +738,51 @@ test("TEST 3: both roles registered -> COMMITTED, and a registration that lands 
   assert.equal(k.commitments.a.commitment_sha256, a.commitment_sha256);
   assert.equal(k.commitments.b.commitment_sha256, b.commitment_sha256, "b's registration was not overwritten by a's stale write");
   assert.deepEqual(C.validateCase(k), { ok: true });
+});
+
+test("TEST 3, ITEM 1B, TWO WRITES: role b's file landed and its case update failed; role a's registration projects BOTH files and the case is COMMITTED, with no retry by b", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  const b = party(id, "b", "tool tape\n");
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+
+  // The plant: b's registration file write succeeds and b's case projection
+  // fails (the mock fails the next write to the case path, once).
+  gh.forceFailure(PINS, C.casePath(id), 1, 500);
+  const brokenB = await commit(reg(id, b));
+  assert.equal(brokenB._status, 503, JSON.stringify(brokenB._body));
+  assert.equal(brokenB._body.error_code, "case_update_failed");
+  assert.equal(brokenB._body.registration_recorded, true);
+  const fileB = gh.read(PINS, C.registrationPath(id, "b"));
+  assert.equal(fileB.commitment_sha256, b.commitment_sha256, "b's registration file landed");
+  const before = storedCase(id);
+  assert.equal(before.commitments.b, null, "b's case projection did not");
+  assert.equal(before.status, "OPEN");
+
+  // Role a registers. b sends nothing more.
+  const writes = gh.putLog.length;
+  const resA = await commit(reg(id, a));
+  assert.equal(resA._status, 201, JSON.stringify(resA._body));
+  assert.equal(resA._body.status, "COMMITTED");
+  const fileA = gh.read(PINS, C.registrationPath(id, "a"));
+  const k = storedCase(id);
+  assert.equal(k.status, "COMMITTED", "both registration files exist, so the case is COMMITTED");
+  assert.deepEqual(k.commitments.a, C.commitmentEntry(fileA), "a, projected from its file");
+  assert.deepEqual(k.commitments.b, C.commitmentEntry(fileB), "b, projected from ITS file by a's request");
+  assert.deepEqual(resA._body.case, k, "the answer carries the case as written");
+  assert.deepEqual(C.validateCase(k), { ok: true });
+  // No retry by b: a's request wrote a's file and the case, and nothing else;
+  // b's file is byte for byte what b's own request wrote.
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.registrationPath(id, "a"), C.casePath(id)]);
+  assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), fileB);
+
+  // MUST-FAIL ARM: the item-one projection (the requested role only) on the
+  // same stored case leaves it OPEN with b missing. The two assertions on
+  // k.status and k.commitments.b above are what catch it.
+  const onlyA = C.applyRegistration(before, fileA);
+  assert.equal(onlyA.status, "OPEN");
+  assert.equal(onlyA.commitments.b, null);
 });
 
 // =============================================================================
