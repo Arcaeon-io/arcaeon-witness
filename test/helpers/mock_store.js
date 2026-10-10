@@ -25,6 +25,19 @@
 // `forceConflict(repo, path, n)` lets a regression test simulate n concurrent
 // writers colliding on one path — the shape that made THE money bug possible
 // (two overlapping Stripe deliveries both winning a stale read).
+//
+//   GET  /repos/<repo>/commits?path=<path>&sha=<branch>&per_page=<n>
+//        -> 200 [{sha, commit:{message, author:{date}, committer:{date}}}]
+//        the commits that touched <path>, NEWEST FIRST, at most per_page
+//        (2026-10-10, case protocol item 2a: lib/_store.js listCommits, read
+//        by ?op=case-commit to fill a registration's stamp_commit). Every
+//        successful PUT and DELETE is one commit touching its path, and its
+//        sha is the `commit.sha` the PUT answered with. seed() gives its path
+//        a history of exactly ONE commit (a file that "exists before any
+//        handler runs" was committed once), replacing whatever history the
+//        path had, so re-seeding a path to change its content in a test never
+//        plants a second commit by accident. addCommit() plants one on
+//        purpose; forceCommitsFailure() makes the read itself fail.
 
 "use strict";
 
@@ -61,6 +74,40 @@ class MockGitHubStore {
     // not represent a truncated tree could not test that distinction at all.
     this.treeTruncated = false;
     this.treeStatus = 200; // set to 5xx to make the tree unreadable
+    // Commit history (see the header): repo -> [{sha, path, message, date}],
+    // oldest first. Commit shas are 40 lowercase hex, like git's.
+    this.commits = new Map();
+    this._commitSeq = 0;
+    this.commitsLog = []; // [path] — every commits-for-path read, in order
+    this._forcedCommitsFailure = new Map(); // "repo::path" -> {remaining, status}
+  }
+
+  _commitsOf(repo) {
+    if (!this.commits.has(repo)) this.commits.set(repo, []);
+    return this.commits.get(repo);
+  }
+
+  _recordCommit(repo, path, message) {
+    this._commitSeq += 1;
+    const sha = crypto.createHash("sha1").update(`mock-commit-${this._commitSeq}`).digest("hex");
+    this._commitsOf(repo).push({ sha, path, message: String(message || ""), date: new Date().toISOString() });
+    return sha;
+  }
+
+  // Plant one more commit touching `path` (a second write to a path that
+  // should have been written once). Returns its sha.
+  addCommit(repo, path, message = "mock: an extra commit touching this path") {
+    return this._recordCommit(repo, path, message);
+  }
+
+  // The commits that touched `path`, newest first (test assertions).
+  commitsFor(repo, path) {
+    return this._commitsOf(repo).filter((c) => c.path === path).slice().reverse();
+  }
+
+  // Force the next `n` commits-for-path reads of `path` to fail with `status`.
+  forceCommitsFailure(repo, path, n = 1, status = 500) {
+    this._forcedCommitsFailure.set(`${repo}::${path}`, { remaining: n, status });
   }
 
   _repoMap(repo) {
@@ -78,6 +125,10 @@ class MockGitHubStore {
       content: JSON.stringify(obj, null, 2) + "\n",
       sha: this._newSha(),
     });
+    // exactly one commit for a seeded path (see the header)
+    const list = this._commitsOf(repo);
+    for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === path) list.splice(i, 1);
+    this._recordCommit(repo, path, "mock: seeded");
   }
 
   // Read back the current stored JSON for a path (test assertions).
@@ -124,6 +175,24 @@ class MockGitHubStore {
       const tree = [];
       for (const [p, r] of this._repoMap(tm[1])) tree.push({ path: p, type: "blob", sha: r.sha });
       return fakeResponse(200, { sha: "mock-tree", tree, truncated: this.treeTruncated === true });
+    }
+
+    // Commits-for-path read (_store.js listCommits): see the header.
+    const cm = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/commits$/);
+    if (cm && ((opts && opts.method) || "GET") === "GET") {
+      const p = u.searchParams.get("path");
+      this.commitsLog.push(p);
+      const forced = this._forcedCommitsFailure.get(`${cm[1]}::${p}`);
+      if (forced && forced.remaining > 0) {
+        forced.remaining -= 1;
+        return fakeResponse(forced.status, { message: "mock: forced commits read failure" });
+      }
+      const perPage = Math.max(1, Math.min(100, Number(u.searchParams.get("per_page")) || 30));
+      const list = this._commitsOf(cm[1]).filter((c) => p === null || c.path === p).slice().reverse().slice(0, perPage);
+      return fakeResponse(200, list.map((c) => ({
+        sha: c.sha,
+        commit: { message: c.message, author: { date: c.date }, committer: { date: c.date } },
+      })));
     }
 
     const m = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/(.+)$/);
@@ -200,14 +269,16 @@ class MockGitHubStore {
       map.set(path, { content: decoded, sha: newSha });
       this.commitCounter += 1;
       this.putLog.push({ repo, path, sha: newSha });
+      const commitSha = this._recordCommit(repo, path, body.message);
       return fakeResponse(200, {
         content: { sha: newSha, path },
-        commit: { sha: `commit-${this.commitCounter}` },
+        commit: { sha: commitSha },
       });
     }
 
     if (method === "DELETE") {
       map.delete(path);
+      this._recordCommit(repo, path, "mock: delete");
       return fakeResponse(200, { ok: true });
     }
 

@@ -491,18 +491,24 @@ module.exports = async (req, res) => {
     return reconcileHttp.handlePage(req, res);
   }
 
-  // --- co-hosted mode: the case protocol, item one (lib/_case_http.js) ---
+  // --- co-hosted mode: the case protocol (lib/_case_http.js) ---
   // POST ?op=case-open writes an OPEN case; POST ?op=case-commit registers a
-  // stamped commitment to one role of it, first write wins. Here for the same
-  // reason as stamp and reconcile: the 12-function cap ("No thirteenth
-  // function. Every new route is ?op=case-<verb> on verify.js",
+  // stamped commitment to one role of it, first write wins; POST
+  // ?op=case-reveal (item 2a) takes both reveals and both tapes in one
+  // request, runs the existing reconcile once, and seals the case. Here for
+  // the same reason as stamp and reconcile: the 12-function cap ("No
+  // thirteenth function. Every new route is ?op=case-<verb> on verify.js",
   // CASE_PROTOCOL_DESIGN_2026-10-10.md). Writes go to the pins repository's
-  // cases/ tree; the stamps repository is only read. No tape, no salt.
+  // cases/ tree and the seal's pin; the stamps repository is only read. No
+  // tape, no salt is kept.
   if (op === "case-open") {
     return caseHttp.handleCaseOpen(req, res);
   }
   if (op === "case-commit") {
     return caseHttp.handleCaseCommit(req, res);
+  }
+  if (op === "case-reveal") {
+    return caseHttp.handleCaseReveal(req, res);
   }
 
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every

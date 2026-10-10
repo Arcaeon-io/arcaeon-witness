@@ -14,6 +14,15 @@
 // registration files, the stamp's size, a body that arrives already parsed,
 // and one label on two sides. Each carries a MUST-FAIL ARM: the item-one
 // behaviour run through the same check, shown to be caught.
+//
+// Tests titled ITEM 2A are item two's registration half (2026-10-10, design
+// "After the fix pass"): stamp_commit read from the stamp's commit history,
+// stamp_history_ambiguous, and item 1b's leftovers (the status rule, a
+// rebuild that writes, the idempotent replay, a WITHDRAWN re-read, the
+// retry's stamp recheck). Each carries a MUST-FAIL ARM too. The joint
+// reveal and the seal are in test/case_reveal.test.js. Two item-one tests
+// changed their bodies, not their names, because 2a changes the behaviour
+// they pinned: the same-hash replay is now 200, and stamp_commit is filled.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -400,12 +409,17 @@ test("TEST 3: a second registration for the same role is refused role_already_co
   assert.equal(again._body.ok, false);
   assert.equal(again._body.error_code, "role_already_committed");
   assert.equal(again._body.registered.commitment_sha256, first.commitment_sha256);
-  // the same registration a second time is a second registration too
+  // The same registration a second time is a replay, not a second
+  // registration (item 2a, IDEMPOTENT REPLAY; item one answered it 409): it
+  // confirms the one that stands, and writes nothing.
   const replay = await commit(reg(id, first));
-  assert.equal(replay._status, 409);
-  assert.equal(replay._body.error_code, "role_already_committed");
+  assert.equal(replay._status, 200, JSON.stringify(replay._body));
+  assert.equal(replay._body.ok, true);
+  assert.equal(replay._body.existing, true);
+  assert.deepEqual(replay._body.projected, []);
+  assert.equal(replay._body.registration.commitment_sha256, first.commitment_sha256);
 
-  assert.equal(gh.putLog.length, writes, "a refused registration writes nothing");
+  assert.equal(gh.putLog.length, writes, "neither the refusal nor the replay wrote anything");
   assert.equal(gh.read(PINS, C.registrationPath(id, "a")).commitment_sha256, first.commitment_sha256);
   assert.equal(storedCase(id).commitments.a.commitment_sha256, first.commitment_sha256);
 });
@@ -477,9 +491,15 @@ test("TEST 3: stamp fields come from the fetched stamp record; a caller's stampe
   assert.equal(r.kind, "case-commitment");
   assert.equal(r.stamped_at, STAMPED, "stamped_at is the fetched record's, verbatim");
   assert.equal(r.registered_at, "2026-10-10T08:00:00Z", "registered_at is this service's clock");
-  assert.equal(r.stamp_commit, null, "the stamp record carries no commit, so none is recorded");
+  // stamp_commit (item 2a; item one recorded null): the one commit the stamps
+  // repository's history names for the stamp's path, read by this service.
+  const history = gh.commitsFor(STAMPS, stamp.stampPath(a.commitment_sha256));
+  assert.equal(history.length, 1, "fixture: one commit holds the stamp");
+  assert.match(history[0].sha, /^[0-9a-f]{40}$/);
+  assert.equal(r.stamp_commit, history[0].sha, "stamp_commit is the commit the stamp's history names");
+  assert.notEqual(r.stamp_commit, "f".repeat(40), "never the caller's");
   assert.deepEqual(storedCase(id).commitments.a, {
-    commitment_sha256: a.commitment_sha256, registered_at: "2026-10-10T08:00:00Z", stamp_commit: null, stamped_at: STAMPED,
+    commitment_sha256: a.commitment_sha256, registered_at: "2026-10-10T08:00:00Z", stamp_commit: history[0].sha, stamped_at: STAMPED,
   });
 });
 
@@ -886,6 +906,368 @@ test("TEST 5: no tape and no salt is held anywhere, and a registration that carr
     assert.ok(!all.includes(secret), `stored data holds ${secret.slice(0, 16)}`);
   }
   assert.ok(all.includes(a.commitment_sha256), "control: the scan sees what IS stored");
+});
+
+// =============================================================================
+// ITEM 2A: stamp_commit from the stamp's history, and item 1b's leftovers
+// =============================================================================
+
+// The stamps repository's commits for a stamp's path (mock), newest first.
+function stampHistory(hash) {
+  return gh.commitsFor(STAMPS, stamp.stampPath(hash));
+}
+
+test("TEST 3, ITEM 2A: a stamp path touched by more than one commit is refused stamp_history_ambiguous and writes nothing; a path with one commit registers it", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  plantStamp(a.commitment_sha256);
+  const second = gh.addCommit(STAMPS, stamp.stampPath(a.commitment_sha256), "a later edit of the stamp record");
+  const history = stampHistory(a.commitment_sha256);
+  assert.equal(history.length, 2, "fixture: two commits touch the stamp's path");
+  assert.equal(history[0].sha, second, "fixture: newest first");
+
+  // MUST-FAIL ARM: the stamp record itself passes every item-one and item-1b
+  // check (kind, version, hash, time, size), so only the history can refuse it.
+  const rec = gh.read(STAMPS, stamp.stampPath(a.commitment_sha256));
+  assert.equal(H._internal.judgeStampRecord({ json: rec, sha: "x" }, a.commitment_sha256).ok, true);
+  assert.equal(rec.size, C.COMMITMENT_BYTES_LENGTH);
+
+  const writes = gh.putLog.length;
+  const res = await commit(reg(id, a));
+  assert.equal(res._status, 409, JSON.stringify(res._body));
+  assert.equal(res._body.ok, false);
+  assert.equal(res._body.error_code, "stamp_history_ambiguous");
+  assert.deepEqual(res._body.commits, history.map((c) => c.sha), "both commits are named; neither is chosen");
+  assert.equal(res._body.commitment_sha256, a.commitment_sha256);
+  assert.equal(gh.putLog.length, writes, "nothing written");
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.deepEqual(storedCase(id).commitments, { a: null, b: null });
+
+  // control: a fresh commitment, stamped once, registers with that commit
+  const fresh = party(id, "a", "agent tape\n");
+  plantStamp(fresh.commitment_sha256);
+  const ok = await commit(reg(id, fresh));
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+  assert.equal(ok._body.registration.stamp_commit, stampHistory(fresh.commitment_sha256)[0].sha);
+  assert.equal(storedCase(id).commitments.a.stamp_commit, ok._body.registration.stamp_commit);
+});
+
+test("TEST 3, ITEM 2A: a stamp history that cannot be read, cannot be parsed, or names no commit is a 503 and writes nothing; stamp_commit is never written null", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  const writes = gh.putLog.length;
+
+  // the read fails
+  gh.forceCommitsFailure(STAMPS, spath, 1, 502);
+  const down = await commit(reg(id, a));
+  assert.equal(down._status, 503, JSON.stringify(down._body));
+  assert.equal(down._body.error_code, "stamp_history_unreachable");
+
+  // the read answers 200 with something that is not a listing
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => (/\/commits\?/.test(String(url))
+    ? { ok: true, status: 200, json: async () => ({ message: "not a list" }), text: async () => "" }
+    : viaMock(url, o));
+  let notList;
+  try {
+    notList = await commit(reg(id, a));
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(notList._status, 503);
+  assert.equal(notList._body.error_code, "stamp_history_unreadable");
+  assert.equal(notList._body.reason, "listing_unreadable");
+
+  // the history is empty although the record is there
+  const all = gh.commits.get(STAMPS);
+  const kept = all.filter((c) => c.path !== spath);
+  gh.commits.set(STAMPS, kept);
+  const empty = await commit(reg(id, a));
+  assert.equal(empty._status, 503);
+  assert.equal(empty._body.error_code, "stamp_history_unreadable");
+  assert.equal(empty._body.reason, "no_commit_touches_path");
+
+  assert.equal(gh.putLog.length, writes, "no unreadable history wrote anything");
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  // MUST-FAIL ARM: item one wrote stamp_commit: null whatever the history
+  // said. Restored to one commit, the registration records a git id.
+  gh.commits.set(STAMPS, all);
+  const ok = await commit(reg(id, a));
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+  assert.notEqual(ok._body.registration.stamp_commit, null);
+  assert.match(ok._body.registration.stamp_commit, /^[0-9a-f]{40}$/);
+});
+
+test("STORE, ITEM 2A: listCommits reads the target it is given (repo, branch, token, path) and refuses a non-listing or an entry with no sha", async () => {
+  const savedPin = process.env.GITHUB_PIN_TOKEN;
+  const seen = [];
+  const answers = [];
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    seen.push({ url: String(url), authorization: ((o && o.headers) || {}).authorization });
+    const body = answers.shift();
+    return { ok: true, status: 200, json: async () => body, text: async () => "" };
+  };
+  try {
+    process.env.GITHUB_PIN_TOKEN = "pin-token-not-for-stamps";
+    const one = { sha: "a".repeat(40), commit: { committer: { date: "2026-10-10T07:45:01Z" } } };
+    answers.push([one]);
+    const got = await require("../lib/_stamp_store.js").listCommits("stamps/ab/x.json", { perPage: 2 });
+    assert.deepEqual(got, [{ sha: "a".repeat(40), date: "2026-10-10T07:45:01Z" }]);
+    const u = new URL(seen[0].url);
+    assert.equal(u.pathname, `/repos/${STAMPS}/commits`, "the stamps repository, not the pins one");
+    assert.equal(u.searchParams.get("path"), "stamps/ab/x.json");
+    assert.equal(u.searchParams.get("sha"), "main");
+    assert.equal(u.searchParams.get("per_page"), "2");
+    assert.equal(seen[0].authorization, `Bearer ${process.env.STAMP_TOKEN}`, "the stamps token");
+    // the pins default is unchanged
+    answers.push([]);
+    assert.deepEqual(await store.listCommits("cases/x.json"), []);
+    assert.equal(new URL(seen[1].url).pathname, `/repos/${PINS}/commits`);
+    assert.equal(seen[1].authorization, "Bearer pin-token-not-for-stamps");
+    // refusals: a 200 that is not a list, an entry without a git sha
+    answers.push({ tree: [] });
+    await assert.rejects(() => store.listCommits("x.json"), (e) => e.code === "listing_unreadable");
+    answers.push([{ sha: "commit-1" }]);
+    await assert.rejects(() => store.listCommits("x.json"), (e) => e.code === "commits_unreadable");
+    // a half-built target is refused before any request, like every primitive
+    const before = seen.length;
+    await assert.rejects(() => store.forTarget({ repo: "someone/stamps", branch: "main" }).listCommits("x.json"), /no tokenEnv/);
+    assert.equal(seen.length, before);
+  } finally {
+    global.fetch = viaMock;
+    process.env.GITHUB_PIN_TOKEN = savedPin;
+  }
+});
+
+test("TEST 3, ITEM 2A (1B LEFTOVER): applyRegistration never turns a COMMITTED case with an empty slot back into OPEN; OPEN to COMMITTED is its one move", () => {
+  const opened = C.validateOpening(opening()).opening;
+  const base = C.newCase(opened);
+  const regFor = (role, h) => ({ kind: "case-commitment", v: 1, case_id: base.case_id, role, commitment_sha256: h,
+    registered_at: "2026-10-10T07:50:00Z", stamp_commit: "c".repeat(40), stamped_at: "2026-10-10T07:49:00.000Z" });
+  // A COMMITTED case with both slots empty: validateCase refuses it, so no
+  // stored case reaches this, but the function is pure and must not regress.
+  const committedEmpty = { ...base, status: "COMMITTED" };
+  assert.equal(C.validateCase(committedEmpty).ok, false, "fixture: not a valid stored case");
+  const frozen = JSON.stringify(committedEmpty);
+  const next = C.applyRegistration(committedEmpty, regFor("a", sha("1")));
+  assert.equal(next.status, "COMMITTED", "a COMMITTED case stays COMMITTED");
+  assert.equal(JSON.stringify(committedEmpty), frozen, "the argument is not mutated");
+
+  // MUST-FAIL ARM: item one's rule computed the status from the commitments
+  // and turned this exact input back into OPEN.
+  const itemOne = (c) => (c.commitments.a !== null && c.commitments.b !== null ? "COMMITTED" : "OPEN");
+  assert.equal(itemOne(next), "OPEN", "the old computation regresses this input");
+
+  // the one move, and the statuses it refuses
+  const half = C.applyRegistration(base, regFor("a", sha("1")));
+  assert.equal(half.status, "OPEN");
+  assert.equal(C.applyRegistration(half, regFor("b", sha("2"))).status, "COMMITTED");
+  for (const status of ["VERDICT", "WITHDRAWN", "EXPIRED", "SOMETHING", undefined]) {
+    assert.throws(() => C.applyRegistration({ ...base, status }, regFor("a", sha("1"))),
+      (e) => e instanceof C.CaseError && e.code === "case_not_open", String(status));
+  }
+});
+
+test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale is rebuilt on the fresh case and the rebuild WRITES: four writes, COMMITTED", async () => {
+  // b's request reads the case and both files (none yet); a's whole
+  // registration lands before b writes its own file, so a's projection
+  // cannot see b, and b's case write is stale. Only b's rebuild can add b.
+  async function race(id, a, b) {
+    const cpath = C.casePath(id);
+    const bFile = C.registrationPath(id, "b");
+    const viaMock = global.fetch;
+    let aStatus = null;
+    const casePuts = [];
+    global.fetch = async (url, o) => {
+      const isPut = !!o && o.method === "PUT";
+      if (aStatus === null && isPut && String(url).endsWith(`/contents/${bFile}`)) {
+        aStatus = "running";
+        aStatus = (await commit(reg(id, a)))._status;
+      }
+      const r = await viaMock(url, o);
+      if (isPut && String(url).endsWith(`/contents/${cpath}`)) {
+        const sent = JSON.parse(Buffer.from(JSON.parse(o.body).content, "base64").toString("utf-8"));
+        casePuts.push({ status: r.status, a: sent.commitments.a !== null, b: sent.commitments.b !== null });
+      }
+      return r;
+    };
+    try {
+      const resB = await commit(reg(id, b));
+      return { aStatus, resB, casePuts };
+    } finally {
+      global.fetch = viaMock;
+    }
+  }
+
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  const b = party(id, "b", "tool tape\n");
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  const writes = gh.putLog.length;
+  const { aStatus, resB, casePuts } = await race(id, a, b);
+  assert.equal(aStatus, 201, "a registered in between");
+  assert.equal(resB._status, 201, JSON.stringify(resB._body));
+  assert.equal(resB._body.status, "COMMITTED");
+  assert.deepEqual(resB._body.projected, ["b"]);
+  assert.deepEqual(casePuts, [
+    { status: 200, a: true, b: false }, // a's own projection
+    { status: 409, a: false, b: true }, // b's first write, on the stale case
+    { status: 200, a: true, b: true }, // b's REBUILD, on top of a's
+  ], "the rebuild is what wrote b");
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path),
+    [C.registrationPath(id, "a"), C.casePath(id), C.registrationPath(id, "b"), C.casePath(id)], "four writes");
+  const k = storedCase(id);
+  assert.equal(k.status, "COMMITTED");
+  assert.deepEqual(k.commitments.a, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "a"))));
+  assert.deepEqual(k.commitments.b, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "b"))));
+  assert.deepEqual(C.validateCase(k), { ok: true });
+
+  // MUST-FAIL ARM: the same race with a rebuild hook that never writes. b is
+  // left out of the case and b's answer is not a success.
+  const id2 = await openCase({ scope_digest: sha("the rebuild arm") });
+  const a2 = party(id2, "a", "agent tape\n");
+  const b2 = party(id2, "b", "tool tape\n");
+  plantStamp(a2.commitment_sha256);
+  plantStamp(b2.commitment_sha256);
+  const realPut = store.putFile;
+  store.putFile = (p, obj, msg, s, o2, t) => realPut(p, obj, msg, s, o2 && o2.rebuild ? { ...o2, rebuild: () => null } : o2, t);
+  let arm;
+  try {
+    arm = await race(id2, a2, b2);
+  } finally {
+    store.putFile = realPut;
+  }
+  assert.equal(arm.aStatus, 201);
+  assert.equal(arm.resB._status, 503, "without a writing rebuild, b's projection is lost");
+  assert.equal(arm.resB._body.error_code, "case_update_failed");
+  assert.equal(storedCase(id2).commitments.b, null);
+  assert.equal(storedCase(id2).status, "OPEN");
+});
+
+test("TEST 3, ITEM 2A (1B LEFTOVER): the same registration replayed is a 200 that completes or confirms, by either party; only a different hash is role_already_committed", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  const b = party(id, "b", "tool tape\n");
+  const otherA = party(id, "a", "another agent tape\n");
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  plantStamp(otherA.commitment_sha256);
+  assert.equal((await commit(reg(id, a)))._status, 201);
+  // b's file lands and b's projection fails
+  gh.forceFailure(PINS, C.casePath(id), 1, 500);
+  const brokenB = await commit(reg(id, b));
+  assert.equal(brokenB._status, 503);
+  assert.equal(brokenB._body.error_code, "case_update_failed");
+  const before = storedCase(id);
+  assert.equal(before.commitments.b, null);
+  assert.equal(before.status, "OPEN");
+
+  // MUST-FAIL ARM: item one refused any registration for a role the case
+  // already holds, which is exactly this request (a's entry is present).
+  assert.notEqual(before.commitments.a, null, "item one would have answered role_already_committed here");
+
+  // a's replay (not b's) repairs b's projection
+  const writes = gh.putLog.length;
+  const replay = await commit(reg(id, a), Date.parse(DEADLINE) + 60000);
+  assert.equal(replay._status, 200, JSON.stringify(replay._body));
+  assert.equal(replay._body.existing, true);
+  assert.deepEqual(replay._body.projected, ["b"], "the replay projected the other role's file");
+  assert.equal(replay._body.status, "COMMITTED");
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.casePath(id)], "one write: the case");
+  const k = storedCase(id);
+  assert.equal(k.status, "COMMITTED");
+  assert.deepEqual(k.commitments.b, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "b"))));
+  assert.deepEqual(C.validateCase(k), { ok: true });
+
+  // replayed again, by either party, it confirms and writes nothing
+  const after = gh.putLog.length;
+  for (const p of [a, b]) {
+    const again = await commit(reg(id, p));
+    assert.equal(again._status, 200, JSON.stringify(again._body));
+    assert.equal(again._body.existing, true);
+    assert.deepEqual(again._body.projected, []);
+  }
+  assert.equal(gh.putLog.length, after, "a confirming replay writes nothing");
+
+  // a different hash for a registered role is still refused
+  const swap = await commit(reg(id, otherA));
+  assert.equal(swap._status, 409);
+  assert.equal(swap._body.error_code, "role_already_committed");
+  assert.equal(swap._body.registered.commitment_sha256, a.commitment_sha256);
+  assert.equal(gh.putLog.length, after);
+});
+
+test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's read and its case write is a typed 409 case_withdrawn, never a 500; the registration file stands", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  plantStamp(a.commitment_sha256);
+  const cpath = C.casePath(id);
+  const withdrawn = { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+    withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z" }, limits: C.LIMITS.slice(), sig: null, sig_reason: "withdrawn in this test" };
+  assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: a valid redacted record");
+  const viaMock = global.fetch;
+  let landed = false;
+  global.fetch = async (url, o) => {
+    // the withdrawal lands just before a's case write is sent
+    if (!landed && o && o.method === "PUT" && String(url).endsWith(`/contents/${cpath}`)) {
+      landed = true;
+      gh.seed(PINS, cpath, withdrawn);
+    }
+    return viaMock(url, o);
+  };
+  let res;
+  try {
+    res = await commit(reg(id, a));
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(landed, true);
+  assert.equal(res._status, 409, JSON.stringify(res._body));
+  assert.equal(res._body.ok, false);
+  assert.equal(res._body.error_code, "case_withdrawn");
+  assert.equal(res._body.registration_recorded, true);
+  assert.equal(gh.read(PINS, C.registrationPath(id, "a")).commitment_sha256, a.commitment_sha256, "the registration file stands");
+  assert.deepEqual(storedCase(id), withdrawn, "the withdrawn record is not written over");
+
+  // MUST-FAIL ARM: item one's re-read read the role's entry straight off the
+  // re-read record, and the redacted record has no commitments: a TypeError.
+  assert.throws(() => C.sameEntry(withdrawn.commitments[a.role], C.commitmentEntry(res._body.registration)), TypeError);
+});
+
+test("TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp's size and projects nothing if it fails", async () => {
+  const id = await openCase();
+  const a = party(id, "a", "agent tape\n");
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  gh.forceFailure(PINS, C.casePath(id), 1, 500);
+  const broken = await commit(reg(id, a));
+  assert.equal(broken._status, 503);
+  assert.equal(broken._body.error_code, "case_update_failed");
+  assert.equal(storedCase(id).commitments.a, null);
+
+  // the stamp record now says a size that is not a commitment's
+  gh.seed(STAMPS, spath, { kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size: 64, stamped_at: "2026-10-10T07:45:00.123Z" });
+  const writes = gh.putLog.length;
+  const reads = gh.getLog.length;
+  const retry = await commit(reg(id, a));
+  assert.ok(gh.getLog.slice(reads).includes(spath), "the retry read the stamp");
+  assert.equal(retry._status, 409, JSON.stringify(retry._body));
+  assert.equal(retry._body.error_code, "stamp_size_mismatch");
+  assert.equal(retry._body.stamped_size, 64);
+  assert.equal(gh.putLog.length, writes, "nothing projected");
+  assert.equal(storedCase(id).commitments.a, null);
+
+  // MUST-FAIL ARM: item one's completion read no stamp at all, so it would
+  // have projected here. The same retry with a commitment-sized stamp does.
+  plantStamp(a.commitment_sha256);
+  const done = await commit(reg(id, a));
+  assert.equal(done._status, 200, JSON.stringify(done._body));
+  assert.deepEqual(done._body.projected, ["a"]);
+  assert.equal(storedCase(id).commitments.a.commitment_sha256, a.commitment_sha256);
 });
 
 // =============================================================================
