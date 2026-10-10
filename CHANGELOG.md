@@ -1,5 +1,20 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: .gitattributes: LF everywhere, so every deployer serves the same bytes (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** On the owner's Windows checkout (`core.autocrlf true`), the working copy of `public/.well-known/arcaeon/case-signing-keys.json` is CRLF (sha256 `b6d11ab5...`), while the git blob is LF (sha256 `c17f497f...`, 2055 bytes). A prebuilt deploy uploads the working copy, so one made on Windows would serve other bytes than one made on Linux. Check (a), which compares the served bytes with the local file, would call both byte-identical.
+- **The fix.** A tracked `.gitattributes` at the root: `* text=auto eol=lf`. Every blob and every working copy is LF on every OS.
+  - There are no binary rules: every tracked file is text (`git ls-files --eol`: 165 files, all `i/lf`; js, md, json, py, ps1, one svg, .gitignore).
+  - `git add --renormalize .` staged no change but `.gitattributes` itself.
+  - On Windows, the two `.ps1` scripts now check out LF too.
+- **Tests.** `test/deploy_shape.test.js` +3, all reading raw bytes, never normalized text:
+  - every file under `public/` has no 0x0D byte in this working copy (the bytes a prebuilt deploy uploads), and `.gitattributes` holds the rule. A stale CRLF working copy fails, naming the refresh: delete `public/` and run `git checkout -- public`;
+  - every file under `public/` has no 0x0D byte in its blob, both in HEAD and in the index, read with `git cat-file blob` (no filters), and `text=auto` and `eol=lf` apply to it. This one skips by design outside a git checkout;
+  - a break arm: a CRLF blob written with `hash-object --no-filters` into a scratch repository still shows its 0x0D through `git cat-file`, a raw read of a CRLF file shows its CR, and `readText` would hide it.
+  - A must-fail check on scratch clones (harness not committed) planted 3 defects one at a time: a CRLF working copy, a CR in a staged blob, and the rule removed. All 3 were caught. The refresh command was run on a CRLF copy: the key document went from 2077 bytes back to 2055, sha256 `c17f497f...`.
+  - Suite 941 -> 944 tests, 0 fail. Here: 942 pass and the 2 environment skips.
+- **For an existing Windows checkout.** A pull does not rewrite files it does not change, so the three `public/` files stay CRLF until they are refreshed. The working-copy test says so until then.
+
 ## 2026-10-10: tests read text files line-ending-blind (CRLF checkouts) (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** On the owner's Windows checkout (`core.autocrlf true`, 785 CR bytes in README.md), `test/deploy_shape.test.js` read "the README lists []". JavaScript's `/m` counts a lone `\r` as a line end, so the "Deploy shape" heading split did match. The list's lines then kept their `\r`, and none matched `/^- `...`$/`.

@@ -29,6 +29,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 
 // A text file as the parsers below expect it: LF line ends, whatever the checkout.
 const readText = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
@@ -155,6 +156,62 @@ test("DEPLOY SHAPE, CRLF: a README checked out with CRLF line ends (core.autocrl
   // their \r and none matches /^- `...`$/.)
   assert.deepEqual(readmeServed(fs.readFileSync(file, "utf8")), []);
   assert.deepEqual(shapeProblems({ ...theRepository(), readme: fs.readFileSync(file, "utf8") }), ["the README lists []"]);
+});
+
+// BYTES: what the domain serves is the same on every deployer's OS. A
+// prebuilt deploy uploads the working copy, so a CRLF checkout would serve
+// other bytes than an LF one; .gitattributes (`* text=auto eol=lf`) keeps
+// every blob and every working copy LF. Read raw: `git cat-file blob` applies
+// no filter, and the working copy is read as a Buffer, never as normalized text.
+const CR = 0x0d;
+const hasCR = (buf) => buf.includes(CR);
+const git = (args, cwd = ROOT) => spawnSync("git", args, { cwd, encoding: "buffer" });
+const NO_GIT_REASON = fs.existsSync(path.join(ROOT, ".git"))
+  ? false
+  : "no .git at the repo root: this is not a git checkout, so there is no committed blob to read";
+
+test("DEPLOY SHAPE, BYTES: every file under public/ is LF on disk, with no 0x0D byte, and .gitattributes says eol=lf", () => {
+  const attrs = readText(path.join(ROOT, ".gitattributes")).split("\n");
+  assert.ok(attrs.includes("* text=auto eol=lf"), ".gitattributes holds the rule");
+  for (const rel of filesUnder(path.join(ROOT, "public"))) {
+    const raw = fs.readFileSync(path.join(ROOT, "public", ...rel.split("/")));
+    assert.equal(hasCR(raw), false,
+      `public/${rel}: this working copy holds CR bytes, so a prebuilt deploy from it would serve them. ` +
+        "Refresh it: delete public/ and run git checkout -- public");
+  }
+});
+
+test("DEPLOY SHAPE, BYTES: every file under public/ has no 0x0D byte in its committed blob (HEAD) or its staged one (the index)", { skip: NO_GIT_REASON }, () => {
+  for (const rel of filesUnder(path.join(ROOT, "public"))) {
+    const p = `public/${rel}`;
+    const attr = git(["check-attr", "text", "eol", "--", p]).stdout.toString();
+    assert.match(attr, /: text: auto\n/, `${p}: text=auto applies`);
+    assert.match(attr, /: eol: lf\n/, `${p}: eol=lf applies`);
+    const staged = git(["ls-files", "-s", "--", p]).stdout.toString().trim().split(/\s+/)[1];
+    assert.match(String(staged), /^[0-9a-f]{40,64}$/, `${p} is tracked`);
+    const blobs = [["the index", staged]];
+    const head = git(["rev-parse", "--verify", "-q", `HEAD:${p}`]);
+    if (head.status === 0) blobs.push(["HEAD", head.stdout.toString().trim()]);
+    for (const [where, sha] of blobs) {
+      const r = git(["cat-file", "blob", sha]);
+      assert.equal(r.status, 0, `${p}: git cat-file blob ${sha}`);
+      assert.equal(hasCR(r.stdout), false, `${p}: its blob in ${where} holds a CR byte`);
+    }
+  }
+});
+
+test("DEPLOY SHAPE, BYTES, BREAK ARM: a CRLF blob read through git cat-file still shows its 0x0D; a CRLF file on disk shows it read raw", { skip: NO_GIT_REASON }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deploy-shape-cr-"));
+  assert.equal(git(["init", "-q"], dir).status, 0);
+  const file = path.join(dir, "doc.json");
+  fs.writeFileSync(file, "{\r\n  \"a\": 1\r\n}\r\n");
+  const w = git(["-c", "core.autocrlf=false", "hash-object", "-w", "--no-filters", "doc.json"], dir);
+  assert.equal(w.status, 0);
+  const sha = w.stdout.toString().trim();
+  const r = git(["cat-file", "blob", sha], dir);
+  assert.equal(hasCR(r.stdout), true, "git cat-file returns the blob's raw bytes, CR included");
+  assert.equal(hasCR(fs.readFileSync(file)), true, "a raw read of a CRLF file shows its CR");
+  assert.equal(hasCR(Buffer.from(readText(file))), false, "and readText would hide it, which is why the byte checks read raw");
 });
 
 test("DEPLOY SHAPE, BREAK ARMS: each drift is named", () => {
