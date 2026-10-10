@@ -37,6 +37,9 @@
 // a link to vercel.com/sso-api), modelled on it, not copied from a live
 // one; `protect: {page: "plain"}` answers a bare 401 with none of those
 // marks instead. `protect: true` is protection with no secret that passes.
+// A request that passes and also carries x-vercel-set-bypass-cookie gets
+// Vercel's cookie handshake, as the first real dry run saw it: a 307 to its
+// own URL with a bypass cookie, never the page.
 // `requests` records what arrived, headers included.
 "use strict";
 
@@ -162,6 +165,11 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
       if (guard && !(guard.secret && req.headers["x-vercel-protection-bypass"] === guard.secret)) {
         if (guard.page === "plain") return send(res, 401, "Unauthorized\n", "text/plain; charset=utf-8");
         return ssoPage(res, `https://preview.invalid${req.url}`);
+      }
+      if (guard && req.headers["x-vercel-set-bypass-cookie"] !== undefined) {
+        res.setHeader("location", req.url);
+        res.setHeader("set-cookie", `_vercel_jwt=${Math.random().toString(36).slice(2)}; Path=/; HttpOnly; Secure; SameSite=Lax`);
+        return send(res, 307, "", "text/plain; charset=utf-8");
       }
       let pathname = decodeURIComponent(u.pathname);
       if (Object.prototype.hasOwnProperty.call(answers, pathname)) {

@@ -58,8 +58,10 @@
 //   --bypass <secret>   the Vercel project's Protection Bypass for Automation
 //                       secret. Read from VERCEL_AUTOMATION_BYPASS_SECRET when
 //                       the flag is absent. Sent as x-vercel-protection-bypass
-//                       on every request to the preview, with
-//                       x-vercel-set-bypass-cookie: true on the first.
+//                       on every request to the preview, and nothing else:
+//                       never x-vercel-set-bypass-cookie, which Vercel answers
+//                       with a 307 to the same URL (its cookie handshake)
+//                       instead of the page.
 //   --key <key>         an issued key (ARCAEON_KEY). Sent only as the bearer of
 //                       case-open and of the two stamps. Use a key that has not
 //                       opened a case today if --exhaust-quota is given.
@@ -143,7 +145,6 @@ const TIMEOUT_MS = 30000;
 // A PROTECTED PREVIEW, above.
 const BYPASS_ENV = "VERCEL_AUTOMATION_BYPASS_SECRET";
 const BYPASS_HEADER = "x-vercel-protection-bypass";
-const BYPASS_COOKIE_HEADER = "x-vercel-set-bypass-cookie";
 
 function helpText() {
   const src = fs.readFileSync(__filename, "utf8").split("\n");
@@ -264,17 +265,11 @@ function request(base, method, target, { headers = {}, body = null, chunks = nul
 }
 
 // Every request to the preview: `request` with the bypass, when one was
-// given, as x-vercel-protection-bypass, and x-vercel-set-bypass-cookie: true
-// on the run's first request (A PROTECTED PREVIEW, above).
+// given, as x-vercel-protection-bypass on every request, and no cookie
+// asked for (--bypass, above: x-vercel-set-bypass-cookie draws a 307).
 function send(ctx, method, target, opts = {}) {
   const headers = { ...(opts.headers || {}) };
-  if (ctx.bypass) {
-    headers[BYPASS_HEADER] = ctx.bypass;
-    if (!ctx.bypassCookieAsked) {
-      ctx.bypassCookieAsked = true;
-      headers[BYPASS_COOKIE_HEADER] = "true";
-    }
-  }
+  if (ctx.bypass) headers[BYPASS_HEADER] = ctx.bypass;
   return request(ctx.base, method, target, { ...opts, headers });
 }
 
@@ -798,7 +793,6 @@ async function run(opts) {
     keyDocument,
     key: opts.key,
     bypass: opts.bypass || null,
-    bypassCookieAsked: false,
     keysDocAnswer: null,
     pinToken: opts.pinToken || null,
     exhaustQuota: opts.exhaustQuota === true,

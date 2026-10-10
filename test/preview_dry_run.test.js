@@ -535,7 +535,7 @@ test("(g) BROKEN with the paths when the whole root is served, and (REVIEW FIX 2
 // a protected preview: Vercel Authentication and the automation bypass
 // =============================================================================
 
-test("PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret, the first alone asks for the bypass cookie", async (t) => {
+test("PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret and none asks for the bypass cookie, which the stand-in answers with Vercel's 307 handshake", async (t) => {
   const r = await dryRun(t, { bypass: BYPASS, exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { secret: BYPASS } } });
   for (const id of "abcdefg") assert.equal(word(r, id), "VERIFIED", r.show);
   assert.equal(r.code, 0);
@@ -543,8 +543,19 @@ test("PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); ev
   assert.ok(qs.length > 150, `the whole run went through: ${qs.length} requests`);
   for (const q of qs) assert.equal(q.headers["x-vercel-protection-bypass"], BYPASS, `${q.method} ${q.path}${q.search}`);
   assert.equal(qs[0].path, `/${S.CASE_KEYS_DOC}`, "the first request is (a)'s GET");
-  assert.equal(qs[0].headers["x-vercel-set-bypass-cookie"], "true");
-  assert.equal(qs.slice(1).some((q) => Object.prototype.hasOwnProperty.call(q.headers, "x-vercel-set-bypass-cookie")), false, "on the first request only");
+  assert.equal(qs.some((q) => Object.prototype.hasOwnProperty.call(q.headers, "x-vercel-set-bypass-cookie")), false, "no request asks for the cookie");
+
+  // The handshake the tool must not trigger is live in the stand-in, as the
+  // first real dry run saw it: with the cookie header, a 307 to the same URL;
+  // with the bypass alone, the document.
+  const doc = fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")));
+  const handshake = await tool._internal.request(r.preview.base, "GET", `/${S.CASE_KEYS_DOC}`,
+    { headers: { "x-vercel-protection-bypass": BYPASS, "x-vercel-set-bypass-cookie": "true" } });
+  assert.equal(handshake.status, 307);
+  assert.equal(handshake.headers.location, `/${S.CASE_KEYS_DOC}`);
+  const plain = await tool._internal.request(r.preview.base, "GET", `/${S.CASE_KEYS_DOC}`, { headers: { "x-vercel-protection-bypass": BYPASS } });
+  assert.equal(plain.status, 200);
+  assert.ok(plain.body.equals(doc));
 
   // A bypass sent to a preview that is not protected changes nothing (a
   // fresh store: the arm above spent the key's opens for today).

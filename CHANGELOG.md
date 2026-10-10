@@ -1,5 +1,16 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the preview dry run, after its first real run: no bypass cookie; a note on root files served on the preview (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** The owner ran the dry run against a protected preview deployment of this branch. The bypass worked and the functions answered. On the first request, though, `x-vercel-set-bypass-cookie: true` drew Vercel's cookie handshake: a 307 whose `location` is the same URL. So (a) read COULD NOT LOOK (HTTP 307, neither the file nor a 404). With only `x-vercel-protection-bypass`, the key document came back 200 `application/json`, 2055 bytes, with the committed file's sha256.
+- **The fix.** `tools/preview_dry_run.js` sends only `x-vercel-protection-bypass`, on every request, and never `x-vercel-set-bypass-cookie`. This supersedes the 3a entry's line that the first request carries it.
+- **Tests.**
+  - The stand-in (`test/helpers/vercel_preview.js`) mimics the handshake: a request that passes protection and carries `x-vercel-set-bypass-cookie` gets a 307 to its own URL with a bypass cookie, never the page.
+  - The right-bypass test now asserts that no request carries the cookie header, and that the handshake is live: with the header, 307 to self; with the bypass alone, the document.
+  - A must-fail check on a scratch copy (harness not committed) restored the old behaviour, the cookie asked on the first request, and separately on every request. Both were caught, the first with the real run's own symptom: (a) HTTP 307, neither the file nor a 404.
+  - Suite 938 tests, 0 fail. Here: 936 pass and the 2 environment skips.
+- **Note, no code yet: root files served on the preview.** The same run's (g) found 131 of its 134 root paths (lib/, tools/, test/, README.md, package.json) served 200 on the preview. Production answers 404 for the same paths. The owner is finding what differs in the production checkout before deciding anything. Until then, (g) reads BROKEN on the preview, as it should.
+
 ## 2026-10-10: the case protocol, item 3b follow-up: tests that took the committed key document for "a document without the case key" (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** `faab41b` lists the production case key's public entry (`case-2026-10+295a9a61`, active) in `.well-known/arcaeon/case-signing-keys.json`. Two 2c tests used the committed document as a document with no key, and failed. No code changed, and the key document is untouched.
