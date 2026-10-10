@@ -10,5 +10,13 @@
   },
   "rotation": "Rotation adds a new key with status active and moves the previous key to retired, so records signed before the rotation keep verifying. A key is marked revoked only if its private half is believed exposed. This document is the single place either change is announced. The service signs only with a key listed here as active (it carries this document in its own deployment and checks the configured key against it); a configured key that is not listed is not used. No case-signing key has been provisioned yet: until a key is listed here, every case record carries sig null with its sig_reason (key_unpublished).",
   "updated": "2026-10-10",
-  "keys": []
+  "keys": [
+    {
+      "key_id": "case-2026-10+295a9a61",
+      "verifier": "case-2026-10+295a9a61+AVNuIrdN4MHY+qSDNSBo5xNUMBaDJzFl2nDLa075beNw",
+      "since": "2026-10-10",
+      "note": "arcaeon witness case signing key, minted 2026-10-10 on the owner's laptop",
+      "status": "active"
+    }
+  ]
 }
