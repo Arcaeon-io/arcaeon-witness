@@ -620,6 +620,10 @@ test("EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anyth
   assert.equal(three.code, 3);
 });
 
+// What (e) says in a child-process run against the stand-in: unsigned, because
+// no case key is in the stand-in's environment (case_key_unset).
+const UNSIGNED_E = /^BROKEN \(e\) chunked case-reveal: case-reveal with .* answered HTTP 201 VERDICT for case_id [0-9a-f]{64}, but the seal is unsigned \(signed_by null, sig null; sig_reason: This case is sealed and not signed \(case_key_unset\): .*\): the published case signer is not installed$/;
+
 function runCli(args, extraEnv = {}) {
   return new Promise((resolve) => {
     const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GITHUB_|STAMP_|WITNESS_|VERCEL_)/.test(k))), ...extraEnv };
@@ -651,9 +655,11 @@ test("CLI: seven lines on stdout and nothing else, in order; no key, operator ke
   assert.equal(lines.length, 7, r.stdout);
   assert.deepEqual(lines.map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`),
     ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], r.stdout);
-  // The committed document lists no case key yet, so a deployment of this
-  // checkout seals unsigned, and (e) says so.
-  assert.match(lines[4], /but the seal is unsigned \(signed_by null, sig null; sig_reason: /);
+  // (e) is BROKEN because the seal is UNSIGNED. The committed document lists
+  // the production case key (item 3b), and the child checks against it, but
+  // the key's private half is in no tree, so the stand-in (this checkout's
+  // api/ with no case key in its environment) cannot sign with it.
+  assert.match(lines[4], UNSIGNED_E);
   assert.equal(r.code, 3);
   for (const s of SECRETS) {
     assert.equal(r.stdout.includes(s), false);
@@ -678,6 +684,7 @@ test("CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET wh
 
   const fromEnv = await runCli(["--base", p.base, "--key", KEY], { VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS });
   assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
+  assert.match(fromEnv.stdout.trim().split("\n")[4], UNSIGNED_E, "(e) is BROKEN because the seal is unsigned, as in the CLI test above");
   assert.equal(fromEnv.code, 3);
   assert.match(fromEnv.stderr, /, with a protection bypass$/m);
   const seen = p.requests.length;

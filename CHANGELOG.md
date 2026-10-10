@@ -1,5 +1,14 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the case protocol, item 3b follow-up: tests that took the committed key document for "a document without the case key" (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** `faab41b` lists the production case key's public entry (`case-2026-10+295a9a61`, active) in `.well-known/arcaeon/case-signing-keys.json`. Two 2c tests used the committed document as a document with no key, and failed. No code changed, and the key document is untouched.
+- **`test/case_item2c.test.js`** (no test renamed or removed):
+  - FIX 2 (GPT's planted test) seals against an injected copy of the committed document with `keys: []` (`NO_KEYS_DOC`), the same property as before: three valid, distinct keys and a document without the case key seal UNSIGNED, `key_unpublished`.
+  - FIX 4 checks the unknown-field refusal on that same injected document. Its committed-document half now asserts that the committed document passes with exactly one entry, active, whose `key_id` is `case-2026-10+295a9a61` and whose verifier is the file's own and names that key id.
+- **`test/preview_dry_run.test.js`.** The two child-process runs still expect (e) BROKEN, and now name the reason: the seal is unsigned (`case_key_unset`). The committed document lists the production key, but its private half is in no tree, so the stand-in cannot sign with it.
+- **Tests.** A must-fail check on a scratch copy (harness not committed) planted 3 defects one at a time: publication not enforced, an unknown top-level field accepted, and the checker dropping its entries. The reworked tests caught all 3. Suite 938 tests, 0 fail. Here: 936 pass and the 2 environment skips.
+
 ## 2026-10-10: the case protocol, item 3a: three holes in the preview dry run, after the outside review of c0ef907 (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Fix 1: (e) requires a signed seal the published key confirms.** A 201 VERDICT is BROKEN, never VERIFIED, when:

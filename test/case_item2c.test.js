@@ -87,9 +87,14 @@ const LOG_ENV = "WITNESS_LOG_SIGNER_KEY";
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer });
 const CASE_KEY_ID = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
 const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, since: "2026-10-10", note: "the test environment's case key", status: "active" });
-// The committed document lists no key; the signing tests hand the seal a
-// copy that lists the test key (lib/_case_seal.js, PUBLICATION FAILS CLOSED).
+// The committed document lists the production case key (item 3b), never
+// this test's; the signing tests hand the seal a copy that lists the test key
+// (lib/_case_seal.js, PUBLICATION FAILS CLOSED), and the tests that need "a
+// document without the case key" hand it a copy that lists no key at all.
 const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY] });
+const NO_KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: Object.freeze([]) });
+// The production case key's public entry, as item 3b committed it.
+const PRODUCTION_KEY_ID = "case-2026-10+295a9a61";
 const OPEN_KEY = "case-test-open-key-0004";
 const OPEN_AUTH = Object.freeze({ authorization: `Bearer ${OPEN_KEY}` });
 
@@ -266,20 +271,22 @@ test("FIX 1: an unsigned seal is still a seal and anchors with no signature to c
 
 test("FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the reveal seals UNSIGNED, key_unpublished", async () => {
   // the three keys are distinct and valid, so separation holds
-  const loaded = S.loadCaseSigner(SIGNED, { keyDocument: S.PUBLISHED_KEYS });
+  const loaded = S.loadCaseSigner(SIGNED, { keyDocument: NO_KEYS_DOC });
   assert.equal(loaded.ok, false);
   assert.equal(loaded.code, "key_unpublished");
   assert.equal(loaded.privateKey, undefined, "an unpublished key is not handed out");
   assert.equal(loaded.keyId, CASE_KEY_ID, "its public half is, for the entry");
-  assert.deepEqual(S.PUBLISHED_KEYS.keys, [], "fixture: the committed document lists no key");
-  const { id, r } = await sealedCase({ keyDocument: S.PUBLISHED_KEYS });
+  assert.deepEqual(NO_KEYS_DOC.keys, [], "fixture: the injected document lists no key");
+  assert.equal(S.checkKeyDocument(NO_KEYS_DOC).ok, true, "fixture: and reads as a key document");
+  const { id, r } = await sealedCase({ keyDocument: NO_KEYS_DOC });
   const k = storedCase(id);
   assert.equal(k.sig, null, "never signed");
   assert.equal(k.signed_by, null);
   assert.match(k.sig_reason, /^This case is sealed and not signed \(key_unpublished\): /);
   assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
   assert.equal(r.body.sealed_by, null);
-  // with no keyDocument at all, the default is the committed document
+  // with no keyDocument at all, the default is the committed document, which
+  // lists the production key and not this test's
   const plain = await committedCase({ over: { scope_digest: sha("default document") } });
   const res = makeRes();
   await H.handleCaseReveal(req("case-reveal", revealBody(plain.id, plain.a, plain.b)), res, { now: REVEAL_AT, env: SIGNED });
@@ -376,12 +383,25 @@ test("FIX 3: the status row reads no case file and no pin; a truncated tree make
 // =============================================================================
 
 test("FIX 4: checkKeyDocument refuses an unknown top-level field by name; the committed document passes", () => {
-  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf-8"));
-  assert.deepEqual(S.checkKeyDocument(doc), { ok: true, keys: [] });
+  // The property, on the injected document with no key.
+  assert.deepEqual(S.checkKeyDocument(NO_KEYS_DOC), { ok: true, keys: [] });
   for (const extra of ["private_keys", "trusted", "mirror", "keys_v2"]) {
-    const got = S.checkKeyDocument({ ...doc, [extra]: "x" });
+    const got = S.checkKeyDocument({ ...NO_KEYS_DOC, [extra]: "x" });
     assert.deepEqual(got, { ok: false, reason: "unknown_field", at: extra }, extra);
   }
+  // The committed document passes, with its one active entry: the
+  // production case key, holding the verifier the file holds.
+  const doc = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf-8"));
+  const checked = S.checkKeyDocument(doc);
+  assert.equal(checked.ok, true, JSON.stringify(checked));
+  assert.equal(checked.keys.length, 1);
+  const [prod] = checked.keys;
+  assert.equal(prod.key_id, PRODUCTION_KEY_ID);
+  assert.equal(prod.status, "active");
+  assert.equal(prod.verifier, doc.keys[0].verifier);
+  const vk = checkpoint.parseVerifierKey(prod.verifier);
+  assert.equal(vk.ok, true, "the verifier parses");
+  assert.equal(`${vk.name}+${vk.hash}`, PRODUCTION_KEY_ID, "and names the key the entry names");
   // and a document the checker refuses publishes no key
   assert.equal(S.loadCaseSigner(SIGNED, { keyDocument: { ...KEYS_DOC, trusted: [CASE_KEY.verifier] } }).code, "key_unpublished");
   // MUST-FAIL ARM: the 2b checker read only its required fields, and the
