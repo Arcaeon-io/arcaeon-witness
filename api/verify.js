@@ -50,6 +50,7 @@ const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
 const reconcileHttp = require("../lib/_reconcile_http.js");
+const caseHttp = require("../lib/_case_http.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 const RAW_BASE = `https://raw.githubusercontent.com/${store.REPO}/${store.BRANCH}`;
@@ -488,6 +489,20 @@ module.exports = async (req, res) => {
   }
   if (op === "reconcile-page") {
     return reconcileHttp.handlePage(req, res);
+  }
+
+  // --- co-hosted mode: the case protocol, item one (lib/_case_http.js) ---
+  // POST ?op=case-open writes an OPEN case; POST ?op=case-commit registers a
+  // stamped commitment to one role of it, first write wins. Here for the same
+  // reason as stamp and reconcile: the 12-function cap ("No thirteenth
+  // function. Every new route is ?op=case-<verb> on verify.js",
+  // CASE_PROTOCOL_DESIGN_2026-10-10.md). Writes go to the pins repository's
+  // cases/ tree; the stamps repository is only read. No tape, no salt.
+  if (op === "case-open") {
+    return caseHttp.handleCaseOpen(req, res);
+  }
+  if (op === "case-commit") {
+    return caseHttp.handleCaseCommit(req, res);
   }
 
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every
