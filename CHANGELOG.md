@@ -1,5 +1,33 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the case protocol, item 3a: the case-key mint and the preview dry run (branch `case-protocol-2026-10-10`, local only, NOT deployed, no key minted, nothing published)
+
+- **Why.** Item three provisions the case key and promotes a preview. Before either, the key needs a tool that never shows its private half, and the preview needs one run that says what it does before anything is promoted. Nothing under `api/` changed (still 12 functions).
+- **`tools/mint_case_key.js`** `--out <path ending in .signer.key> [--name] [--note]`.
+  - It mints one Ed25519 key in the signer-string shape `loadCaseSigner` reads, `PRIVATE+KEY+<name>+<8 hex>+<base64(0x01 || seed)>`.
+  - The private half is written create-only, mode 0600, to `--out` and nowhere else. An existing path is refused (exit 2) and left untouched.
+  - stdout is only the document entry `{key_id, verifier, since, note, status: "active"}`; progress goes to stderr.
+  - The entry is `keyDocumentEntry` of `loadCaseSigner`'s `key_unpublished` answer against the committed document. Before printing, the tool checks three things, or removes the file and refuses: the entry passes `checkKeyDocument` inside the committed document; `loadCaseSigner` loads the key once that document lists it; and the key's signature verifies under the printed verifier. Throwaway log and reconcile keys stand in for the separation rule; the real ones are never read.
+  - It follows `tools/logtree_keygen.js`: the `.signer.key` suffix `.gitignore` covers, header-as-help, exit 0/1/2, Windows icacls.
+- **`tools/preview_dry_run.js`** `--base <origin> --key <issued key> [--operator-key] [--pin-token] [--exhaust-quota]`. Seven checks in order, one line each, VERIFIED / BROKEN / COULD NOT LOOK with the evidence:
+  - (a) the key document is served byte-identical to the checkout's (sha256);
+  - (b) `/case/:case_id` from this checkout's `vercel.json` delivers the page of a case the run opened (200 text/html, the id, `Case: OPEN`);
+  - (c) case-open with the key is 201; with `--exhaust-quota`, opens 1-20 are 201 and the 21st is 429 `open_quota_exceeded`. Without the flag the line is COULD NOT LOOK. The per-IP limiter's `rate_limited`, or a refusal before the 21st (the key opened earlier today), is COULD NOT LOOK, never VERIFIED;
+  - (d) role a's commitment is stamped, then registered at once; the registration's `stamp_commit` must be the commit the stamp answered;
+  - (e) role b is stamped and registered, then the joint reveal goes out chunked with no content-length and must be 201 VERDICT;
+  - (f) the sealer's case pass (`lib/_sealer.js` `anchorCases`) runs only with `--pin-token`. The store `GITHUB_PIN_REPO` names must first show the case opened on the preview. The pass must report nothing refused, in conflict or unreadable, and the sealed case must be anchored under the reveal's chain;
+  - (g) README.md, package.json, package-lock.json and every file under lib/, tools/ and test/ must answer 404.
+  - Exit 0 all VERIFIED, 2 any BROKEN, 3 any COULD NOT LOOK (3 wins), 1 usage.
+  - The issued key goes only to case-open and the two stamps. `--operator-key` (`WITNESS_CASE_OPERATOR_KEY`) is accepted and never sent, because no check calls `case-reference`. The pin token is set for the pass alone and put back. Every line is scrubbed of all three.
+- **Tests.**
+  - `test/mint_case_key.test.js` (new, 5).
+  - `test/preview_dry_run.test.js` (new, 14) runs the tool over HTTP against `test/helpers/vercel_preview.js` (new): an in-process server running this checkout's `api/*.js` over the mock store, with Vercel's filesystem-then-rewrites order, its JSON body parser and an optional deployment protection.
+    - Each check is planted both ways, VERIFIED and BROKEN, plus its COULD NOT LOOK cases.
+    - Two runs go through the CLI as a child process: one against the stand-in, one against a closed port.
+    - What only a live preview can answer stays the dry run's: Vercel's own parser and static serving, its protection, and GitHub's read-after-write.
+  - A must-fail pass on a scratch copy (harness not committed) planted 34 defects one at a time; 33 were caught. The one left is an equivalent mutant: the mint's explicit `checkKeyDocument` line is repeated inside `loadCaseSigner`, so removing it alone changes nothing.
+  - Suite 912 -> 931 tests, 0 fail. Here: 929 pass and the 2 skips 2d names (`KEY DOCUMENT, THIS ENVIRONMENT`, and `LIVE DIFFERENTIAL`, which needs an arcaeon-ledger checkout).
+
 ## 2026-10-10: the case protocol, item 2d: a fix pass after the code review of 2c: the sealed check on the reference and the page, no count from a truncated read, the operator's own key, the open quota on a fresh day (no fix needed), a partial conflict count (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** A code review of 2c raised five points. Four were real and are fixed here. The fifth, about the open quota, did not reproduce: its planted test passes on the 2c code, so that code is unchanged.

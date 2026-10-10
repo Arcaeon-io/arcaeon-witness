@@ -1,0 +1,739 @@
+#!/usr/bin/env node
+// tools/preview_dry_run.js — a dry run of the case protocol against a preview
+// deployment, before anything is promoted (case protocol item 3a).
+//
+// It drives the preview over HTTP the way a party would, compares what the
+// preview serves with this checkout, and prints exactly one line per check,
+// in this order, each starting with VERIFIED, BROKEN or COULD NOT LOOK and
+// followed by its evidence (HTTP status, byte count, sha256, case_id, or why
+// it could not look):
+//
+//   (a) /.well-known/arcaeon/case-signing-keys.json is served byte-identical
+//       to the committed file in this checkout (sha256 compared).
+//   (b) the /case/:case_id rewrite in this checkout's vercel.json delivers
+//       the case page: GET /case/<case_id> for a case this run opened answers
+//       200 text/html naming that case_id, with the status OPEN.
+//   (c) case-open with the issued key answers 201. With --exhaust-quota the
+//       run keeps opening until the 21st open of the UTC day is refused 429
+//       open_quota_exceeded (lib/_case_http.js THE OPEN QUOTA, 20 a key a
+//       day); without it the line is COULD NOT LOOK, saying so.
+//   (d) a stamp, then an immediate read of the stamp's commit, sees it: role
+//       a's commitment is stamped (POST /api/stamp, size 272) and registered
+//       at once (?op=case-commit, which reads the stamp's commit history);
+//       the registration must name the commit the stamp answered with.
+//   (e) case-reveal with a JSON body sent chunked, with NO content-length
+//       header, is accepted: role b is stamped and registered, then the
+//       joint reveal goes out in chunks and must answer 201, sealed VERDICT.
+//   (f) the sealer's case pass (lib/_sealer.js anchorCases, the pass
+//       tools/seal_batch.js runs) against the preview's pins store. It reads
+//       and writes that store directly, never through the preview, so it
+//       needs the pins token: without --pin-token it is COULD NOT LOOK. With
+//       it, the store GITHUB_PIN_REPO / GITHUB_PIN_BRANCH name must hold the
+//       case this run opened on the preview (else it is not the preview's
+//       store, and the line says so), the pass must report nothing refused,
+//       in conflict or unreadable, and the case sealed in (e) must be
+//       anchored under the chain the reveal answered with.
+//   (g) nothing at the project root that is not meant to be public is
+//       served: README.md, package.json, package-lock.json, and every file
+//       under lib/, tools/ and test/ in this checkout (tests/ too, if it
+//       exists) must answer 404. Any 2xx is BROKEN, with the paths.
+//
+// USAGE
+//
+//   node tools/preview_dry_run.js --base <preview URL> --key <issued key>
+//        [--operator-key <k>] [--pin-token <t>] [--exhaust-quota]
+//
+//   --base <url>        the preview's origin, https://<deployment>.vercel.app
+//                       (no path, no query).
+//   --key <key>         an issued key (ARCAEON_KEY). Sent only as the bearer of
+//                       case-open and of the two stamps. Use a key that has not
+//                       opened a case today if --exhaust-quota is given.
+//   --operator-key <k>  WITNESS_CASE_OPERATOR_KEY, which authenticates
+//                       ?op=case-reference. No check above calls that op, so
+//                       it is accepted and never sent.
+//   --pin-token <t>     the pins store's token (GITHUB_PIN_TOKEN), for (f) only.
+//                       It is set for the pass alone and never sent to the
+//                       preview. Set GITHUB_PIN_REPO and GITHUB_PIN_BRANCH to
+//                       the preview's pins store if it is not the default.
+//   --exhaust-quota     run the quota half of (c): up to 21 opens.
+//   --help              this text
+//
+// NOTHING SECRET IS PRINTED. Neither key, the operator key nor the pin token
+// appears on stdout or stderr: every line is checked for each of them and
+// any occurrence is replaced before it is written. stdout carries the seven
+// lines and nothing else; progress goes to stderr.
+//
+// IT WRITES TO THE PREVIEW'S STORES. A dry run is real traffic: one case (21
+// with --exhaust-quota) is opened in the preview's pins store, two stamps go
+// to its stamps store (free, or 0.25 credits each from the key once the
+// address's free stamps are spent), two registrations and one sealed case
+// with its pin are written, and with --pin-token the case pass may pin other
+// pending cases there. The parties are labelled "preview-dry-run agent" and
+// "preview-dry-run tool". The tapes are the MATCHED pair of
+// test/fixtures/reconcile/cases.json that test/case_reveal.test.js seals.
+// The per-IP limiter (30 calls in 10 minutes, shared by every case op and
+// the page) leaves room for one --exhaust-quota run in a window; a second
+// run inside it reads 429 rate_limited, which is COULD NOT LOOK, never
+// mistaken for the quota.
+//
+// EXIT CODES: 0 every check VERIFIED; 2 a check BROKEN; 3 a check COULD NOT
+// LOOK (3 wins over 2); 1 usage.
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const http = require("http");
+const https = require("https");
+const C = require("../lib/_case.js");
+const S = require("../lib/_case_seal.js");
+
+const ROOT = path.join(__dirname, "..");
+const VERIFIED = "VERIFIED";
+const BROKEN = "BROKEN";
+const COULD_NOT_LOOK = "COULD NOT LOOK";
+
+const CHECKS = Object.freeze([
+  ["a", "case key document"],
+  ["b", "case page rewrite"],
+  ["c", "case-open and the open quota"],
+  ["d", "stamp, then its commit read at once"],
+  ["e", "chunked case-reveal"],
+  ["f", "sealer's case pass"],
+  ["g", "root-file exposure"],
+]);
+
+// THE OPEN QUOTA (lib/_case_http.js OPEN_QUOTA_PER_DAY): the 21st is refused.
+const QUOTA_PER_DAY = 20;
+const CASE_PAGE_SOURCE = "/case/:case_id";
+const EXPOSED_FILES = Object.freeze(["README.md", "package.json", "package-lock.json"]);
+const EXPOSED_DIRS = Object.freeze(["lib", "tools", "test", "tests"]);
+const EXPOSURE_CONCURRENCY = 8;
+const TAPES_FIXTURE = "test/fixtures/reconcile/cases.json";
+const TAPES_NAME = /^receipt-test_call_proxy_tape\/test_cross_repo_adapter_tape_a0: agent vs tool$/;
+const REVEAL_CHUNKS = 4;
+const TIMEOUT_MS = 30000;
+
+function helpText() {
+  const src = fs.readFileSync(__filename, "utf8").split("\n");
+  const out = [];
+  for (const line of src.slice(1)) {
+    if (!line.startsWith("//")) break;
+    out.push(line.replace(/^\/\/ ?/, ""));
+  }
+  return out.join("\n");
+}
+
+function parseArgs(argv) {
+  const a = { exhaustQuota: false };
+  for (let i = 0; i < argv.length; i++) {
+    const t = argv[i];
+    const next = () => {
+      if (i + 1 >= argv.length) throw new Error(`${t} needs a value`);
+      return argv[++i];
+    };
+    if (t === "--help" || t === "-h") a.help = true;
+    else if (t === "--base") a.base = next();
+    else if (t === "--key") a.key = next();
+    else if (t === "--operator-key") a.operatorKey = next();
+    else if (t === "--pin-token") a.pinToken = next();
+    else if (t === "--exhaust-quota") a.exhaustQuota = true;
+    else throw new Error(`unknown argument ${t}`);
+  }
+  return a;
+}
+
+function sha256hex(buf) {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+
+function tryJson(buf) {
+  try {
+    return JSON.parse(buf.toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// A function's own refusal names itself: error_code (the case ops), or
+// reason (the stamp endpoint).
+function codeOf(json) {
+  if (!json || typeof json !== "object") return null;
+  if (typeof json.error_code === "string") return json.error_code;
+  if (typeof json.reason === "string") return json.reason;
+  return null;
+}
+
+function said(ans) {
+  if (ans.error) return ans.error;
+  const code = codeOf(tryJson(ans.body));
+  return `HTTP ${ans.status}${code ? ` ${code}` : ""}`;
+}
+
+// ---------------------------------------------------------------------------
+// HTTP: node's own client, one connection per request, never a redirect
+// followed, never a body decoded (accept-encoding: identity), never throws.
+// -> {status, headers, body} or {error}.
+// ---------------------------------------------------------------------------
+function request(base, method, target, { headers = {}, body = null, chunks = null, timeoutMs = TIMEOUT_MS } = {}) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => {
+      if (!done) {
+        done = true;
+        resolve(v);
+      }
+    };
+    const u = new URL(target, base);
+    const mod = u.protocol === "https:" ? https : http;
+    const h = { "accept-encoding": "identity", "user-agent": "arcaeon-preview-dry-run/1", ...headers };
+    if (body !== null) h["content-length"] = String(Buffer.byteLength(body));
+    if (chunks !== null) h["transfer-encoding"] = "chunked";
+    let req;
+    try {
+      req = mod.request(u, { method, headers: h, agent: false }, (res) => {
+        const parts = [];
+        res.on("data", (c) => parts.push(c));
+        res.on("end", () => finish({ status: res.statusCode, headers: res.headers, body: Buffer.concat(parts) }));
+        res.on("error", (e) => finish({ error: `the answer broke off (${e.code || e.message})` }));
+      });
+    } catch (e) {
+      finish({ error: `the request could not be made (${e.code || e.message})` });
+      return;
+    }
+    req.setTimeout(timeoutMs, () => req.destroy(Object.assign(new Error("timeout"), { code: `no answer in ${timeoutMs / 1000}s` })));
+    req.on("error", (e) => finish({ error: `no answer (${e.code || e.message})` }));
+    if (chunks !== null) {
+      for (const c of chunks) req.write(c);
+      req.end();
+    } else {
+      req.end(body === null ? undefined : body);
+    }
+  });
+}
+
+// Why an answer is not one the check can judge, or null when it is the
+// function's own answer to judge. A 429, a 502/503/504 that is not a
+// deployment saying it is not configured, and a 401/403 that is not the
+// function's own JSON refusal (deployment protection answers before the
+// function) cannot be judged.
+function unlooked(ans) {
+  if (ans.error) return ans.error;
+  const json = tryJson(ans.body);
+  const code = codeOf(json);
+  if (ans.status === 429) return `${said(ans)}: refused for rate, not judged`;
+  if ([502, 503, 504].includes(ans.status)) {
+    if (code && /not_configured/.test(code)) return null;
+    return `${said(ans)}: the preview could not answer this request`;
+  }
+  if ((ans.status === 401 || ans.status === 403) && !(json && json.ok === false)) {
+    return `HTTP ${ans.status} before any function answered (deployment protection?)`;
+  }
+  return null;
+}
+
+const verified = (text) => ({ word: VERIFIED, text });
+const broken = (text) => ({ word: BROKEN, text });
+const couldNotLook = (text) => ({ word: COULD_NOT_LOOK, text });
+
+// ---------------------------------------------------------------------------
+// the run's case: one opening, its two parties, their tapes and salts
+// ---------------------------------------------------------------------------
+function loadTapes(root) {
+  let fx;
+  try {
+    fx = JSON.parse(fs.readFileSync(path.join(root, ...TAPES_FIXTURE.split("/")), "utf8"));
+  } catch (e) {
+    return { why: `the tape pair could not be read from ${TAPES_FIXTURE} (${e.code || e.name})` };
+  }
+  const c = (fx.cases || []).find((x) => TAPES_NAME.test(x.name) && x.python);
+  if (!c) return { why: `${TAPES_FIXTURE} holds no MATCHED agent-vs-tool pair named as test/case_reveal.test.js names it` };
+  return { a: Buffer.from(c.a_b64, "base64"), b: Buffer.from(c.b_b64, "base64") };
+}
+
+function party(caseId, role, tape) {
+  const salt = C.newSalt();
+  const tape_sha256 = sha256hex(tape);
+  return { role, tape, salt, tape_sha256, commitment_sha256: C.commitmentSha256({ case_id: caseId, role, tape_sha256, salt }) };
+}
+
+// An opening only this run makes: its scope digest names the run and the
+// open's number. The parties are already in canonical order (agent sorts
+// before tool), so role a is the agent.
+function opening(ctx, n) {
+  const nowMs = Date.now();
+  return {
+    protocol_version: C.PROTOCOL_VERSION,
+    policy_version: C.SUPPORTED_POLICY_VERSION,
+    scope_digest: sha256hex(`arcaeon preview dry run ${ctx.runId} open ${n}`),
+    party_a: { side: "agent", label: "preview-dry-run agent" },
+    party_b: { side: "tool", label: "preview-dry-run tool" },
+    opened_at: C.utcSeconds(nowMs - 60000),
+    deadline: C.utcSeconds(nowMs + 86400000),
+  };
+}
+
+function postJson(ctx, target, obj, { bearer = null } = {}) {
+  const headers = { "content-type": "application/json" };
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
+  return request(ctx.base, "POST", target, { headers, body: JSON.stringify(obj) });
+}
+
+async function open(ctx, n) {
+  ctx.log(`(c) case-open ${n}`);
+  const ans = await postJson(ctx, "/api/verify?op=case-open", opening(ctx, n), { bearer: ctx.key });
+  const json = ans.error ? null : tryJson(ans.body);
+  return { ans, json, caseId: ans.status === 201 && json && /^[0-9a-f]{64}$/.test(String(json.case_id)) ? json.case_id : null };
+}
+
+// Open #1, shared by (b), (c), (d), (e) and (f): made once, when first needed.
+async function firstOpen(ctx) {
+  if (!ctx.first) ctx.first = await open(ctx, 1);
+  return ctx.first;
+}
+
+// The verdict on an open that did not answer 201.
+function openFailed(o, n) {
+  const why = unlooked(o.ans);
+  if (why) return couldNotLook(`case-open ${n} with the issued key: ${why}`);
+  if (o.ans.status === 201) return broken(`case-open ${n} with the issued key answered HTTP 201 without a case_id`);
+  return broken(`case-open ${n} with the issued key answered ${said(o.ans)}, not 201`);
+}
+
+async function stampIt(ctx, sha) {
+  ctx.log("stamp");
+  const ans = await postJson(ctx, "/api/stamp", { sha256: sha, size: C.COMMITMENT_BYTES_LENGTH }, { bearer: ctx.key });
+  const json = ans.error ? null : tryJson(ans.body);
+  if (ans.status === 201 && json && typeof json.commit === "string") return { ok: true, commit: json.commit, ans };
+  if (ans.status === 200 && json && json.existing === true) {
+    return { ok: false, verdict: couldNotLook(`the stamp answered HTTP 200 existing: this hash was stamped before, so the write is not fresh`) };
+  }
+  if (ans.status === 201) return { ok: false, verdict: couldNotLook("the stamp answered HTTP 201 and named no commit to compare") };
+  if (ans.status === 402) return { ok: false, verdict: couldNotLook("the stamp answered HTTP 402: the issued key's balance is below a stamp's price once the free stamps are spent") };
+  const why = unlooked(ans);
+  if (why) return { ok: false, verdict: couldNotLook(`the stamp: ${why}`) };
+  return { ok: false, verdict: broken(`the stamp answered ${said(ans)}, not 201`) };
+}
+
+async function register(ctx, caseId, p) {
+  ctx.log(`case-commit role ${p.role}`);
+  const ans = await postJson(ctx, "/api/verify?op=case-commit", { case_id: caseId, role: p.role, commitment_sha256: p.commitment_sha256 });
+  return { ans, json: ans.error ? null : tryJson(ans.body) };
+}
+
+// ---------------------------------------------------------------------------
+// the checks
+// ---------------------------------------------------------------------------
+async function checkKeyDocument(ctx) {
+  const rel = S.CASE_KEYS_DOC;
+  let local;
+  try {
+    local = fs.readFileSync(path.join(ctx.root, ...rel.split("/")));
+  } catch (e) {
+    return couldNotLook(`the committed ${rel} could not be read in this checkout (${e.code || e.name})`);
+  }
+  const want = sha256hex(local);
+  ctx.log(`(a) GET /${rel}`);
+  const ans = await request(ctx.base, "GET", `/${rel}`);
+  if (ans.error) return couldNotLook(`GET /${rel}: ${ans.error}`);
+  if (ans.status === 200) {
+    const got = sha256hex(ans.body);
+    if (got === want) return verified(`GET /${rel}: HTTP 200, ${ans.body.length} bytes, sha256 ${got}, byte-identical to the committed file`);
+    return broken(`GET /${rel}: HTTP 200, ${ans.body.length} bytes, sha256 ${got}; the committed file is ${local.length} bytes, sha256 ${want}`);
+  }
+  if (ans.status === 404) return broken(`GET /${rel}: HTTP 404, not served (the committed file is ${local.length} bytes, sha256 ${want})`);
+  return couldNotLook(`GET /${rel}: ${unlooked(ans) || `HTTP ${ans.status}, neither the file nor a 404`}`);
+}
+
+// A rewrite source as Vercel writes one (":name" segments, optionally with a
+// "(regex)") -> RegExp, or null.
+function sourceRegex(source) {
+  if (typeof source !== "string" || !source.startsWith("/")) return null;
+  const parts = source.split("/").map((seg) => {
+    const m = /^:([A-Za-z_][A-Za-z0-9_]*)(\((.+)\))?$/.exec(seg);
+    if (m) return `(${m[3] || "[^/]+"})`;
+    return seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  });
+  try {
+    return new RegExp(`^${parts.join("/")}$`);
+  } catch {
+    return null;
+  }
+}
+
+function caseRewrite(vercel) {
+  const rewrites = vercel && Array.isArray(vercel.rewrites) ? vercel.rewrites : [];
+  return rewrites.find((r) => r && r.source === CASE_PAGE_SOURCE && sourceRegex(r.source)) || null;
+}
+
+async function checkCasePage(ctx) {
+  const rw = caseRewrite(ctx.vercel);
+  const o = await firstOpen(ctx);
+  if (!o.caseId) {
+    const why = `no case_id to ask for: case-open answered ${said(o.ans)}`;
+    return rw ? couldNotLook(why) : broken(`this checkout's vercel.json has no rewrite for ${CASE_PAGE_SOURCE}; ${why}`);
+  }
+  const id = o.caseId;
+  ctx.log(`(b) GET /case/${id}`);
+  const ans = await request(ctx.base, "GET", `/case/${id}`);
+  if (!rw) return broken(`this checkout's vercel.json has no rewrite for ${CASE_PAGE_SOURCE}; GET /case/${id}: ${said(ans)}`);
+  const via = `vercel.json rewrites ${rw.source} to ${rw.destination}`;
+  if (ans.error) return couldNotLook(`${via}; GET /case/${id}: ${ans.error}`);
+  const type = String(ans.headers["content-type"] || "");
+  const html = ans.body.toString("utf8");
+  if (ans.status === 200 && /^text\/html\b/i.test(type) && html.includes(`<code>${id}</code>`) && html.includes("<h1>Case: OPEN</h1>")) {
+    return verified(`${via}; GET /case/${id}: HTTP 200 ${type.split(";")[0]}, ${ans.body.length} bytes, the page of case_id ${id}, status OPEN`);
+  }
+  const why = unlooked(ans);
+  if (why) return couldNotLook(`${via}; GET /case/${id}: ${why}`);
+  if (ans.status === 200) {
+    const missing = !/^text\/html\b/i.test(type) ? `content-type ${type || "none"}, not text/html`
+      : !html.includes(`<code>${id}</code>`) ? "the page does not name this case_id" : "the page does not say Case: OPEN";
+    return broken(`${via}; GET /case/${id}: HTTP 200, ${ans.body.length} bytes, but ${missing}`);
+  }
+  return broken(`${via}; GET /case/${id}: HTTP ${ans.status}, ${ans.body.length} bytes, not the case page`);
+}
+
+async function checkOpenQuota(ctx) {
+  const o = await firstOpen(ctx);
+  if (!o.caseId) {
+    const v = openFailed(o, 1);
+    const tail = ctx.exhaustQuota ? "the quota run needs the first open to succeed, so it was not started" : "the quota was not tried: --exhaust-quota was not given";
+    return { word: v.word, text: `${v.text}; ${tail}` };
+  }
+  const first = `case-open 1 with the issued key answered HTTP 201 (case_id ${o.caseId})`;
+  if (!ctx.exhaustQuota) return couldNotLook(`${first}; the 21st open of the day was not tried: --exhaust-quota was not given`);
+  let last = null;
+  for (let n = 2; n <= QUOTA_PER_DAY + 1; n += 1) {
+    const r = await open(ctx, n);
+    if (r.caseId) {
+      last = r.caseId;
+      continue;
+    }
+    const code = codeOf(r.json);
+    if (r.ans.status === 429 && code === "rate_limited") {
+      return couldNotLook(`${first}; open ${n} was refused HTTP 429 rate_limited by the per-IP limiter, not by the open quota, ` +
+        `with ${n - 1} opens accepted in this run`);
+    }
+    if (r.ans.status === 429 && code === "open_quota_exceeded") {
+      const retry = r.ans.headers["retry-after"];
+      if (n === QUOTA_PER_DAY + 1) {
+        return verified(`${first}; opens 1-${QUOTA_PER_DAY} answered HTTP 201 and open ${n} was refused HTTP 429 open_quota_exceeded ` +
+          `(quota_per_day ${r.json.quota_per_day}, day ${r.json.day}${retry ? `, retry-after ${retry}s` : ""})`);
+      }
+      return couldNotLook(`${first}; open ${n} of this run was refused HTTP 429 open_quota_exceeded after ${n - 1} accepted: this key ` +
+        "had opened cases earlier today, so this run cannot count to the 21st open of the day (use a key that has not opened a case today)");
+    }
+    const v = openFailed(r, n);
+    return { word: v.word, text: `${first}; ${v.text}, ${n - 1} opens accepted in this run` };
+  }
+  return broken(`${first}; open ${QUOTA_PER_DAY + 1} of this run was accepted HTTP 201 (case_id ${last}): ` +
+    `no open quota refused it after ${QUOTA_PER_DAY}`);
+}
+
+async function checkStampRead(ctx) {
+  const o = await firstOpen(ctx);
+  if (!o.caseId) return couldNotLook(`no case to register a stamped commitment to: case-open answered ${said(o.ans)}`);
+  if (ctx.tapes.why) return couldNotLook(ctx.tapes.why);
+  const a = party(o.caseId, "a", ctx.tapes.a);
+  ctx.log("(d) role a: stamp, then case-commit");
+  const st = await stampIt(ctx, a.commitment_sha256);
+  if (!st.ok) return st.verdict;
+  const r = await register(ctx, o.caseId, a);
+  const stamped = `stamp of role a's commitment ${a.commitment_sha256} answered HTTP 201, commit ${st.commit}`;
+  if (r.ans.status === 201 && r.json && r.json.registration) {
+    ctx.roleA = a;
+    const read = r.json.registration.stamp_commit;
+    if (read === st.commit) return verified(`${stamped}; case-commit at once answered HTTP 201 and read stamp_commit ${read}, the same commit`);
+    return broken(`${stamped}; case-commit at once answered HTTP 201 but read stamp_commit ${read}, another commit`);
+  }
+  const code = codeOf(r.json);
+  if (r.ans.status === 404 && code === "no_commitment") {
+    return broken(`${stamped}; case-commit at once answered HTTP 404 no_commitment: the read did not see the stamp`);
+  }
+  if (r.ans.status === 503 && code === "stamp_history_unreadable" && r.json.reason === "no_commit_touches_path") {
+    return broken(`${stamped}; case-commit at once answered HTTP 503 stamp_history_unreadable (no_commit_touches_path): the read did not see the stamp's commit`);
+  }
+  const why = unlooked(r.ans);
+  if (why) return couldNotLook(`${stamped}; case-commit: ${why}`);
+  return broken(`${stamped}; case-commit at once answered ${said(r.ans)}, not 201`);
+}
+
+async function checkChunkedReveal(ctx) {
+  const o = await firstOpen(ctx);
+  if (!o.caseId) return couldNotLook(`no case to reveal: case-open answered ${said(o.ans)}`);
+  if (!ctx.roleA) return couldNotLook("role a was not registered in (d), so the case cannot be COMMITTED for a reveal");
+  const id = o.caseId;
+  const b = party(id, "b", ctx.tapes.b);
+  ctx.log("(e) role b: stamp, then case-commit");
+  const st = await stampIt(ctx, b.commitment_sha256);
+  if (!st.ok) return couldNotLook(`setup, role b's stamp: ${st.verdict.text}`);
+  const r = await register(ctx, id, b);
+  if (!(r.ans.status === 201 && r.json && r.json.status === "COMMITTED")) {
+    return couldNotLook(`setup, role b's registration answered ${said(r.ans)}${r.json && r.json.status ? ` (status ${r.json.status})` : ""}, not 201 COMMITTED`);
+  }
+  const a = ctx.roleA;
+  const text = JSON.stringify({
+    case_id: id,
+    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
+    tape_a_b64: a.tape.toString("base64"),
+    tape_b_b64: b.tape.toString("base64"),
+  });
+  const bytes = Buffer.from(text, "utf8");
+  const size = Math.ceil(bytes.length / REVEAL_CHUNKS);
+  const chunks = [];
+  for (let i = 0; i < bytes.length; i += size) chunks.push(bytes.subarray(i, i + size));
+  ctx.log(`(e) case-reveal, chunked, ${bytes.length} bytes in ${chunks.length} chunks`);
+  const ans = await request(ctx.base, "POST", "/api/verify?op=case-reveal", { headers: { "content-type": "application/json" }, chunks });
+  const sent = `a JSON body of ${bytes.length} bytes sent in ${chunks.length} chunks with no content-length`;
+  const json = ans.error ? null : tryJson(ans.body);
+  if (ans.status === 201 && json && json.case_id === id && json.status === "VERDICT") {
+    ctx.sealed = { caseId: id, chain: json.chain, pin: json.pin };
+    const k = json.case || {};
+    const word = json.verdict && json.verdict.verdict ? `, verdict ${json.verdict.verdict}` : "";
+    return verified(`case-reveal with ${sent} answered HTTP 201: case_id ${id} sealed VERDICT${word}, pin ${json.pin}, ` +
+      `${k.signed_by ? `signed by ${k.signed_by}` : "unsigned"}`);
+  }
+  const why = unlooked(ans);
+  if (why) return couldNotLook(`case-reveal with ${sent}: ${why}`);
+  return broken(`case-reveal with ${sent} answered ${said(ans)}${ans.status === 201 ? " without a sealed VERDICT for this case" : ", not 201"}`);
+}
+
+async function checkSealerPass(ctx) {
+  if (!ctx.pinToken) {
+    return couldNotLook("the sealer's case pass (lib/_sealer.js anchorCases, as tools/seal_batch.js runs it) reads and writes the pins store " +
+      "directly, never through the preview, and needs the pins token: --pin-token was not given");
+  }
+  const o = await firstOpen(ctx);
+  if (!o.caseId) return couldNotLook(`no case was opened on the preview, so no store can be shown to be the preview's: case-open answered ${said(o.ans)}`);
+  const store = require("../lib/_store.js");
+  const where = `the pins store ${store.REPO}@${store.BRANCH}`;
+  const had = Object.prototype.hasOwnProperty.call(process.env, "GITHUB_PIN_TOKEN");
+  const before = process.env.GITHUB_PIN_TOKEN;
+  process.env.GITHUB_PIN_TOKEN = ctx.pinToken;
+  try {
+    ctx.log(`(f) ${where}: the case opened on the preview, then the case pass`);
+    let got;
+    try {
+      got = await store.getFile(C.casePath(o.caseId));
+    } catch (e) {
+      return couldNotLook(`${where} could not be read (${e && e.message})`);
+    }
+    if (got === null) {
+      return couldNotLook(`${where} does not hold case ${o.caseId}, which this run opened on the preview, so it is not the preview's pins ` +
+        "store (set GITHUB_PIN_REPO and GITHUB_PIN_BRANCH to the preview's)");
+    }
+    const sealer = require("../lib/_sealer.js");
+    const rep = await sealer.anchorCases({ now: new Date() });
+    if (!rep.ok) {
+      if (rep.reason === "tree_unreadable") return couldNotLook(`${where}: the case pass could not read the tree (${rep.detail})`);
+      return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
+    }
+    const summary = `${where}: the case pass read ${rep.read} of ${rep.candidates} candidates (${rep.deferred} deferred): ` +
+      `anchored ${rep.anchored.length}, already ${rep.already.length}, pending ${rep.pending.length}, refused ${rep.refused.length}, ` +
+      `conflict ${rep.conflict.length}, unreadable ${rep.unreadable.length}, terminal ${rep.terminal.length}`;
+    const bad = [
+      ...rep.refused.map((x) => `refused ${x.case_id} (${x.code})`),
+      ...rep.conflict.map((x) => `conflict ${x}`),
+      ...rep.unreadable.map((x) => `unreadable ${x}`),
+    ];
+    if (bad.length) return broken(`${summary}; ${bad.slice(0, 5).join(", ")}${bad.length > 5 ? `, and ${bad.length - 5} more` : ""}`);
+    if (rep.truncated) return couldNotLook(`${summary}; the tree came back truncated, so the pass could not see every case`);
+    if (!ctx.sealed) return couldNotLook(`${summary}; no case was sealed in (e), so no case of this run shows the pass's anchor`);
+    const st = await S.anchorState(ctx.sealed.caseId, ctx.sealed.chain);
+    const by = rep.anchored.includes(ctx.sealed.caseId) ? "pinned by this pass" : "pinned at its reveal";
+    if (st.pin === "anchored") return verified(`${summary}; case ${ctx.sealed.caseId} is anchored, chain ${ctx.sealed.chain} (${by})`);
+    const waiting = rep.pending.find((x) => x.case_id === ctx.sealed.caseId);
+    if (st.pin === "unknown" || (st.pin === "pending" && waiting)) {
+      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not anchored yet (${st.reason || (waiting && waiting.reason) || "store unreachable"})`);
+    }
+    if (st.pin === "pending" && !rep.anchored.includes(ctx.sealed.caseId) && rep.deferred > 0) {
+      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not anchored yet and fell outside this run's window`);
+    }
+    return broken(`${summary}; case ${ctx.sealed.caseId} reads pin ${st.pin}${st.reason ? ` (${st.reason})` : ""}, not anchored under the reveal's chain`);
+  } finally {
+    if (had) process.env.GITHUB_PIN_TOKEN = before;
+    else delete process.env.GITHUB_PIN_TOKEN;
+  }
+}
+
+// Every file under `dir` in this checkout, as root-relative "/" paths.
+function filesUnder(root, dir) {
+  const out = [];
+  const walk = (rel) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(path.join(root, ...rel.split("/")), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) out.push(p);
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+
+function exposurePaths(root) {
+  const dirs = EXPOSED_DIRS.map((d) => [d, filesUnder(root, d)]);
+  return { paths: [...EXPOSED_FILES, ...dirs.flatMap(([, f]) => f)], counts: dirs.filter(([, f]) => f.length).map(([d, f]) => `${d}/ ${f.length}`) };
+}
+
+async function checkExposure(ctx) {
+  const { paths, counts } = exposurePaths(ctx.root);
+  ctx.log(`(g) GET ${paths.length} root paths`);
+  const results = new Array(paths.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < paths.length) {
+      const i = next;
+      next += 1;
+      const target = `/${paths[i].split("/").map(encodeURIComponent).join("/")}`;
+      results[i] = await request(ctx.base, "GET", target, { timeoutMs: 15000 });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(EXPOSURE_CONCURRENCY, paths.length) }, worker));
+  const served = [];
+  const unjudged = [];
+  paths.forEach((p, i) => {
+    const r = results[i];
+    if (!r.error && r.status >= 200 && r.status < 300) served.push(`${p} (HTTP ${r.status}, ${r.body.length} bytes)`);
+    else if (r.error || r.status !== 404) unjudged.push(`${p} (${r.error || `HTTP ${r.status}`})`);
+  });
+  const list = (xs) => `${xs.slice(0, 10).join(", ")}${xs.length > 10 ? `, and ${xs.length - 10} more` : ""}`;
+  const asked = `${paths.length} paths (${EXPOSED_FILES.join(", ")}, ${counts.join(", ")})`;
+  if (served.length) return broken(`${served.length} of ${asked} are served: ${list(served)}`);
+  if (unjudged.length) return couldNotLook(`${unjudged.length} of ${asked} answered neither 404 nor a 2xx: ${list(unjudged)}`);
+  return verified(`${asked}: every one answered HTTP 404`);
+}
+
+const RUNNERS = Object.freeze({
+  a: checkKeyDocument,
+  b: checkCasePage,
+  c: checkOpenQuota,
+  d: checkStampRead,
+  e: checkChunkedReveal,
+  f: checkSealerPass,
+  g: checkExposure,
+});
+
+// ---------------------------------------------------------------------------
+// the run
+// ---------------------------------------------------------------------------
+// -> the exit code: 3 if any check COULD NOT LOOK, else 2 if any is BROKEN,
+// else 0.
+function exitCodeOf(results) {
+  if (results.some((r) => r.word === COULD_NOT_LOOK)) return 3;
+  if (results.some((r) => r.word === BROKEN)) return 2;
+  return 0;
+}
+
+// Every secret this run holds, longest first, replaced wherever it appears.
+function redactor(secrets) {
+  const list = secrets.filter((s) => typeof s === "string" && s.length > 0).sort((x, y) => y.length - x.length);
+  return (text) => {
+    let out = String(text);
+    for (const s of list) out = out.split(s).join("[redacted]");
+    return out;
+  };
+}
+
+// opts: {base, key, operatorKey, pinToken, exhaustQuota, root, vercel,
+// stdout(line), stderr(line)}. root defaults to this checkout and vercel to
+// its vercel.json. -> {code, results: [{id, title, word, text, line}]}.
+async function run(opts) {
+  const root = opts.root || ROOT;
+  const redact = redactor([opts.key, opts.operatorKey, opts.pinToken]);
+  const stdout = opts.stdout || ((l) => process.stdout.write(`${l}\n`));
+  const stderr = opts.stderr || ((l) => process.stderr.write(`${l}\n`));
+  let vercel = opts.vercel;
+  if (vercel === undefined) {
+    try {
+      vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+    } catch {
+      vercel = null;
+    }
+  }
+  const ctx = {
+    base: opts.base,
+    key: opts.key,
+    pinToken: opts.pinToken || null,
+    exhaustQuota: opts.exhaustQuota === true,
+    root,
+    vercel,
+    runId: crypto.randomBytes(8).toString("hex"),
+    tapes: loadTapes(root),
+    first: null,
+    roleA: null,
+    sealed: null,
+    log: (l) => stderr(redact(`dry run: ${l}`)),
+  };
+  ctx.log(`preview ${ctx.base}, run ${ctx.runId}`);
+  const results = [];
+  for (const [id, title] of CHECKS) {
+    let r;
+    try {
+      r = await RUNNERS[id](ctx);
+    } catch (e) {
+      r = couldNotLook(`the check itself failed (${e && e.name}: ${e && e.message})`);
+    }
+    const line = redact(`${r.word} (${id}) ${title}: ${r.text}`).replace(/[\r\n]+/g, " ");
+    stdout(line);
+    results.push({ id, title, word: r.word, text: r.text, line });
+  }
+  return { code: exitCodeOf(results), results };
+}
+
+async function main(argv) {
+  let a;
+  try {
+    a = parseArgs(argv);
+  } catch (e) {
+    process.stderr.write(`usage: ${e.message}\n`);
+    return 1;
+  }
+  if (a.help) {
+    process.stdout.write(helpText() + "\n");
+    return 0;
+  }
+  if (!a.base || !a.key) {
+    process.stderr.write("usage: --base <preview URL> and --key <issued key> are required (--help for the rest)\n");
+    return 1;
+  }
+  let u;
+  try {
+    u = new URL(a.base);
+  } catch {
+    process.stderr.write("usage: --base is not a URL\n");
+    return 1;
+  }
+  if (!["http:", "https:"].includes(u.protocol) || (u.pathname !== "/" && u.pathname !== "") || u.search || u.hash || u.username || u.password) {
+    process.stderr.write("usage: --base must be the preview's origin, http(s)://host[:port], with no path, query or credentials\n");
+    return 1;
+  }
+  for (const [flag, v] of [["--key", a.key], ["--operator-key", a.operatorKey], ["--pin-token", a.pinToken]]) {
+    if (v !== undefined && !String(v).trim()) {
+      process.stderr.write(`usage: ${flag} must not be empty\n`);
+      return 1;
+    }
+  }
+  const { code } = await run({
+    base: u.origin,
+    key: a.key,
+    operatorKey: a.operatorKey,
+    pinToken: a.pinToken,
+    exhaustQuota: a.exhaustQuota,
+  });
+  return code;
+}
+
+if (require.main === module) {
+  main(process.argv.slice(2)).then((code) => process.exit(code), (e) => {
+    process.stderr.write(`dry run: failed (${e && e.name})\n`);
+    process.exit(3);
+  });
+}
+module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, CHECKS, QUOTA_PER_DAY };
