@@ -1,5 +1,30 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: the case protocol, item 3a: three holes in the preview dry run, after the outside review of c0ef907 (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Fix 1: (e) requires a signed seal the published key confirms.** A 201 VERDICT is BROKEN, never VERIFIED, when:
+  - the sealed case's `signed_by` or `sig` is missing or null (the line says "the published case signer is not installed", with the `sig_reason`);
+  - the case is not a valid record;
+  - it fails `lib/_case_seal.js` `sealedRecordReason` against this checkout's key document (the receipt binding, then the signature under the entry `signed_by` names);
+  - that entry is not `active`;
+  - or the answer's `chain` is not 64 hex, or is not the sealed case's own `caseChain`.
+
+  Item 3b exists to show the published signer is installed, so an unsigned seal is a failure. Until 3b lists the key, (e) against a deployment of this checkout is BROKEN, and the CLI tests now expect that.
+- **Fix 2: (g) reads any answer but a 404 as BROKEN.** That includes a 2xx, a 301/302/307/308 (with its `location`) and a 403, each listed with its path. Only a request that got no answer at all is COULD NOT LOOK.
+- **Fix 3: (f) counts an anchor only for the reveal's chain.** The reveal's chain must be 64 hex, and the pin record's `chain` must equal it. An anchored state under any other chain is BROKEN.
+- **Timeouts.** Each request has three clocks: the request's socket before an answer starts, `res.setTimeout` once one has (a server that stalls mid-body), and a deadline of four idle periods on the whole exchange (an answer that trickles in forever).
+- **The key document is the checkout's.** (e) and (f) judge against this checkout's `.well-known/arcaeon/case-signing-keys.json`, and (f) hands it to `anchorCases`. `run({keyDocument})` lets a test hand another, the rule `lib/_case_seal.js` keeps; the CLI never does.
+- **Tests.**
+  - The stand-in gains `signer: {env, keyDocument}`, a deployment with the case key installed and listed, and `answers`, a fixed answer or a dropped connection per path. In-process runs seal with a throwaway key listed active in a copy of the committed document.
+  - `test/preview_dry_run.test.js` 18 -> 21:
+    - fix 1: the planted 201 VERDICT with `sig` and `signed_by` null; a deployment with no signer; a key the document does not list, or lists retired; and the answer altered (`signed_by` or `sig` missing, `sig` invalid, `chain` not hex, missing or another);
+    - fix 3: an anchored state under another chain;
+    - the three clocks: a stall, a trickle and silence, each ended by its own clock, with a 5-second guard so a missing clock fails rather than hangs.
+  - Fix 2's arms join the (g) test: 301, 302, 307, 308 and 403 each BROKEN with its path; dropped connections alone COULD NOT LOOK.
+  - Expectations changed: the plain-401 test's (g) is now BROKEN (a 401 is an answer), and the CLI runs' (e) is BROKEN (the committed document lists no key).
+  - A must-fail pass on a scratch copy (harness not committed) planted 15 defects one at a time; all 15 were caught.
+  - Suite 935 -> 938 tests, 0 fail. Here: 936 pass and the 2 environment skips.
+
 ## 2026-10-10: the case protocol, item 3a: the case-key mint and the preview dry run (branch `case-protocol-2026-10-10`, local only, NOT deployed, no key minted, nothing published)
 
 - **Why.** Item three provisions the case key and promotes a preview. Before either, the key needs a tool that never shows its private half, and the preview needs one run that says what it does before anything is promoted. Nothing under `api/` changed (still 12 functions).

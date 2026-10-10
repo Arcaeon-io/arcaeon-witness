@@ -23,7 +23,14 @@
 //       the registration must name the commit the stamp answered with.
 //   (e) case-reveal with a JSON body sent chunked, with NO content-length
 //       header, is accepted: role b is stamped and registered, then the
-//       joint reveal goes out in chunks and must answer 201, sealed VERDICT.
+//       joint reveal goes out in chunks and must answer 201, sealed VERDICT,
+//       SIGNED: the sealed case names its key in signed_by, its sig verifies
+//       under that key's ACTIVE entry in this checkout's key document
+//       (lib/_case_seal.js sealedRecordReason, the receipt binding included),
+//       and the answer's chain is 64 hex and the case's own. A seal that is
+//       unsigned (sig or signed_by missing or null), or signed by a key the
+//       document does not list as active, is BROKEN: the run exists to show
+//       the published case signer is installed.
 //   (f) the sealer's case pass (lib/_sealer.js anchorCases, the pass
 //       tools/seal_batch.js runs) against the preview's pins store. It reads
 //       and writes that store directly, never through the preview, so it
@@ -32,11 +39,14 @@
 //       case this run opened on the preview (else it is not the preview's
 //       store, and the line says so), the pass must report nothing refused,
 //       in conflict or unreadable, and the case sealed in (e) must be
-//       anchored under the chain the reveal answered with.
+//       anchored, its pin record's chain equal to the 64-hex chain the
+//       reveal answered with; an anchor under any other chain is BROKEN.
 //   (g) nothing at the project root that is not meant to be public is
 //       served: README.md, package.json, package-lock.json, and every file
 //       under lib/, tools/ and test/ in this checkout (tests/ too, if it
-//       exists) must answer 404. Any 2xx is BROKEN, with the paths.
+//       exists) must answer 404. Any other answer that arrives (a 2xx, a
+//       301/302/307/308 redirect, a 403, anything) is BROKEN, with the
+//       paths; only a request that got no answer at all is COULD NOT LOOK.
 //
 // USAGE
 //
@@ -195,35 +205,54 @@ function said(ans) {
 // ---------------------------------------------------------------------------
 // HTTP: node's own client, one connection per request, never a redirect
 // followed, never a body decoded (accept-encoding: identity), never throws.
-// -> {status, headers, body} or {error}.
+// Three clocks, so nothing can hang the run: the request's socket going
+// quiet `timeoutMs` before an answer starts, the answer going quiet
+// `timeoutMs` mid-body (res.setTimeout), and a deadline of `deadlineMs`
+// (four idle periods unless given) on the whole exchange, which also ends an
+// answer that trickles in forever. -> {status, headers, body} or {error}.
 // ---------------------------------------------------------------------------
-function request(base, method, target, { headers = {}, body = null, chunks = null, timeoutMs = TIMEOUT_MS } = {}) {
+function request(base, method, target, { headers = {}, body = null, chunks = null, timeoutMs = TIMEOUT_MS, deadlineMs = timeoutMs * 4 } = {}) {
   return new Promise((resolve) => {
     let done = false;
+    let req = null;
+    let res = null;
+    let deadline = null;
     const finish = (v) => {
       if (!done) {
         done = true;
+        clearTimeout(deadline);
         resolve(v);
       }
+    };
+    const abandon = (error) => {
+      finish({ error });
+      if (res) res.destroy();
+      if (req) req.destroy();
     };
     const u = new URL(target, base);
     const mod = u.protocol === "https:" ? https : http;
     const h = { "accept-encoding": "identity", "user-agent": "arcaeon-preview-dry-run/1", ...headers };
     if (body !== null) h["content-length"] = String(Buffer.byteLength(body));
     if (chunks !== null) h["transfer-encoding"] = "chunked";
-    let req;
+    deadline = setTimeout(() => abandon(`no complete answer in ${deadlineMs / 1000}s`), deadlineMs);
     try {
-      req = mod.request(u, { method, headers: h, agent: false }, (res) => {
+      req = mod.request(u, { method, headers: h, agent: false }, (r) => {
+        res = r;
         const parts = [];
+        res.setTimeout(timeoutMs, () => abandon(`the answer stalled mid-body (nothing for ${timeoutMs / 1000}s)`));
         res.on("data", (c) => parts.push(c));
         res.on("end", () => finish({ status: res.statusCode, headers: res.headers, body: Buffer.concat(parts) }));
         res.on("error", (e) => finish({ error: `the answer broke off (${e.code || e.message})` }));
+        res.on("close", () => finish({ error: "the answer broke off before its end" }));
       });
     } catch (e) {
       finish({ error: `the request could not be made (${e.code || e.message})` });
       return;
     }
-    req.setTimeout(timeoutMs, () => req.destroy(Object.assign(new Error("timeout"), { code: `no answer in ${timeoutMs / 1000}s` })));
+    // Before an answer starts; once it has, its own clock (res.setTimeout) owns it.
+    req.setTimeout(timeoutMs, () => {
+      if (!res) abandon(`no answer in ${timeoutMs / 1000}s`);
+    });
     req.on("error", (e) => finish({ error: `no answer (${e.code || e.message})` }));
     if (chunks !== null) {
       for (const c of chunks) req.write(c);
@@ -509,6 +538,36 @@ async function checkStampRead(ctx) {
   return broken(`${stamped}; case-commit at once answered ${said(r.ans)}, not 201`);
 }
 
+const HEX64 = /^[0-9a-f]{64}$/;
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// (e)'s judgement of a 201 VERDICT answer: the sealed case it carries is
+// signed, its seal holds against this checkout's key document under an
+// ACTIVE entry, and the answer's chain is 64 hex and that case's own.
+// -> verified(what was shown) or broken / couldNotLook(why not).
+function sealedAnswer(ctx, id, json) {
+  const k = json.case;
+  if (!isObject(k)) return broken("it carries no sealed case object");
+  const absent = (v) => (v === undefined ? "missing" : v === null ? "null" : null);
+  if (absent(k.signed_by) || absent(k.sig)) {
+    return broken(`the seal is unsigned (signed_by ${absent(k.signed_by) || "set"}, sig ${absent(k.sig) || "set"}` +
+      `${typeof k.sig_reason === "string" ? `; sig_reason: ${k.sig_reason}` : ""}): the published case signer is not installed`);
+  }
+  const v = C.validateCase(k);
+  if (!v.ok) return broken(`its sealed case is not a valid arcaeon-case/1 record (${v.code} at ${v.field})`);
+  if (k.status !== "VERDICT" || k.case_id !== id) return broken(`its sealed case is ${k.status} for case_id ${k.case_id}, not this case's VERDICT`);
+  const doc = S.checkKeyDocument(ctx.keyDocument);
+  if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_DOC} does not read (${doc.reason} at ${doc.at}), so the signature cannot be checked`);
+  const unsealed = S.sealedRecordReason(k, ctx.keyDocument);
+  if (unsealed) return broken(`its sealed record does not hold against this checkout's ${S.CASE_KEYS_DOC} (${unsealed.code}: ${unsealed.reason})`);
+  const entry = doc.keys.find((e) => e.key_id === k.signed_by);
+  if (entry.status !== "active") return broken(`it is signed by ${k.signed_by}, which ${S.CASE_KEYS_DOC} lists as ${entry.status}, not active`);
+  if (typeof json.chain !== "string" || !HEX64.test(json.chain)) return broken(`its chain ${JSON.stringify(json.chain)} is not 64 hex`);
+  const own = S.caseChain(k);
+  if (json.chain !== own) return broken(`its chain ${json.chain} is not the sealed case's own (${own})`);
+  return verified(`signed by ${k.signed_by}, verified under its active entry in ${S.CASE_KEYS_DOC}; chain ${json.chain}, the case's own`);
+}
+
 async function checkChunkedReveal(ctx) {
   const o = await firstOpen(ctx);
   if (!o.caseId) return couldNotLook(`no case to reveal: case-open answered ${said(o.ans)}`);
@@ -538,11 +597,12 @@ async function checkChunkedReveal(ctx) {
   const sent = `a JSON body of ${bytes.length} bytes sent in ${chunks.length} chunks with no content-length`;
   const json = ans.error ? null : tryJson(ans.body);
   if (ans.status === 201 && json && json.case_id === id && json.status === "VERDICT") {
+    const head = `case-reveal with ${sent} answered HTTP 201 VERDICT for case_id ${id}`;
+    const seal = sealedAnswer(ctx, id, json);
+    if (seal.word !== VERIFIED) return { word: seal.word, text: `${head}, but ${seal.text}` };
     ctx.sealed = { caseId: id, chain: json.chain, pin: json.pin };
-    const k = json.case || {};
     const word = json.verdict && json.verdict.verdict ? `, verdict ${json.verdict.verdict}` : "";
-    return verified(`case-reveal with ${sent} answered HTTP 201: case_id ${id} sealed VERDICT${word}, pin ${json.pin}, ` +
-      `${k.signed_by ? `signed by ${k.signed_by}` : "unsigned"}`);
+    return verified(`${head}${word}: ${seal.text}, pin ${json.pin}`);
   }
   const why = unlooked(ans);
   if (why) return couldNotLook(`case-reveal with ${sent}: ${why}`);
@@ -573,8 +633,10 @@ async function checkSealerPass(ctx) {
       return couldNotLook(`${where} does not hold case ${o.caseId}, which this run opened on the preview, so it is not the preview's pins ` +
         "store (set GITHUB_PIN_REPO and GITHUB_PIN_BRANCH to the preview's)");
     }
+    const doc = S.checkKeyDocument(ctx.keyDocument);
+    if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_DOC} does not read (${doc.reason} at ${doc.at}), so the pass could not check a seal's signature`);
     const sealer = require("../lib/_sealer.js");
-    const rep = await sealer.anchorCases({ now: new Date() });
+    const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument });
     if (!rep.ok) {
       if (rep.reason === "tree_unreadable") return couldNotLook(`${where}: the case pass could not read the tree (${rep.detail})`);
       return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
@@ -590,9 +652,16 @@ async function checkSealerPass(ctx) {
     if (bad.length) return broken(`${summary}; ${bad.slice(0, 5).join(", ")}${bad.length > 5 ? `, and ${bad.length - 5} more` : ""}`);
     if (rep.truncated) return couldNotLook(`${summary}; the tree came back truncated, so the pass could not see every case`);
     if (!ctx.sealed) return couldNotLook(`${summary}; no case was sealed in (e), so no case of this run shows the pass's anchor`);
-    const st = await S.anchorState(ctx.sealed.caseId, ctx.sealed.chain);
+    const want = ctx.sealed.chain;
+    if (typeof want !== "string" || !HEX64.test(want)) return broken(`${summary}; the reveal's chain ${JSON.stringify(want)} is not 64 hex, so no anchor can be for it`);
+    const st = await S.anchorState(ctx.sealed.caseId, want);
     const by = rep.anchored.includes(ctx.sealed.caseId) ? "pinned by this pass" : "pinned at its reveal";
-    if (st.pin === "anchored") return verified(`${summary}; case ${ctx.sealed.caseId} is anchored, chain ${ctx.sealed.chain} (${by})`);
+    // Anchored counts only for the reveal's own chain, read off the pin record.
+    const pinned = st.record && typeof st.record.chain === "string" ? st.record.chain : null;
+    if (st.pin === "anchored" && pinned === want) return verified(`${summary}; case ${ctx.sealed.caseId} is anchored, chain ${want} (${by})`);
+    if (st.pin === "anchored") {
+      return broken(`${summary}; case ${ctx.sealed.caseId} reads anchored under chain ${JSON.stringify(pinned)}, not the reveal's chain ${want}`);
+    }
     const waiting = rep.pending.find((x) => x.case_id === ctx.sealed.caseId);
     if (st.pin === "unknown" || (st.pin === "pending" && waiting)) {
       return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not anchored yet (${st.reason || (waiting && waiting.reason) || "store unreachable"})`);
@@ -646,17 +715,23 @@ async function checkExposure(ctx) {
     }
   };
   await Promise.all(Array.from({ length: Math.min(EXPOSURE_CONCURRENCY, paths.length) }, worker));
-  const served = [];
-  const unjudged = [];
+  // Any answer that arrives and is not a 404 is BROKEN (a 2xx serves the
+  // file, a redirect points somewhere, a 403 says it is there); only a
+  // request that got no answer at all could not look.
+  const answered = [];
+  const unanswered = [];
   paths.forEach((p, i) => {
     const r = results[i];
-    if (!r.error && r.status >= 200 && r.status < 300) served.push(`${p} (HTTP ${r.status}, ${r.body.length} bytes)`);
-    else if (r.error || r.status !== 404) unjudged.push(`${p} (${r.error || `HTTP ${r.status}`})`);
+    if (r.error) unanswered.push(`${p} (${r.error})`);
+    else if (r.status !== 404) {
+      const to = r.headers.location ? ` to ${r.headers.location}` : "";
+      answered.push(`${p} (HTTP ${r.status}${to}, ${r.body.length} bytes)`);
+    }
   });
   const list = (xs) => `${xs.slice(0, 10).join(", ")}${xs.length > 10 ? `, and ${xs.length - 10} more` : ""}`;
   const asked = `${paths.length} paths (${EXPOSED_FILES.join(", ")}, ${counts.join(", ")})`;
-  if (served.length) return broken(`${served.length} of ${asked} are served: ${list(served)}`);
-  if (unjudged.length) return couldNotLook(`${unjudged.length} of ${asked} answered neither 404 nor a 2xx: ${list(unjudged)}`);
+  if (answered.length) return broken(`${answered.length} of ${asked} answered other than 404: ${list(answered)}`);
+  if (unanswered.length) return couldNotLook(`${unanswered.length} of ${asked} got no answer: ${list(unanswered)}`);
   return verified(`${asked}: every one answered HTTP 404`);
 }
 
@@ -692,8 +767,11 @@ function redactor(secrets) {
 }
 
 // opts: {base, key, bypass, operatorKey, pinToken, exhaustQuota, root,
-// vercel, stdout(line), stderr(line)}. root defaults to this checkout and
-// vercel to its vercel.json. -> {code, results: [{id, title, word, text, line}]}.
+// vercel, keyDocument, stdout(line), stderr(line)}. root defaults to this
+// checkout, vercel to its vercel.json, and keyDocument to its
+// .well-known/arcaeon/case-signing-keys.json, parsed (null when it does not
+// read); the CLI never passes another, a test may (lib/_case_seal.js's own
+// rule for keyDocument). -> {code, results: [{id, title, word, text, line}]}.
 async function run(opts) {
   const root = opts.root || ROOT;
   const redact = redactor([opts.key, opts.bypass, opts.operatorKey, opts.pinToken]);
@@ -707,8 +785,17 @@ async function run(opts) {
       vercel = null;
     }
   }
+  let keyDocument = opts.keyDocument;
+  if (keyDocument === undefined) {
+    try {
+      keyDocument = JSON.parse(fs.readFileSync(path.join(root, ...S.CASE_KEYS_DOC.split("/")), "utf8"));
+    } catch {
+      keyDocument = null;
+    }
+  }
   const ctx = {
     base: opts.base,
+    keyDocument,
     key: opts.key,
     bypass: opts.bypass || null,
     bypassCookieAsked: false,
@@ -805,4 +892,4 @@ if (require.main === module) {
     process.exit(3);
   });
 }
-module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, vercelSso, CHECKS, QUOTA_PER_DAY, BYPASS_ENV };
+module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, vercelSso, CHECKS, QUOTA_PER_DAY, BYPASS_ENV, _internal: { request } };

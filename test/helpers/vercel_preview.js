@@ -21,6 +21,14 @@
 //      each server gets its own per-IP limiter budget. `wrap(fn)` may stand
 //      a handler in front of the function (a platform that misbehaves).
 //   4. anything else is 404.
+// `signer: {env, keyDocument}` is a deployment whose environment holds the
+// case key (and the two keys it must differ from) and whose bundled key
+// document lists it: ?op=case-reveal runs lib/_case_http.js handleCaseReveal
+// with those, so the seal is signed. Without it the reveal runs through
+// api/verify.js with this process's environment and the committed document,
+// which lists no key, so the seal is unsigned.
+// `answers` maps a path to a fixed answer, {status, headers}, or {drop:
+// true} to close the connection with no answer at all, ahead of everything.
 // `protect` stands Vercel Authentication in front of all of that: a request
 // is answered 401 before anything above runs, unless it carries
 // x-vercel-protection-bypass equal to `protect.secret` (Protection Bypass
@@ -37,6 +45,8 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..", "..");
+// Required when first used, after the test has set its environment.
+const caseHttp = () => require("../../lib/_case_http.js");
 
 function readVercel() {
   return JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
@@ -131,7 +141,7 @@ function ssoPage(res, url) {
 
 let serverSeq = 0;
 
-async function startPreview({ vercel = readVercel(), serves = publicOnly, files = {}, wrap = null, bodyParser = vercelBody, protect = false } = {}) {
+async function startPreview({ vercel = readVercel(), serves = publicOnly, files = {}, answers = {}, wrap = null, bodyParser = vercelBody, protect = false, signer = null } = {}) {
   serverSeq += 1;
   const ip = `10.77.${(serverSeq >> 8) & 255}.${serverSeq & 255}`;
   const guard = protect === true ? { page: "sso" } : protect || null;
@@ -154,6 +164,12 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
         return ssoPage(res, `https://preview.invalid${req.url}`);
       }
       let pathname = decodeURIComponent(u.pathname);
+      if (Object.prototype.hasOwnProperty.call(answers, pathname)) {
+        const a = answers[pathname];
+        if (a.drop) return req.socket.destroy();
+        for (const [k, v] of Object.entries(a.headers || {})) res.setHeader(k, v);
+        return send(res, a.status, a.body || "", "text/plain; charset=utf-8");
+      }
       if (Object.prototype.hasOwnProperty.call(files, pathname)) return send(res, 200, files[pathname], "application/octet-stream");
       const rel = pathname.replace(/^\/+/, "");
       if (rel && serves(rel)) {
@@ -185,7 +201,8 @@ async function startPreview({ vercel = readVercel(), serves = publicOnly, files 
         },
       });
       vercelResponse(res);
-      await (wrap ? wrap(fn) : fn)(req, res);
+      const base = signer ? (rq, rs) => ((rq.query || {}).op === "case-reveal" ? caseHttp().handleCaseReveal(rq, rs, signer) : fn(rq, rs)) : fn;
+      await (wrap ? wrap(base) : base)(req, res);
       if (!res.writableEnded) res.end();
     } catch {
       if (!res.headersSent) send(res, 500, "FUNCTION_INVOCATION_FAILED\n", "text/plain; charset=utf-8");

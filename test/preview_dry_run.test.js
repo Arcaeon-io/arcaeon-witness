@@ -53,6 +53,7 @@ const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -63,6 +64,7 @@ const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
 const S = require("../lib/_case_seal.js");
+const checkpoint = require("../lib/_checkpoint.js");
 const tool = require("../tools/preview_dry_run.js");
 
 const ROOT = path.join(__dirname, "..");
@@ -76,6 +78,23 @@ const PIN_TOKEN = "dry-run-pin-token-0001-never-sent";
 const BYPASS = "dry-run-bypass-secret-0001-right";
 const WRONG_BYPASS = "dry-run-bypass-secret-0002-wrong";
 const SECRETS = [KEY, OPERATOR_KEY, PIN_TOKEN, BYPASS, WRONG_BYPASS];
+
+// A deployment with its case signer installed and published (item 3b's
+// end state): throwaway keys, made here, written nowhere, and the committed
+// key document with an active entry for the case key. The stand-in seals
+// with them, and the dry run judges (e) and (f) against that document,
+// unless a test says otherwise. The CLI runs keep the committed document.
+const CASE_KEY = checkpoint.generateKey("test.example/dry-run-case");
+const SIGNING_ENV = Object.freeze({
+  [S.CASE_SIGNER_ENV]: CASE_KEY.signer,
+  WITNESS_RECONCILE_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-reconcile").signer,
+  WITNESS_LOG_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-log").signer,
+});
+const COMMITTED_DOC = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_DOC.split("/")), "utf8"));
+const CASE_ENTRY = S.keyDocumentEntry({ keyId: CASE_KEY.verifier.split("+").slice(0, 2).join("+"), verifier: CASE_KEY.verifier },
+  { since: "2026-10-10", note: "the dry-run tests' case key" });
+const TEST_DOC = { ...COMMITTED_DOC, keys: [...COMMITTED_DOC.keys, CASE_ENTRY] };
+const SIGNER = Object.freeze({ env: SIGNING_ENV, keyDocument: TEST_DOC });
 
 let gh;
 let restore;
@@ -107,12 +126,25 @@ function onOp(op, handle) {
   return (fn) => async (req, res) => ((req.query || {}).op === op ? handle(req, res, fn) : fn(req, res));
 }
 
+// Rewrite the reveal's 201 answer on its way out (the seal stands in the store).
+function rewriteReveal(mutate) {
+  return onOp("case-reveal", (req, res, fn) => {
+    const realSend = res.send;
+    res.send = (b) => {
+      const j = JSON.parse(String(b));
+      if (res.statusCode === 201) mutate(j);
+      return realSend.call(res, JSON.stringify(j));
+    };
+    return fn(req, res);
+  });
+}
+
 async function dryRun(t, { preview = {}, ...opts } = {}) {
-  const p = await startPreview(preview);
+  const p = await startPreview({ signer: SIGNER, ...preview });
   t.after(() => p.close());
   const out = [];
   const err = [];
-  const r = await tool.run({ base: p.base, key: KEY, stdout: (l) => out.push(l), stderr: (l) => err.push(l), ...opts });
+  const r = await tool.run({ base: p.base, key: KEY, keyDocument: TEST_DOC, stdout: (l) => out.push(l), stderr: (l) => err.push(l), ...opts });
   const by = Object.fromEntries(r.results.map((x) => [x.id, x]));
   const show = out.join("\n");
   // Every run: seven lines, in order, each a verdict word; no secret anywhere;
@@ -153,8 +185,12 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   const commit = /commit ([0-9a-f]{40})/.exec(r.by.d.line)[1];
   assert.match(r.by.d.line, new RegExp(`read stamp_commit ${commit}, the same commit`));
   assert.equal(gh.read(PINS, C.registrationPath(id, "a")).stamp_commit, commit);
-  assert.match(r.by.e.line, new RegExp(`no content-length answered HTTP 201: case_id ${id} sealed VERDICT, verdict MATCHED, pin anchored`));
-  assert.equal(gh.read(PINS, C.casePath(id)).status, "VERDICT");
+  const sealed = gh.read(PINS, C.casePath(id));
+  assert.equal(sealed.status, "VERDICT");
+  assert.equal(sealed.signed_by, CASE_ENTRY.key_id, "the stand-in signs with the published case key");
+  assert.match(r.by.e.line, new RegExp(`no content-length answered HTTP 201 VERDICT for case_id ${id}, verdict MATCHED: signed by ` +
+    `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in \\.well-known/arcaeon/case-signing-keys\\.json; ` +
+    `chain ${S.caseChain(sealed)}, the case's own, pin anchored$`));
   assert.match(r.by.f.line, new RegExp(`case ${id} is anchored, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\)`));
   assert.match(r.by.g.line, /README\.md, package\.json, package-lock\.json, lib\/ \d+, tools\/ \d+, test\/ \d+\): every one answered HTTP 404/);
 
@@ -311,6 +347,82 @@ test("(e) BROKEN when the platform loses a chunked JSON body, or asks for a leng
   assert.match(wantsLength.by.e.line, /answered HTTP 411 length_required/);
 });
 
+test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_by null is BROKEN, never VERIFIED; so is any seal the published key does not confirm, and any chain that is not the case's own", async (t) => {
+  // The planted test: the answer says 201 VERDICT, unsigned.
+  const planted = await dryRun(t, { preview: { wrap: rewriteReveal((j) => {
+    j.case.sig = null;
+    j.case.signed_by = null;
+  }) } });
+  assert.equal(word(planted, "e"), "BROKEN", planted.show);
+  assert.match(planted.by.e.line, /answered HTTP 201 VERDICT for case_id [0-9a-f]{64}, but the seal is unsigned \(signed_by null, sig null\): the published case signer is not installed$/);
+
+  // A deployment with no case signer installed seals unsigned, and says why.
+  const bare = await dryRun(t, { preview: { signer: null } });
+  assert.equal(word(bare, "e"), "BROKEN");
+  assert.match(bare.by.e.line, /the seal is unsigned \(signed_by null, sig null; sig_reason: This case is sealed and not signed \(case_key_unset\)/);
+  const id = /case_id ([0-9a-f]{64})/.exec(bare.by.b.line)[1];
+  assert.equal(gh.read(PINS, C.casePath(id)).sig, null, "it really sealed unsigned");
+
+  // Signed, but by a key this checkout's document does not list, or lists retired.
+  const unlisted = await dryRun(t, { keyDocument: COMMITTED_DOC });
+  assert.equal(word(unlisted, "e"), "BROKEN");
+  assert.match(unlisted.by.e.line, /its sealed record does not hold against this checkout's \.well-known\/arcaeon\/case-signing-keys\.json \(case_signature_invalid: signer_unpublished\)/);
+  const retired = await dryRun(t, { keyDocument: { ...COMMITTED_DOC, keys: [{ ...CASE_ENTRY, status: "retired" }] } });
+  assert.equal(word(retired, "e"), "BROKEN");
+  assert.match(retired.by.e.line, /which \.well-known\/arcaeon\/case-signing-keys\.json lists as retired, not active/);
+
+  // The answer altered on its way out.
+  const arms = [
+    ["signed_by missing", (j) => { delete j.case.signed_by; }, /the seal is unsigned \(signed_by missing, sig set\)/],
+    ["sig missing", (j) => { delete j.case.sig; }, /the seal is unsigned \(signed_by set, sig missing\)/],
+    ["sig invalid", (j) => { j.case.sig = Buffer.alloc(64, 7).toString("base64"); }, /\(case_signature_invalid: bad_signature\)/],
+    ["chain not hex", (j) => { j.chain = "not-a-chain"; }, /its chain "not-a-chain" is not 64 hex/],
+    ["chain missing", (j) => { delete j.chain; }, /its chain undefined is not 64 hex/],
+    ["chain another", (j) => { j.chain = "0".repeat(64); }, /its chain 0{64} is not the sealed case's own \([0-9a-f]{64}\)/],
+  ];
+  for (const [name, mutate, want] of arms) {
+    const r = await dryRun(t, { preview: { wrap: rewriteReveal(mutate) } });
+    assert.equal(word(r, "e"), "BROKEN", `${name}: ${r.by.e.line}`);
+    assert.match(r.by.e.line, want, name);
+  }
+});
+
+test("TIMEOUTS: an answer that stalls mid-body, one that trickles forever, and one that never starts each end the request with an error in bounded time", async (t) => {
+  const server = http.createServer((req, res) => {
+    if (req.url === "/stall") {
+      res.writeHead(200, { "content-length": "100" });
+      res.write("0123456789");
+    } else if (req.url === "/trickle") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      const timer = setInterval(() => res.write("."), 50);
+      res.on("close", () => clearInterval(timer));
+    }
+    // "/silent": never answered
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => {
+    server.closeAllConnections();
+    server.close(() => resolve());
+  }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  // Each clock ends its own case: the answer's idle timer the stall, the
+  // deadline (four idle periods) the trickle, the request's the silence.
+  for (const [p, want] of [["/stall", /^the answer stalled mid-body \(nothing for 0\.4s\)$/], ["/trickle", /^no complete answer in 1\.6s$/],
+    ["/silent", /^no answer in 0\.4s$/]]) {
+    const t0 = Date.now();
+    let guard;
+    const r = await Promise.race([
+      tool._internal.request(base, "GET", p, { timeoutMs: 400 }),
+      new Promise((resolve) => {
+        guard = setTimeout(() => resolve({ error: "the request never ended" }), 5000);
+      }),
+    ]);
+    clearTimeout(guard);
+    assert.match(String(r.error), want, `${p}: ${JSON.stringify(r).slice(0, 200)}`);
+    assert.ok(Date.now() - t0 < 3000, `${p} ended in ${Date.now() - t0} ms`);
+  }
+});
+
 // =============================================================================
 // (f) the sealer's case pass
 // =============================================================================
@@ -362,15 +474,51 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   assert.equal(process.env.GITHUB_PIN_TOKEN, "test-token", "the pin token is put back");
 });
 
+test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own chain; an anchor read under another chain is BROKEN", async (t) => {
+  const real = S.anchorState;
+  S.anchorState = async () => ({ pin: "anchored", record: { chain: "0".repeat(64) } });
+  t.after(() => {
+    S.anchorState = real;
+  });
+  const r = await dryRun(t, { pinToken: PIN_TOKEN });
+  S.anchorState = real;
+  assert.equal(word(r, "e"), "VERIFIED", r.show);
+  assert.equal(word(r, "f"), "BROKEN", r.show);
+  assert.match(r.by.f.line, /case [0-9a-f]{64} reads anchored under chain "0{64}", not the reveal's chain [0-9a-f]{64}$/);
+});
+
 // =============================================================================
 // (g) root-file exposure
 // =============================================================================
 
-test("(g) BROKEN with the paths when the whole root is served; the paths asked are every lib/, tools/ and test/ file of this checkout", async (t) => {
+test("(g) BROKEN with the paths when the whole root is served, and (REVIEW FIX 2) for any answer but a 404, redirects and a 403 included; COULD NOT LOOK only for no answer; the paths asked are every lib/, tools/ and test/ file of this checkout", async (t) => {
   const r = await dryRun(t, { preview: { serves: () => true } });
   assert.equal(word(r, "g"), "BROKEN");
-  assert.match(r.by.g.line, /are served: README\.md \(HTTP 200, \d+ bytes\), package\.json \(HTTP 200, \d+ bytes\), lib\//);
+  assert.match(r.by.g.line, /answered other than 404: README\.md \(HTTP 200, \d+ bytes\), package\.json \(HTTP 200, \d+ bytes\), lib\//);
   assert.equal(r.by.g.line.includes("package-lock.json ("), false, "a file this checkout does not have is not served");
+
+  // REVIEW FIX 2: any answer but a 404 is BROKEN, redirects and a 403
+  // included, each with its path; a request that got no answer alone is
+  // COULD NOT LOOK.
+  const odd = {
+    "/README.md": { status: 301, headers: { location: "/readme" } },
+    "/package.json": { status: 302, headers: { location: "https://elsewhere.example/package.json" } },
+    "/lib/_case.js": { status: 307, headers: { location: "/lib/case" } },
+    "/tools/mint_case_key.js": { status: 308, headers: { location: "/tools/mint" } },
+    "/test/helpers/mock_store.js": { status: 403 },
+  };
+  const moved = await dryRun(t, { preview: { answers: odd } });
+  assert.equal(word(moved, "g"), "BROKEN", moved.show);
+  assert.match(moved.by.g.line, /5 of \d+ paths \([^)]*\) answered other than 404: /);
+  for (const [p, a] of Object.entries(odd)) {
+    const to = a.headers ? ` to ${a.headers.location}` : "";
+    assert.ok(moved.by.g.line.includes(`${p.slice(1)} (HTTP ${a.status}${to}, `), `${p} in: ${moved.by.g.line}`);
+  }
+  const dropped = await dryRun(t, { preview: { answers: { "/README.md": { drop: true }, "/lib/_case.js": { drop: true } } } });
+  assert.equal(word(dropped, "g"), "COULD NOT LOOK", dropped.show);
+  assert.match(dropped.by.g.line, /2 of \d+ paths \([^)]*\) got no answer: README\.md \(no answer \(ECONNRESET\)\), lib\/_case\.js/);
+  const both = await dryRun(t, { preview: { answers: { "/README.md": { drop: true }, "/package.json": { status: 403 } } } });
+  assert.equal(word(both, "g"), "BROKEN", "an answer that is not a 404 outranks a path that got none");
 
   const { paths } = tool.exposurePaths(ROOT);
   for (const p of ["README.md", "package.json", "package-lock.json", "lib/_case_seal.js", "tools/preview_dry_run.js", "test/helpers/mock_store.js",
@@ -425,11 +573,13 @@ test("PROTECTED, NO BYPASS OR A WRONG ONE: Vercel's SSO 401 on the first request
   assert.equal(gh.putLog.length, 0, "no case, stamp or counter was written");
 });
 
-test("A 401 THAT IS NOT VERCEL'S SSO PAGE is left to the checks: each reads it as COULD NOT LOOK on its own, never BROKEN or VERIFIED", async (t) => {
+test("A 401 THAT IS NOT VERCEL'S SSO PAGE is left to the checks: (a) to (f) read it as COULD NOT LOOK, never VERIFIED; (g) reads any answer but a 404 as BROKEN", async (t) => {
   const r = await dryRun(t, { exhaustQuota: true, pinToken: PIN_TOKEN, preview: { protect: { page: "plain" } } });
-  for (const id of "abcdefg") assert.equal(word(r, id), "COULD NOT LOOK", r.show);
+  for (const id of "abcdef") assert.equal(word(r, id), "COULD NOT LOOK", r.show);
   assert.match(r.by.a.line, /HTTP 401 before any function answered/);
   assert.equal(r.by.a.line.includes("protected preview"), false);
+  assert.equal(word(r, "g"), "BROKEN");
+  assert.match(r.by.g.line, /answered other than 404: README\.md \(HTTP 401, /);
   assert.equal(r.code, 3);
 });
 
@@ -500,7 +650,10 @@ test("CLI: seven lines on stdout and nothing else, in order; no key, operator ke
   assert.equal(lines.pop(), "", "stdout ends with a newline");
   assert.equal(lines.length, 7, r.stdout);
   assert.deepEqual(lines.map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`),
-    ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "VERIFIED e", "COULD NOT LOOK f", "VERIFIED g"], r.stdout);
+    ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], r.stdout);
+  // The committed document lists no case key yet, so a deployment of this
+  // checkout seals unsigned, and (e) says so.
+  assert.match(lines[4], /but the seal is unsigned \(signed_by null, sig null; sig_reason: /);
   assert.equal(r.code, 3);
   for (const s of SECRETS) {
     assert.equal(r.stdout.includes(s), false);
@@ -524,7 +677,7 @@ test("CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET wh
   const words = (r) => r.stdout.trim().split("\n").map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`);
 
   const fromEnv = await runCli(["--base", p.base, "--key", KEY], { VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS });
-  assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "VERIFIED e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
+  assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
   assert.equal(fromEnv.code, 3);
   assert.match(fromEnv.stderr, /, with a protection bypass$/m);
   const seen = p.requests.length;
