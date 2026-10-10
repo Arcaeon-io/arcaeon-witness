@@ -18,12 +18,20 @@
 // BREAK ARMS: a function that loads the document without includeFiles, a
 // file outside the list in public/, a page link public/ does not serve, a
 // README list that drifts, a missing outputDirectory: each is named.
+// LINE ENDINGS: a checkout with core.autocrlf true (Windows) has CRLF text
+// files, and a line-anchored regex (/^...$/m) never matches a line that ends
+// in a carriage return. So every text file read here goes through readText,
+// CRLF to LF right after the read, and a planted arm reads a CRLF README.
 "use strict";
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+
+// A text file as the parsers below expect it: LF line ends, whatever the checkout.
+const readText = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 
 const S = require("../lib/_case_seal.js");
 
@@ -101,7 +109,7 @@ function theRepository() {
   const links = new Set();
   for (const dir of ["api", "lib"]) {
     for (const f of fs.readdirSync(path.join(ROOT, dir)).filter((x) => x.endsWith(".js"))) {
-      const src = fs.readFileSync(path.join(ROOT, dir, f), "utf8");
+      const src = readText(path.join(ROOT, dir, f));
       for (const m of src.matchAll(/(?:href|src)=["'](\/[A-Za-z0-9_./-]+\.(?:md|json|svg|txt|png|ico|html|css|xml|webmanifest))["']/g)) links.add(m[1]);
     }
   }
@@ -111,7 +119,7 @@ function theRepository() {
     rootEntries: fs.readdirSync(ROOT),
     graphs,
     links: [...links].sort(),
-    readme: fs.readFileSync(path.join(ROOT, "README.md"), "utf8"),
+    readme: readText(path.join(ROOT, "README.md")),
     apiFiles,
   };
 }
@@ -127,6 +135,26 @@ test("DEPLOY SHAPE: outputDirectory public/, exactly the served files in it, inc
   assert.equal(repo.vercel.functions["api/pin.js"].maxDuration, 30);
   // The document the module loaded is the committed file, byte for byte.
   assert.deepEqual(S.PUBLISHED_KEYS, JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf8")));
+});
+
+test("DEPLOY SHAPE, CRLF: a README checked out with CRLF line ends (core.autocrlf true) reads through readText to the same served list", () => {
+  const lf = readText(path.join(ROOT, "README.md"));
+  const want = readmeServed(lf);
+  assert.deepEqual(want, [...SERVED].sort());
+  // The planted arm: the README as a CRLF checkout holds it, on disk.
+  const crlf = lf.replace(/\n/g, "\r\n");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "deploy-shape-crlf-"));
+  const file = path.join(dir, "README.md");
+  fs.writeFileSync(file, crlf);
+  assert.ok(fs.readFileSync(file, "utf8").includes("## Deploy shape\r\n"), "the planted file really is CRLF");
+  assert.deepEqual(readmeServed(readText(file)), want);
+  assert.deepEqual(shapeProblems({ ...theRepository(), readme: readText(file) }), [], "the whole shape holds on a CRLF checkout");
+  // MUST-FAIL ARM: the same bytes read without the normalization are the
+  // failure seen on Windows, "the README lists []". (JavaScript's /m counts
+  // a lone \r as a line end, so the headings split; the list's lines keep
+  // their \r and none matches /^- `...`$/.)
+  assert.deepEqual(readmeServed(fs.readFileSync(file, "utf8")), []);
+  assert.deepEqual(shapeProblems({ ...theRepository(), readme: fs.readFileSync(file, "utf8") }), ["the README lists []"]);
 });
 
 test("DEPLOY SHAPE, BREAK ARMS: each drift is named", () => {

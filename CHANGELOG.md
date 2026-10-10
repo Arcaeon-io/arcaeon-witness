@@ -1,5 +1,17 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-10: tests read text files line-ending-blind (CRLF checkouts) (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** On the owner's Windows checkout (`core.autocrlf true`, 785 CR bytes in README.md), `test/deploy_shape.test.js` read "the README lists []". JavaScript's `/m` counts a lone `\r` as a line end, so the "Deploy shape" heading split did match. The list's lines then kept their `\r`, and none matched `/^- `...`$/`.
+- **The fix.** Every text file a test reads for line-anchored or line-split matching is normalized right after `readFileSync` with `.replace(/\r\n/g, "\n")`:
+  - in `test/deploy_shape.test.js`, through one reader, `readText`, for the README and the page sources;
+  - in the three other tests that split a source file into lines: `test/case_item2b.test.js` (the seal header), `test/case_item2d.test.js` (`_case_http.js` code lines) and `test/merkle_batching.test.js` (`_batch.js` code lines). These three already tolerated a trailing `\r`, so this is prevention.
+  - The other `/m` regexes in `test/` match captured process output, not file contents. `test/logtree_keygen.test.js` already splits on `/\r?\n/`. No code outside `test/` changed.
+- **Tests.**
+  - `test/deploy_shape.test.js` +1. The planted arm writes the README with CRLF line ends to disk and reads it through `readText`: the same served list, and the whole shape holds. A must-fail arm reads the same bytes without normalizing and gets the Windows failure verbatim, `the README lists []`.
+  - On a scratch copy with all 163 text files converted to CRLF: the previous commit fails exactly that one test, and this tree passes the suite. There are 3 skips there, the third being the `.gitignore` test, which skips by design outside a git checkout.
+  - Suite 940 -> 941 tests, 0 fail. Here: 939 pass and the 2 environment skips.
+
 ## 2026-10-10: the deploy shape, declared: public/ is the output directory (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** The owner read the real deployments' file trees through the Vercel API. Production went out PREBUILT with no static file at all (1 source file, 12 functions), so it answers 404 for `/.well-known/arcaeon/snapshot-keys.json` and would answer 404 for the case key document. The first preview uploaded the raw tree and serves 148 static files, `lib/`, `test/` and `CHANGELOG.md` among them. A local `vercel build` of the previous commit puts the same 148 files in `.vercel/output/static` (reproduced here with Vercel CLI 63.1.2 on a scratch copy). The shape depended on who deployed, and nothing in the repository declared it.

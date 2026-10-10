@@ -417,7 +417,7 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   // the code reads no WITNESS_ADMIN_KEY: no property access and no string of it
   const fs = require("node:fs");
   const path = require("node:path");
-  const code = fs.readFileSync(path.join(__dirname, "..", "lib", "_case_http.js"), "utf-8").split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+  const code = fs.readFileSync(path.join(__dirname, "..", "lib", "_case_http.js"), "utf-8").replace(/\r\n/g, "\n").split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
   assert.ok(!code.includes("WITNESS_ADMIN_KEY"), "lib/_case_http.js's code (its comments aside) never names WITNESS_ADMIN_KEY");
 });
 

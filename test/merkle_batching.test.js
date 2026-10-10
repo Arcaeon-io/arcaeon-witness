@@ -473,7 +473,7 @@ test("CONTRACT: a 409 on the root write is retried by lib/_store.js putFile, and
 });
 
 test("CONTRACT: lib/_batch.js does not reimplement the retry — it has no fetch, no attempt loop, and one write primitive", () => {
-  const src = fs.readFileSync(path.join(__dirname, "..", "lib", "_batch.js"), "utf-8");
+  const src = fs.readFileSync(path.join(__dirname, "..", "lib", "_batch.js"), "utf-8").replace(/\r\n/g, "\n");
   const code = src
     .split("\n")
     .filter((l) => !l.trim().startsWith("//"))
