@@ -519,3 +519,85 @@ test("AN UNREADABLE CURRENT DOCUMENT: whether a key was since revoked cannot be 
   const { k } = await sealedCase("current unreadable");
   assert.deepEqual(await S.sealedRecordReason(k, null), { code: "document_unavailable", reason: "current_document_unreadable", document_commit: k.signed_under.document_commit });
 });
+
+// =============================================================================
+// STEP 3: the page says which document and which pin
+// =============================================================================
+
+async function pageOf(id, { keyDocument = DOC, env = {} } = {}) {
+  const res = makeRes();
+  await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.98.0.${(ipSeq += 1) & 255}` } }), res,
+    { now: REVEAL_AT + 3600000, keyDocument, env });
+  return { status: res._status, html: String(res._body) };
+}
+const verdictWord = (html) => {
+  const m = /<span class="word (?:pass|fail)?">([A-Z ]+)<\/span>/.exec(html.slice(html.indexOf("<h2>The verdict</h2>")));
+  return m ? m[1] : null;
+};
+
+test("THE PAGE NAMES ITS DOCUMENT AND ITS PIN: sealed under document <sha256> at commit <W> (a link to the document there), pinned at commit <P> with the pins repository's commit time; retrieved_at is labelled service clock, unverified", async () => {
+  const { id, k } = await sealedCase("page names");
+  const su = k.signed_under;
+  const p = await pageOf(id);
+  assert.equal(p.status, 200);
+  assert.ok(p.html.includes(`sealed under document <code>${su.document_sha256.slice(0, 16)}</code> at commit`), "the document, by its sha256");
+  assert.ok(p.html.includes(`href="https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${su.document_commit}/${S.CASE_KEYS_FILE}"`), "a link to the document at that commit");
+  assert.ok(p.html.includes(`>${su.document_commit.slice(0, 12)}<`));
+  assert.ok(p.html.includes(`${su.retrieved_at} (service clock, unverified)`));
+  const pinCommits = gh.commitsFor(PINS, S.pinPaths(id).seq);
+  assert.equal(pinCommits.length, 1, "fixture: the numbered pin record was written once");
+  const P = pinCommits[0];
+  assert.ok(p.html.includes(`pinned at commit <a href="https://github.com/${store.REPO}/commit/${P.sha}"`), "the pin's commit, linked");
+  assert.ok(p.html.includes(`${P.date} (the pins repository&#39;s commit time)`), "with the repository's commit time");
+  assert.equal(verdictWord(p.html), "MATCHED");
+});
+
+test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and still shows the verdict", async () => {
+  const pending = await sealedCase("page pending", { pinFails: true });
+  const p = await pageOf(pending.id);
+  assert.ok(p.html.includes("not pinned yet"), "no pin, no pin commit");
+  assert.equal(verdictWord(p.html), "MATCHED");
+  const pinned = await sealedCase("page pin unreadable");
+  gh.forceCommitsFailure(PINS, S.pinPaths(pinned.id).seq, 1, 500);
+  const q = await pageOf(pinned.id);
+  assert.ok(q.html.includes("the commit that wrote its pin could not be read on this request"));
+  assert.equal(verdictWord(q.html), "MATCHED");
+});
+
+test("SIGNER SINCE REVOKED ON THE PAGE: a dated banner names the key, revoked_since and the revoking commit; the case stays sealed and its verdict word does not change", async () => {
+  const { id } = await sealedCase("page since revoked");
+  const before = await pageOf(id);
+  const revoked = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY));
+  const p = await pageOf(id, { keyDocument: revoked, env: { [S.DEPLOY_COMMIT_ENV]: CURRENT_COMMIT } });
+  assert.equal(p.status, 200);
+  assert.match(p.html, /<h1>Case: VERDICT<\/h1>/);
+  assert.ok(p.html.includes("Revoked since this case was sealed"), "the banner");
+  assert.ok(p.html.includes(`the case key <code>${KD.keyIdOf(CASE_KEY)}</code> is marked revoked since 2026-10-11`));
+  assert.ok(p.html.includes(`href="https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${CURRENT_COMMIT}/${S.CASE_KEYS_FILE}"`), "the revoking commit, linked");
+  assert.equal(verdictWord(p.html), verdictWord(before.html));
+  assert.ok(!p.html.includes("SEALED RECORD DOES NOT VERIFY"));
+  // the reader's own commit unknown: said so, not invented
+  const q = await pageOf(id, { keyDocument: revoked, env: {} });
+  assert.ok(q.html.includes("the key document this deployment carries (its commit is not known here)"));
+  // the reconcile key, revoked since
+  const r = await pageOf(id, { keyDocument: KD.docWith(KD.entry(CASE_KEY), revokedIn(RECEIPT_KEY, "2026-10-12", "reconcile")), env: { [S.DEPLOY_COMMIT_ENV]: CURRENT_COMMIT } });
+  assert.ok(r.html.includes(`the reconcile key <code>${KD.keyIdOf(RECEIPT_KEY)}</code> is marked revoked since 2026-10-12`));
+  assert.equal(verdictWord(r.html), verdictWord(before.html));
+});
+
+test("THE VERDICT WORD NEVER CHANGES ON A LATER DOCUMENT: whatever the current document says of the two keys, a sealed case shows the word it was sealed with", async () => {
+  const { id } = await sealedCase("word stays");
+  const sealedWord = verdictWord((await pageOf(id)).html);
+  assert.equal(sealedWord, "MATCHED");
+  for (const [name, later] of [
+    ["the case key dropped", KD.docWith(KD.reconcileEntry(RECEIPT_KEY))],
+    ["both retired", KD.docWith(KD.entry(CASE_KEY, { status: "retired" }), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }))],
+    ["both revoked", KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), revokedIn(RECEIPT_KEY, "2026-10-11", "reconcile"))],
+    ["no key at all", KD.docWith()],
+    ["another key added", KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(OTHER_KEY))],
+  ]) {
+    const p = await pageOf(id, { keyDocument: later });
+    assert.equal(p.status, 200, name);
+    assert.equal(verdictWord(p.html), sealedWord, name);
+  }
+});

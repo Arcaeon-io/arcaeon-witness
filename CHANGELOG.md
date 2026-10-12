@@ -1,5 +1,19 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, step 3: the case page names the document a case was sealed under and the commit that pinned it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **A sealed case's page** (`lib/_case_page.js`, THE DOCUMENT AND THE PIN), in its "Anchor and signature" panel:
+  - **key document**: "sealed under document <sha256, 16 hex> at commit <W>", the commit linked to the document at that commit in this public repository. `retrieved_at` is shown as "service clock, unverified": the public time bound is the commit's time, never the service's clock;
+  - **pin**: "pinned at commit <P>, <date> (the pins repository's commit time)", for the commit that wrote the case's numbered pin record. It is read once the case is anchored, says "not pinned yet" before that, and says so when that commit cannot be read on the request;
+  - **signed by**: the key id, and that the signature verified under the key document the case names. It no longer checks the CURRENT document.
+- **`signer_since_revoked`** shows the verdict with a dated banner: "Revoked since this case was sealed", which key (case or reconcile), revoked since when, and the revoking document's commit. That commit is this deployment's own `VERCEL_GIT_COMMIT_SHA`, linked, or "its commit is not known here".
+- **The verdict word never changes on a later document**: dropping, retiring or revoking either key, or adding keys, leaves the sealed word.
+- The withdrawn page and the open and committed panels keep their wording.
+- **Tests.**
+  - `test/case_signed_under.test.js` +4: the document and the pin named; not pinned yet, and a pin commit that cannot be read; the dated banner for either key, with the reader's commit known or not; the verdict word unchanged under five later documents.
+  - The 2c page test cites the document at its commit and says the signature verified under it (by design).
+  - Suite 1044 -> 1048 tests, 0 fail, 14 todo. Here: 1032 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, step 2: a sealed case is held to the document it names, never to the current one (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **THE SEALED CHECK** (`lib/_case_seal.js` `sealedRecordReason`) is now asynchronous. It reads the key document the case names, `signed_under.document_commit`, from this public repository (`raw.githubusercontent.com`, no credentials) via `fetchNamedDocument`. A commit's file never changes, so an answered read is kept for the life of the instance; a failed one is not. Under that document, both keys must have been active at `retrieved_at` (listed from that day or before, and active or revoked only from a later day), and both signatures must verify. The answers:

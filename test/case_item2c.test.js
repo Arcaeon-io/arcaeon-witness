@@ -1006,8 +1006,10 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pv, /anchored: its pin/);
   assert.ok(pv.includes(S.ANCHOR_NOTE.replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;")), "the anchor sentence");
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
-  assert.ok(pv.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
-  assert.match(pv, /listed in the key document as active; the signature verifies under the published verifier/);
+  // since Design I: the key document the case names, at its commit, cited
+  const named = storedCase(s.id).signed_under;
+  assert.ok(pv.includes(`href="https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${named.document_commit}/${S.CASE_KEYS_FILE}"`), "the key document, cited");
+  assert.match(pv, /the signature verified under the key document this case names/);
   // the same case through the real dispatch (the committed key document as
   // the CURRENT one, which does not list the test key, and the service
   // clock): since Design I the case is held to the document it NAMES, read
@@ -1021,7 +1023,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pd, /<span class="word pass">MATCHED<\/span>/);
   assert.ok(!pd.includes("SEALED RECORD DOES NOT VERIFY"));
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
-  assert.ok(pd.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
+  assert.ok(pd.includes(`/blob/${named.document_commit}/${S.CASE_KEYS_FILE}"`), "the key document it names, cited");
   // an unsigned seal (a document without the case key) verifies through the
   // real dispatch and shows its verdict
   const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: NO_CASE_KEY_DOC });
