@@ -5,6 +5,10 @@
 // its own bucket (lib/_ratelimit.js checkKey), never its address's; anything
 // else (no key, a key that is not valid) draws on the per-IP bucket and past
 // it is 429 before its 401. The keyless ops stay per-IP.
+// THE OPERATOR'S BEARER (2026-10-12, the same shape on ?op=case-reference):
+// a request carrying WITNESS_CASE_OPERATOR_KEY's bearer draws on that key's
+// own budget, never its address's; any other reference draws on the per-IP
+// budget, and past it is 429 before its 401 or 503.
 // FIX G (2026-10-12; GPT-5.6 §2C): a role appends at most
 // REFERENCE_QUOTA_PER_ROLE rows to one case (the open quota's 20), counted
 // in the private usage repository; past it, 409 reference_quota with the
@@ -194,9 +198,9 @@ async function sealedCase(scope) {
   return { id, a, b };
 }
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
-async function reference(body, { env = SIGNED, headers = {}, now = REVEAL_AT + 3600000 } = {}) {
+async function reference(body, { env = SIGNED, headers = {}, ip = freshIp(), now = REVEAL_AT + 3600000 } = {}) {
   const res = makeRes();
-  await H.handleCaseReference(makeReq({ method: "POST", query: { op: "case-reference" }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...headers }, body }), res, { now, env, keyDocument: KEYS_DOC });
+  await H.handleCaseReference(makeReq({ method: "POST", query: { op: "case-reference" }, headers: { "content-type": "application/json", "x-forwarded-for": ip, ...headers }, body }), res, { now, env, keyDocument: KEYS_DOC });
   return res;
 }
 const xref = (n) => ({ ...XREF, reference: `ref-${n}` });
@@ -346,4 +350,65 @@ test("FIX G: two takers creating a role's counter at once: the one that loses th
   assert.equal(raced, true, "fixture: the counter was created between this request's read and its create");
   assert.equal(r._status, 201, JSON.stringify(r._body));
   assert.equal(gh.read(USAGE, quotaFile(id, "a")).count, 6, "the other taker's 5, then this one");
+});
+
+// =============================================================================
+// THE OPERATOR'S BEARER: the same shape as FIX F, on ?op=case-reference
+// =============================================================================
+
+const AS_OPERATOR = Object.freeze({ authorization: `Bearer ${OPERATOR_KEY}` });
+
+test("OPERATOR: after references with no proof and no bearer spend one address's budget, the operator's reference from that address still appends", async () => {
+  const { id } = await sealedCase("O victim");
+  const ip = freshIp();
+  let n = 0;
+  let last;
+  do {
+    last = await reference({ case_id: id, cross_reference: xref(`junk ${n}`) }, { env: OPERATOR_ENV, ip });
+    n += 1;
+  } while (last._status === 401 && n <= ratelimit.LIMIT + 5);
+  assert.equal(last._status, 429, "the address's budget is spent by requests that carry no bearer");
+  assert.equal(n, ratelimit.LIMIT + 1);
+  const op = await reference({ case_id: id, cross_reference: xref("the operator's row") }, { env: OPERATOR_ENV, headers: AS_OPERATOR, ip });
+  assert.equal(op._status, 201, `the operator is not refused by the budget unauthenticated requests spent: ${JSON.stringify(op._body)}`);
+  assert.equal(op._body.appended_by, "operator");
+});
+
+test("OPERATOR: the operator's bearer draws on its own budget: from one address, its LIMIT+1th call is 429 with the per-key note, while that address's budget stays unspent", async () => {
+  const { id, a } = await sealedCase("O budget");
+  const ip = freshIp();
+  for (let i = 0; i < ratelimit.LIMIT; i += 1) {
+    const r = await reference({ not: "a reference body" }, { env: OPERATOR_ENV, headers: AS_OPERATOR, ip });
+    assert.equal(r._status, 400, `operator call ${i + 1}: ${JSON.stringify(r._body)}`);
+  }
+  const over = await reference({ case_id: id, cross_reference: xref("past the operator's budget") }, { env: OPERATOR_ENV, headers: AS_OPERATOR, ip: freshIp() });
+  assert.equal(over._status, 429, JSON.stringify(over._body));
+  assert.equal(over._body.error_code, "rate_limited");
+  assert.match(over._body.note, /^per-key limiter: ~30 calls per key per 10 minutes/);
+  const role = await reference({ ...proofOf(id, a), cross_reference: xref("a role, same address") }, { env: OPERATOR_ENV, ip });
+  assert.equal(role._status, 201, `the operator's calls spent nothing of the address's budget: ${JSON.stringify(role._body)}`);
+  const bare = await reference({ case_id: id, cross_reference: xref("no bearer, same address") }, { env: OPERATOR_ENV, ip });
+  assert.equal(bare._status, 401, JSON.stringify(bare._body));
+  assert.equal(bare._body.error_code, "reference_unauthorized");
+});
+
+test("OPERATOR: a bearer that is not the operator's, or any bearer while the operator's key is unset, draws on the address's budget, and past it is 429 before its 401 or 503", async () => {
+  const { id } = await sealedCase("O not the operator");
+  for (const [env, headers, status, code] of [
+    [OPERATOR_ENV, { authorization: "Bearer not-the-operator" }, 401, "reference_unauthorized"],
+    [OPERATOR_ENV, { authorization: `Bearer ${OPERATOR_KEY}x` }, 401, "reference_unauthorized"],
+    [SIGNED, AS_OPERATOR, 503, "operator_key_not_configured"],
+  ]) {
+    const ip = freshIp();
+    for (let i = 0; i < ratelimit.LIMIT; i += 1) {
+      const r = await reference({ case_id: id, cross_reference: xref(`not the operator ${i}`) }, { env, headers, ip });
+      assert.equal(r._status, status, JSON.stringify(r._body));
+      assert.equal(r._body.error_code, code);
+    }
+    const over = await reference({ case_id: id, cross_reference: xref("not the operator, over") }, { env, headers, ip });
+    assert.equal(over._status, 429, `${code}: ${JSON.stringify(over._body)}`);
+    assert.match(over._body.note, /^naive per-IP limiter/);
+  }
+  const op = await reference({ case_id: id, cross_reference: xref("the operator") }, { env: OPERATOR_ENV, headers: AS_OPERATOR });
+  assert.equal(op._status, 201, JSON.stringify(op._body));
 });
