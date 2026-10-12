@@ -51,6 +51,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const ratelimit = require("../../lib/_ratelimit.js");
 
 function textResponse(status, text) {
   return {
@@ -333,11 +334,16 @@ class MockGitHubStore {
   }
 }
 
-// Patches global.fetch to route through `store`. Returns a restore function —
+// Patches global.fetch to route through `store`, and gives the test a fresh
+// lib/_ratelimit.js limiter (per-instance memory): every address's and every
+// key's budget starts unspent, as on a fresh instance. The budgets are kept
+// on the real clock, so without this one key's opens add up across a whole
+// test file (lib/_ratelimit.js, PER-KEY BUCKETS). Returns a restore function —
 // ALWAYS call it in an afterEach, or one test's mock store leaks into the next.
 function install(store) {
   const original = global.fetch;
   global.fetch = (url, opts) => store.handleFetch(url, opts);
+  ratelimit.setStore(null);
   return function restore() {
     global.fetch = original;
   };

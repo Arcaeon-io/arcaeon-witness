@@ -368,20 +368,19 @@ test('GPT-5.6 §1.4 / §3.3: "No sealed case records the key-document hash, Git 
   assert.equal(k.signed_under.retrieved_at, C.utcSeconds(REVEAL_AT), "and the retrieval time (the service clock)");
 });
 
-test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption): "admit() runs ratelimit.check(req) before openKey() ... The victim is blocked before their valid bearer key is even checked"',
-  { todo: "CONFIRMED: after unauthenticated case-open requests spend one address's per-IP budget, a valid keyed open from that address is 429 rate_limited (the assertion 'an authenticated open is not refused by the budget unauthenticated requests spent' fails)" }, async () => {
-    const ip = "10.74.0.1";
-    let n = 0;
-    let last;
-    do {
-      last = await open({ scope_digest: sha(`junk ${n}`) }, { headers: {}, ip });
-      n += 1;
-    } while (last._status === 401 && n <= ratelimit.LIMIT + 5);
-    assert.equal(last._status, 429, "the address's budget is spent by requests that carry no key");
-    assert.ok(n > 1);
-    const victim = await open({ scope_digest: sha("the victim's real opening") }, { ip });
-    assert.equal(victim._status, 201, `an authenticated open is not refused by the budget unauthenticated requests spent: ${JSON.stringify(victim._body)}`);
-  });
+test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption): "admit() runs ratelimit.check(req) before openKey() ... The victim is blocked before their valid bearer key is even checked"', async () => {
+  const ip = "10.74.0.1";
+  let n = 0;
+  let last;
+  do {
+    last = await open({ scope_digest: sha(`junk ${n}`) }, { headers: {}, ip });
+    n += 1;
+  } while (last._status === 401 && n <= ratelimit.LIMIT + 5);
+  assert.equal(last._status, 429, "the address's budget is spent by requests that carry no key");
+  assert.ok(n > 1);
+  const victim = await open({ scope_digest: sha("the victim's real opening") }, { ip });
+  assert.equal(victim._status, 201, `an authenticated open is not refused by the budget unauthenticated requests spent: ${JSON.stringify(victim._body)}`);
+});
 
 // =============================================================================
 // GPT-5.6, section 2: what an adversarial role can do

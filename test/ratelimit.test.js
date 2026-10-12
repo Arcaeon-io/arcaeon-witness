@@ -150,3 +150,53 @@ test("ENV: the shared store is chosen only when both URL and token are set (Verc
   assert.equal(ratelimit.storeFromEnv({ KV_REST_API_URL: "https://x", KV_REST_API_TOKEN: "t" }).kind, "kv");
   assert.equal(ratelimit.storeFromEnv({ UPSTASH_REDIS_REST_URL: "https://x", UPSTASH_REDIS_REST_TOKEN: "t" }).kind, "kv");
 });
+
+// ---- PER-KEY BUCKETS (FIX F, 2026-10-12): checkKey(keyHash) ----
+
+const crypto = require("node:crypto");
+const hashOf = (s) => crypto.createHash("sha256").update(s).digest("hex");
+
+test("PER-KEY: a key's bucket holds LIMIT calls, apart from every address's bucket and every other key's", async () => {
+  const lim = ratelimit.createLimiter();
+  const h1 = hashOf("per-key one");
+  const h2 = hashOf("per-key two");
+  const req = freshReq();
+  for (let i = 0; i < ratelimit.LIMIT; i++) {
+    assert.equal((await lim.checkKey(h1)).limited, false, `key call ${i + 1} of ${ratelimit.LIMIT}`);
+  }
+  const blocked = await lim.checkKey(h1);
+  assert.equal(blocked.limited, true, "the key's call past LIMIT is blocked");
+  assert.ok(blocked.retryAfterSeconds > 0 && blocked.retryAfterSeconds <= ratelimit.WINDOW_MS / 1000);
+  assert.equal((await lim.checkKey(h2)).limited, false, "another key's bucket is untouched");
+  assert.equal((await lim.check(req)).limited, false, "an address's bucket is untouched");
+  for (let i = 0; i < ratelimit.LIMIT; i++) await lim.check(req);
+  assert.equal((await lim.check(req)).limited, true, "control: the address is now over its own limit");
+  assert.equal((await lim.checkKey(h2)).limited, false, "and that spends no key's bucket");
+  assert.equal((await lim.checkKey(hashOf("per-key three"), ratelimit.LIMIT + 1)).limited, true, "cost is charged on a key's bucket too");
+});
+
+test("PER-KEY: the bucket is named \"key,\" + the key's sha256, and no address a caller can forge names it", async () => {
+  const named = [];
+  const spy = ratelimit.memoryStore();
+  const lim = ratelimit.createLimiter({ store: { kind: "spy", hit: (k, c, t) => { named.push(k); return spy.hit(k, c, t); } } });
+  const h = hashOf("per-key forged");
+  await lim.checkKey(h);
+  assert.deepEqual(named, [`key,${h}`]);
+  for (const forged of [h, `key,${h}`, `key:${h}`, `key${h}`, `key;${h}`, `key/${h}`, ` key,${h}`, `key,${h}, 10.0.0.1`]) {
+    const req = { headers: { "x-forwarded-for": forged } };
+    for (let i = 0; i <= ratelimit.LIMIT; i++) await lim.check(req);
+    assert.notEqual(ratelimit.callerIp(req), `key,${h}`, forged);
+  }
+  assert.equal((await lim.checkKey(h)).limited, false, "no forged address spent the key's bucket");
+});
+
+test("PER-KEY: checkKey takes a sha256 and nothing else, so a raw key never names a bucket", async () => {
+  const named = [];
+  const lim = ratelimit.createLimiter({ store: { kind: "spy", hit: async (k) => { named.push(k); return { count: 1, windowStart: 0 }; } } });
+  const h = hashOf("per-key shape");
+  for (const bad of ["case-test-open-key-0021", h.toUpperCase(), `${h}0`, `0${h}`, h.slice(1), `${h}\n`, "", undefined, null, 42]) {
+    await assert.rejects(lim.checkKey(bad), TypeError, String(bad));
+  }
+  await assert.rejects(ratelimit.checkKey("case-test-open-key-0021"), TypeError, "the module-level checkKey too");
+  assert.deepEqual(named, [], "nothing reached the store");
+});
