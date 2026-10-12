@@ -58,6 +58,14 @@
 //     (a daily anchor record names a head of the pins repository that holds
 //     the pin, and the record's own commit is named) or could_not_look.
 //
+// DECIDED, AND STILL TODO (the claim is true, and the design keeps it):
+//   - GPT-5.6 §2B, A's reveal refused 409 case_withdrawn after B's
+//     withdrawal: Design N (2026-10-12) keeps the refusal. It now comes
+//     before the tapes are read or hashed, and its answer carries a signed
+//     refusal receipt (comparison_refused, consent_not_jointly_held); the
+//     public record does not change. The test's assertion asks for a seal,
+//     so it stays todo, and so does §2B's redacted-record test.
+//
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
 //     daily anchor": the daily head anchor and its OpenTimestamps proof are

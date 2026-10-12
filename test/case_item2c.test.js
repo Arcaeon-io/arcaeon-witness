@@ -568,7 +568,8 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.deepEqual(Object.keys(k).sort(), [...C.WITHDRAWN_FIELDS].sort());
   assert.deepEqual(C.validateCase(k), { ok: true });
   assert.equal(k.status, "WITHDRAWN");
-  assert.deepEqual(k.withdrawal, { by_role: "a", at: "2026-10-10T09:00:00Z", salt_sha256: C.saltSha256(a.salt) });
+  // Design N: the reason code, party_choice when the request names none
+  assert.deepEqual(k.withdrawal, { by_role: "a", at: "2026-10-10T09:00:00Z", salt_sha256: C.saltSha256(a.salt), reason: "party_choice" });
   assert.deepEqual(k.limits, C.LIMITS.slice());
   // no labels, no commitments
   const text = JSON.stringify(k);

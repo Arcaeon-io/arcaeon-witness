@@ -507,3 +507,107 @@ test("FIX E: the schema: reveal_attempt only on a COMMITTED case, its commitment
   const open = await openCase("E schema open");
   assert.equal(C.validateCase({ ...storedCase(open), reveal_attempt: attempt }).code, "status_inconsistent", "an open case has no attempt");
 });
+
+// =============================================================================
+// DESIGN N: a withdrawal's reason; a joint reveal after it refused before its
+// tapes are read; a signed refusal receipt
+// =============================================================================
+
+test("DESIGN N (1): a withdrawal records its reason code beside by_role and at: party_choice, deadline or other, from the request, party_choice by default; any other is 400 and nothing is withdrawn", async () => {
+  for (const [given, want] of [[undefined, "party_choice"], ["party_choice", "party_choice"], ["deadline", "deadline"], ["other", "other"]]) {
+    const c = await committedCase(`N reason ${given}`);
+    const w = await withdraw(c.id, c.a, { reason: given });
+    assert.equal(w.status, 201, JSON.stringify(w.body));
+    const rec = storedCase(c.id);
+    assert.deepEqual(Object.keys(rec.withdrawal).sort(), ["at", "by_role", "reason", "salt_sha256"]);
+    assert.equal(rec.withdrawal.reason, want);
+    assert.equal(rec.withdrawal.by_role, "a");
+    assert.deepEqual(C.validateCase(rec), { ok: true });
+    assert.equal(S.signatureReason(rec, CASE_KEY.verifier), null, "the reason is inside the signed bytes");
+    assert.ok((await casePage(c.id)).html.includes(`<th>reason</th><td><code>${want}</code></td>`), "the withdrawn page shows the code");
+    assert.notEqual(S.signatureReason({ ...rec, withdrawal: { ...rec.withdrawal, reason: "other" === want ? "deadline" : "other" } }, CASE_KEY.verifier), null);
+  }
+  const c = await committedCase("N reason bad");
+  for (const bad of ["regret", "", 7, null]) {
+    const w = await withdraw(c.id, c.a, { reason: bad });
+    assert.equal(w.status, 400, JSON.stringify(w.body));
+    assert.equal(w.body.error_code, "malformed_field");
+    assert.equal(w.body.field, "reason");
+  }
+  assert.equal(storedCase(c.id).status, "COMMITTED", "nothing withdrawn");
+  // the record's schema: a reason is one of the three
+  const w = await withdraw(c.id, c.b, { reason: "other" });
+  assert.equal(w.status, 201);
+  const rec = storedCase(c.id);
+  assert.equal(C.validateCase({ ...rec, withdrawal: { ...rec.withdrawal, reason: "regret" } }).code, "malformed_field");
+  assert.equal(C.validateCase({ ...rec, withdrawal: { ...rec.withdrawal, why: "x" } }).code, "unknown_field");
+});
+
+test("DESIGN N (2): a joint reveal after a withdrawal is refused 409 case_withdrawn before its tapes are read or hashed: they are never decoded, so even tapes that do not decode are refused so, and nothing about them is stored or logged", async (t) => {
+  const c = await committedCase("N refused early");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const decode = t.mock.method(RECONCILE, "tapeFrom");
+  const logged = [];
+  for (const m of ["log", "error", "warn", "info"]) t.mock.method(console, m, (...args) => logged.push(args.join(" ")));
+  const writes = gh.putLog.length;
+  const body = { ...revealBody(c.id, c.a, c.b), tape_a_b64: "%%% not base64 %%%", tape_b_b64: c.b.tape.toString("base64") };
+  const r = await reveal(c, { body });
+  assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(r.body.error_code, "case_withdrawn");
+  assert.equal(decode.mock.callCount(), 0, "the tapes are never decoded, so never hashed");
+  const text = JSON.stringify(r.body) + logged.join("\n");
+  for (const secret of [c.a.tape_sha256, c.b.tape_sha256, c.a.salt, c.b.salt, c.b.tape.toString("base64").slice(0, 40)]) {
+    assert.ok(!text.includes(secret), "nothing about the tapes in the answer or the logs");
+  }
+  assert.deepEqual(gh.putLog.slice(writes), [], "nothing stored");
+});
+
+test("DESIGN N (3): the refusal carries a signed refusal receipt {kind: comparison_refused, case_id, at, reason: consent_not_jointly_held}, signed by the case key under the current key document, which anyone can verify; the public case record and page do not change", async () => {
+  const c = await committedCase("N receipt");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const record = storedCase(c.id);
+  const before = (await casePage(c.id)).html;
+  const writes = gh.putLog.length;
+  const r = await reveal(c, { now: REVEAL_AT });
+  assert.equal(r.status, 409);
+  const rr = r.body.refusal_receipt;
+  assert.deepEqual(Object.keys(rr).sort(), ["at", "case_id", "kind", "reason", "sig", "sig_reason", "signed_by", "v"]);
+  assert.deepEqual([rr.kind, rr.v, rr.case_id, rr.at, rr.reason], ["comparison_refused", 1, c.id, C.utcSeconds(REVEAL_AT), "consent_not_jointly_held"]);
+  assert.equal(rr.signed_by, KD.keyIdOf(CASE_KEY));
+  assert.deepEqual(S.verifyRefusalReceipt(rr, DOC), { ok: true });
+  // what anyone holding it can check: a changed field, another case, a document that does not list the key
+  assert.equal(S.verifyRefusalReceipt({ ...rr, at: C.utcSeconds(REVEAL_AT + 1000) }, DOC).reason, "bad_signature");
+  assert.equal(S.verifyRefusalReceipt({ ...rr, case_id: "f".repeat(64) }, DOC).reason, "bad_signature");
+  assert.equal(S.verifyRefusalReceipt(rr, KD.docWith(KD.reconcileEntry(RECEIPT_KEY))).reason, "signer_unpublished");
+  assert.equal(S.verifyRefusalReceipt({ ...rr, reason: "other" }, DOC).reason, "malformed_field");
+  assert.equal(S.verifyRefusalReceipt({ ...rr, extra: 1 }, DOC).reason, "unknown_field");
+  // the public record and page do not change
+  assert.deepEqual(gh.putLog.slice(writes), [], "nothing written");
+  assert.deepEqual(storedCase(c.id), record);
+  assert.equal((await casePage(c.id)).html, before);
+  // with no case key that the current document lists: the receipt says it is unsigned, and why
+  const d = await committedCase("N receipt unsigned");
+  assert.equal((await withdraw(d.id, d.a)).status, 201);
+  const u = await reveal(d, { keyDocument: KD.docWith(KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.equal(u.status, 409);
+  assert.equal(u.body.refusal_receipt.sig, null);
+  assert.match(u.body.refusal_receipt.sig_reason, /not signed \(key_unpublished\)/);
+  assert.equal(S.verifyRefusalReceipt(u.body.refusal_receipt, DOC).reason, "unsigned");
+});
+
+test("DESIGN N (3): a withdrawal that lands while the reveal reads the case, before its attempt, is refused the same way, with a signed refusal receipt and no comparison", async (t) => {
+  const c = await committedCase("N race");
+  const compare = t.mock.method(RECONCILE, "compare");
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`),
+    () => withdraw(c.id, c.b, { now: REVEAL_AT - 1000 }),
+    () => reveal(c),
+  );
+  assert.equal(r.fired, true);
+  assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
+  assert.equal(r.out.status, 409, JSON.stringify(r.out.body).slice(0, 300));
+  assert.equal(r.out.body.error_code, "case_withdrawn");
+  assert.deepEqual(S.verifyRefusalReceipt(r.out.body.refusal_receipt, DOC), { ok: true });
+  assert.equal(compare.mock.callCount(), 0, "nothing compared");
+  assert.equal(storedCase(c.id).status, "WITHDRAWN");
+});

@@ -1,5 +1,29 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design N: a withdrawal's reason, a joint reveal after it refused before its tapes are read, and a signed refusal receipt (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **(1) THE REASON** (`lib/_case.js`). The withdrawal event gains `reason` beside `by_role` and `at`.
+  - It is a code from the request's optional `reason`: `party_choice` | `deadline` | `other`, and `party_choice` when none is named. Any other value is 400 `malformed_field` (`reason`), and nothing is withdrawn.
+  - It sits inside the record's signed bytes.
+  - The withdrawn page shows the code.
+  - A record from before, with no reason, still reads.
+- **(2) THE REFUSAL BEFORE THE TAPES** (`lib/_case_http.js`).
+  - The reveal now reads only its case fields first.
+  - A joint reveal that arrives after a withdrawal is refused 409 `case_withdrawn` before the tapes are decoded or hashed: tapes that would not even decode are refused the same way.
+  - Nothing about the tapes is stored or logged.
+  - The tapes are decoded once the case is known to take a reveal.
+  - The request body itself is read, since it carries the case id.
+- **(3) THE REFUSAL RECEIPT** (`lib/_case_seal.js`).
+  - **What it is.** The refusing answer carries `refusal_receipt`: `{kind: "comparison_refused", v: 1, case_id, at, reason: "consent_not_jointly_held"}`, signed with the case key under the key document the deployment carries (`signed_by` and `sig`, or `sig: null` with `sig_reason`, as a seal is).
+  - **Checking it.** The requester may show it to anyone. `verifyRefusalReceipt(rec, doc)` checks exact fields, the fixed values, and a signature by a key the document lists as a case key, not revoked.
+  - **What it changes.** It is written nowhere: the public case record and page do not change.
+  - **The race.** A withdrawal that lands under the reveal's attempt write (FIX E) is refused the same way, with a receipt, and nothing is compared.
+- **Tests.**
+  - `test/case_consent.test.js` +4: the reason (default, each code, refusals, signed, on the page); the refusal before the tapes (never decoded, nothing in the answer or the logs, nothing stored); the receipt (fields, verified, each forgery refused, unsigned without a listed key, record and page unchanged); the race.
+  - GPT-5.6 §2B's two tests stay todo, now noted as decided: the design keeps the refusal, and their assertions ask for a seal.
+  - TEST 10 expects the default reason in the withdrawal.
+- Suite 1123 -> 1127 tests, 0 fail, 3 todo. Here: 1122 pass and the 2 environment skips.
+
 ## 2026-10-12: Red-team fix E: the two-phase reveal; a comparison that ran always leaves its trace (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §1.3).** "The system has run the comparison but leaves only a normal COMMITTED case": a reveal whose root write failed after the comparison left the record byte-identical to the COMMITTED case.
