@@ -64,6 +64,7 @@ const path = require("node:path");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -174,7 +175,7 @@ async function committedCase({ over } = {}) {
   const b = party(id, "b", TOOL_TAPE);
   for (const p of [a, b]) {
     plantStamp(p.commitment_sha256);
-    const r = await call(H.handleCaseCommit, "case-commit", { case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, NOW);
+    const r = await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }), NOW);
     assert.equal(r._status, 201, JSON.stringify(r._body));
   }
   assert.equal(storedCase(id).status, "COMMITTED");
@@ -356,7 +357,7 @@ test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment
     plantStamp(p.commitment_sha256);
     const commit = p.role === "b" ? null : gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha;
     regs[p.role] = C.registrationRecord({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256, registered_at: "2026-10-10T08:00:00Z",
-      stamp_commit: commit, stamped_at: "2026-10-10T07:45:00.123Z" });
+      stamp_commit: commit, stamped_at: "2026-10-10T07:45:00.123Z", ...REG.keyFields({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }) });
     gh.seed(PINS, C.registrationPath(id, p.role), regs[p.role]);
   }
   const committed = { ...kase, commitments: { a: C.commitmentEntry(regs.a), b: C.commitmentEntry(regs.b) }, status: "COMMITTED" };

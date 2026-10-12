@@ -48,6 +48,7 @@ const crypto = require("node:crypto");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRawReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -158,7 +159,7 @@ async function committedCase({ over, tapeA = AGENT_TAPE, tapeB = TOOL_TAPE } = {
   const b = party(id, "b", tapeB);
   for (const p of [a, b]) {
     plantStamp(p.commitment_sha256);
-    const r = await call(H.handleCaseCommit, "case-commit", { case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, NOW);
+    const r = await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }), NOW);
     assert.equal(r._status, 201, JSON.stringify(r._body));
   }
   assert.equal(storedCase(id).status, "COMMITTED");
@@ -370,7 +371,7 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     const a = party(id, "a", AGENT_TAPE);
     const b = party(id, "b", TOOL_TAPE);
     plantStamp(a.commitment_sha256);
-    await call(H.handleCaseCommit, "case-commit", { case_id: id, role: "a", commitment_sha256: a.commitment_sha256 }, NOW);
+    await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: "a", commitment_sha256: a.commitment_sha256 }), NOW);
     return revealBody(id, a, b);
   });
   plant("not committed: already sealed", 409, "not_committed", async () => {
@@ -509,8 +510,8 @@ test("TEST 4 AND TEST 5, THE REVEAL HALVES: of fifty stamped candidates only the
   }
   const b = party(id, "b", TOOL_TAPE);
   plantStamp(b.commitment_sha256);
-  assert.equal((await call(H.handleCaseCommit, "case-commit", { case_id: id, role: "a", commitment_sha256: cands[37].commitment_sha256 }, NOW))._status, 201);
-  assert.equal((await call(H.handleCaseCommit, "case-commit", { case_id: id, role: "b", commitment_sha256: b.commitment_sha256 }, NOW))._status, 201);
+  assert.equal((await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: "a", commitment_sha256: cands[37].commitment_sha256 }), NOW))._status, 201);
+  assert.equal((await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256 }), NOW))._status, 201);
   const writes = gh.putLog.length;
   for (const i of [0, 1, 36, 38, 49]) {
     const r = await reveal(revealBody(id, cands[i], b));
@@ -563,7 +564,8 @@ test("REVEAL: policy_unavailable when the case's bound version is not the one th
   for (const p of [a2, b2]) {
     plantStamp(p.commitment_sha256);
     regs[p.role] = C.registrationRecord({ case_id: id2, role: p.role, commitment_sha256: p.commitment_sha256, registered_at: "2026-10-10T08:00:00Z",
-      stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha, stamped_at: "2026-10-10T07:45:00.123Z" });
+      stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha, stamped_at: "2026-10-10T07:45:00.123Z",
+      ...REG.keyFields({ case_id: id2, role: p.role, commitment_sha256: p.commitment_sha256 }) });
     gh.seed(PINS, C.registrationPath(id2, p.role), regs[p.role]);
   }
   const committed = { ...kase, commitments: { a: C.commitmentEntry(regs.a), b: C.commitmentEntry(regs.b) }, status: "COMMITTED" };

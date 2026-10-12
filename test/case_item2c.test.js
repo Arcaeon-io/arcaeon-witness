@@ -59,6 +59,7 @@ const path = require("node:path");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -165,7 +166,7 @@ async function openCase(over, now = NOW) {
 }
 async function register(id, p, now = NOW) {
   plantStamp(p.commitment_sha256);
-  const r = await call(H.handleCaseCommit, "case-commit", { case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, now);
+  const r = await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }), now);
   assert.equal(r._status, 201, JSON.stringify(r._body));
 }
 async function committedCase({ over } = {}) {
@@ -724,7 +725,7 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   await register(o, pa);
   plantStamp(pb.commitment_sha256);
   const r3 = await interleave(C.casePath(o), () => withdraw(proofOf(o, pa)),
-    () => call(H.handleCaseCommit, "case-commit", { case_id: o, role: "b", commitment_sha256: pb.commitment_sha256 }, NOW));
+    () => call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: o, role: "b", commitment_sha256: pb.commitment_sha256 }), NOW));
   assert.equal(r3.inner._status, 201, JSON.stringify(r3.inner._body));
   assert.equal(r3.outer.status, 201, JSON.stringify(r3.outer.body));
   assert.equal(storedCase(o).status, "WITHDRAWN");

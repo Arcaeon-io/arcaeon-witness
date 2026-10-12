@@ -48,6 +48,7 @@ const crypto = require("node:crypto");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -133,8 +134,9 @@ function party(caseId, role, tapeText, salt = C.newSalt()) {
   const tape_sha256 = sha(tapeText);
   return { role, tape_sha256, salt, commitment_sha256: C.commitmentSha256({ case_id: caseId, role, tape_sha256, salt }) };
 }
+// The registration body, signed by the role's own test key (red-team fix A).
 function reg(caseId, p, role = p.role) {
-  return { case_id: caseId, role, commitment_sha256: p.commitment_sha256 };
+  return REG.signedBody({ case_id: caseId, role, commitment_sha256: p.commitment_sha256 });
 }
 function storedCase(caseId) {
   return gh.read(PINS, C.casePath(caseId));
@@ -510,6 +512,7 @@ test("TEST 3: stamp fields come from the fetched stamp record; a caller's stampe
   assert.notEqual(r.stamp_commit, "f".repeat(40), "never the caller's");
   assert.deepEqual(storedCase(id).commitments.a, {
     commitment_sha256: a.commitment_sha256, registered_at: "2026-10-10T08:00:00Z", stamp_commit: history[0].sha, stamped_at: STAMPED,
+    key_id: REG.keyIdOf(REG.KEYS.a),
   });
 });
 
@@ -580,16 +583,17 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
     assert.equal(res._status, 400, String(role));
     assert.equal(res._body.error_code, "bad_role");
   }
-  const unknown = await commit({ ...reg(id, a), case_id: "9".repeat(64) });
+  const unknown = await commit(REG.signedBody({ case_id: "9".repeat(64), role: "a", commitment_sha256: a.commitment_sha256 }));
   assert.equal(unknown._status, 404);
   assert.equal(unknown._body.error_code, "case_not_found");
 
   // A VERDICT case and a WITHDRAWN (redacted) case, both valid records.
   const opened = C.validateOpening(opening({ scope_digest: sha("verdict case") })).opening;
   const vid = C.deriveCaseId(opened);
-  const entry = (h) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: null, stamped_at: "2026-10-10T07:49:00.000Z" });
+  const entry = (h, r) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: null, stamped_at: "2026-10-10T07:49:00.000Z",
+    key_id: REG.keyIdOf(REG.KEYS[r]) });
   const reveal = { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T08:10:00Z" };
-  const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1")), b: entry(sha("2")) }, reveals: { a: reveal, b: reveal },
+  const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1"), "a"), b: entry(sha("2"), "b") }, reveals: { a: reveal, b: reveal },
     verdict: { kind: "arcaeon-reconcile-receipt" }, status: "VERDICT" };
   assert.deepEqual(C.validateCase(verdictCase), { ok: true }, "fixture: the planted VERDICT case is a valid record");
   gh.seed(PINS, C.casePath(vid), verdictCase);

@@ -9,7 +9,15 @@
 //     assertion that fails.
 // One claim says the code has NO defect (GPT-5.6 §4, a cross-key quota
 // burn): its test asserts that, and passes.
-// No code under test is changed. Every store is the in-memory mock.
+// When this file was written no code under test was changed. Every store is
+// the in-memory mock.
+//
+// FIXED SINCE, each in its own commit, its test's `todo` removed and its
+// named assertion kept, with tests of the fix beside it:
+//   - GPT-5.6 §2A, a one-key bilateral case: red-team fix A, ONE KEY PER
+//     ROLE (lib/_case.js). Registration is signed by a registration key, the
+//     two roles take two distinct key ids (409 same_key_both_roles), and a
+//     case whose two commitments share one is single_party, never sealed.
 //
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
@@ -63,6 +71,7 @@ const checkpoint = require("../lib/_checkpoint.js");
 const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
 const { canonicalBytes } = require("../lib/_check_record.js");
+const REG = require("./helpers/case_registration.js");
 const reconcileFixtures = require("./fixtures/reconcile/cases.json");
 
 const PINS = process.env.GITHUB_PIN_REPO;
@@ -86,6 +95,8 @@ const KEYS_DOC = Object.freeze(docWith(entry(CASE_KEY)));
 const OPEN_KEY = "case-test-open-key-0021";
 const VICTIM_KEY = "case-test-open-key-0022";
 const OPEN_AUTH = Object.freeze({ authorization: `Bearer ${OPEN_KEY}` });
+const ATTACKER = Object.freeze({ side: "agent", label: "attacker-account" });
+const HONEST = Object.freeze({ side: "tool", label: "honest-party-account" });
 const XREF = Object.freeze({ operator: "second-operator.example", reference: "case-ref-0042", url: "https://second-operator.example/cases/0042" });
 
 function tapePair() {
@@ -149,14 +160,16 @@ function party(caseId, role, tape, salt = C.newSalt()) {
   const tape_sha256 = sha(tape);
   return { role, tape, tape_sha256, salt, commitment_sha256: C.commitmentSha256({ case_id: caseId, role, tape_sha256, salt }) };
 }
-async function commit(id, p, now = NOW) {
+// A registration, signed by `key` (the role's own test key by default: two
+// roles, two key ids, red-team fix A).
+async function commit(id, p, now = NOW, key = REG.KEYS[p.role]) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", { case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }), res, { now });
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, key)), res, { now });
   return res;
 }
-async function register(id, p) {
+async function register(id, p, key = REG.KEYS[p.role]) {
   plantStamp(p.commitment_sha256);
-  const r = await commit(id, p);
+  const r = await commit(id, p, NOW, key);
   assert.equal(r._status, 201, JSON.stringify(r._body));
 }
 async function committedCase(over) {
@@ -348,19 +361,205 @@ test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption):
 // GPT-5.6, section 2: what an adversarial role can do
 // =============================================================================
 
-test('GPT-5.6 §2A: "Create a seemingly bilateral case using an honest party\'s label": one key holder opens, registers both roles and reveals',
-  { todo: "CONFIRMED: one requester seals a case naming another party's label, and the page shows it as a party of a sealed verdict (the assertion 'a case one requester opened, registered and revealed alone is not shown as a sealed verdict naming another party' fails)" }, async () => {
-    const { id } = await sealedCase({
-      scope_digest: sha("2A"),
-      party_a: { side: "agent", label: "attacker-account" },
-      party_b: { side: "tool", label: "honest-party-account" },
-    });
-    const page = await casePage(id);
-    assert.equal(page.status, 200);
-    assert.ok(page.html.includes(CP.LABELS_SENTENCE), "the page carries the labels sentence");
-    const shown = page.html.includes("honest-party-account") && page.html.includes("<h2>The verdict</h2>");
-    assert.equal(shown, false, "a case one requester opened, registered and revealed alone is not shown as a sealed verdict naming another party");
-  });
+test('GPT-5.6 §2A: "Create a seemingly bilateral case using an honest party\'s label": one key holder opens, registers both roles and reveals', async () => {
+  // FIXED (red-team fix A, lib/_case.js ONE KEY PER ROLE): role b's
+  // registration under the key id role a registered with is refused 409
+  // same_key_both_roles, so the case never reaches COMMITTED and the reveal
+  // seals nothing.
+  const id = await openCase({ scope_digest: sha("2A"), party_a: ATTACKER, party_b: HONEST });
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  const one = REG.KEYS.a; // the one key holder's key
+  await register(id, a, one);
+  plantStamp(b.commitment_sha256);
+  const second = await commit(id, b, NOW, one);
+  assert.equal(second._status, 409, JSON.stringify(second._body));
+  assert.equal(second._body.error_code, "same_key_both_roles");
+  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "nothing was registered for role b");
+  assert.equal(storedCase(id).status, "OPEN");
+  const r = await reveal(revealBody(id, a, b));
+  assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 200));
+  const page = await casePage(id);
+  assert.equal(page.status, 200);
+  assert.ok(page.html.includes(CP.LABELS_SENTENCE), "the page carries the labels sentence");
+  const shown = page.html.includes("honest-party-account") && page.html.includes("<h2>The verdict</h2>");
+  assert.equal(shown, false, "a case one requester opened, registered and revealed alone is not shown as a sealed verdict naming another party");
+});
+
+// -----------------------------------------------------------------------------
+// Red-team fix A: ONE KEY PER ROLE (lib/_case.js). The two roles of a case are
+// registered by two distinct key ids; a case whose two commitments share one
+// never reaches sealed.
+// -----------------------------------------------------------------------------
+
+test("FIX A: the refusal is symmetric and writes nothing: role a under the key id role b registered with is 409 same_key_both_roles too", async () => {
+  const id = await openCase({ scope_digest: sha("A sym"), party_a: ATTACKER, party_b: HONEST });
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, b, REG.KEYS.b);
+  plantStamp(a.commitment_sha256);
+  const writes = gh.putLog.length;
+  const r = await commit(id, a, NOW, REG.KEYS.b);
+  assert.equal(r._status, 409, JSON.stringify(r._body));
+  assert.equal(r._body.error_code, "same_key_both_roles");
+  assert.equal(r._body.role, "a");
+  assert.equal(r._body.key_id, REG.keyIdOf(REG.KEYS.b));
+  assert.equal(gh.putLog.length, writes, "nothing written");
+  // the same role under its own key registers
+  const ok = await commit(id, a, NOW, REG.KEYS.a);
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+  assert.equal(ok._body.status, "COMMITTED");
+});
+
+test("FIX A: two registrations under two distinct key ids still seal, and the page shows the verdict naming both parties", async () => {
+  const { id } = await sealedCase({ scope_digest: sha("A two keys"), party_a: ATTACKER, party_b: HONEST });
+  const k = storedCase(id);
+  assert.equal(k.status, "VERDICT");
+  assert.equal(k.commitments.a.key_id, REG.keyIdOf(REG.KEYS.a));
+  assert.equal(k.commitments.b.key_id, REG.keyIdOf(REG.KEYS.b));
+  assert.equal(C.singleParty(k), false);
+  assert.equal(S.sealedRecordReason(k, KEYS_DOC), null);
+  for (const r of C.ROLES) {
+    const file = gh.read(PINS, C.registrationPath(id, r));
+    assert.equal(file.key_id, REG.keyIdOf(REG.KEYS[r]));
+    assert.equal(file.verifier, REG.KEYS[r].verifier);
+    assert.deepEqual(C.validateRegistrationRecord(file), { ok: true });
+  }
+  const page = await casePage(id);
+  assert.match(page.html, /<h2>The verdict<\/h2>/);
+  assert.ok(page.html.includes("honest-party-account") && page.html.includes("attacker-account"));
+  const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
+  assert.deepEqual(run.already, [id]);
+  assert.deepEqual(run.single_party, []);
+});
+
+// Two registrations under one key that race past the check: role b's
+// request reads both registration files (role a has none yet), and while it
+// reads its stamp, role a registers under the same key. Each file is first
+// write wins, so both stand, and the case projects both: COMMITTED, with one
+// key id in both commitments.
+async function racedSingleParty(scope) {
+  const id = await openCase({ scope_digest: sha(scope), party_a: ATTACKER, party_b: HONEST });
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  const one = REG.KEYS.a;
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  const r = await during(
+    (url, method) => method === "GET" && url.includes(`/repos/${STAMPS}/contents/${stamp.stampPath(b.commitment_sha256)}`),
+    () => commit(id, a, NOW + 1000, one),
+    () => commit(id, b, NOW + 2000, one),
+  );
+  assert.equal(r.fired, true, "role a registered inside role b's request");
+  assert.equal(r.inner._status, 201, JSON.stringify(r.inner._body));
+  assert.equal(r.out._status, 201, JSON.stringify(r.out._body));
+  const k = storedCase(id);
+  assert.equal(k.status, "COMMITTED");
+  assert.equal(k.commitments.a.key_id, k.commitments.b.key_id, "fixture: one key id in both commitments");
+  assert.equal(C.singleParty(k), true);
+  return { id, a, b };
+}
+
+test("FIX A: a case whose two commitments share a key id never reaches sealed: the joint reveal is 409 single_party and writes nothing", async () => {
+  const { id, a, b } = await racedSingleParty("A raced reveal");
+  const before = storedCase(id);
+  const writes = gh.putLog.length;
+  const r = await reveal(revealBody(id, a, b));
+  assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(r.body.error_code, "single_party");
+  assert.equal(r.body.key_id, before.commitments.a.key_id);
+  assert.equal(r.body.verdict, undefined, "no verdict");
+  assert.equal(gh.putLog.length, writes, "nothing written");
+  assert.deepEqual(storedCase(id), before);
+});
+
+test("FIX A: the sealer reports such a case not_sealed: single_party, and pins nothing", async () => {
+  const { id } = await racedSingleParty("A raced sealer");
+  const one = await S.anchorCase(id, { now: REVEAL_AT, keyDocument: KEYS_DOC });
+  assert.deepEqual(one, { ok: false, code: "not_sealed", status: "COMMITTED", reason: "single_party" });
+  const run = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
+  assert.equal(run.not_sealed, 1);
+  assert.deepEqual(run.single_party, [id]);
+  assert.deepEqual(run.anchored, []);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
+});
+
+test("FIX A: the case page shows such a case as single_party and names no second label", async () => {
+  const { id } = await racedSingleParty("A raced page");
+  const page = await casePage(id);
+  assert.equal(page.status, 200);
+  assert.match(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
+  assert.ok(page.html.includes("single_party"));
+  assert.ok(page.html.includes(REG.keyIdOf(REG.KEYS.a)), "the page names the one key id");
+  assert.equal(page.html.includes("honest-party-account"), false, "no second label");
+  assert.equal(page.html.includes("attacker-account"), false, "no label at all: the labels are the opener's text");
+  assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
+  assert.equal(page.html.includes("<h2>Parties</h2>"), false);
+});
+
+test("FIX A: a VERDICT whose two commitments share a key id (signed by the case key) is still not sealed: page, sealed check, sealer and reference all refuse it", async () => {
+  const { id, a } = await sealedCase({ scope_digest: sha("A forged verdict"), party_a: ATTACKER, party_b: HONEST }, { pinFails: true });
+  const k = storedCase(id);
+  const forged = S.signCase({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_id: k.commitments.a.key_id } } },
+    S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
+  assert.deepEqual(C.validateCase(forged), { ok: true }, "fixture: the schema reads it");
+  assert.notEqual(forged.sig, null, "fixture: signed by the published case key");
+  gh.seed(PINS, C.casePath(id), forged);
+  assert.deepEqual(S.sealedRecordReason(forged, KEYS_DOC), { code: "single_party", reason: "same_key_both_roles" });
+  const page = await casePage(id);
+  assert.match(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
+  assert.equal(page.html.includes("honest-party-account"), false);
+  assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
+  const one = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
+  assert.deepEqual(one, { ok: false, code: "not_sealed", status: "VERDICT", reason: "single_party" });
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  const ref = await reference({ ...proofOf(id, a), cross_reference: XREF });
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.equal(ref.body.error_code, "single_party");
+  assert.deepEqual(referenceFiles(id), []);
+});
+
+test("FIX A: a registration proves its key: a signature the verifier does not confirm is 403 registration_unauthorized, and a body without a key is 400", async () => {
+  const id = await openCase({ scope_digest: sha("A proof") });
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const fields = { case_id: id, role: "a", commitment_sha256: a.commitment_sha256 };
+  const send = async (body) => {
+    const res = makeRes();
+    await H.handleCaseCommit(req("case-commit", body), res, { now: NOW });
+    return res;
+  };
+  const writes = gh.putLog.length;
+  // signed by key b, presented under key a's verifier
+  const stolen = await send({ ...REG.signedBody(fields, REG.KEYS.b), verifier: REG.KEYS.a.verifier });
+  assert.equal(stolen._status, 403, JSON.stringify(stolen._body));
+  assert.equal(stolen._body.error_code, "registration_unauthorized");
+  // a signature over another role's fields
+  const otherRole = await send({ ...fields, verifier: REG.KEYS.a.verifier, sig: REG.signedBody({ ...fields, role: "b" }, REG.KEYS.a).sig });
+  assert.equal(otherRole._status, 403);
+  for (const drop of ["verifier", "sig"]) {
+    const body = REG.signedBody(fields);
+    delete body[drop];
+    const r = await send(body);
+    assert.equal(r._status, 400, drop);
+    assert.equal(r._body.error_code, "missing_field", drop);
+  }
+  assert.equal(gh.putLog.length, writes, "nothing written");
+  assert.equal((await send(REG.signedBody(fields)))._status, 201);
+});
+
+test("FIX A: a registration under another key for a role already registered is role_already_committed, never a replay", async () => {
+  const id = await openCase({ scope_digest: sha("A replay key") });
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a, REG.KEYS.a);
+  const other = checkpoint.generateKey("party-c.example/case-registration");
+  const r = await commit(id, a, NOW, other);
+  assert.equal(r._status, 409, JSON.stringify(r._body));
+  assert.equal(r._body.error_code, "role_already_committed");
+  const same = await commit(id, a, NOW, REG.KEYS.a);
+  assert.equal(same._status, 200, "the same registration under the same key is the replay");
+  assert.equal(same._body.existing, true);
+});
 
 test('GPT-5.6 §2B: "Before either submits the joint reveal, B sends case-withdraw ... A\'s reveal returns 409 case_withdrawn"',
   { todo: "CONFIRMED: after B's withdrawal, A's joint reveal (with both reveals, exchanged out of band) is 409 case_withdrawn (the assertion 'A's reveal still seals' fails)" }, async () => {

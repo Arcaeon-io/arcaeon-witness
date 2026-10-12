@@ -1,5 +1,33 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: red-team fix A, one key per role: a case one key registered both roles of is never sealed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** GPT-5.6's red-team review, §2A, CONFIRMED by `test/case_redteam.test.js`: one requester opened a case naming another party's label, registered both roles and revealed. The page then showed a sealed verdict naming the other party. Registration was keyless, so nothing told the two roles apart.
+- **The rule (`lib/_case.js`, ONE KEY PER ROLE).** The two roles of a case are registered by two distinct key ids.
+  - `?op=case-commit` takes `{case_id, role, commitment_sha256, verifier, sig}`. `verifier` is an Ed25519 verifier string in `lib/_checkpoint.js`'s shape. `sig` is that key's signature over the json-c14n:v1 bytes of `{kind: "case-registration-signature", v: 1, case_id, role, commitment_sha256}` (`registrationSigningBytes`; `signRegistration` makes one from a signer string).
+  - The key id is the verifier's first two segments, `<name>+<8 hex>`.
+  - A malformed verifier or sig is 400 `malformed_field`. A signature the verifier does not confirm is 403 `registration_unauthorized`, checked before anything is read.
+  - A new registration whose key id is the other role's registered key id is 409 `same_key_both_roles`, and nothing is written. The other role's registration FILE counts, not only the case object.
+  - The same commitment under another key for a role already registered is `role_already_committed`, never a replay.
+  - The registration file keeps `key_id`, `verifier` and `sig` (a reader of the file re-checks the signature); the case's commitment entry keeps `key_id`.
+  - The commitment is unchanged: the same preimage, the same 272 bytes, the same hash.
+- **A case whose two commitments share a key id** (two registrations that raced past the check, each first write wins per role, or a record no build wrote) is single party (`C.singleParty`) and never reaches sealed:
+  - the joint reveal refuses it, 409 `single_party`, and compares nothing;
+  - `sealCase` refuses to build one;
+  - THE SEALED CHECK (`sealedRecordReason`) answers `{code: "single_party", reason: "same_key_both_roles"}` for a stored VERDICT that is one, first, so `?op=case-reference` refuses it 409 `single_party`;
+  - `anchorCase` answers `not_sealed`, reason `single_party`, for one read as COMMITTED or VERDICT, and pins nothing. `anchorPending` counts it in `not_sealed` and lists it in a new `single_party` field;
+  - the case page shows SINGLE PARTY: the id, the stored status, the one key id, the opening and registration times, the record links and the four limits. It names no label (one would name a party that registered nothing), and shows no verdict, records, cross-reference or anchor, even for a VERDICT.
+- **The limit, said in the code.** Two key ids show two keys, not two holders: one holder can make a second key. What the rule removes is the one-key case, and the use of a key the registrant does not hold.
+- **Records stored before this change** carry no key. The schema now refuses them, so their page answers "Could not look" (503) and the commit and reveal paths answer `registration_record_unreadable`. None exists outside the tests and the preview's store.
+- **`tools/preview_dry_run.js`.** It registers each role under its own throwaway registration key, made for the run and held in memory. Only the verifier and the signature are sent.
+- **Tests.**
+  - `test/case_redteam.test.js`: the §2A test loses its `todo` and keeps its named assertion. Its one key holder's second registration is now 409 `same_key_both_roles`.
+  - Beside it, 8 tests of the fix: the refusal both ways; two distinct keys still seal; a raced single-party case refused by the reveal, reported `not_sealed: single_party` by the sealer, and shown as single party naming no label; a forged single-party VERDICT signed by the case key refused by the page, the sealed check, the sealer and the reference; the 403 and the 400s; another key for a registered role.
+  - Every test that registers now signs through `test/helpers/case_registration.js`, one throwaway key per role.
+  - The other 15 confirmed claims still fail at their own named assertions.
+  - `test/case_fix_mutation_gaps.test.js` (new): a must-fail pass (harness not committed) planted 37 defects in fix A's code. 18 were caught by the tests above. Of the 19 that survived, 18 are closed there and one is equivalent (A18, named in the file). Two more were planted after and are caught: A16, and A19, a key name longer than a key id holds (180 characters), which reading the diff found answering a 500. It is now a 400 `malformed_field`. Final: 39 planted (`lib/_case.js` 19, `lib/_case_http.js` 8, `lib/_case_seal.js` 5, `lib/_case_page.js` 5, `tools/preview_dry_run.js` 2), 38 caught, 1 equivalent.
+  - Suite 997 -> 1019 tests, 0 fail, 15 todo. Here: 1002 pass and the 2 environment skips.
+
 ## 2026-10-10: .gitattributes: LF everywhere, so every deployer serves the same bytes (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** On the owner's Windows checkout (`core.autocrlf true`), the working copy of `public/.well-known/arcaeon/case-signing-keys.json` is CRLF (sha256 `b6d11ab5...`), while the git blob is LF (sha256 `c17f497f...`, 2055 bytes). A prebuilt deploy uploads the working copy, so one made on Windows would serve other bytes than one made on Linux. Check (a), which compares the served bytes with the local file, would call both byte-identical.

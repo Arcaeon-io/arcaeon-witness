@@ -21,7 +21,11 @@
 //   (d) a stamp, then an immediate read of the stamp's commit, sees it: role
 //       a's commitment is stamped (POST /api/stamp, size 272) and registered
 //       at once (?op=case-commit, which reads the stamp's commit history);
-//       the registration must name the commit the stamp answered with.
+//       the registration must name the commit the stamp answered with. Each
+//       role registers under its own throwaway registration key, made for
+//       this run and held in memory only (lib/_case.js ONE KEY PER ROLE: the
+//       two roles of a case are two distinct key ids); only the public
+//       verifier and the signature are sent.
 //   (e) case-reveal with a JSON body sent chunked, with NO content-length
 //       header, is accepted: role b is stamped and registered, then the
 //       joint reveal goes out in chunks and must answer 201, sealed VERDICT,
@@ -117,6 +121,7 @@ const http = require("http");
 const https = require("https");
 const C = require("../lib/_case.js");
 const S = require("../lib/_case_seal.js");
+const checkpoint = require("../lib/_checkpoint.js"); // generateKey: the run's two registration keys
 
 const ROOT = path.join(__dirname, "..");
 const VERIFIED = "VERIFIED";
@@ -389,9 +394,13 @@ async function stampIt(ctx, sha) {
   return { ok: false, verdict: broken(`the stamp answered ${said(ans)}, not 201`) };
 }
 
+// A registration signed by the role's own key for this run (ONE KEY PER
+// ROLE, lib/_case.js): the verifier and the signature, never the key.
 async function register(ctx, caseId, p) {
   ctx.log(`case-commit role ${p.role}`);
-  const ans = await postJson(ctx, "/api/verify?op=case-commit", { case_id: caseId, role: p.role, commitment_sha256: p.commitment_sha256 });
+  const k = ctx.regKeys[p.role];
+  const fields = { case_id: caseId, role: p.role, commitment_sha256: p.commitment_sha256 };
+  const ans = await postJson(ctx, "/api/verify?op=case-commit", { ...fields, verifier: k.verifier, sig: C.signRegistration(fields, k.signer) });
   return { ans, json: ans.error ? null : tryJson(ans.body) };
 }
 
@@ -800,6 +809,8 @@ async function run(opts) {
     root,
     vercel,
     runId: crypto.randomBytes(8).toString("hex"),
+    // One registration key per role, for this run only, never printed.
+    regKeys: { a: checkpoint.generateKey("preview-dry-run/party-a"), b: checkpoint.generateKey("preview-dry-run/party-b") },
     tapes: loadTapes(root),
     first: null,
     roleA: null,

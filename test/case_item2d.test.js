@@ -48,6 +48,7 @@ const crypto = require("node:crypto");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const keys = require("../lib/_keys.js");
 const C = require("../lib/_case.js");
@@ -148,7 +149,7 @@ async function committedCase({ over } = {}) {
   for (const p of [a, b]) {
     plantStamp(p.commitment_sha256);
     const r = makeRes();
-    await H.handleCaseCommit(req("case-commit", { case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }), r, { now: NOW });
+    await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), r, { now: NOW });
     assert.equal(r._status, 201, JSON.stringify(r._body));
   }
   return { id, a, b };

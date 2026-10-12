@@ -49,6 +49,7 @@ const crypto = require("node:crypto");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
+const REG = require("./helpers/case_registration.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -93,6 +94,7 @@ function reg(role, commitment, registeredAt = "2026-10-10T08:00:00Z") {
   return C.registrationRecord({
     case_id: ID, role, commitment_sha256: commitment, registered_at: registeredAt,
     stamp_commit: "1".repeat(40), stamped_at: "2026-10-10T07:45:00.123Z",
+    ...REG.keyFields({ case_id: ID, role, commitment_sha256: commitment }),
   });
 }
 const OPEN_CASE = C.newCase(OPENING, ID);
@@ -263,7 +265,7 @@ function commitmentFor(role, tape) {
 async function commit(role, commitment) {
   plantStamp(commitment);
   const res = makeRes();
-  await H.handleCaseCommit(post("case-commit", { case_id: ID, role, commitment_sha256: commitment }), res, { now: NOW });
+  await H.handleCaseCommit(post("case-commit", REG.signedBody({ case_id: ID, role, commitment_sha256: commitment })), res, { now: NOW });
   return res;
 }
 // The case's PUT, held until `plant` has changed the store (another writer landed first).
@@ -288,7 +290,10 @@ test("H18 (judgeRegistration, the role at its path): commit_a.json whose record 
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
   const file = gh.read(PINS, C.registrationPath(ID, "a"));
-  gh.seed(PINS, C.registrationPath(ID, "a"), { ...file, role: "b" });
+  // a valid role-b record (signed as role b) at role a's path
+  const asB = { ...file, role: "b", sig: C.signRegistration({ case_id: ID, role: "b", commitment_sha256: file.commitment_sha256 }, REG.KEYS.a.signer) };
+  assert.deepEqual(C.validateRegistrationRecord(asB), { ok: true }, "fixture: a valid record");
+  gh.seed(PINS, C.registrationPath(ID, "a"), asB);
   const res = await commit("b", commitmentFor("b", "tape b"));
   assert.equal(res._status, 503, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "registration_record_unreadable");
