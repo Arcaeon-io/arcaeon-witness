@@ -481,8 +481,9 @@ test("CRASH BETWEEN THE PHASES: the case file written and its pin not; the answe
   assert.equal(r.body.case_commit, sealCommit(id), "the answer still names the case file's commit");
   assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
   // the case's PUT answered without its commit: a process that died right after the write
+  // (the reveal's attempt is the case file's first PUT since red-team fix E; the seal's is the second)
   const c = await committedCase("J crash answer");
-  gh.dropCommitFromAnswer(PINS, C.casePath(c.id), 1);
+  gh.dropCommitFromAnswer(PINS, C.casePath(c.id), 2);
   const lost = await reveal(c);
   assert.equal(lost.status, 201);
   assert.equal(lost.body.case_commit, null);

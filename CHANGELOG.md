@@ -1,5 +1,34 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Red-team fix E: the two-phase reveal; a comparison that ran always leaves its trace (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §1.3).** "The system has run the comparison but leaves only a normal COMMITTED case": a reveal whose root write failed after the comparison left the record byte-identical to the COMMITTED case.
+- **THE TWO-PHASE REVEAL** (`lib/_case.js`, `lib/_case_http.js`). Before it compares anything, the reveal writes `reveal_attempt` into the COMMITTED case, a CAS over the case as read. The attempt is `{commitments: {a, b}, input_sha256, at}`:
+  - `commitments`: the two registered commitment hashes;
+  - `input_sha256`: the sha256 of the json-c14n:v1 comparison input, `{kind: "case-reveal-input", v: 1, case_id, policy_version, tape_a_sha256, tape_b_sha256}` (`C.revealInputSha256`);
+  - `at`: the service clock.
+- **Then one of two things.** The root write, a CAS over the attempt as written, replaces the record with the sealed case (VERDICT, which carries neither field). Or the record stays COMMITTED with the attempt and `reveal_failure: {reason, at}`. The reasons are `comparison_failed`, `receipt_check_failed`, `verdict_not_sealable`, `seal_build_failed` and `case_seal_failed`. The answer says whether the failure write landed (`reveal_failure_recorded`).
+- **When nothing is written.**
+  - An attempt that cannot be written compares nothing: 503 `reveal_attempt_unwritten`.
+  - A case that moved under the attempt is refused by what it now is.
+  - The reconcile signer is now checked before the attempt, so a reveal that cannot compare records nothing.
+- **The schema.** Only a COMMITTED case carries the fields. The attempt names the case's own commitments, a failure stands only beside an attempt, and fields are exact.
+- **The sealer** reports a COMMITTED case with an attempt as `not_sealed`, reason `reveal_incomplete`, and lists it in `reveal_incomplete`, never as a clean COMMITTED.
+- **The page** says a reveal was attempted at T and did not complete (reason, at), or does not record that it completed. It does not show the input hash.
+- **The same reveal sent again seals.** The new attempt replaces the old one and its failure.
+- **A case with a reveal attempt is not withdrawn by one role:** 409 `reveal_attempted`. A withdrawal would erase the trace.
+- **Tests.**
+  - `test/case_consent.test.js` +5:
+    - the attempt is in the record when the comparison runs;
+    - a failed root write leaves the attempt and the failure, and the sealer reports reveal_incomplete, and the page says so, and the retry seals;
+    - an unwritable attempt compares nothing;
+    - failures recorded by reason;
+    - the withdrawal refused;
+    - the schema.
+  - The §1.3 red-team test loses its todo and keeps its named assertion. Its fixture now fails the case file's second PUT (the seal's; the first is the attempt).
+  - Four tests that counted the reveal's case writes, failed the first one, or listed a VERDICT's optional fields were updated by design.
+- Suite 1118 -> 1123 tests, 0 fail, 4 -> 3 todo. Here: 1118 pass and the 2 environment skips.
+
 ## 2026-10-12: Red-team fix D: a reference row only to a case that is pinned or anchored (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §1.2).** "A reference may be appended before the case anchor exists": a role's reference to a sealed case whose pin was not written was 201.

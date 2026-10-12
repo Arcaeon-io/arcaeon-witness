@@ -39,6 +39,11 @@
 //     (lib/_case_http.js ?op=case-reference, step 1c). A case whose state is
 //     not pinned or anchored (Design J's words) is 409 case_not_anchored,
 //     with its state; no row is written.
+//   - GPT-5.6 §1.3, a comparison that ran leaving a clean COMMITTED case:
+//     FIX E, THE TWO-PHASE REVEAL (lib/_case_http.js). The reveal writes
+//     reveal_attempt into the case before it compares; a root write that
+//     then fails leaves COMMITTED with reveal_attempt and reveal_failure,
+//     and the sealer reports not_sealed: reveal_incomplete.
 //   - GPT-5.6 §3.2, no commit bound to a sealed case: Design J, THE PIN IS
 //     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
 //     commit that wrote the sealed case file, and every reader reads the
@@ -326,24 +331,32 @@ test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be a
   assert.deepEqual([r.status, r.body.error_code, r.body.state], [409, "case_not_anchored", "commit_unrecorded"]);
 });
 
-test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comparison, the system has run the comparison but leaves only a normal COMMITTED case" (the sealer, run mid-reveal, reports it as not_sealed)',
-  { todo: "CONFIRMED: after the comparison ran and the root write failed, the case record is byte-identical to the COMMITTED case before the reveal (the assertion 'a comparison that ran leaves a trace in the case record' fails)" }, async (t) => {
-    const { id, a, b } = await committedCase({ scope_digest: sha("1.3") });
-    const before = storedCase(id);
-    const compare = t.mock.method(RECONCILE, "compare");
-    gh.forceFailure(PINS, C.casePath(id), 1, 502);
-    const r = await during(
-      (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(id)}`),
-      () => S.anchorPending({ now: REVEAL_AT }),
-      () => reveal(revealBody(id, a, b)),
-    );
-    assert.equal(r.fired, true);
-    assert.equal(r.inner.not_sealed, 1, "the sealer, mid-reveal, saw a COMMITTED case");
-    assert.equal(r.out.status, 503, JSON.stringify(r.out.body).slice(0, 300));
-    assert.equal(r.out.body.error_code, "case_seal_failed");
-    assert.equal(compare.mock.callCount(), 1, "the comparison ran");
-    assert.notDeepEqual(storedCase(id), before, "a comparison that ran leaves a trace in the case record");
-  });
+test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comparison, the system has run the comparison but leaves only a normal COMMITTED case" (the sealer, run mid-reveal, reports it as not_sealed)', async (t) => {
+  const { id, a, b } = await committedCase({ scope_digest: sha("1.3") });
+  const before = storedCase(id);
+  const compare = t.mock.method(RECONCILE, "compare");
+  // FIX E: the case file's first write is the reveal's attempt, before the
+  // comparison; the root write that fails is its second
+  let puts = 0;
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(id)}`) && ++puts === 2,
+    () => {
+      gh.forceFailure(PINS, C.casePath(id), 1, 502);
+      return S.anchorPending({ now: REVEAL_AT });
+    },
+    () => reveal(revealBody(id, a, b)),
+  );
+  assert.equal(r.fired, true);
+  assert.equal(r.inner.not_sealed, 1, "the sealer, mid-reveal, saw a COMMITTED case");
+  assert.deepEqual(r.inner.reveal_incomplete, [id], "FIX E: and says the reveal is incomplete, never a clean COMMITTED");
+  assert.equal(r.out.status, 503, JSON.stringify(r.out.body).slice(0, 300));
+  assert.equal(r.out.body.error_code, "case_seal_failed");
+  assert.equal(compare.mock.callCount(), 1, "the comparison ran");
+  assert.notDeepEqual(storedCase(id), before, "a comparison that ran leaves a trace in the case record");
+  assert.equal(storedCase(id).status, "COMMITTED");
+  assert.ok(storedCase(id).reveal_attempt, "FIX E: the attempt");
+  assert.equal(storedCase(id).reveal_failure.reason, "case_seal_failed", "and its failure");
+});
 
 test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"', async () => {
   // FIXED (Design I, lib/_case_seal.js THE SEALED CHECK): a sealed case is

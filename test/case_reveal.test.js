@@ -664,8 +664,10 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
   assert.equal(r.body.reason, "receipt_tape_a_mismatch");
   assert.equal(r.body.verdict, undefined);
   assert.equal(runs(), 1, "the comparison ran; its receipt was refused");
-  assert.equal(gh.putLog.length, writes, "nothing sealed, nothing pinned");
+  // red-team fix E: the attempt, before the comparison, and its failure; nothing sealed, nothing pinned
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.casePath(id), C.casePath(id)]);
   assert.equal(storedCase(id).status, "COMMITTED");
+  assert.equal(storedCase(id).reveal_failure.reason, "receipt_check_failed");
   // control: the real builder seals
   assert.equal((await reveal(revealBody(id, a, b))).status, 201);
 });
@@ -728,7 +730,7 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT", "the case file stands");
   assert.deepEqual(C.validateCase(k), { ok: true });
-  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, ...C.OPTIONAL_TOP_LEVEL_FIELDS].sort(), "no anchor or pin field in the case");
+  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under"].sort(), "no anchor or pin field in the case (and no reveal attempt: a sealed case is the seal)");
   assert.equal(gh.has(PINS, paths.seq), false);
   assert.equal(gh.has(PINS, paths.latest), false);
   assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "commit_unrecorded", reason: "not_pinned" }, "computed from the pin's absence");
@@ -740,8 +742,19 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
 test("TEST 8: a case write that fails leaves no pin and the case COMMITTED; the same reveal then seals", async (t) => {
   const runs = spyReconcile(t);
   const { id, a, b } = await committedCase();
-  gh.forceFailure(PINS, C.casePath(id), 1, 500);
-  const r = await reveal(revealBody(id, a, b));
+  // red-team fix E: the case file's second PUT is the seal's (its first is the reveal's attempt)
+  let puts = 0;
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if ((o && o.method) === "PUT" && String(url).includes(`/contents/${C.casePath(id)}`) && ++puts === 2) gh.forceFailure(PINS, C.casePath(id), 1, 500);
+    return viaMock(url, o);
+  };
+  let r;
+  try {
+    r = await reveal(revealBody(id, a, b));
+  } finally {
+    global.fetch = viaMock;
+  }
   assert.equal(r.status, 503, JSON.stringify(r.body));
   assert.equal(r.body.error_code, "case_seal_failed");
   assert.equal(r.body.verdict, undefined);
