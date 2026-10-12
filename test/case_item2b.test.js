@@ -99,6 +99,9 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const LOG_ENV = "WITNESS_LOG_SIGNER_KEY";
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer });
+// The service's reconcile verifier, public, as a reader with no signer key
+// (the sealer, a page in this process) is told it (red-team fix B).
+process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // Item 2c: the case key signs only as an ACTIVE entry of the key document,
 // and the anchor retry checks a stored signature against it; the committed
 // document lists no key, so the signing tests hand the seal, the retry and
@@ -293,13 +296,22 @@ test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS
   assert.equal(loaded.ok, false);
   assert.equal(loaded.code, "key_separation_unverifiable");
   assert.match(loaded.reason, /WITNESS_RECONCILE_SIGNER_KEY is not set/);
-  const { id } = await sealedCase({ env });
+  // Since red-team fix B a deployment with no reconcile signer compares
+  // nothing, so in this environment the reveal seals nothing at all.
+  const c = await committedCase();
+  const refused = await reveal(revealBody(c.id, c.a, c.b), { env });
+  assert.equal(refused.status, 503, JSON.stringify(refused.body).slice(0, 200));
+  assert.equal(refused.body.error_code, "signer_unavailable");
+  assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed, so never signed with the receipt key");
+  // The unsigned seal itself, where separation cannot be shown beside a
+  // reconcile signer: the log key unset.
+  const { id } = await sealedCase({ over: { scope_digest: sha("log key unset") }, env: { [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
   const k = storedCase(id);
   assert.equal(k.sig, null, "never signed");
   assert.equal(k.signed_by, null);
-  assert.match(k.sig_reason, /^This case is sealed and not signed \(key_separation_unverifiable\): /);
-  assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(RECEIPT_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
-  assert.equal(S.verifyCase(k, RECEIPT_KEY.verifier, { nowMs: REVEAL_AT }).reason, "unsigned");
+  assert.match(k.sig_reason, /^This case is sealed and not signed \(key_separation_unverifiable\): .*WITNESS_LOG_SIGNER_KEY is not set/);
+  assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
+  assert.equal(S.verifyCase(k, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "unsigned");
   // MUST-FAIL ARM: the 2a guard could not see the receipt key and would have
   // signed the case with it.
   assert.equal(guard2a(env), true);

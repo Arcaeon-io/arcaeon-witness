@@ -85,9 +85,17 @@ const SECRETS = [KEY, OPERATOR_KEY, PIN_TOKEN, BYPASS, WRONG_BYPASS];
 // with them, and the dry run judges (e) and (f) against that document,
 // unless a test says otherwise. The CLI runs keep the committed document.
 const CASE_KEY = checkpoint.generateKey("test.example/dry-run-case");
+// The deployment's reconcile signer (red-team fix B: without one the
+// stand-in compares nothing), one throwaway key: in SIGNING_ENV, and in this
+// process's environment, which the stand-in's api/verify.js reads. The dry
+// run is told its public verifier: in process, through this environment
+// (lib/_reconcile_receipt.js expectedVerifier), and in a CLI run through
+// WITNESS_RECONCILE_VERIFIER (runCli).
+const RECONCILE_KEY = checkpoint.generateKey("test.example/dry-run-reconcile");
+process.env.WITNESS_RECONCILE_SIGNER_KEY = RECONCILE_KEY.signer;
 const SIGNING_ENV = Object.freeze({
   [S.CASE_SIGNER_ENV]: CASE_KEY.signer,
-  WITNESS_RECONCILE_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-reconcile").signer,
+  WITNESS_RECONCILE_SIGNER_KEY: RECONCILE_KEY.signer,
   WITNESS_LOG_SIGNER_KEY: checkpoint.generateKey("test.example/dry-run-log").signer,
 });
 const COMMITTED_DOC = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf8"));
@@ -474,6 +482,30 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   assert.equal(process.env.GITHUB_PIN_TOKEN, "test-token", "the pin token is put back");
 });
 
+test("(e), (f) RED-TEAM FIX B: the receipt is held to the reconcile verifier the dry run is told; another key's receipt is BROKEN receipt_unsigned, and with none known (e) and (f) are COULD NOT LOOK, saying why", async (t) => {
+  // The preview's receipts are RECONCILE_KEY's; the dry run is told another key.
+  const other = checkpoint.generateKey("test.example/dry-run-other-reconcile");
+  const wrong = await dryRun(t, { receiptVerifier: other.verifier, pinToken: PIN_TOKEN });
+  assert.equal(word(wrong, "e"), "BROKEN", wrong.show);
+  assert.match(wrong.by.e.line, /its sealed record does not hold against this checkout's .* \(receipt_unsigned: unknown_signer\)$/);
+  // A pass told the other key refuses the case the preview sealed.
+  const sealedId = /case_id ([0-9a-f]{64})/.exec(wrong.by.e.line)[1];
+  assert.equal(gh.read(PINS, C.casePath(sealedId)).status, "VERDICT", "fixture: the preview sealed it");
+  assert.equal(word(wrong, "f"), "BROKEN", wrong.show);
+  assert.ok(wrong.by.f.line.includes(`refused ${sealedId} (receipt_unsigned)`), wrong.by.f.line);
+  // Told no verifier at all.
+  const none = await dryRun(t, { receiptVerifier: null, pinToken: PIN_TOKEN });
+  for (const id of ["e", "f"]) {
+    assert.equal(word(none, id), "COULD NOT LOOK", none.show);
+    assert.match(none.by[id].line, /no reconcile verifier is known here \(set WITNESS_RECONCILE_VERIFIER to the public verifier of the preview's WITNESS_RECONCILE_SIGNER_KEY\), so the receipt's signer cannot be checked$/);
+  }
+  assert.equal(none.code, 3);
+  // control: told the preview's own verifier, both hold
+  const right = await dryRun(t, { receiptVerifier: RECONCILE_KEY.verifier, pinToken: PIN_TOKEN });
+  assert.equal(word(right, "e"), "VERIFIED", right.show);
+  assert.equal(word(right, "f"), "VERIFIED", right.show);
+});
+
 test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own chain; an anchor read under another chain is BROKEN", async (t) => {
   const real = S.anchorState;
   S.anchorState = async () => ({ pin: "anchored", record: { chain: "0".repeat(64) } });
@@ -643,7 +675,8 @@ const UNSIGNED_E = /^BROKEN \(e\) chunked case-reveal: case-reveal with .* answe
 
 function runCli(args, extraEnv = {}) {
   return new Promise((resolve) => {
-    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GITHUB_|STAMP_|WITNESS_|VERCEL_)/.test(k))), ...extraEnv };
+    const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GITHUB_|STAMP_|WITNESS_|VERCEL_)/.test(k))),
+      WITNESS_RECONCILE_VERIFIER: RECONCILE_KEY.verifier, ...extraEnv };
     const child = spawn(process.execPath, [TOOL, ...args], { env });
     let stdout = "";
     let stderr = "";

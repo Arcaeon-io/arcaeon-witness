@@ -1,5 +1,45 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: red-team fix B, a receipt is the service's: a stored reconcile receipt holds only when the service's reconcile signer signed it, and no signer means no comparison (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** GPT-5.6's red-team review, §3.1, CONFIRMED by `test/case_redteam.test.js`: a sealed case built from a receipt no comparison produced, unsigned, passed `sealedRecordReason`. Its page showed MATCHED and "The service ran its recorded comparison once". A stored receipt was checked under the verifier it carried itself, so a receipt signed by any key, or by none, passed.
+- **The rule (`lib/_case_seal.js`, A RECEIPT IS THE SERVICE'S).** A stored receipt holds only with a signature by the service's reconcile signer over its canonical bytes.
+  - `checkStoredReceipt` answers `receipt_unsigned` when the receipt is unsigned, signed under another verifier, or read where no verifier is known.
+  - THE SEALED CHECK (`sealedRecordReason`) answers `{code: "receipt_unsigned", reason}`, the reason one of `unsigned`, `unknown_signer` or `no_reconcile_verifier`.
+  - A receipt that names the service's verifier but whose signature does not verify was altered after signing. That stays `verdict_unbound`, `receipt_bad_signature`, as before.
+  - The seal-time `checkReceipt` refuses no signer, or an unsigned receipt, as `receipt_unsigned` (before, an unsigned receipt matched to a keyless deployment passed).
+- **Who refuses such a case.**
+  - The case page shows SEALED RECORD DOES NOT VERIFY, naming the check ("the receipt's signer") with code `receipt_unsigned` and the reason.
+  - `anchorCase` refuses it (`refused`, code `receipt_unsigned`) and pins nothing.
+  - `?op=case-reference` refuses it 409 `receipt_unsigned`.
+  - A case whose receipt the service's signer signed shows and anchors as before.
+- **The service's verifier** (`lib/_reconcile_receipt.js` `expectedVerifier`) is read from the reader's environment, in this order:
+  1. the public half of `WITNESS_RECONCILE_SIGNER_KEY` (on the deployment, so the page and the reference need no new setting);
+  2. else `WITNESS_RECONCILE_VERIFIER` (new): the verifier string alone, for a reader that holds no signer key, such as the operator's sealer run (`tools/seal_batch.js`) and the dry run.
+  - Neither, or neither parsing, is no verifier, and every receipt is refused. The case page and the reference read their deployment's environment. `anchorCase`, `anchorPending` and `lib/_sealer.js` `anchorCases` take a `receiptVerifier` and read the process environment without one.
+- **Fail closed (`lib/_reconcile_http.js`, NO SIGNER, NO RECEIPT).** With `WITNESS_RECONCILE_SIGNER_KEY` absent or unreadable:
+  - `?op=reconcile` refuses 503 `signer_unavailable`, with no verdict and no receipt, before the tapes are compared;
+  - the joint reveal refuses the same way (it runs the same `compare`): nothing compared, nothing sealed.
+  - The service never hands out an unsigned receipt. `signReceipt` can still write the unsigned form when handed no signer, since a reader must recognise one; no path of the service hands it none.
+- **`tools/preview_dry_run.js`.** (e) and (f) hold the receipt to the reconcile verifier read from this machine's environment (`WITNESS_RECONCILE_VERIFIER`, public). A receipt signed by another key is BROKEN `receipt_unsigned`. With no verifier known, (e) and (f) are COULD NOT LOOK and say so.
+- **For the owner.**
+  - The deployment must hold `WITNESS_RECONCILE_SIGNER_KEY`, or `?op=reconcile` and every reveal answer 503.
+  - The machine that runs `tools/seal_batch.js` or the dry run needs `WITNESS_RECONCILE_VERIFIER` set to that key's public verifier, or the sealer refuses every sealed case and the dry run cannot look.
+  - Only one verifier is held at a time: rotating the reconcile key would make cases sealed under the old key read `unknown_signer`.
+- **Tests.**
+  - `test/case_redteam.test.js`: the §3.1 test loses its `todo` and keeps its named assertion. Its page assertions now say SEALED RECORD DOES NOT VERIFY with `receipt_unsigned` and no MATCHED.
+  - Beside it, 4 tests of the fix: 503 `signer_unavailable` from `?op=reconcile` for an absent, empty or unparseable signer, with the port never run; the same from the reveal, nothing written; a receipt signed by the wrong key refused by the sealed check, the page, `anchorCase`, `anchorPending` and the reference; and the readers (no verifier refuses everything; the signer key or the public verifier each name it).
+  - The other 14 confirmed claims still fail at their own named assertions.
+  - Test environments now carry a throwaway reconcile signer where the real dispatch runs, and the public verifier where readers run:
+    - `test/reconcile_endpoint.test.js`;
+    - one 2a reveal through `api/verify.js`;
+    - the dry run's stand-in;
+    - the case test files.
+  - Expectations changed by design: the 2b separation test's environment with no reconcile signer now gets 503 from the reveal, so its unsigned-seal half runs with the log key unset instead; the seal-time check's two unsigned arms read `receipt_unsigned`.
+  - `test/preview_dry_run.test.js` +1: the wrong verifier, none, and the right one.
+  - `test/case_fix_mutation_gaps.test.js` +4: a must-fail pass (harness not committed) planted 34 defects in fix B's code. 28 were caught by the tests above. Of the 6 that survived, 5 are closed there and one is equivalent (S11, named in the file). Final: 34 planted, 33 caught, 1 equivalent.
+  - Suite 1019 -> 1028 tests, 0 fail, 14 todo. Here: 1012 pass and the 2 environment skips.
+
 ## 2026-10-12: red-team fix A, one key per role: a case one key registered both roles of is never sealed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** GPT-5.6's red-team review, §2A, CONFIRMED by `test/case_redteam.test.js`: one requester opened a case naming another party's label, registered both roles and revealed. The page then showed a sealed verdict naming the other party. Registration was keyless, so nothing told the two roles apart.

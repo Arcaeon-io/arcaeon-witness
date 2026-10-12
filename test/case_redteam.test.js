@@ -18,6 +18,11 @@
 //     ROLE (lib/_case.js). Registration is signed by a registration key, the
 //     two roles take two distinct key ids (409 same_key_both_roles), and a
 //     case whose two commitments share one is single_party, never sealed.
+//   - GPT-5.6 §3.1, a verdict no comparison produced: red-team fix B, A
+//     RECEIPT IS THE SERVICE'S (lib/_case_seal.js). A stored receipt holds
+//     only when the service's reconcile signer signed it (receipt_unsigned
+//     otherwise, and the page does not verify the record), and with no
+//     reconcile signer nothing is compared (503 signer_unavailable).
 //
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
@@ -88,6 +93,9 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const OTHER_KEY = checkpoint.generateKey("arcaeon.io/case-test-unlisted/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
+// The service's reconcile verifier, public, as a reader with no signer key
+// (the sealer, a page in this process) is told it (red-team fix B).
+process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const keyIdOf = (k) => k.verifier.split("+").slice(0, 2).join("+");
 const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status });
 const docWith = (...entries) => ({ ...S.PUBLISHED_KEYS, keys: entries });
@@ -603,25 +611,140 @@ test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeated
 // GPT-5.6, section 3: silent operator actions
 // =============================================================================
 
-test('GPT-5.6 §3.1 / §5 / §6.3: "Fabricate a case verdict without actually running reconcile ... If the reconcile receipt is unsigned, checkStoredReceipt() accepts it" (and the page says "The service ran its recorded comparison once")',
-  { todo: "CONFIRMED: a sealed case built from a receipt no comparison produced passes sealedRecordReason and the page shows its verdict (the assertion 'a verdict no comparison produced does not pass the sealed check' fails)" }, async (t) => {
-    const { id, a, b } = await committedCase({ scope_digest: sha("3.1") });
-    const compare = t.mock.method(RECONCILE, "compare");
-    const result = { verdict: "MATCHED", at: null, side: null, matched: 999, counts: { agent: 999, tool: 999 }, findings: [], could_not_look: [], exit_code: 0 };
-    const receipt = receipts.signReceipt(receipts.buildReceipt({ bytesA: AGENT_TAPE, bytesB: TOOL_TAPE, result, now: REVEAL_AT }), { ok: false, reason: "no signer" });
-    const st = S.storableReceipt(receipt);
-    assert.equal(st.ok, true);
-    const fabricated = S.sealCase(storedCase(id), {
-      reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-      receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
-    }, { ok: false, code: "case_key_unset", reason: "no case signing key is configured" });
-    gh.seed(PINS, C.casePath(id), fabricated);
-    const page = await casePage(id);
-    assert.equal(compare.mock.callCount(), 0, "reconcile never ran");
-    assert.match(page.html, /<span class="word pass">MATCHED<\/span>/);
-    assert.match(page.html, /The service ran its recorded comparison once/);
-    assert.notEqual(S.sealedRecordReason(fabricated, KEYS_DOC), null, "a verdict no comparison produced does not pass the sealed check");
-  });
+test('GPT-5.6 §3.1 / §5 / §6.3: "Fabricate a case verdict without actually running reconcile ... If the reconcile receipt is unsigned, checkStoredReceipt() accepts it" (and the page says "The service ran its recorded comparison once")', async (t) => {
+  // FIXED (red-team fix B, lib/_case_seal.js A RECEIPT IS THE SERVICE'S): a
+  // stored receipt not signed by the service's reconcile signer is
+  // receipt_unsigned, and the page shows the record as not verifying.
+  const { id, a, b } = await committedCase({ scope_digest: sha("3.1") });
+  const compare = t.mock.method(RECONCILE, "compare");
+  const result = { verdict: "MATCHED", at: null, side: null, matched: 999, counts: { agent: 999, tool: 999 }, findings: [], could_not_look: [], exit_code: 0 };
+  const receipt = receipts.signReceipt(receipts.buildReceipt({ bytesA: AGENT_TAPE, bytesB: TOOL_TAPE, result, now: REVEAL_AT }), { ok: false, reason: "no signer" });
+  const st = S.storableReceipt(receipt);
+  assert.equal(st.ok, true);
+  const fabricated = S.sealCase(storedCase(id), {
+    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+  }, { ok: false, code: "case_key_unset", reason: "no case signing key is configured" });
+  gh.seed(PINS, C.casePath(id), fabricated);
+  const page = await casePage(id);
+  assert.equal(compare.mock.callCount(), 0, "reconcile never ran");
+  assert.match(page.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(page.html.includes("receipt_unsigned"));
+  assert.doesNotMatch(page.html, /<span class="word pass">MATCHED<\/span>/);
+  assert.doesNotMatch(page.html, /The service ran its recorded comparison once/);
+  assert.equal(S.checkStoredReceipt(fabricated), "receipt_unsigned");
+  assert.deepEqual(S.sealedRecordReason(fabricated, KEYS_DOC), { code: "receipt_unsigned", reason: "unsigned" });
+  assert.notEqual(S.sealedRecordReason(fabricated, KEYS_DOC), null, "a verdict no comparison produced does not pass the sealed check");
+});
+
+// -----------------------------------------------------------------------------
+// Red-team fix B: A RECEIPT IS THE SERVICE'S (lib/_case_seal.js). A stored
+// receipt holds only with a signature by the service's reconcile signer over
+// its canonical bytes; with no reconcile signer, the service compares nothing.
+// -----------------------------------------------------------------------------
+
+const WRONG_RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
+
+test("FIX B: op=reconcile with WITNESS_RECONCILE_SIGNER_KEY absent or unreadable is 503 signer_unavailable: no receipt, no verdict, and the comparison never runs", async (t) => {
+  const T = require("../lib/_reconcile_tapes.js");
+  const port = t.mock.method(T, "reconcileTapes");
+  const body = { agent_tape_b64: AGENT_TAPE.toString("base64"), tool_tape_b64: TOOL_TAPE.toString("base64") };
+  for (const env of [{}, { [receipts.SIGNER_ENV]: "" }, { [receipts.SIGNER_ENV]: "PRIVATE+KEY+not-a-key" }, { [receipts.VERIFIER_ENV]: RECEIPT_KEY.verifier }]) {
+    const res = makeRes();
+    await RECONCILE.handleReconcile(req("reconcile", body), res, { env });
+    const got = parsed(res);
+    assert.equal(res._status, 503, JSON.stringify(got));
+    assert.equal(got.error_code, "signer_unavailable");
+    assert.equal(got.receipt, undefined, "no receipt");
+    assert.equal(got.verdict, undefined, "no verdict");
+  }
+  assert.equal(port.mock.callCount(), 0, "nothing was compared");
+  const ok = makeRes();
+  await RECONCILE.handleReconcile(req("reconcile", body), ok, { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
+  const signed = parsed(ok);
+  assert.equal(ok._status, 200);
+  assert.equal(signed.receipt.signer.verifier, RECEIPT_KEY.verifier, "control: with the signer, a signed receipt");
+  assert.equal(port.mock.callCount(), 1);
+});
+
+test("FIX B: the joint reveal with no reconcile signer is 503 signer_unavailable; nothing is compared and nothing is sealed", async () => {
+  const { id, a, b } = await committedCase({ scope_digest: sha("B reveal") });
+  const before = storedCase(id);
+  const writes = gh.putLog.length;
+  const { [receipts.SIGNER_ENV]: _gone, ...noSigner } = SIGNED; // eslint-disable-line no-unused-vars
+  const r = await reveal(revealBody(id, a, b), { env: noSigner });
+  assert.equal(r.status, 503, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(r.body.error_code, "signer_unavailable");
+  assert.equal(r.body.verdict, undefined);
+  assert.equal(gh.putLog.length, writes, "nothing written");
+  assert.deepEqual(storedCase(id), before);
+  // control: the same reveal with the signer seals
+  assert.equal((await reveal(revealBody(id, a, b))).status, 201);
+});
+
+// A case sealed exactly as the service seals one, except that its receipt
+// was signed by another reconcile key: the comparison ran, the case key
+// signed the seal, only the receipt's signer is not the service's.
+async function wronglySignedCase(scope) {
+  const { id, a, b } = await committedCase({ scope_digest: sha(scope) });
+  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: WRONG_RECEIPT_KEY.signer }, now: REVEAL_AT });
+  const st = S.storableReceipt(compared.receipt);
+  assert.equal(st.ok, true);
+  const sealed = S.sealCase(storedCase(id), {
+    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+  }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
+  assert.notEqual(sealed.sig, null, "fixture: the case key signed it");
+  assert.equal(S.checkSealedReceipt(sealed), null, "fixture: the receipt is bound to the case");
+  gh.seed(PINS, C.casePath(id), sealed);
+  return { id, a, b, sealed };
+}
+
+test("FIX B: a receipt signed by another key than the service's reconcile signer is receipt_unsigned: the sealed check, the page, the sealer and the reference all refuse it", async () => {
+  const { id, a, sealed } = await wronglySignedCase("B wrong key");
+  assert.equal(S.checkStoredReceipt(sealed), "receipt_unsigned");
+  assert.deepEqual(S.sealedRecordReason(sealed, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
+  const page = await casePage(id);
+  assert.match(page.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(page.html.includes("receipt_unsigned"));
+  assert.ok(page.html.includes("unknown_signer"));
+  assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
+  assert.deepEqual(await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC }), { ok: false, code: "receipt_unsigned", reason: "unknown_signer" });
+  const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
+  assert.deepEqual(run.refused, [{ case_id: id, code: "receipt_unsigned", reason: "unknown_signer" }]);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  const ref = await reference({ ...proofOf(id, a), cross_reference: XREF });
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.equal(ref.body.error_code, "receipt_unsigned");
+  assert.deepEqual(referenceFiles(id), []);
+  // control: it is the signer that decides. A reader told the other key
+  // would take the same bytes.
+  assert.equal(S.sealedRecordReason(sealed, KEYS_DOC, { receiptVerifier: WRONG_RECEIPT_KEY.verifier }), null);
+});
+
+test("FIX B: a reader that knows no reconcile verifier refuses every receipt; the verifier is the signer key's public half, or WITNESS_RECONCILE_VERIFIER", async () => {
+  const { id } = await sealedCase({ scope_digest: sha("B readers") });
+  const k = storedCase(id);
+  assert.equal(S.sealedRecordReason(k, KEYS_DOC), null, "the service's own receipt holds");
+  assert.deepEqual(S.sealedRecordReason(k, KEYS_DOC, { receiptVerifier: null }), { code: "receipt_unsigned", reason: "no_reconcile_verifier" });
+  assert.equal(S.checkStoredReceipt(k, { receiptVerifier: null }), "receipt_unsigned");
+  assert.equal(receipts.expectedVerifier({}), null);
+  assert.equal(receipts.expectedVerifier({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }), RECEIPT_KEY.verifier);
+  assert.equal(receipts.expectedVerifier({ [receipts.VERIFIER_ENV]: ` ${RECEIPT_KEY.verifier}\n` }), RECEIPT_KEY.verifier);
+  assert.equal(receipts.expectedVerifier({ [receipts.VERIFIER_ENV]: "not a verifier" }), null);
+  assert.equal(receipts.expectedVerifier({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [receipts.VERIFIER_ENV]: WRONG_RECEIPT_KEY.verifier }), RECEIPT_KEY.verifier,
+    "the signer key, when this environment holds it, names its own verifier");
+  // the page reads its deployment's environment
+  const pageWith = async (env) => {
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res,
+      { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC, env });
+    return String(res._body);
+  };
+  assert.match(await pageWith({}), /SEALED RECORD DOES NOT VERIFY[\s\S]*no_reconcile_verifier/);
+  assert.match(await pageWith({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }), /<h2>The verdict<\/h2>/);
+  assert.match(await pageWith({ [receipts.VERIFIER_ENV]: RECEIPT_KEY.verifier }), /<h2>The verdict<\/h2>/);
+});
 
 test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind them [the service-clock fields] to a Git commit ID"',
   { todo: "CONFIRMED: the commit that wrote the sealed case appears neither in the case nor in its pin (the assertion 'the sealed case or its pin names the commit that wrote it' fails)" }, async () => {

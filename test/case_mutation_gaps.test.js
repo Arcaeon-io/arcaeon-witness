@@ -360,7 +360,13 @@ async function committedCase() {
   assert.equal(gh.read(PINS, C.casePath(ID)).status, "COMMITTED");
   return parties;
 }
-async function reveal(p, { now = REVEAL_AT, env = {} } = {}) {
+// The service's reconcile signer (red-team fix B: with none, nothing is
+// compared), and its verifier, which a reader holding no signer key (the
+// sealer, the page in this process) is told.
+const RECEIPT_KEY = require("../lib/_checkpoint.js").generateKey("arcaeon.io/reconcile-test/2026-10-10");
+const RECEIPT_ENV = Object.freeze({ WITNESS_RECONCILE_SIGNER_KEY: RECEIPT_KEY.signer });
+process.env.WITNESS_RECONCILE_VERIFIER = RECEIPT_KEY.verifier;
+async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
   const res = makeRes();
   const body = {
     case_id: ID,
@@ -469,7 +475,7 @@ test("S55 (referenceSeqs): a references listing that cannot be read is never rea
   const writes = gh.putLog.length;
   const res = makeRes();
   await withListingFailure(C.referencesDir(ID), () => H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: {} }));
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV }));
   assert.equal(res._status, 503, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "store_unreachable");
   assert.equal(gh.putLog.length, writes, "nothing written");
@@ -511,7 +517,7 @@ test("P10 (crossRows): a reference row's operator is escaped on the page", async
   const p = await sealedCase();
   const res = makeRes();
   await H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: {} });
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV });
   assert.equal(res._status, 201, JSON.stringify(res._body));
   const pg = await page();
   assert.ok(pg.html.includes("&lt;i&gt;op&lt;/i&gt;"), "escaped");

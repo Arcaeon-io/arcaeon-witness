@@ -1,11 +1,14 @@
 // test/case_fix_mutation_gaps.test.js — the gaps a must-fail (mutation) pass
-// over red-team fix A (ONE KEY PER ROLE, lib/_case.js) found, in the style of
+// over red-team fix A (ONE KEY PER ROLE, lib/_case.js) and fix B (A RECEIPT
+// IS THE SERVICE'S, lib/_case_seal.js) found, in the style of
 // test/case_mutation_gaps.test.js: one planted defect at a time in a scratch
 // copy, the whole suite run each time, and for every defect the suite let
 // through, the smallest test here that fails with that defect and passes on
 // the real code. Each test names the mutant it kills.
 //
-// FIX A's pass (harness not committed): 37 defects planted in the code fix A
+// Two passes, one per red-team fix (harness not committed).
+//
+// FIX A's pass: 37 defects planted in the code fix A
 // added or changed, across lib/_case.js (17), lib/_case_http.js (8),
 // lib/_case_seal.js (5), lib/_case_page.js (5) and tools/preview_dry_run.js
 // (2). 18 were caught by the suite with fix A's own tests. Of the 19 that
@@ -20,6 +23,17 @@
 // show, and A19 (a key name longer than a key id holds), for a defect found
 // reading the diff and fixed before the commit (it answered a 500). Final:
 // 39 planted, lib/_case.js 19, 38 caught, 1 equivalent.
+//
+// FIX B's pass: 34 defects planted in the code fix B added or changed,
+// across lib/_reconcile_receipt.js (4), lib/_reconcile_http.js (4),
+// lib/_case_http.js (4), lib/_case_seal.js (13), lib/_sealer.js (1),
+// lib/_case_page.js (3) and tools/preview_dry_run.js (5). 28 were caught by
+// the suite with fix B's own tests. Of the 6 that survived, 5 are closed
+// here and one is equivalent:
+//   - S11, lib/_case_seal.js receiptSignerReason verifying under the
+//     verifier the receipt carries instead of the expected one: the line
+//     before it returns unless the two are the same string.
+// Final: 34 planted, 33 caught, 1 equivalent.
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -47,6 +61,7 @@ const H = require("../lib/_case_http.js");
 const S = require("../lib/_case_seal.js");
 const CP = require("../lib/_case_page.js");
 const receipts = require("../lib/_reconcile_receipt.js");
+const RECONCILE = require("../lib/_reconcile_http.js");
 const checkpoint = require("../lib/_checkpoint.js");
 const stamp = require("../lib/_stamp.js");
 const reconcileFixtures = require("./fixtures/reconcile/cases.json");
@@ -64,6 +79,9 @@ const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
 const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
+// The service's reconcile verifier, public, as this process's readers are
+// told it (red-team fix B).
+process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [{ key_id: REG.keyIdOf(CASE_KEY), verifier: CASE_KEY.verifier, since: "2026-10-10", note: "a test key", status: "active" }] });
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0031" });
 
@@ -379,4 +397,68 @@ test("P03, P04 (the single-party page past the deadline): still SINGLE PARTY, ne
   assert.equal(p.html.includes("attacker-account"), false);
   const before = await casePage(id, REVEAL_AT);
   assert.ok(before.html.includes("stored as COMMITTED, not shown"), "before the deadline: the stored status alone");
+});
+
+// =============================================================================
+// red-team fix B: A RECEIPT IS THE SERVICE'S (lib/_case_seal.js)
+// =============================================================================
+
+// A case sealed as the service seals one (the comparison run, the case key
+// signing the seal), with its receipt signed by `receiptKey`.
+async function sealedWith(scope, receiptKey = RECEIPT_KEY) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  for (const p of [a, b]) assert.equal((await commit(id, p)).status, 201);
+  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: receiptKey.signer }, now: REVEAL_AT });
+  const st = S.storableReceipt(compared.receipt);
+  assert.equal(st.ok, true);
+  const sealed = S.sealCase(gh.read(PINS, C.casePath(id)), {
+    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+  }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
+  gh.seed(PINS, C.casePath(id), sealed);
+  return { id, a, b, sealed };
+}
+const withReceipt = (k, over) => ({ ...k, verdict: { ...k.verdict, ...over } });
+
+test("S10 (receiptSignerReason, the carried verifier first): a receipt naming a verifier that is not one is receipt_unsigned, unknown_signer, never read as malformed", async () => {
+  const { sealed } = await sealedWith("S10");
+  const odd = withReceipt(sealed, { signer: { ...sealed.verdict.signer, verifier: "not-a-verifier" } });
+  assert.equal(S.checkSealedReceipt(odd), null, "fixture: still bound");
+  assert.deepEqual(S.sealedRecordReason(odd, KEYS_DOC, { receiptVerifier: RECEIPT_KEY.verifier }), { code: "receipt_unsigned", reason: "unknown_signer" });
+  assert.equal(S.checkStoredReceipt(odd, { receiptVerifier: RECEIPT_KEY.verifier }), "receipt_unsigned");
+});
+
+test("S12 (checkStoredReceipt): a receipt the service's signer signed and someone altered after is receipt_bad_signature, not receipt_unsigned", async () => {
+  const { sealed } = await sealedWith("S12");
+  assert.equal(S.checkStoredReceipt(sealed), null, "control: as sealed");
+  const altered = withReceipt(sealed, { verdict: { ...sealed.verdict.verdict, findings: sealed.verdict.verdict.findings + 1 } });
+  assert.equal(S.checkStoredReceipt(altered), "receipt_bad_signature");
+  assert.deepEqual(S.sealedRecordReason(altered, KEYS_DOC), { code: "verdict_unbound", reason: "receipt_bad_signature" });
+});
+
+test("H11, H13 (reference): the reconcile verifier is the deployment's own environment's; with none there, a sealed case takes no row (409 receipt_unsigned, in words)", async () => {
+  const { id, a } = await sealedWith("H11");
+  const body = { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } };
+  const at = (env) => {
+    const res = makeRes();
+    return H.handleCaseReference(req("case-reference", body), res, { now: REVEAL_AT + 3600000, env, keyDocument: KEYS_DOC }).then(() => res);
+  };
+  assert.equal(receipts.expectedVerifier(process.env), RECEIPT_KEY.verifier, "fixture: this process knows the verifier");
+  const bare = await at({});
+  assert.equal(bare._status, 409, JSON.stringify(bare._body));
+  assert.equal(bare._body.error_code, "receipt_unsigned");
+  assert.equal(bare._body.reason, "no_reconcile_verifier");
+  assert.match(bare._body.error, /the receipt it carries is not signed by this service's reconcile signer/);
+  const ok = await at(SIGNED);
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+});
+
+test("P08 (the page's words for receipt_unsigned): the failed check is named in words, not only by its code", async () => {
+  const other = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
+  const { id } = await sealedWith("P08", other);
+  const p = await casePage(id);
+  assert.match(p.html, /SEALED RECORD DOES NOT VERIFY/);
+  assert.ok(p.html.includes("the receipt&#39;s signer: the reconcile receipt it carries is not signed by this service&#39;s reconcile signer"), p.html.slice(0, 200));
 });

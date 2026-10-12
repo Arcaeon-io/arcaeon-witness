@@ -20,6 +20,12 @@ const checkpoint = require("../lib/_checkpoint.js");
 const receipts = require("../lib/_reconcile_receipt.js");
 const fixtures = require("./fixtures/reconcile/cases.json");
 
+// The deployment's reconcile signer, a throwaway key made here: since
+// red-team fix B the endpoint compares nothing without one (503
+// signer_unavailable), and the real dispatch reads it from the process.
+const SIGNER = checkpoint.generateKey("arcaeon.io/reconcile-endpoint-test/2026-10-12");
+process.env[receipts.SIGNER_ENV] = SIGNER.signer;
+
 const { pyLoads, pyDumps, chainOf } = T._internal;
 
 // Each test gets its own caller IP so the shared per-IP limiter never bites.

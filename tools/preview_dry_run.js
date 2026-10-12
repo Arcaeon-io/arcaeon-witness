@@ -31,8 +31,10 @@
 //       joint reveal goes out in chunks and must answer 201, sealed VERDICT,
 //       SIGNED: the sealed case names its key in signed_by, its sig verifies
 //       under that key's ACTIVE entry in this checkout's key document
-//       (lib/_case_seal.js sealedRecordReason, the receipt binding included),
-//       and the answer's chain is 64 hex and the case's own. A seal that is
+//       (lib/_case_seal.js sealedRecordReason, the receipt binding included,
+//       and since red-team fix B its receipt signed by the service's
+//       reconcile signer: see THE RECONCILE VERIFIER, below), and the
+//       answer's chain is 64 hex and the case's own. A seal that is
 //       unsigned (sig or signed_by missing or null), or signed by a key the
 //       document does not list as active, is BROKEN: the run exists to show
 //       the published case signer is installed.
@@ -80,6 +82,16 @@
 //   --exhaust-quota     run the quota half of (c): up to 21 opens.
 //   --help              this text
 //
+// THE RECONCILE VERIFIER (red-team fix B). (e) and (f) hold the sealed
+// case's reconcile receipt to the service's reconcile verifier, the public
+// half of the preview's WITNESS_RECONCILE_SIGNER_KEY, read from this
+// machine's environment as lib/_reconcile_receipt.js expectedVerifier reads
+// it: WITNESS_RECONCILE_VERIFIER (the verifier string; it is public), or the
+// signer key itself if it is set here. With neither, each of (e) and (f)
+// that gets that far is COULD NOT LOOK, saying so: a receipt's signer that
+// cannot be checked is never VERIFIED. A receipt signed by another key is
+// BROKEN (receipt_unsigned).
+//
 // A PROTECTED PREVIEW. The project protects its previews with Vercel
 // Authentication, so a request without the bypass is answered 401 with
 // Vercel's SSO page before any function runs. The first request is the
@@ -122,6 +134,7 @@ const https = require("https");
 const C = require("../lib/_case.js");
 const S = require("../lib/_case_seal.js");
 const checkpoint = require("../lib/_checkpoint.js"); // generateKey: the run's two registration keys
+const receipts = require("../lib/_reconcile_receipt.js"); // expectedVerifier: THE RECONCILE VERIFIER
 
 const ROOT = path.join(__dirname, "..");
 const VERIFIED = "VERIFIED";
@@ -546,6 +559,10 @@ async function checkStampRead(ctx) {
 const HEX64 = /^[0-9a-f]{64}$/;
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
+// THE RECONCILE VERIFIER, above: why (e) and (f) cannot judge a receipt.
+const NO_RECONCILE_VERIFIER = `no reconcile verifier is known here (set ${receipts.VERIFIER_ENV} to the public verifier of the preview's ` +
+  `${receipts.SIGNER_ENV}), so the receipt's signer cannot be checked`;
+
 // (e)'s judgement of a 201 VERDICT answer: the sealed case it carries is
 // signed, its seal holds against this checkout's key document under an
 // ACTIVE entry, and the answer's chain is 64 hex and that case's own.
@@ -563,7 +580,8 @@ function sealedAnswer(ctx, id, json) {
   if (k.status !== "VERDICT" || k.case_id !== id) return broken(`its sealed case is ${k.status} for case_id ${k.case_id}, not this case's VERDICT`);
   const doc = S.checkKeyDocument(ctx.keyDocument);
   if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the signature cannot be checked`);
-  const unsealed = S.sealedRecordReason(k, ctx.keyDocument);
+  if (!ctx.receiptVerifier) return couldNotLook(NO_RECONCILE_VERIFIER);
+  const unsealed = S.sealedRecordReason(k, ctx.keyDocument, { receiptVerifier: ctx.receiptVerifier });
   if (unsealed) return broken(`its sealed record does not hold against this checkout's ${S.CASE_KEYS_FILE} (${unsealed.code}: ${unsealed.reason})`);
   const entry = doc.keys.find((e) => e.key_id === k.signed_by);
   if (entry.status !== "active") return broken(`it is signed by ${k.signed_by}, which ${S.CASE_KEYS_FILE} lists as ${entry.status}, not active`);
@@ -640,8 +658,9 @@ async function checkSealerPass(ctx) {
     }
     const doc = S.checkKeyDocument(ctx.keyDocument);
     if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the pass could not check a seal's signature`);
+    if (!ctx.receiptVerifier) return couldNotLook(`${where}: ${NO_RECONCILE_VERIFIER}`);
     const sealer = require("../lib/_sealer.js");
-    const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument });
+    const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument, receiptVerifier: ctx.receiptVerifier });
     if (!rep.ok) {
       if (rep.reason === "tree_unreadable") return couldNotLook(`${where}: the case pass could not read the tree (${rep.detail})`);
       return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
@@ -772,11 +791,13 @@ function redactor(secrets) {
 }
 
 // opts: {base, key, bypass, operatorKey, pinToken, exhaustQuota, root,
-// vercel, keyDocument, stdout(line), stderr(line)}. root defaults to this
-// checkout, vercel to its vercel.json, and keyDocument to its
+// vercel, keyDocument, receiptVerifier, stdout(line), stderr(line)}. root
+// defaults to this checkout, vercel to its vercel.json, keyDocument to its
 // public/.well-known/arcaeon/case-signing-keys.json, parsed (null when it does not
-// read); the CLI never passes another, a test may (lib/_case_seal.js's own
-// rule for keyDocument). -> {code, results: [{id, title, word, text, line}]}.
+// read), and receiptVerifier to THE RECONCILE VERIFIER read from this
+// process's environment (null for none); the CLI never passes another, a
+// test may (lib/_case_seal.js's own rule for keyDocument).
+// -> {code, results: [{id, title, word, text, line}]}.
 async function run(opts) {
   const root = opts.root || ROOT;
   const redact = redactor([opts.key, opts.bypass, opts.operatorKey, opts.pinToken]);
@@ -805,6 +826,7 @@ async function run(opts) {
     bypass: opts.bypass || null,
     keysDocAnswer: null,
     pinToken: opts.pinToken || null,
+    receiptVerifier: opts.receiptVerifier !== undefined ? opts.receiptVerifier : receipts.expectedVerifier(process.env),
     exhaustQuota: opts.exhaustQuota === true,
     root,
     vercel,

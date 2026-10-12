@@ -76,6 +76,9 @@ const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 // Item 2b: the case key signs only when it can be shown different from BOTH
 // other keys, so the signing environment carries all three.
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
+// The service's reconcile verifier, public, as a reader with no signer key
+// (the sealer, a page in this process) is told it (red-team fix B).
+process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // Item 2c: the case key signs only when it is an ACTIVE entry of the key
 // document (lib/_case_seal.js, PUBLICATION FAILS CLOSED), and the anchor
 // retry checks a stored case's signature against that document. The
@@ -261,15 +264,19 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
 test("TEST 7: an ALTERED pair seals as ALTERED with the first divergence in the receipt, through the real verify.js dispatch", async (t) => {
   const { id, a, b } = await committedCase({ tapeA: ALT_AGENT, tapeB: ALT_TOOL });
   const runs = spyReconcile(t);
-  // The real dispatch reads its clock and keys from the process (no key is
-  // set here, so this seal is unsigned); its clock is held at 10:00.
+  // The real dispatch reads its clock and keys from the process: the
+  // reconcile signer is set for this test (since red-team fix B nothing is
+  // compared without one), the case key is not, so this seal is unsigned;
+  // its clock is held at 10:00.
   const res = makeRes();
   const realNow = Date.now;
   Date.now = () => Date.parse("2026-10-10T10:00:00Z");
+  process.env[receipts.SIGNER_ENV] = RECEIPT_KEY.signer;
   try {
     await verifyHandler(req("case-reveal", revealBody(id, a, b)), res);
   } finally {
     Date.now = realNow;
+    delete process.env[receipts.SIGNER_ENV];
   }
   const body = parsed(res);
   assert.equal(res._status, 201, JSON.stringify(body).slice(0, 300));
@@ -625,12 +632,13 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
     assert.equal(got.ok, false, reason);
     assert.equal(got.reason, reason, `${reason}: got ${got.reason}`);
   }
-  // signed when the key is unset, unsigned when it is set
+  // Since red-team fix B nothing unsigned seals: no signer, or an unsigned
+  // receipt, is receipt_unsigned, even when the two agree.
   const unsignedSigner = receipts.loadSigner({});
-  assert.equal(S.checkReceipt(receipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unsigned_inconsistent");
+  assert.equal(S.checkReceipt(receipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unsigned");
   const unsignedReceipt = receipts.signReceipt(receipts.buildReceipt({ bytesA: a.tape, bytesB: b.tape, result, now: REVEAL_AT }), unsignedSigner);
-  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result })).reason, "receipt_signer_mismatch");
-  assert.deepEqual(S.checkReceipt(unsignedReceipt, ctx({ result, signer: unsignedSigner })), { ok: true }, "control: unsigned and keyless agree");
+  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result })).reason, "receipt_unsigned");
+  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unsigned", "unsigned and keyless no longer seal");
 
   // Through the endpoint: a receipt builder that binds the wrong tape. The
   // signature is good; the binding is not; nothing is sealed.
