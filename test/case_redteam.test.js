@@ -626,17 +626,16 @@ test('GPT-5.6 §2B: "It does not identify the parties, commitments"',
       "the redacted root identifies the parties and their commitments");
   });
 
-test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, or lifetime addendum quota"',
-  { todo: "CONFIRMED: one role's proof appends 100 reference rows to one case, each 201 (the assertion 'a role cannot append a hundred reference rows to one case' fails)" }, async () => {
-    const { id, a } = await sealedCase({ scope_digest: sha("2C") });
-    let accepted = 0;
-    for (let i = 0; i < 100; i += 1) {
-      const r = await reference({ ...proofOf(id, a), cross_reference: { ...XREF, reference: `flood-${i}` } });
-      if (r.status !== 201) break;
-      accepted += 1;
-    }
-    assert.ok(accepted < 100, `a role cannot append a hundred reference rows to one case (${accepted} accepted)`);
-  });
+test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, or lifetime addendum quota"', async () => {
+  const { id, a } = await sealedCase({ scope_digest: sha("2C") });
+  let accepted = 0;
+  for (let i = 0; i < 100; i += 1) {
+    const r = await reference({ ...proofOf(id, a), cross_reference: { ...XREF, reference: `flood-${i}` } });
+    if (r.status !== 201) break;
+    accepted += 1;
+  }
+  assert.ok(accepted < 100, `a role cannot append a hundred reference rows to one case (${accepted} accepted)`);
+});
 
 // =============================================================================
 // GPT-5.6, section 3: silent operator actions
@@ -819,16 +818,18 @@ test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write co
 
 test('GPT-5.6 §4: "Each accepted request does at least a root read, reference-directory listing, reference-row write, then liveRecords() listing and up to 20 row reads"',
   { todo: "CONFIRMED: with 21 rows present, one accepted reference reads the root, lists twice, writes one row and reads 20 rows (the assertion 'an accepted reference reads fewer than 20 rows' fails)" }, async () => {
-    const { id, a } = await sealedCase({ scope_digest: sha("4 cost") });
-    for (let i = 0; i < 21; i += 1) assert.equal((await reference({ ...proofOf(id, a), cross_reference: { ...XREF, reference: `row-${i}` } })).status, 201);
+    const { id, a, b } = await sealedCase({ scope_digest: sha("4 cost") });
+    // both roles write the 21 rows: one role may append 20 (FIX G, THE REFERENCE QUOTA)
+    for (let i = 0; i < 21; i += 1) assert.equal((await reference({ ...proofOf(id, i % 2 ? b : a), cross_reference: { ...XREF, reference: `row-${i}` } })).status, 201);
     const g0 = gh.getLog.length;
-    const p0 = gh.putLog.length;
+    const pinWrites = () => gh.putLog.filter((x) => x.repo === PINS).length;
+    const p0 = pinWrites();
     assert.equal((await reference({ ...proofOf(id, a), cross_reference: { ...XREF, reference: "measured" } })).status, 201);
     const reads = gh.getLog.slice(g0);
     const rowReads = reads.filter((p) => /\/references\/\d{8}\.json$/.test(p)).length;
     assert.ok(reads.includes(C.casePath(id)), "a root read");
     assert.equal(reads.filter((p) => p === C.referencesDir(id)).length, 2, "two listings");
-    assert.equal(gh.putLog.length - p0, 1, "one row write");
+    assert.equal(pinWrites() - p0, 1, "one row write (the quota's counter is in the private usage repository)");
     assert.ok(rowReads < 20, `an accepted reference reads fewer than 20 rows (${rowReads})`);
   });
 

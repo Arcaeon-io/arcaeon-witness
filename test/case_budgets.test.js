@@ -5,6 +5,10 @@
 // its own bucket (lib/_ratelimit.js checkKey), never its address's; anything
 // else (no key, a key that is not valid) draws on the per-IP bucket and past
 // it is 429 before its 401. The keyless ops stay per-IP.
+// FIX G (2026-10-12; GPT-5.6 §2C): a role appends at most
+// REFERENCE_QUOTA_PER_ROLE rows to one case (the open quota's 20), counted
+// in the private usage repository; past it, 409 reference_quota with the
+// count. The roles count apart, and the operator takes no unit.
 // Every store is the in-memory mock; every budget is the process's limiter,
 // fresh for each test (test/helpers/mock_store.js install).
 "use strict";
@@ -24,6 +28,8 @@ delete process.env.WITNESS_CASE_OPERATOR_KEY;
 const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
@@ -31,7 +37,17 @@ const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
 const ratelimit = require("../lib/_ratelimit.js");
+const S = require("../lib/_case_seal.js");
+const receipts = require("../lib/_reconcile_receipt.js");
+const checkpoint = require("../lib/_checkpoint.js");
+const stamp = require("../lib/_stamp.js");
+const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
+const reconcileFixtures = require("./fixtures/reconcile/cases.json");
 
+const PINS = process.env.GITHUB_PIN_REPO;
+const STAMPS = process.env.STAMP_REPO;
+const USAGE = process.env.GITHUB_USAGE_REPO;
 const NOW = Date.parse("2026-10-10T08:00:00Z");
 const KEY = "case-test-open-key-0031";
 const OTHER_KEY = "case-test-open-key-0032";
@@ -130,4 +146,204 @@ test("FIX F: the keyless ops stay per-IP, and a bearer key on one of them does n
   }
   const keyed = await open({ scope_digest: sha("the key's budget is untouched") }, { headers: bearer(KEY) });
   assert.equal(keyed._status, 201, JSON.stringify(keyed._body));
+});
+
+// =============================================================================
+// FIX G: the reference quota, per case and per role
+// =============================================================================
+
+// Throwaway keys, made here, written nowhere.
+const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test-budgets/2026-10-12");
+const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test-budgets/2026-10-12");
+const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer });
+const KEYS_DOC = Object.freeze(KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)));
+const OPERATOR_KEY = "case-budgets-operator-key";
+const OPERATOR_ENV = Object.freeze({ ...SIGNED, [H.OPERATOR_KEY_ENV]: OPERATOR_KEY });
+const REVEAL_AT = Date.parse("2026-10-10T09:00:00Z");
+const XREF = Object.freeze({ operator: "second-operator.example", reference: "case-ref-0042", url: "https://second-operator.example/cases/0042" });
+const [AGENT_TAPE, TOOL_TAPE] = (() => {
+  const c = reconcileFixtures.cases.find((x) => /^receipt-test_call_proxy_tape\/test_cross_repo_adapter_tape_a0: agent vs tool$/.test(x.name) && x.python);
+  assert.ok(c, "the fixture tape pair");
+  return [Buffer.from(c.a_b64, "base64"), Buffer.from(c.b_b64, "base64")];
+})();
+
+function party(caseId, role, tape) {
+  const tape_sha256 = sha(tape);
+  const salt = C.newSalt();
+  return { role, tape, tape_sha256, salt, commitment_sha256: C.commitmentSha256({ case_id: caseId, role, tape_sha256, salt }) };
+}
+async function sealedCase(scope) {
+  const o = await open({ scope_digest: sha(scope) }, { headers: bearer(KEY) });
+  assert.equal(o._status, 201, JSON.stringify(o._body));
+  const id = o._body.case_id;
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  for (const p of [a, b]) {
+    gh.seed(STAMPS, stamp.stampPath(p.commitment_sha256), { kind: "file-stamp", v: 1, sha256: p.commitment_sha256, size: C.COMMITMENT_BYTES_LENGTH, stamped_at: "2026-10-10T07:45:00.123Z" });
+    const r = await call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }));
+    assert.equal(r._status, 201, JSON.stringify(r._body));
+  }
+  const res = makeRes();
+  await H.handleCaseReveal(makeReq({ method: "POST", query: { op: "case-reveal" }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp() }, body: {
+    case_id: id,
+    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
+    tape_a_b64: a.tape.toString("base64"),
+    tape_b_b64: b.tape.toString("base64"),
+  } }), res, { now: REVEAL_AT, env: KD.deployed(gh, SIGNED, KEYS_DOC), keyDocument: KEYS_DOC });
+  assert.equal(res._status, 201, JSON.stringify(res._body).slice(0, 300));
+  return { id, a, b };
+}
+const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
+async function reference(body, { env = SIGNED, headers = {}, now = REVEAL_AT + 3600000 } = {}) {
+  const res = makeRes();
+  await H.handleCaseReference(makeReq({ method: "POST", query: { op: "case-reference" }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp(), ...headers }, body }), res, { now, env, keyDocument: KEYS_DOC });
+  return res;
+}
+const xref = (n) => ({ ...XREF, reference: `ref-${n}` });
+const rowsIn = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.referencesDir(id)}/`)).length;
+const quotaFile = (id, role) => H._internal.referenceQuotaPath(id, role);
+const writesTo = (repo) => gh.putLog.filter((x) => x.repo === repo).length;
+
+test("FIX G: one role appends REFERENCE_QUOTA_PER_ROLE (20, the open quota's constant) rows to a case; its next is 409 reference_quota with the count, and nothing is written; the other role and the operator still append", async () => {
+  assert.equal(H.REFERENCE_QUOTA_PER_ROLE, 20);
+  assert.equal(H.REFERENCE_QUOTA_PER_ROLE, H.OPEN_QUOTA_PER_DAY, "one number");
+  const { id, a, b } = await sealedCase("G quota");
+  for (let i = 1; i <= 20; i += 1) {
+    const r = await reference({ ...proofOf(id, a), cross_reference: xref(i) });
+    assert.equal(r._status, 201, `row ${i}: ${JSON.stringify(r._body)}`);
+  }
+  assert.equal(rowsIn(id), 20);
+  const pins = writesTo(PINS);
+  const usage = writesTo(USAGE);
+  const over = await reference({ ...proofOf(id, a), cross_reference: xref(21) });
+  assert.equal(over._status, 409, JSON.stringify(over._body));
+  assert.equal(over._body.ok, false);
+  assert.equal(over._body.error_code, "reference_quota");
+  assert.equal(over._body.case_id, id);
+  assert.equal(over._body.role, "a");
+  assert.equal(over._body.count, 20);
+  assert.equal(over._body.quota, 20);
+  assert.match(over._body.error, /role a has appended 20 reference rows to this case, the most one role may append \(20\); no row was written/);
+  assert.equal(over._headers["cache-control"], "no-store");
+  assert.equal(writesTo(PINS), pins, "no row");
+  assert.equal(writesTo(USAGE), usage, "no counter write");
+  assert.equal(rowsIn(id), 20);
+  // the counter: in the private usage repository, never the public pins repository
+  assert.equal(quotaFile(id, "a"), `case_references/${id}/a.json`);
+  assert.deepEqual(gh.read(USAGE, quotaFile(id, "a")), { kind: "case-reference-quota", v: 1, case_id: id, role: "a", count: 20 });
+  assert.equal(gh.has(PINS, quotaFile(id, "a")), false);
+  // the other role counts apart
+  const rb = await reference({ ...proofOf(id, b), cross_reference: xref("b") });
+  assert.equal(rb._status, 201, JSON.stringify(rb._body));
+  assert.equal(gh.read(USAGE, quotaFile(id, "b")).count, 1);
+  // the operator is not a role: no unit is taken
+  const u = writesTo(USAGE);
+  const op = await reference({ case_id: id, cross_reference: xref("op") }, { env: OPERATOR_ENV, headers: { authorization: `Bearer ${OPERATOR_KEY}` } });
+  assert.equal(op._status, 201, JSON.stringify(op._body));
+  assert.equal(op._body.appended_by, "operator");
+  assert.equal(writesTo(USAGE), u, "the operator's row takes no unit");
+  assert.equal(rowsIn(id), 22);
+  // and role a stays refused
+  assert.equal((await reference({ ...proofOf(id, a), cross_reference: xref(22) }))._status, 409);
+});
+
+test("FIX G: one number: REFERENCE_QUOTA_PER_ROLE is defined as OPEN_QUOTA_PER_DAY, by name, so a change to the open quota's number changes both", () => {
+  const code = fs.readFileSync(path.join(__dirname, "..", "lib", "_case_http.js"), "utf-8").replace(/\r\n/g, "\n");
+  assert.match(code, /^const OPEN_QUOTA_PER_DAY = 20;$/m);
+  assert.match(code, /^const REFERENCE_QUOTA_PER_ROLE = OPEN_QUOTA_PER_DAY;$/m);
+});
+
+test("FIX G: only a role that proved itself on a sealed case spends its count", async () => {
+  const { id, a } = await sealedCase("G proof");
+  const o = await open({ scope_digest: sha("G proof, not sealed") }, { headers: bearer(KEY) });
+  assert.equal(o._status, 201);
+  const usage = writesTo(USAGE);
+  const wrong = await reference({ ...proofOf(id, a), salt: C.newSalt(), cross_reference: xref(1) });
+  assert.equal(wrong._status, 403, JSON.stringify(wrong._body));
+  assert.equal(wrong._body.error_code, "reference_unauthorized");
+  const unsealed = await reference({ ...proofOf(o._body.case_id, party(o._body.case_id, "a", AGENT_TAPE)), cross_reference: xref(2) });
+  assert.equal(unsealed._status, 409);
+  assert.equal(unsealed._body.error_code, "case_not_sealed");
+  assert.equal(writesTo(USAGE), usage, "no counter was written");
+  assert.equal(gh.has(USAGE, quotaFile(id, "a")), false);
+  assert.equal(gh.has(USAGE, quotaFile(o._body.case_id, "a")), false);
+});
+
+test("FIX G: the count is read from the store, per case: a counter planted past the quota refuses with its count, one at 19 admits one row, another case's counter is not this one's, and a damaged counter is 503 reference_quota_unreadable, never zero", async () => {
+  const { id, a, b } = await sealedCase("G store");
+  gh.seed(USAGE, quotaFile(sha("another case"), "a"), { kind: "case-reference-quota", v: 1, case_id: sha("another case"), role: "a", count: 20 });
+  gh.seed(USAGE, quotaFile(id, "a"), { kind: "case-reference-quota", v: 1, case_id: id, role: "a", count: 19 });
+  const last = await reference({ ...proofOf(id, a), cross_reference: xref(1) });
+  assert.equal(last._status, 201, JSON.stringify(last._body));
+  assert.equal(gh.read(USAGE, quotaFile(id, "a")).count, 20);
+  assert.equal((await reference({ ...proofOf(id, a), cross_reference: xref(2) }))._body.error_code, "reference_quota");
+  gh.seed(USAGE, quotaFile(id, "a"), { kind: "case-reference-quota", v: 1, case_id: id, role: "a", count: 25 });
+  const past = await reference({ ...proofOf(id, a), cross_reference: xref(3) });
+  assert.equal(past._status, 409);
+  assert.equal(past._body.count, 25, "the count is the counter's, not the quota");
+  gh.seed(USAGE, quotaFile(id, "b"), { kind: "case-reference-quota", v: 1, case_id: id, role: "b", count: "many" });
+  const pins = writesTo(PINS);
+  const damaged = await reference({ ...proofOf(id, b), cross_reference: xref(4) });
+  assert.equal(damaged._status, 503, JSON.stringify(damaged._body));
+  assert.equal(damaged._body.error_code, "reference_quota_unreadable");
+  assert.equal(damaged._body.role, "b");
+  assert.equal(writesTo(PINS), pins, "no row");
+  assert.equal(rowsIn(id), 1);
+});
+
+test("FIX G: 26 references by one role at once append at most 20 rows, and the counter agrees", async () => {
+  const { id, a } = await sealedCase("G concurrent");
+  const results = await Promise.all(Array.from({ length: 26 }, (_, i) => reference({ ...proofOf(id, a), cross_reference: xref(i) })));
+  const ok = results.filter((r) => r._status === 201).length;
+  for (const r of results) assert.ok([201, 409, 503].includes(r._status), JSON.stringify(r._body));
+  assert.ok(ok > 0, "some appended");
+  assert.ok(ok <= 20, `${ok} appended`);
+  assert.equal(rowsIn(id), ok);
+  const count = gh.read(USAGE, quotaFile(id, "a")).count;
+  assert.ok(count >= ok && count <= 20, `counter ${count}, rows ${ok}`);
+});
+
+test("FIX G: a row whose seq another row takes moves to the next seq and takes no second unit", async () => {
+  const { id, a } = await sealedCase("G moved");
+  const viaMock = global.fetch;
+  let planted = false;
+  global.fetch = async (url, o) => {
+    if (!planted && (o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.referencePath(id, 1)}`)) {
+      planted = true;
+      gh.seed(PINS, C.referencePath(id, 1), { another: "row, first" });
+    }
+    return viaMock(url, o);
+  };
+  let r;
+  try {
+    r = await reference({ ...proofOf(id, a), cross_reference: xref(1) });
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(planted, true, "fixture: another row took seq 1 between the listing and the write");
+  assert.equal(r._status, 201, JSON.stringify(r._body));
+  assert.equal(r._body.seq, 2);
+  assert.equal(gh.read(USAGE, quotaFile(id, "a")).count, 1, "one row, one unit");
+});
+
+test("FIX G: two takers creating a role's counter at once: the one that loses the create re-reads and counts on, never a 503", async () => {
+  const { id, a } = await sealedCase("G create race");
+  const viaMock = global.fetch;
+  let raced = false;
+  global.fetch = async (url, o) => {
+    if (!raced && (o && o.method) === "PUT" && String(url).includes(`/repos/${USAGE}/contents/${quotaFile(id, "a")}`)) {
+      raced = true;
+      gh.seed(USAGE, quotaFile(id, "a"), { kind: "case-reference-quota", v: 1, case_id: id, role: "a", count: 5 });
+    }
+    return viaMock(url, o);
+  };
+  let r;
+  try {
+    r = await reference({ ...proofOf(id, a), cross_reference: xref(1) });
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(raced, true, "fixture: the counter was created between this request's read and its create");
+  assert.equal(r._status, 201, JSON.stringify(r._body));
+  assert.equal(gh.read(USAGE, quotaFile(id, "a")).count, 6, "the other taker's 5, then this one");
 });
