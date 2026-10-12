@@ -1,5 +1,15 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, step 5: a seal that names no key document is document_unrecorded, never valid (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- A stored VERDICT with no `signed_under` (a seal from before Design I) reads as `document_unrecorded` (reason `no_signed_under`), signed or not, under any current document, readable or not. It is never `valid_under_document`, and no document is fetched for it.
+  - **The page** shows the does-not-verify state, naming the check in words: "the key document: the record names none it was sealed under, so it cannot be held to one".
+  - **`anchorCase`** refuses it and pins nothing (`anchorPending` lists it under `refused`).
+  - **`?op=case-reference`** refuses it 409 `document_unrecorded`, saying that it names no key document it was signed under.
+- The does-not-verify page's own sentence now says a sealed record is shown only when it names its key document and verifies under that document, read at its commit. The case-signature check's words say "the key document the case names".
+- **Tests.** `test/case_signed_under.test.js` +2: `document_unrecorded` under every current document, signed or unsigned, with nothing fetched; and the page, the sealer and the reference.
+- Suite 1048 -> 1050 tests, 0 fail, 11 todo. Here: 1037 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, step 4: the three key-document red-team claims are fixed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - `test/case_redteam.test.js`: the three tests quoting GPT-5.6 §1.4 and §3.3 lose their `todo` and keep their named assertions.

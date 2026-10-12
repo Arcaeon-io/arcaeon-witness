@@ -601,3 +601,50 @@ test("THE VERDICT WORD NEVER CHANGES ON A LATER DOCUMENT: whatever the current d
     assert.equal(verdictWord(p.html), sealedWord, name);
   }
 });
+
+// =============================================================================
+// STEP 5: a seal that names no document is document_unrecorded
+// =============================================================================
+
+// A seal as a build before Design I wrote one: no signed_under, signed by
+// the case key over the bytes it does have (or unsigned).
+async function unrecordedCase(scope, { signed = true } = {}) {
+  const { id, a, k } = await sealedCase(scope, { pinFails: true });
+  const { signed_under: _gone, ...old } = k; // eslint-disable-line no-unused-vars
+  const signer = signed ? S.loadCaseSigner(KEYS, { keyDocument: DOC }) : { ok: false, code: "case_key_unset", reason: "no case signing key is configured" };
+  const rec = S.signCase(old, signer);
+  assert.deepEqual(C.validateCase(rec), { ok: true }, "fixture: the schema reads it");
+  assert.equal(rec.signed_under, undefined);
+  gh.seed(PINS, C.casePath(id), rec);
+  return { id, a, rec };
+}
+
+test("DOCUMENT UNRECORDED: a sealed case with no signed_under is document_unrecorded under every current document, signed or not; never valid_under_document", async () => {
+  for (const signed of [true, false]) {
+    const { rec } = await unrecordedCase(`unrecorded ${signed}`, { signed });
+    for (const current of [DOC, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(OTHER_KEY)), KD.docWith(), null]) {
+      const answer = await S.sealedRecordReason(rec, current);
+      assert.deepEqual(answer, { code: "document_unrecorded", reason: "no_signed_under" }, `signed ${signed}`);
+      assert.equal(S.sealHolds(answer), false);
+    }
+  }
+  assert.equal(gh.rawLog.length, 0, "no document is fetched for a case that names none");
+});
+
+test("DOCUMENT UNRECORDED, THE READERS: the page shows the record as not verifying and says why in words, the sealer does not pin it, and the reference refuses it 409", async () => {
+  const { id, a } = await unrecordedCase("unrecorded readers");
+  const p = await pageOf(id);
+  assert.equal(p.status, 200);
+  assert.match(p.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(p.html.includes("document_unrecorded"));
+  assert.ok(p.html.includes("the key document: the record names none it was sealed under, so it cannot be held to one"));
+  assert.equal(p.html.includes("<h2>The verdict</h2>"), false);
+  assert.deepEqual(await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: DOC }), { ok: false, code: "document_unrecorded", reason: "no_signed_under" });
+  const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual(run.refused, [{ case_id: id, code: "document_unrecorded", reason: "no_signed_under" }]);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  const ref = await referenceAs(id, a);
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.equal(ref.body.error_code, "document_unrecorded");
+  assert.match(ref.body.error, /it names no key document it was signed under/);
+});
