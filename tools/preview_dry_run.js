@@ -46,8 +46,12 @@
 //       case this run opened on the preview (else it is not the preview's
 //       store, and the line says so), the pass must report nothing refused,
 //       in conflict or unreadable, and the case sealed in (e) must be
-//       anchored, its pin record's chain equal to the 64-hex chain the
-//       reveal answered with; an anchor under any other chain is BROKEN.
+//       pinned (lib/_case_seal.js THE ANCHOR WORDS: the pin holds its chain
+//       at the commit that wrote it, read on the raw host) or anchored, its
+//       pin record's chain equal to the 64-hex chain the reveal answered
+//       with; a pin under any other chain is BROKEN. A pin it could not read
+//       at its commit (a pins store the raw host does not serve, say) is
+//       COULD NOT LOOK.
 //   (g) nothing at the project root that is not meant to be public is
 //       served: README.md, package.json, package-lock.json, and every file
 //       under lib/, tools/ and test/ in this checkout (tests/ too, if it
@@ -683,7 +687,7 @@ async function checkSealerPass(ctx) {
       return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
     }
     const summary = `${where}: the case pass read ${rep.read} of ${rep.candidates} candidates (${rep.deferred} deferred): ` +
-      `anchored ${rep.anchored.length}, already ${rep.already.length}, pending ${rep.pending.length}, refused ${rep.refused.length}, ` +
+      `pinned ${rep.newly_pinned.length}, already ${rep.already.length}, pending ${rep.pending.length}, refused ${rep.refused.length}, ` +
       `conflict ${rep.conflict.length}, unreadable ${rep.unreadable.length}, terminal ${rep.terminal.length}, could not look ${rep.could_not_look.length}`;
     const bad = [
       ...rep.refused.map((x) => `refused ${x.case_id} (${x.code})`),
@@ -692,27 +696,34 @@ async function checkSealerPass(ctx) {
     ];
     if (bad.length) return broken(`${summary}; ${bad.slice(0, 5).join(", ")}${bad.length > 5 ? `, and ${bad.length - 5} more` : ""}`);
     if (rep.truncated) return couldNotLook(`${summary}; the tree came back truncated, so the pass could not see every case`);
-    if (!ctx.sealed) return couldNotLook(`${summary}; no case was sealed in (e), so no case of this run shows the pass's anchor`);
+    if (!ctx.sealed) return couldNotLook(`${summary}; no case was sealed in (e), so no case of this run shows the pass's pin`);
     const unread = rep.could_not_look.find((x) => x.case_id === ctx.sealed.caseId);
     if (unread) return couldNotLook(`${summary}; the key document case ${ctx.sealed.caseId} names could not be read (${unread.reason}), so the pass did not pin it`);
     const want = ctx.sealed.chain;
-    if (typeof want !== "string" || !HEX64.test(want)) return broken(`${summary}; the reveal's chain ${JSON.stringify(want)} is not 64 hex, so no anchor can be for it`);
+    if (typeof want !== "string" || !HEX64.test(want)) return broken(`${summary}; the reveal's chain ${JSON.stringify(want)} is not 64 hex, so no pin can be for it`);
     const st = await S.anchorState(ctx.sealed.caseId, want);
-    const by = rep.anchored.includes(ctx.sealed.caseId) ? "pinned by this pass" : "pinned at its reveal";
-    // Anchored counts only for the reveal's own chain, read off the pin record.
+    const by = rep.newly_pinned.includes(ctx.sealed.caseId) ? "pinned by this pass" : "pinned at its reveal";
+    // Pinned (or anchored) counts only for the reveal's own chain, read off the pin record.
+    const held = st.pin === "pinned" || st.pin === "anchored";
     const pinned = st.record && typeof st.record.chain === "string" ? st.record.chain : null;
-    if (st.pin === "anchored" && pinned === want) return verified(`${summary}; case ${ctx.sealed.caseId} is anchored, chain ${want} (${by})`);
-    if (st.pin === "anchored") {
-      return broken(`${summary}; case ${ctx.sealed.caseId} reads anchored under chain ${JSON.stringify(pinned)}, not the reveal's chain ${want}`);
+    if (held && pinned === want) {
+      const anchored = st.pin === "anchored" ? `; anchored by ${st.anchor.path}, written at commit ${st.anchor.record_commit.sha}` : "; not anchored yet";
+      return verified(`${summary}; case ${ctx.sealed.caseId} is pinned at commit ${st.pin_commit.sha}, chain ${want} (${by})${anchored}`);
+    }
+    if (held) {
+      return broken(`${summary}; case ${ctx.sealed.caseId} reads ${st.pin} under chain ${JSON.stringify(pinned)}, not the reveal's chain ${want}`);
     }
     const waiting = rep.pending.find((x) => x.case_id === ctx.sealed.caseId);
-    if (st.pin === "unknown" || (st.pin === "pending" && waiting)) {
-      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not anchored yet (${st.reason || (waiting && waiting.reason) || "store unreachable"})`);
+    if (st.pin === "could_not_look") {
+      return couldNotLook(`${summary}; the pin of case ${ctx.sealed.caseId} could not be read (${st.reason})`);
     }
-    if (st.pin === "pending" && !rep.anchored.includes(ctx.sealed.caseId) && rep.deferred > 0) {
-      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not anchored yet and fell outside this run's window`);
+    if (st.pin === "pending" && waiting) {
+      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not pinned yet (${waiting.reason || "store unreachable"})`);
     }
-    return broken(`${summary}; case ${ctx.sealed.caseId} reads pin ${st.pin}${st.reason ? ` (${st.reason})` : ""}, not anchored under the reveal's chain`);
+    if (st.pin === "pending" && !rep.newly_pinned.includes(ctx.sealed.caseId) && rep.deferred > 0) {
+      return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not pinned yet and fell outside this run's window`);
+    }
+    return broken(`${summary}; case ${ctx.sealed.caseId} reads pin ${st.pin}${st.reason ? ` (${st.reason})` : ""}, not pinned under the reveal's chain`);
   } finally {
     if (had) process.env.GITHUB_PIN_TOKEN = before;
     else delete process.env.GITHUB_PIN_TOKEN;

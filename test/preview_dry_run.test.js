@@ -205,8 +205,8 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   assert.match(r.by.e.line, new RegExp(`no content-length answered HTTP 201 VERDICT for case_id ${id}, verdict MATCHED: signed by ` +
     `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in public/\\.well-known/arcaeon/case-signing-keys\\.json, ` +
     `the document it names at commit ${KD.commitOf(TEST_DOC)}; ` +
-    `chain ${S.caseChain(sealed)}, the case's own, pin anchored$`));
-  assert.match(r.by.f.line, new RegExp(`case ${id} is anchored, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\)`));
+    `chain ${S.caseChain(sealed)}, the case's own, pin pinned$`));
+  assert.match(r.by.f.line, new RegExp(`case ${id} is pinned at commit [0-9a-f]{40}, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\); not anchored yet$`));
   assert.match(r.by.g.line, /README\.md, package\.json, package-lock\.json, lib\/ \d+, tools\/ \d+, test\/ \d+\): every one answered HTTP 404/);
 
   // The reveal really went out chunked, with no content-length.
@@ -460,7 +460,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   assert.equal(failed, 1);
   assert.match(healed.by.e.line, /pin pending/);
   assert.equal(word(healed, "f"), "VERIFIED", healed.show);
-  assert.match(healed.by.f.line, /anchored 1, already 0[^;]*; case [0-9a-f]{64} is anchored, chain [0-9a-f]{64} \(pinned by this pass\)/);
+  assert.match(healed.by.f.line, /pinned 1, already 0[^;]*; case [0-9a-f]{64} is pinned at commit [0-9a-f]{40}, chain [0-9a-f]{64} \(pinned by this pass\); not anchored yet$/);
 
   // A sealable case whose file does not read: the pass refuses it.
   gh = new MockGitHubStore();
@@ -526,8 +526,8 @@ test("T06, T07 (f) DESIGN I: a pass that could not read the key document this ru
   const real = S.anchorPending;
   t.mock.method(S, "anchorPending", async (o) => {
     const rep = await real(o);
-    const ids = [...rep.anchored, ...rep.already];
-    return { ...rep, anchored: [], already: [], could_not_look: ids.map((case_id) => ({ case_id, reason: "http_404" })) };
+    const ids = [...rep.newly_pinned, ...rep.already];
+    return { ...rep, newly_pinned: [], already: [], could_not_look: ids.map((case_id) => ({ case_id, reason: "http_404" })) };
   });
   const r = await dryRun(t, { pinToken: PIN_TOKEN });
   assert.equal(word(r, "e"), "VERIFIED", r.show);

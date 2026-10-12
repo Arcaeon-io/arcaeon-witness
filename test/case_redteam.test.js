@@ -29,11 +29,18 @@
 //     only when the service's reconcile signer signed it (receipt_unsigned
 //     otherwise, and the page does not verify the record), and with no
 //     reconcile signer nothing is compared (503 signer_unavailable).
+//   - GPT-5.6 §3.4, anchored meaning only that latest.json exists: Design J,
+//     THE ANCHOR WORDS (lib/_case_seal.js). A reader says pinned (the pin
+//     holds the case's chain at the commit that wrote it, named), anchored
+//     (a daily anchor record names a head of the pins repository that holds
+//     the pin, and the record's own commit is named) or could_not_look.
 //
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
-//     daily anchor": the daily head anchor is an outside job, not in this
-//     repository (§3.4's test shows anchorState reads the pointer alone);
+//     daily anchor": the daily head anchor and its OpenTimestamps proof are
+//     an outside job, not in this repository (since Design J a reader reads
+//     the record and the pin at the head it names; the proof is not checked
+//     here);
 //   - GPT-5.6 §3.2 and Gemini §3, an operator backdating the service clock:
 //     the clock is the deployment's; a test hands the handlers any time it
 //     likes, which shows nothing about a live operator;
@@ -211,7 +218,7 @@ async function sealedCase(over, { pinFails = false } = {}) {
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
   const r = await reveal(revealBody(c.id, c.a, c.b));
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "anchored");
+  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
   return c;
 }
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
@@ -505,7 +512,7 @@ test("FIX A: the sealer reports such a case not_sealed: single_party, and pins n
   const run = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
   assert.equal(run.not_sealed, 1);
   assert.deepEqual(run.single_party, [id]);
-  assert.deepEqual(run.anchored, []);
+  assert.deepEqual(run.newly_pinned, []);
   assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
 });
 
@@ -791,16 +798,20 @@ test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind
     assert.ok(commits.some((c) => text.includes(c)), "the sealed case or its pin names the commit that wrote it");
   });
 
-test('GPT-5.6 §3.4 / §5: "pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion in any daily anchor"',
-  { todo: "CONFIRMED: anchorState answers anchored after reading pins/case/<id>/latest.json and nothing else (the assertion 'anchored is said only after something beyond the pin pointer is read' fails)" }, async () => {
-    const { id } = await sealedCase({ scope_digest: sha("3.4") });
-    const from = gh.getLog.length;
-    const st = await S.anchorState(id, S.caseChain(storedCase(id)));
-    assert.equal(st.pin, "anchored");
-    const reads = gh.getLog.slice(from);
-    assert.deepEqual(reads, [S.pinPaths(id).latest]);
-    assert.ok(reads.length > 1, "anchored is said only after something beyond the pin pointer is read");
-  });
+test('GPT-5.6 §3.4 / §5: "pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion in any daily anchor"', async () => {
+  const { id } = await sealedCase({ scope_digest: sha("3.4") });
+  const chain = S.caseChain(storedCase(id));
+  // Design J: the pin alone is pinned, never anchored
+  assert.equal((await S.anchorState(id, chain)).pin, "pinned");
+  // a daily anchor record naming a head of the pins repository that holds the pin
+  const day = gh.commitsFor(PINS, S.pinPaths(id).seq).slice(-1)[0].date.slice(0, 10);
+  gh.seedText(PINS, `anchors/${day}-head.txt`, `${gh.headOf(PINS)} ${day}T03:15:00+00:00\n`);
+  const from = gh.getLog.length;
+  const st = await S.anchorState(id, chain);
+  assert.equal(st.pin, "anchored");
+  const reads = gh.getLog.slice(from);
+  assert.ok(reads.length > 1, "anchored is said only after something beyond the pin pointer is read");
+});
 
 test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write commit"',
   { todo: "CONFIRMED: the commit that wrote a reference row appears neither in the row nor in the answer (the assertion 'the row or its answer names the commit that wrote it' fails)" }, async () => {

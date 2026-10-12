@@ -219,7 +219,7 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
   assert.equal(r.body.ok, true);
   assert.equal(r.body.status, "VERDICT");
   assert.equal(r.body.verdict.summary, "MATCHED 5 of 5");
-  assert.equal(r.body.pin, "anchored");
+  assert.equal(r.body.pin, "pinned");
 
   const k = storedCase(id);
   assert.deepEqual(k, r.body.case, "the answer carries the case as written");
@@ -750,7 +750,7 @@ test("TEST 8: a case write that fails leaves no pin and the case COMMITTED; the 
   assert.deepEqual(pinFiles, [], "no pin of any kind");
   const ok = await reveal(revealBody(id, a, b));
   assert.equal(ok.status, 201);
-  assert.equal(ok.body.pin, "anchored");
+  assert.equal(ok.body.pin, "pinned");
   assert.equal(runs(), 2);
 });
 
@@ -768,7 +768,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   // the retry, an hour later
   const retry = await S.anchorCase(id, { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC });
   assert.equal(retry.ok, true);
-  assert.equal(retry.pin, "anchored");
+  assert.equal(retry.pin, "pinned");
   assert.equal(retry.chain, chain, "the retry's chain is the seal's");
   const pinned = gh.read(PINS, paths.latest);
   assert.equal(pinned.chain, chain);
@@ -781,11 +781,11 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   // a repeat writes nothing
   const writes = gh.putLog.length;
   const again = await S.anchorCase(id, { keyDocument: KEYS_DOC });
-  assert.equal(again.pin, "anchored");
+  assert.equal(again.pin, "pinned");
   assert.equal(again.existing, true);
   assert.equal(again.chain, chain);
   assert.equal(gh.putLog.length, writes);
-  assert.equal((await S.anchorState(id, chain)).pin, "anchored");
+  assert.equal((await S.anchorState(id, chain)).pin, "pinned");
 
   // a lost pointer: the numbered record landed, the pointer did not; the
   // retry adopts the record it finds, unchanged
@@ -797,7 +797,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   const orphan = gh.read(PINS, p2.seq);
   assert.equal(orphan.chain, r2.body.chain);
   const retry2 = await S.anchorCase(c2.id, { now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
-  assert.equal(retry2.pin, "anchored");
+  assert.equal(retry2.pin, "pinned");
   assert.equal(retry2.chain, r2.body.chain);
   assert.deepEqual(gh.read(PINS, p2.latest), orphan, "adopted as it was, its first pinned_at kept");
 
@@ -925,7 +925,7 @@ test("TEST 9: with no case key the seal is unsigned and says why; the log key, t
     assert.equal(r.body.sealed_by, null, name);
     assert.equal(S.verifyCase(k, CASE_KEY.verifier).reason, "unsigned", name);
     assert.equal(k.verdict.sig === null, false, `${name}: the receipt is still signed with its own key`);
-    assert.equal(r.body.pin, "anchored", `${name}: an unsigned seal is still sealed and pinned`);
+    assert.equal(r.body.pin, "pinned", `${name}: an unsigned seal is still sealed and pinned`);
   }
   // MUST-FAIL ARM: unsigned with no reason is not a valid case
   const { id, a, b } = await committedCase({ over: { scope_digest: sha("no reason") } });

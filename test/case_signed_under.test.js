@@ -400,7 +400,7 @@ test("SIGNER SINCE REVOKED: valid under the named document, and the current docu
   // still sealed: the sealer pins it, and a role may append its reference
   const pinned = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: caseRevoked });
   assert.equal(pinned.ok, true, JSON.stringify(pinned));
-  assert.equal(pinned.pin, "anchored");
+  assert.equal(pinned.pin, "pinned");
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt,
     cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
@@ -468,7 +468,7 @@ test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, networ
   const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: DOC });
   assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "http_404" }]);
   assert.deepEqual(run.refused, []);
-  assert.deepEqual(run.anchored, []);
+  assert.deepEqual(run.newly_pinned, []);
   assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
   const ref = await referenceAs(id, a);
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
@@ -486,7 +486,7 @@ test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, networ
   // the document is back: the next run pins
   KD.serve(gh, DOC);
   const again = await S.anchorPending({ now: REVEAL_AT + 120000, keyDocument: DOC });
-  assert.deepEqual(again.anchored, [id]);
+  assert.deepEqual(again.newly_pinned, [id]);
   assert.deepEqual(again.could_not_look, []);
 });
 
@@ -560,7 +560,8 @@ test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and 
   const pinned = await sealedCase("page pin unreadable");
   gh.forceCommitsFailure(PINS, S.pinPaths(pinned.id).seq, 1, 500);
   const q = await pageOf(pinned.id);
-  assert.ok(q.html.includes("the commit that wrote its pin could not be read on this request"));
+  // Design J: a pin whose commit cannot be read is could_not_look, no claim
+  assert.ok(q.html.includes("could_not_look: its pin could not be read on this request (pin_commit_unreadable)"));
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 
@@ -737,6 +738,6 @@ test("L01 (lib/_sealer.js anchorCases): the current document it is handed is the
   const { id } = await sealedCase("L01", { pinFails: true });
   const run = await sealer.anchorCases({ now: new Date(REVEAL_AT + 60000), keyDocument: { ...DOC, extra: true } });
   assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "current_document_unreadable" }]);
-  assert.deepEqual(run.anchored, []);
+  assert.deepEqual(run.newly_pinned, []);
   assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
 });

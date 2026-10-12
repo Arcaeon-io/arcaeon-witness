@@ -432,7 +432,7 @@ async function sealedCase({ pinFails = false } = {}) {
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(ID).seq, 1, 502);
   const r = await reveal(p);
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "anchored");
+  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
   return p;
 }
 async function page(id = ID, keyDocument = S.PUBLISHED_KEYS) {
@@ -512,7 +512,8 @@ test("P08 (anchorHtml): a pin pointer holding another chain reads as a conflict 
   const pg = await page();
   assert.equal(pg.status, 200);
   assert.match(pg.html, /a pin under this case&#39;s namespace holds another chain|a pin under this case's namespace holds another chain/);
-  assert.ok(!pg.html.includes("anchored: its pin"), "not anchored");
+  assert.ok(!pg.html.includes("anchored: a daily anchor record"), "not anchored");
+  assert.ok(!pg.html.includes("pinned at commit"), "not pinned");
 });
 
 test("P10 (crossRows): a reference row's operator is escaped on the page", async () => {
@@ -548,7 +549,7 @@ test("E03 (sealOnce): a batch pass that refuses does not stop the case pass: a p
   assert.equal(r.refused, true);
   assert.equal(r.reason, "pending_document_corrupt");
   assert.ok(r.cases && r.cases.ok, JSON.stringify(r.cases));
-  assert.deepEqual(r.cases.anchored, [ID]);
+  assert.deepEqual(r.cases.newly_pinned, [ID]);
   assert.equal(gh.has(PINS, S.pinPaths(ID).latest), true);
 });
 

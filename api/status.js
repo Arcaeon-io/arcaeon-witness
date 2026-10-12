@@ -168,7 +168,7 @@ module.exports = async (req, res) => {
     ? `<tr>
           <td><code>pins/case/</code> <a class="src" href="${esc(TREE("pins/case"))}" title="every case seal pin">tree</a></td>
           <td>${esc(caseAnchors.case_files)}</td>
-          <td>${esc(caseAnchors.anchored)}</td>
+          <td>${esc(caseAnchors.pinned)}</td>
           <td>${esc(caseAnchors.pending)}</td>
           <td>${esc(caseAnchors.withdrawn)}</td>
         </tr>`
@@ -354,10 +354,10 @@ ${brandMark.FAVICON_LINK}
   </div>
 
   <h2>Case seals</h2>
-  <p class="muted">A sealed case (the case protocol) is anchored by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Anchored</em> means the case has both registration files and its pin. <em>Pending</em> means it has both registration files and no pin yet: a sealed case waiting for the operator's sealer run to write its pin, a case not yet revealed, or one past its deadline with no reveal. The tree alone cannot tell those apart; the case's own page can. <em>Withdrawn</em> cases carry the withdrawal marker and are never pending. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <p class="muted">A sealed case (the case protocol) is pinned by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Pinned</em> means the case has both registration files and a pin pointer, by path alone; whether the pin holds the case's chain at the commit that wrote it, and whether a daily anchor record holds it (anchored), the case's own page says. <em>Pending</em> means it has both registration files and no pin yet: a sealed case waiting for the operator's sealer run to write its pin, a case not yet revealed, or one past its deadline with no reveal. The tree alone cannot tell those apart; the case's own page can. <em>Withdrawn</em> cases carry the withdrawal marker and are never pending. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
   <div class="panel scroll">
     <table>
-      <thead><tr><th>where</th><th>case files</th><th>anchored</th><th>pending</th><th>withdrawn</th></tr></thead>
+      <thead><tr><th>where</th><th>case files</th><th>pinned</th><th>pending</th><th>withdrawn</th></tr></thead>
       <tbody>${caseRowHtml}</tbody>
     </table>
     ${casePartialHtml}

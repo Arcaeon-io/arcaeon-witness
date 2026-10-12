@@ -1,5 +1,39 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design J, step 1: pinned, anchored or could_not_look; anchored only with a daily anchor record and its commit (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §3.4 / §5).** `anchorState` answered "anchored" after reading `pins/case/<id>/latest.json` and nothing else, so "anchored" meant only "a pin file exists".
+- **THE ANCHOR WORDS** (`lib/_case_seal.js` `anchorState`). A reader says one of three words, each only after the reads it names:
+  - **pinned**: the pointer holds the case's chain, and so does the numbered record read AT the commit that wrote it (its oldest commit), which is named with its commit time;
+  - **anchored**: pinned, and a daily anchor record `anchors/<date>-head.txt` names a head of the pins repository at which the numbered record holds the chain. The record's own commit is read and named, and the record at that commit names the same head;
+  - **could_not_look**: a read failed, no claim.
+- A pinned case whose anchor could not be looked up stays pinned and says so (`anchor: {could_not_look}`). The other answers are `pending`, `conflict` and `unreadable`. A conflict now includes a numbered record that held another chain at the commit that wrote it, and a head a record names that holds another chain.
+- **How the files are read.**
+  - Files at a commit are read from the public pins repository on the raw host, with no credentials. Answered reads are cached, failed ones are not.
+  - Records are looked up from the day before the pin's commit, oldest first, at most `ANCHOR_RECORD_READS` (3).
+  - The OpenTimestamps proof is not checked here.
+- **Every place that said anchored after reading only the pin now says pinned:**
+  - `pinChain` (`pinned`, with `pin_commit` when it wrote the record);
+  - the reveal's answer (`pin: "pinned"`, `pin_commit`);
+  - the sealer's report (`newly_pinned`, was `anchored`);
+  - the status row (`pinned`, was `anchored`, in the data, the JSON and the page);
+  - the case page (the anchor and pin rows);
+  - `ANCHOR_NOTE`;
+  - the dry run's (f).
+- **The case page.**
+  - anchored names the record (linked at the commit that wrote it), that commit and the head, each a link.
+  - pinned says no daily anchor record read holds the pin yet.
+  - could_not_look says what could not be read and claims nothing.
+- **`test/helpers/mock_store.js`.**
+  - The raw host serves a pins-repository file at any of its commits, as git would.
+  - Commit shas are unique across the process.
+  - New: `seedText`, `headOf`, `forceGetFailure`, and a `match` for `forceRawFailure`.
+- **Tests.**
+  - `test/case_commits.test.js` (new, 8): pinned; anchored; a head that predates the pin, and the read bound; could_not_look at each read; conflicts at the pin's commit and in an anchored head; the writers' words; the page; the note.
+  - The §3.4 red-team test loses its todo and keeps its named assertion. It now plants a daily anchor record; the line that recorded the defect (only the pointer read) is gone.
+  - Tests that expected the old words were updated by design.
+- Suite 1076 -> 1084 tests, 0 fail, 9 -> 8 todo. Here: 1074 pass and the 2 environment skips.
+
 ## 2026-10-12: The page says two keys, never two parties (decision on the A + B report; branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - Two key ids prove two keys, not two holders. The single-party page's status line now reads "not shown as a case between two keys", and the page header comment says the same. No page state says "two parties".

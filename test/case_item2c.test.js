@@ -201,7 +201,7 @@ async function sealedCase({ over, env = SIGNED, pinFails = false, keyDocument = 
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
   const r = await reveal(revealBody(c.id, c.a, c.b, extra), { env, keyDocument });
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "anchored");
+  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
   return { ...c, r };
 }
 function storedCase(id) {
@@ -261,7 +261,7 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   // retired key's cases stay trusted: the document's status_meaning)
   const retired = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] } });
   assert.equal(retired.ok, true, JSON.stringify(retired));
-  assert.equal(retired.pin, "anchored");
+  assert.equal(retired.pin, "pinned");
   assert.equal(retired.chain, S.caseChain(good));
 });
 
@@ -270,7 +270,7 @@ test("FIX 1: an unsigned seal is still a seal and anchors with no signature to c
   assert.equal(storedCase(id).sig, null);
   const r = await S.anchorCase(id, { now: REVEAL_AT + 60000 });
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(r.pin, "anchored");
+  assert.equal(r.pin, "pinned");
 });
 
 // =============================================================================
@@ -364,7 +364,7 @@ test("FIX 3: the status row reads no case file and no pin; a truncated tree make
   const reads = gh.getLog.length;
   const d = await gatherStatusData();
   assert.ok(!gh.getLog.slice(reads).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case file, no case pin read");
-  assert.deepEqual(d.caseAnchors, { case_files: 3, anchored: 1, pending: 1, withdrawn: 1, partial: false });
+  assert.deepEqual(d.caseAnchors, { case_files: 3, pinned: 1, pending: 1, withdrawn: 1, partial: false });
 
   // the mock tree, marked truncated
   gh.treeTruncated = true;
@@ -963,7 +963,7 @@ test("OPEN QUOTA: twenty opens per key per UTC day; the twenty-first is 429 open
 
 const LIMIT_LINES = C.LIMITS.map((l) => l.replace(/&/g, "&amp;"));
 
-test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT anchored and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through verify.js and the /case/<case_id> rewrite", async () => {
+test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through verify.js and the /case/<case_id> rewrite", async () => {
   const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "vercel.json"), "utf8"));
   const rw = Object.fromEntries(cfg.rewrites.map((r) => [r.source, r.destination]));
   assert.equal(rw["/case/:case_id"], "/api/verify?op=case-page&case_id=:case_id");
@@ -1003,7 +1003,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pv, /<span class="word pass">MATCHED<\/span>/);
   assert.match(pv, /none: every call matched \(5 matched\)/);
   assert.match(pv, /one record: this service&#39;s/);
-  assert.match(pv, /anchored: its pin/);
+  assert.match(pv, /pinned, not anchored yet: no daily anchor record read on this request holds its pin/);
   assert.ok(pv.includes(S.ANCHOR_NOTE.replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;")), "the anchor sentence");
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
   // since Design I: the key document the case names, at its commit, cited
@@ -1035,7 +1035,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(String(ru._body), /unsigned: This case is sealed and not signed \(key_unpublished\)/);
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
-  assert.match((await casePage(p.id)).html, /sealed, not yet anchored/);
+  assert.match((await casePage(p.id)).html, /sealed, not pinned yet/);
   // ALTERED: the word and the first divergence; and a reference row makes it two records, with the cross-reference shown
   const alt = await committedWith({ scope_digest: sha("page altered") }, ALT_AGENT, ALT_TOOL);
   assert.equal((await reveal(revealBody(alt.id, alt.a, alt.b))).status, 201);

@@ -45,13 +45,28 @@
 //        (2026-10-12, case protocol Design I: lib/_case_seal.js reads the key
 //        document a sealed case names, at the commit it names). Served from
 //        seedRaw(repo, ref, path, text), so one path can hold different text
-//        at different commits; nothing else answers on this host. rawLog
-//        records every read, and forceRawFailure() makes reads fail.
+//        at different commits. Since Design J (lib/_case_seal.js reads a case
+//        file, a pin and a daily anchor record of the pins repository at a
+//        commit) a ref that is a commit of a repository this store holds is
+//        served too, as git would: the path's text as the newest commit at
+//        or before that one left it (404 when none had written it, or one
+//        deleted it). Each commit keeps the text it wrote for that. Nothing
+//        else answers on this host. rawLog records every read, and
+//        forceRawFailure() makes reads fail.
+//
+//   Commit shas are unique across every store in one process (a reader may
+//   cache a file at a commit, which never changes on GitHub, so one test's
+//   commit must never be another test's). seedText() plants a text file
+//   with its commit (the daily anchor records are text, not JSON);
+//   headOf() is a repository's newest commit, its head.
 
 "use strict";
 
 const crypto = require("crypto");
 const ratelimit = require("../../lib/_ratelimit.js");
+
+// Commits made by every store in this process (see the header).
+let commitsMade = 0;
 
 function textResponse(status, text) {
   return {
@@ -86,6 +101,7 @@ class MockGitHubStore {
     this.getLog = []; // [path] — every GET attempted, hit or miss, in order
     this._forced = new Map(); // "repo::path" -> remaining forced-conflict count
     this._forcedFailure = new Map(); // "repo::path" -> {remaining, status}
+    this._forcedGetFailure = new Map(); // "repo::path" -> {remaining, status}
     // GET /repos/<repo>/git/trees/<branch>?recursive=1 -> {tree:[{path,type}], truncated}
     // Added 2026-09-20 for tools/reconcile_batches.js: the reconciler walks the
     // whole repo through store.getTreeMeta, and `truncated` is the field that
@@ -102,7 +118,7 @@ class MockGitHubStore {
     // Raw reads (see the header): "repo@ref:path" -> text.
     this.raw = new Map();
     this.rawLog = []; // ["repo@ref:path"] — every raw read, hit or miss, in order
-    this._forcedRawFailure = null; // {remaining, status} for every raw path
+    this._forcedRawFailure = null; // {remaining, status, match} for the raw paths it matches
   }
 
   // A public file's text at one commit, served on the raw host.
@@ -110,9 +126,35 @@ class MockGitHubStore {
     this.raw.set(`${repo}@${ref}:${path}`, String(text));
   }
 
-  // Force the next `n` raw reads to fail with `status` (0: a network error).
-  forceRawFailure(n = 1, status = 500) {
-    this._forcedRawFailure = { remaining: n, status };
+  // Force the next `n` raw reads to fail with `status` (0: a network error);
+  // with `match`, only the reads whose "repo@ref:path" includes it.
+  forceRawFailure(n = 1, status = 500, match = null) {
+    this._forcedRawFailure = { remaining: n, status, match };
+  }
+
+  // The text `path` held at commit `ref` of `repo`, as git would serve it:
+  // what the newest commit at or before `ref` touching `path` left there.
+  // undefined when `ref` is not a commit of `repo`, or nothing was there.
+  _textAt(repo, ref, path) {
+    const list = this._commitsOf(repo);
+    const at = list.findIndex((c) => c.sha === ref);
+    if (at < 0) return undefined;
+    for (let i = at; i >= 0; i -= 1) {
+      if (list[i].path === path) return list[i].content === null ? undefined : list[i].content;
+    }
+    return undefined;
+  }
+
+  // A repository's newest commit (its head), or null.
+  headOf(repo) {
+    const list = this._commitsOf(repo);
+    return list.length ? list[list.length - 1].sha : null;
+  }
+
+  // Seed a TEXT file (not JSON) with its own commit. Returns the commit sha.
+  seedText(repo, path, text) {
+    this._repoMap(repo).set(path, { content: String(text), sha: this._newSha() });
+    return this._recordCommit(repo, path, "mock: seeded text", String(text));
   }
 
   _commitsOf(repo) {
@@ -120,17 +162,21 @@ class MockGitHubStore {
     return this.commits.get(repo);
   }
 
-  _recordCommit(repo, path, message) {
+  // `content` is the path's text after the commit (null: deleted).
+  _recordCommit(repo, path, message, content = null) {
     this._commitSeq += 1;
-    const sha = crypto.createHash("sha1").update(`mock-commit-${this._commitSeq}`).digest("hex");
-    this._commitsOf(repo).push({ sha, path, message: String(message || ""), date: new Date().toISOString() });
+    commitsMade += 1;
+    const sha = crypto.createHash("sha1").update(`mock-commit-${commitsMade}`).digest("hex");
+    this._commitsOf(repo).push({ sha, path, message: String(message || ""), date: new Date().toISOString(), content });
     return sha;
   }
 
   // Plant one more commit touching `path` (a second write to a path that
-  // should have been written once). Returns its sha.
+  // should have been written once), leaving its text as it is. Returns its
+  // sha.
   addCommit(repo, path, message = "mock: an extra commit touching this path") {
-    return this._recordCommit(repo, path, message);
+    const cur = this._repoMap(repo).get(path);
+    return this._recordCommit(repo, path, message, cur ? cur.content : null);
   }
 
   // The commits that touched `path`, newest first (test assertions).
@@ -154,14 +200,12 @@ class MockGitHubStore {
 
   // Seed a file as it would exist BEFORE any handler under test runs.
   seed(repo, path, obj) {
-    this._repoMap(repo).set(path, {
-      content: JSON.stringify(obj, null, 2) + "\n",
-      sha: this._newSha(),
-    });
+    const content = JSON.stringify(obj, null, 2) + "\n";
+    this._repoMap(repo).set(path, { content, sha: this._newSha() });
     // exactly one commit for a seeded path (see the header)
     const list = this._commitsOf(repo);
     for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === path) list.splice(i, 1);
-    this._recordCommit(repo, path, "mock: seeded");
+    return this._recordCommit(repo, path, "mock: seeded", content);
   }
 
   // Read back the current stored JSON for a path (test assertions).
@@ -190,22 +234,34 @@ class MockGitHubStore {
     this._forcedFailure.set(`${repo}::${path}`, { remaining: n, status });
   }
 
+  // Force the next `n` contents-API GETs of `path` to fail with `status`
+  // (a read that could not be made, never a 404).
+  forceGetFailure(repo, path, n = 1, status = 500) {
+    this._forcedGetFailure.set(`${repo}::${path}`, { remaining: n, status });
+  }
+
   async handleFetch(url, opts) {
     const u = new URL(String(url));
 
     // Raw reads: see the header.
     if (u.hostname === "raw.githubusercontent.com") {
       const parts = u.pathname.split("/").filter(Boolean);
-      const key = `${parts[0]}/${parts[1]}@${parts[2]}:${parts.slice(3).join("/")}`;
+      const repo = `${parts[0]}/${parts[1]}`;
+      const ref = parts[2];
+      const rpath = parts.slice(3).join("/");
+      const key = `${repo}@${ref}:${rpath}`;
       this.rawLog.push(key);
       const forced = this._forcedRawFailure;
-      if (forced && forced.remaining > 0) {
+      if (forced && forced.remaining > 0 && (!forced.match || key.includes(forced.match))) {
         forced.remaining -= 1;
         if (forced.status === 0) throw new TypeError("mock: fetch failed (forced network error)");
         return textResponse(forced.status, "mock: forced raw read failure");
       }
-      if (((opts && opts.method) || "GET") !== "GET" || !this.raw.has(key)) return textResponse(404, "404: Not Found");
-      return textResponse(200, this.raw.get(key));
+      if (((opts && opts.method) || "GET") !== "GET") return textResponse(404, "404: Not Found");
+      if (this.raw.has(key)) return textResponse(200, this.raw.get(key));
+      const atCommit = this._textAt(repo, ref, rpath);
+      if (atCommit === undefined) return textResponse(404, "404: Not Found");
+      return textResponse(200, atCommit);
     }
 
     // Recursive tree read (_store.js getTree / getTreeMeta):
@@ -253,6 +309,11 @@ class MockGitHubStore {
 
     if (method === "GET") {
       this.getLog.push(path);
+      const forcedGet = this._forcedGetFailure.get(`${repo}::${path}`);
+      if (forcedGet && forcedGet.remaining > 0) {
+        forcedGet.remaining -= 1;
+        return fakeResponse(forcedGet.status, { message: "mock: forced read failure" });
+      }
       const rec = map.get(path);
       if (rec) {
         return fakeResponse(200, {
@@ -317,7 +378,7 @@ class MockGitHubStore {
       map.set(path, { content: decoded, sha: newSha });
       this.commitCounter += 1;
       this.putLog.push({ repo, path, sha: newSha });
-      const commitSha = this._recordCommit(repo, path, body.message);
+      const commitSha = this._recordCommit(repo, path, body.message, decoded);
       return fakeResponse(200, {
         content: { sha: newSha, path },
         commit: { sha: commitSha },
