@@ -1,5 +1,26 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Red-team fix C: a registration file never stands after a withdrawal (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §1.1 / §6.2).** "A commitment can land after withdrawal ... the registration file remains written": a commit that read OPEN wrote its registration file after a withdrawal landed, and only its projection answered case_withdrawn.
+- **THE CASE LOCK** (`lib/_case_http.js`).
+  - **Where it lives.** The registration write and the withdrawal's root write take one per-case lock: a lease in the PRIVATE usage repository, `case_locks/<case_id>.json`.
+  - **How it is taken.** Through the store's conditional writes (lib/_claim.js's discipline). It is held `CASE_LOCK_TTL_SECONDS` (30) and released by its holder.
+  - **When it cannot be taken.** A live lock held by another request is waited on three times, then 503 `case_busy`. One that cannot be read is 503 `case_lock_unreachable`; one present and unreadable is 503 `case_lock_unreadable`. Nothing is written in any of them.
+- **Under the lock the commit reads the case again.** On WITHDRAWN it writes nothing: 409 case_withdrawn, `registration_recorded: false`, `received_at` (the registered_at it would have recorded).
+- **After its write, still under the lock, it reads the case once more.** A lease that ran out can be taken over, so a withdrawal may land in between: the race lost after the write. Inside the same critical section:
+  - the registration is removed (`lib/_case_unregister.js`, the pins repository's one deletion, which refuses every path but a registration file; the removal is itself a commit);
+  - a case log event `commit_after_withdrawal` is appended, so the attempt is not invisible: 409 with `registration_removed` and `log_event`.
+- **THE CASE LOG** (`lib/_case.js`): `cases/<case_id>/log/<seq>.json`, create-only, exactly `{kind: "case-event", v, case_id, seq, event, at, role, commitment_sha256, registered_at, registration_commit, withdrawal_at}`.
+- A registration written before the withdrawal stands, as design decision 3 says.
+- **`test/no_delete_record.test.js`.** The new module is the one named exception to "no DELETE against the pin repo". A new test holds it to registration files only, before any request is made.
+- **Tests.**
+  - `test/case_consent.test.js` (new, 5): the withdrawal seen under the lock; the race lost after the write (removed and logged); a live lock (case_busy), with an expired one taken over; a lock that cannot be read; the event's schema.
+  - The §1.1 red-team test loses its todo and keeps its named assertion.
+  - Its sibling keeps the registered_at-before-withdrawal check, now read from the refusal's `received_at` since no file is created.
+  - Three interleaving tests move their interleave point to just before the lock is taken (the lock now orders those writes), or count pins-repository writes only.
+- Suite 1110 -> 1116 tests, 0 fail, 6 -> 5 todo. Here: 1109 pass and the 2 environment skips.
+
 ## 2026-10-12: Design J, step 5: the must-fail pass, 108 planted defects, 107 caught, 1 equivalent (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - 108 defects planted one at a time in the code Design J added or changed, with the whole suite run against each. The harness is not committed.

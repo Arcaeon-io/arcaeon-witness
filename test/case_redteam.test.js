@@ -29,6 +29,12 @@
 //     only when the service's reconcile signer signed it (receipt_unsigned
 //     otherwise, and the page does not verify the record), and with no
 //     reconcile signer nothing is compared (503 signer_unavailable).
+//   - GPT-5.6 §1.1 / §6.2, a registration landing after a withdrawal: FIX C,
+//     THE CASE LOCK (lib/_case_http.js). The registration write and the
+//     withdrawal's root write take one per-case lock; a commit that sees
+//     WITHDRAWN under it writes nothing, and one that loses the race after
+//     its write removes the registration and appends a case log event
+//     commit_after_withdrawal.
 //   - GPT-5.6 §3.2, no commit bound to a sealed case: Design J, THE PIN IS
 //     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
 //     commit that wrote the sealed case file, and every reader reads the
@@ -292,20 +298,18 @@ async function commitAcrossWithdrawal() {
   return { id, res: r.out };
 }
 
-test('GPT-5.6 §1.1 / §6.2: "A commitment can land after withdrawal ... project() then rereads, sees WITHDRAWN, and returns case_withdrawn, but the registration file remains written"',
-  { todo: "CONFIRMED: commit_b.json is present after the withdrawal (the assertion 'no registration file is written after the case was withdrawn' fails)" }, async () => {
-    const { id } = await commitAcrossWithdrawal();
-    assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "no registration file is written after the case was withdrawn");
-  });
-
-test('GPT-5.6 §1.1: "It also creates a public registration dated after a redacted withdrawal": the file\'s registered_at is the commit\'s arrival, before withdrawal.at (only its pins-repository commit comes after)', async () => {
+test('GPT-5.6 §1.1 / §6.2: "A commitment can land after withdrawal ... project() then rereads, sees WITHDRAWN, and returns case_withdrawn, but the registration file remains written"', async () => {
   const { id } = await commitAcrossWithdrawal();
-  const regB = gh.read(PINS, C.registrationPath(id, "b"));
+  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "no registration file is written after the case was withdrawn");
+});
+
+test('GPT-5.6 §1.1: "It also creates a public registration dated after a redacted withdrawal": the commit\'s arrival, the registered_at it would have recorded, is before withdrawal.at, and since FIX C no registration is created at all', async () => {
+  const { id, res } = await commitAcrossWithdrawal();
   const w = storedCase(id).withdrawal;
-  assert.ok(Date.parse(regB.registered_at) < Date.parse(w.at), `${regB.registered_at} vs ${w.at}`);
-  // the order of the writes themselves: the withdrawal's root write, then b's file
-  const order = gh.putLog.map((x) => x.path);
-  assert.ok(order.indexOf(C.registrationPath(id, "b")) > order.indexOf(C.casePath(id)), "the file is written after the redacted root");
+  assert.equal(res._body.registration_recorded, false);
+  assert.ok(Date.parse(res._body.received_at) < Date.parse(w.at), `${res._body.received_at} vs ${w.at}`);
+  // FIX C: no write of b's file at all, before or after the redacted root
+  assert.ok(!gh.putLog.some((x) => x.path === C.registrationPath(id, "b")), "no registration file is written");
 });
 
 test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"',

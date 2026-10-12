@@ -731,13 +731,16 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
 
   // (3) a registration projected between the withdrawal's read and write is
   // no race to lose: the redacted record goes over the fresh case, and the
-  // new registration file stays where it is
+  // new registration file stays where it is. Since red-team fix C the
+  // withdrawal's root write is under THE CASE LOCK, so a registration
+  // between its read and its write lands before it takes the lock: it runs
+  // as the withdrawal's lock write goes out
   const o = await openCase({ scope_digest: sha("race registration") });
   const pa = party(o, "a", AGENT_TAPE);
   const pb = party(o, "b", TOOL_TAPE);
   await register(o, pa);
   plantStamp(pb.commitment_sha256);
-  const r3 = await interleave(C.casePath(o), () => withdraw(proofOf(o, pa)),
+  const r3 = await interleave(H._internal.caseLockPath(o), () => withdraw(proofOf(o, pa)),
     () => call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: o, role: "b", commitment_sha256: pb.commitment_sha256 }), NOW));
   assert.equal(r3.inner._status, 201, JSON.stringify(r3.inner._body));
   assert.equal(r3.outer.status, 201, JSON.stringify(r3.outer.body));

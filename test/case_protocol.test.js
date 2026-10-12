@@ -806,9 +806,10 @@ test("TEST 3, ITEM 1B, TWO WRITES: role b's file landed and its case update fail
   assert.deepEqual(k.commitments.b, C.commitmentEntry(fileB), "b, projected from ITS file by a's request");
   assert.deepEqual(resA._body.case, k, "the answer carries the case as written");
   assert.deepEqual(C.validateCase(k), { ok: true });
-  // No retry by b: a's request wrote a's file and the case, and nothing else;
-  // b's file is byte for byte what b's own request wrote.
-  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.registrationPath(id, "a"), C.casePath(id)]);
+  // No retry by b: a's request wrote a's file and the case, and nothing else
+  // in the pins repository (its case lock, red-team fix C, is in the usage
+  // repository); b's file is byte for byte what b's own request wrote.
+  assert.deepEqual(gh.putLog.slice(writes).filter((w) => w.repo === PINS).map((w) => w.path), [C.registrationPath(id, "a"), C.casePath(id)]);
   assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), fileB);
 
   // MUST-FAIL ARM: the item-one projection (the requested role only) on the
@@ -1089,15 +1090,17 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale 
   // b's request reads the case and both files (none yet); a's whole
   // registration lands before b writes its own file, so a's projection
   // cannot see b, and b's case write is stale. Only b's rebuild can add b.
+  // Since red-team fix C b's file write is under THE CASE LOCK, so a's
+  // registration lands as b's lock write goes out, before b holds it.
   async function race(id, a, b) {
     const cpath = C.casePath(id);
-    const bFile = C.registrationPath(id, "b");
+    const bLock = H._internal.caseLockPath(id);
     const viaMock = global.fetch;
     let aStatus = null;
     const casePuts = [];
     global.fetch = async (url, o) => {
       const isPut = !!o && o.method === "PUT";
-      if (aStatus === null && isPut && String(url).endsWith(`/contents/${bFile}`)) {
+      if (aStatus === null && isPut && String(url).endsWith(`/contents/${bLock}`)) {
         aStatus = "running";
         aStatus = (await commit(reg(id, a)))._status;
       }
@@ -1132,8 +1135,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale 
     { status: 409, a: false, b: true }, // b's first write, on the stale case
     { status: 200, a: true, b: true }, // b's REBUILD, on top of a's
   ], "the rebuild is what wrote b");
-  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path),
-    [C.registrationPath(id, "a"), C.casePath(id), C.registrationPath(id, "b"), C.casePath(id)], "four writes");
+  assert.deepEqual(gh.putLog.slice(writes).filter((w) => w.repo === PINS).map((w) => w.path),
+    [C.registrationPath(id, "a"), C.casePath(id), C.registrationPath(id, "b"), C.casePath(id)], "four writes in the pins repository");
   const k = storedCase(id);
   assert.equal(k.status, "COMMITTED");
   assert.deepEqual(k.commitments.a, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "a"))));
