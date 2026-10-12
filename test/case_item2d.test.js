@@ -260,8 +260,13 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
   assert.match(up.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
   assert.match(up.html, /no key: it is stored unsigned/);
   assert.equal((await reference({ ...proofOf(u.id, u.a), cross_reference: XREF })).body.error_code, "verdict_unbound");
-  // control: the case as sealed takes a row and shows its verdict
+  // control: the case as sealed takes a row and shows its verdict. Red-team
+  // fix D reads its pin first, and the pin names the commit that wrote the
+  // case file; re-seeding a path drops its history in the mock, so the pin
+  // is pointed at the case file's commit as it now stands.
   gh.seed(PINS, C.casePath(id), good);
+  const now = gh.commitsFor(PINS, C.casePath(id))[0].sha;
+  for (const p of [S.pinPaths(id).seq, S.pinPaths(id).latest]) gh.seed(PINS, p, { ...gh.read(PINS, p), case_commit: now });
   const ok = await reference({ ...proofOf(id, a), cross_reference: XREF });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   const shown = await casePage(id);

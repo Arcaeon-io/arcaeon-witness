@@ -1,5 +1,19 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Red-team fix D: a reference row only to a case that is pinned or anchored (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §1.2).** "A reference may be appended before the case anchor exists": a role's reference to a sealed case whose pin was not written was 201.
+- **The fix.** `?op=case-reference` reads the case's pin state (`lib/_case_seal.js` `anchorState`, Design J's words) after the sealed check and before anything is spent or written.
+  - Pinned (anchored implies it) takes a row.
+  - Any other state is 409 `case_not_anchored`, with `state` and `reason` in the body so the caller can retry once the operator's sealer run has pinned the case. The other states are `commit_unrecorded`, `could_not_look`, `pin_commit_mismatch`, `conflict` and `unreadable`.
+  - No row is written and no unit of the reference quota is taken.
+- **No anchor lookup.** A row needs pinned only, so the check reads no daily anchor record: `anchorState(..., {anchor: false})` stops at pinned, with `anchor: {not_looked_up: true}`.
+- **Tests.**
+  - `test/case_consent.test.js` +2: an unpinned case refused, then 201 once pinned; each other state refused with it, and no anchor record read.
+  - The §1.2 red-team test loses its todo and keeps its named assertion.
+  - Three tests that appended a row to a case never pinned now pin it first, or plant the row (C18, which needs a row on an unpinned case). One of them re-points its pin at the case file's commit, because re-seeding drops a path's history in the mock.
+- Suite 1116 -> 1118 tests, 0 fail, 5 -> 4 todo. Here: 1112 pass and the 2 environment skips.
+
 ## 2026-10-12: Red-team fix C: a registration file never stands after a withdrawal (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §1.1 / §6.2).** "A commitment can land after withdrawal ... the registration file remains written": a commit that read OPEN wrote its registration file after a withdrawal landed, and only its projection answered case_withdrawn.

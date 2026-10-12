@@ -982,7 +982,11 @@ test("C13 (the pointer moved from the record read): when another writer moves th
 
 test("C18 (a row of a case not pinned yet): its commit is commit_unrecorded, the case's own second phase not done, never could_not_look", async () => {
   const c = await sealedCase("J row unpinned", { pinFails: true });
-  assert.equal((await reference(c, "a", "early-row")).status, 201, "fixture: a reference before the pin (GPT-5.6 §1.2, still todo)");
+  // a row on a case not pinned: since red-team fix D the handler refuses one, so it is planted, as a row written before would be
+  assert.equal((await reference(c, "a", "early-row")).body.error_code, "case_not_anchored", "fixture: the handler refuses it now");
+  const row = S.referenceRow({ caseId: c.id, seq: 1, crossReference: { ...XREF, reference: "early-row" }, recordedAt: C.utcSeconds(REVEAL_AT + 1800000),
+    appendedBy: "role:a" }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  gh.seed(PINS, rowPath(c.id, 1), row);
   const line = rowLine((await casePage(c.id)).html, 1);
   assert.match(line, /commit_unrecorded: no pin of this case lists the commit that wrote this row yet/);
   assert.ok(!line.includes("could_not_look"));

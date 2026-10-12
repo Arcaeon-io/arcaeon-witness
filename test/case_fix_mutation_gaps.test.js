@@ -454,6 +454,8 @@ test("H13 (reference, the words for receipt_unsigned); since Design I its enviro
   assert.equal(refused._body.reason, "unknown_signer");
   assert.match(refused._body.error, /the receipt it carries is not signed by this service's reconcile signer/);
   const good = await sealedWith("H11");
+  // red-team fix D: a row goes only to a pinned case; the sealer's pass pins it
+  assert.equal((await S.anchorCase(good.id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC })).pin, "pinned");
   const ok = await at(good.id, good.a, {});
   assert.equal(ok._status, 201, JSON.stringify(ok._body));
 });

@@ -35,6 +35,10 @@
 //     WITHDRAWN under it writes nothing, and one that loses the race after
 //     its write removes the registration and appends a case log event
 //     commit_after_withdrawal.
+//   - GPT-5.6 §1.2, a reference before the case anchor exists: FIX D
+//     (lib/_case_http.js ?op=case-reference, step 1c). A case whose state is
+//     not pinned or anchored (Design J's words) is 409 case_not_anchored,
+//     with its state; no row is written.
 //   - GPT-5.6 §3.2, no commit bound to a sealed case: Design J, THE PIN IS
 //     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
 //     commit that wrote the sealed case file, and every reader reads the
@@ -312,14 +316,15 @@ test('GPT-5.6 §1.1: "It also creates a public registration dated after a redact
   assert.ok(!gh.putLog.some((x) => x.path === C.registrationPath(id, "b")), "no registration file is written");
 });
 
-test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"',
-  { todo: "CONFIRMED: a role's reference to a sealed case whose pin is pending is 201 (the assertion 'a reference row is appended only once the case is anchored' fails)" }, async () => {
-    const { id, a } = await sealedCase({ scope_digest: sha("1.2") }, { pinFails: true });
-    assert.equal((await S.anchorState(id, S.caseChain(storedCase(id)))).pin, "commit_unrecorded", "fixture: not pinned");
-    const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
-    assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
-    assert.deepEqual(referenceFiles(id), []);
-  });
+test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"', async () => {
+  const { id, a } = await sealedCase({ scope_digest: sha("1.2") }, { pinFails: true });
+  assert.equal((await S.anchorState(id, S.caseChain(storedCase(id)))).pin, "commit_unrecorded", "fixture: not pinned");
+  const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
+  assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
+  assert.deepEqual(referenceFiles(id), []);
+  // FIX D: refused 409 case_not_anchored, with the state to retry on
+  assert.deepEqual([r.status, r.body.error_code, r.body.state], [409, "case_not_anchored", "commit_unrecorded"]);
+});
 
 test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comparison, the system has run the comparison but leaves only a normal COMMITTED case" (the sealer, run mid-reveal, reports it as not_sealed)',
   { todo: "CONFIRMED: after the comparison ran and the root write failed, the case record is byte-identical to the COMMITTED case before the reveal (the assertion 'a comparison that ran leaves a trace in the case record' fails)" }, async (t) => {
