@@ -1,5 +1,15 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, step 4: the three key-document red-team claims are fixed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- `test/case_redteam.test.js`: the three tests quoting GPT-5.6 §1.4 and §3.3 lose their `todo` and keep their named assertions.
+  - **"A later edit changing a key ... to revoked"**: "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key". The answer is `signer_since_revoked` (a holding answer), and the page shows the verdict and the dated banner.
+  - **"a later document can introduce a verifier"**: "the verdict on stored bytes does not change with the document alone". A case signed by a key its named document does not list stays `case_signature_invalid` (`signer_unpublished`) under a later document that lists it.
+  - **"No sealed case records the key-document hash, Git commit, or retrieval time"**: "the sealed case names the key document it was signed under". `signed_under` now records the sha256 of the document's json-c14n:v1 form, the commit and the retrieval time.
+  - The first two now await the asynchronous check (Design I, step 2), and their documents list the reconcile key as a reconcile entry.
+- The file's header lists them under FIXED SINCE. The other 11 confirmed claims still fail at their own named assertions.
+- Suite 1048 tests, 0 fail, 11 todo. Here: 1035 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, step 3: the case page names the document a case was sealed under and the commit that pinned it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **A sealed case's page** (`lib/_case_page.js`, THE DOCUMENT AND THE PIN), in its "Anchor and signature" panel:

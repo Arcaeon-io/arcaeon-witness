@@ -18,6 +18,12 @@
 //     ROLE (lib/_case.js). Registration is signed by a registration key, the
 //     two roles take two distinct key ids (409 same_key_both_roles), and a
 //     case whose two commitments share one is single_party, never sealed.
+//   - GPT-5.6 §1.4 and §3.3, three claims (a later revocation, a later
+//     document listing a key, no document recorded): Design I. A sealed
+//     case records signed_under {document_sha256, document_commit,
+//     retrieved_at} and is held to the document it names, read at its
+//     commit (lib/_case_seal.js THE SEALED CHECK); a later revocation is
+//     signer_since_revoked, still sealed.
 //   - GPT-5.6 §3.1, a verdict no comparison produced: red-team fix B, A
 //     RECEIPT IS THE SERVICE'S (lib/_case_seal.js). A stored receipt holds
 //     only when the service's reconcile signer signed it (receipt_unsigned
@@ -315,40 +321,52 @@ test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comp
     assert.notDeepEqual(storedCase(id), before, "a comparison that ran leaves a trace in the case record");
   });
 
-test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"',
-  { todo: "CONFIRMED: once the document marks the sealing key revoked, sealedRecordReason answers case_signature_invalid / signer_revoked and the page shows SEALED RECORD DOES NOT VERIFY (the assertion 'a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key' fails)" }, async () => {
-    const { id } = await sealedCase({ scope_digest: sha("1.4 revoke") });
-    const rec = storedCase(id);
-    assert.equal(typeof rec.sig, "string", "fixture: signed");
-    assert.equal(S.sealedRecordReason(rec, KEYS_DOC), null, "verifies under the document it was sealed under");
-    assert.equal(S.sealedRecordReason(rec, docWith(entry(CASE_KEY, "retired"))), null, "control: a retired key's seals stay trusted");
-    const revoked = docWith(entry(CASE_KEY, "revoked"));
-    const page = await casePage(id, { keyDocument: revoked });
-    assert.deepEqual({ reason: S.sealedRecordReason(rec, revoked), doesNotVerify: page.html.includes("SEALED RECORD DOES NOT VERIFY") },
-      { reason: null, doesNotVerify: false },
-      "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key");
-  });
+test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"', async () => {
+  // FIXED (Design I, lib/_case_seal.js THE SEALED CHECK): a sealed case is
+  // held to the document it names; a later revocation makes it
+  // signer_since_revoked, still sealed, with a dated banner.
+  const { id } = await sealedCase({ scope_digest: sha("1.4 revoke") });
+  const rec = storedCase(id);
+  assert.equal(typeof rec.sig, "string", "fixture: signed");
+  assert.equal((await S.sealedRecordReason(rec, KEYS_DOC)).code, "valid_under_document", "verifies under the document it was sealed under");
+  assert.equal((await S.sealedRecordReason(rec, docWith(entry(CASE_KEY, "retired"), KD.reconcileEntry(RECEIPT_KEY)))).code, "valid_under_document",
+    "control: a retired key's seals stay trusted");
+  const revoked = docWith(entry(CASE_KEY, "revoked"), KD.reconcileEntry(RECEIPT_KEY));
+  const page = await casePage(id, { keyDocument: revoked });
+  const answer = await S.sealedRecordReason(rec, revoked);
+  assert.deepEqual({ holds: S.sealHolds(answer), doesNotVerify: page.html.includes("SEALED RECORD DOES NOT VERIFY") },
+    { holds: true, doesNotVerify: false },
+    "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key");
+  assert.equal(answer.code, "signer_since_revoked");
+  assert.match(page.html, /<h2>The verdict<\/h2>/);
+  assert.match(page.html, /Revoked since this case was sealed/);
+});
 
-test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid"',
-  { todo: "CONFIRMED: a stored case signed by an unlisted key reads signer_unpublished under one document and verifies under a later one that lists the key (the assertion 'the verdict on stored bytes does not change with the document alone' fails)" }, async () => {
-    const { id } = await sealedCase({ scope_digest: sha("1.4 later listing") });
-    const rec = storedCase(id);
-    const other = checkpoint.parseSignerKey(OTHER_KEY.signer);
-    const resigned = S.signRecord({ ...rec, signed_by: null, sig: null, sig_reason: null }, { ok: true, keyId: keyIdOf(OTHER_KEY), privateKey: other.privateKey }, "unused");
-    assert.deepEqual(C.validateCase(resigned), { ok: true }, "fixture: schema-valid");
-    const earlier = S.sealedRecordReason(resigned, KEYS_DOC);
-    assert.deepEqual(earlier, { code: "case_signature_invalid", reason: "signer_unpublished" });
-    const later = S.sealedRecordReason(resigned, docWith(entry(CASE_KEY), entry(OTHER_KEY)));
-    assert.deepEqual(later, earlier, "the verdict on stored bytes does not change with the document alone");
-  });
+test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid"', async () => {
+  // FIXED (Design I): the named document alone decides whether a stored
+  // signature verifies; a later document never makes it verify.
+  const { id } = await sealedCase({ scope_digest: sha("1.4 later listing") });
+  const rec = storedCase(id);
+  const other = checkpoint.parseSignerKey(OTHER_KEY.signer);
+  const resigned = S.signRecord({ ...rec, signed_by: null, sig: null, sig_reason: null }, { ok: true, keyId: keyIdOf(OTHER_KEY), privateKey: other.privateKey }, "unused");
+  assert.deepEqual(C.validateCase(resigned), { ok: true }, "fixture: schema-valid");
+  const earlier = await S.sealedRecordReason(resigned, KEYS_DOC);
+  assert.deepEqual(earlier, { code: "case_signature_invalid", reason: "signer_unpublished" });
+  const later = await S.sealedRecordReason(resigned, docWith(entry(CASE_KEY), entry(OTHER_KEY), KD.reconcileEntry(RECEIPT_KEY)));
+  assert.deepEqual(later, earlier, "the verdict on stored bytes does not change with the document alone");
+});
 
-test('GPT-5.6 §1.4 / §3.3: "No sealed case records the key-document hash, Git commit, or retrieval time"',
-  { todo: "CONFIRMED: neither the sha256 of the key document's bytes nor of its json-c14n:v1 form appears in the sealed case (the assertion 'the sealed case names the key document it was signed under' fails)" }, async () => {
-    const { id } = await sealedCase({ scope_digest: sha("1.4 binding") });
-    const text = JSON.stringify(storedCase(id));
-    const digests = [sha(JSON.stringify(KEYS_DOC)), sha(JSON.stringify(KEYS_DOC, null, 2)), sha(canonicalBytes(KEYS_DOC))];
-    assert.ok(digests.some((d) => text.includes(d)), "the sealed case names the key document it was signed under");
-  });
+test('GPT-5.6 §1.4 / §3.3: "No sealed case records the key-document hash, Git commit, or retrieval time"', async () => {
+  // FIXED (Design I, step 1): signed_under, inside the signed bytes.
+  const { id } = await sealedCase({ scope_digest: sha("1.4 binding") });
+  const k = storedCase(id);
+  const text = JSON.stringify(k);
+  const digests = [sha(JSON.stringify(KEYS_DOC)), sha(JSON.stringify(KEYS_DOC, null, 2)), sha(canonicalBytes(KEYS_DOC))];
+  assert.ok(digests.some((d) => text.includes(d)), "the sealed case names the key document it was signed under");
+  assert.equal(k.signed_under.document_sha256, sha(canonicalBytes(KEYS_DOC)));
+  assert.equal(k.signed_under.document_commit, KD.commitOf(KEYS_DOC), "and the Git commit");
+  assert.equal(k.signed_under.retrieved_at, C.utcSeconds(REVEAL_AT), "and the retrieval time (the service clock)");
+});
 
 test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption): "admit() runs ratelimit.check(req) before openKey() ... The victim is blocked before their valid bearer key is even checked"',
   { todo: "CONFIRMED: after unauthenticated case-open requests spend one address's per-IP budget, a valid keyed open from that address is 429 rate_limited (the assertion 'an authenticated open is not refused by the budget unauthenticated requests spent' fails)" }, async () => {
