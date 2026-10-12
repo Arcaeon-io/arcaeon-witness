@@ -362,11 +362,9 @@ async function committedCase() {
   return parties;
 }
 // The service's reconcile signer (red-team fix B: with none, nothing is
-// compared), and its verifier, which a reader holding no signer key (the
-// sealer, the page in this process) is told.
+// compared).
 const RECEIPT_KEY = require("../lib/_checkpoint.js").generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const RECEIPT_ENV = Object.freeze({ WITNESS_RECONCILE_SIGNER_KEY: RECEIPT_KEY.signer });
-process.env.WITNESS_RECONCILE_VERIFIER = RECEIPT_KEY.verifier;
 // The document the deployment carries (Design I): the reconcile key as a
 // reconcile entry, and no case key, so the seal is unsigned.
 const RECEIPT_DOC = Object.freeze({ ...require("../lib/_case_seal.js").PUBLISHED_KEYS, keys: [KD.reconcileEntry(RECEIPT_KEY)] });

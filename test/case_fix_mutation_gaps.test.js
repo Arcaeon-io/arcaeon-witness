@@ -80,9 +80,6 @@ const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
 const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
-// The service's reconcile verifier, public, as this process's readers are
-// told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [{ key_id: REG.keyIdOf(CASE_KEY), verifier: CASE_KEY.verifier, since: "2026-10-10", note: "a test key", status: "active" },
   KD.reconcileEntry(RECEIPT_KEY)] });
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0031" });
@@ -431,32 +428,33 @@ test("S10 (receiptSignerReason, the carried verifier first): a receipt naming a 
   const { sealed } = await sealedWith("S10");
   const odd = withReceipt(sealed, { signer: { ...sealed.verdict.signer, verifier: "not-a-verifier" } });
   assert.equal(S.checkSealedReceipt(odd), null, "fixture: still bound");
-  assert.deepEqual(S.sealedRecordReason(odd, KEYS_DOC, { receiptVerifier: RECEIPT_KEY.verifier }), { code: "receipt_unsigned", reason: "unknown_signer" });
+  assert.deepEqual(await S.sealedRecordReason(odd, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
   assert.equal(S.checkStoredReceipt(odd, { receiptVerifier: RECEIPT_KEY.verifier }), "receipt_unsigned");
 });
 
 test("S12 (checkStoredReceipt): a receipt the service's signer signed and someone altered after is receipt_bad_signature, not receipt_unsigned", async () => {
   const { sealed } = await sealedWith("S12");
-  assert.equal(S.checkStoredReceipt(sealed), null, "control: as sealed");
+  const given = { receiptVerifier: RECEIPT_KEY.verifier };
+  assert.equal(S.checkStoredReceipt(sealed, given), null, "control: as sealed");
   const altered = withReceipt(sealed, { verdict: { ...sealed.verdict.verdict, findings: sealed.verdict.verdict.findings + 1 } });
-  assert.equal(S.checkStoredReceipt(altered), "receipt_bad_signature");
-  assert.deepEqual(S.sealedRecordReason(altered, KEYS_DOC), { code: "verdict_unbound", reason: "receipt_bad_signature" });
+  assert.equal(S.checkStoredReceipt(altered, given), "receipt_bad_signature");
+  assert.deepEqual(await S.sealedRecordReason(altered, KEYS_DOC), { code: "verdict_unbound", reason: "receipt_bad_signature" });
 });
 
-test("H11, H13 (reference): the reconcile verifier is the deployment's own environment's; with none there, a sealed case takes no row (409 receipt_unsigned, in words)", async () => {
-  const { id, a } = await sealedWith("H11");
-  const body = { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } };
-  const at = (env) => {
+test("H13 (reference, the words for receipt_unsigned); since Design I its environment does not decide: a case holds under the document it names whatever the deployment's environment", async () => {
+  const at = (id, p, env) => {
     const res = makeRes();
+    const body = { case_id: id, role: "a", tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } };
     return H.handleCaseReference(req("case-reference", body), res, { now: REVEAL_AT + 3600000, env, keyDocument: KEYS_DOC }).then(() => res);
   };
-  assert.equal(receipts.expectedVerifier(process.env), RECEIPT_KEY.verifier, "fixture: this process knows the verifier");
-  const bare = await at({});
-  assert.equal(bare._status, 409, JSON.stringify(bare._body));
-  assert.equal(bare._body.error_code, "receipt_unsigned");
-  assert.equal(bare._body.reason, "no_reconcile_verifier");
-  assert.match(bare._body.error, /the receipt it carries is not signed by this service's reconcile signer/);
-  const ok = await at(SIGNED);
+  const wrong = await sealedWith("H13", checkpoint.generateKey("arcaeon.io/reconcile-test-other/2026-10-12"));
+  const refused = await at(wrong.id, wrong.a, SIGNED);
+  assert.equal(refused._status, 409, JSON.stringify(refused._body));
+  assert.equal(refused._body.error_code, "receipt_unsigned");
+  assert.equal(refused._body.reason, "unknown_signer");
+  assert.match(refused._body.error, /the receipt it carries is not signed by this service's reconcile signer/);
+  const good = await sealedWith("H11");
+  const ok = await at(good.id, good.a, {});
   assert.equal(ok._status, 201, JSON.stringify(ok._body));
 });
 

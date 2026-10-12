@@ -44,6 +44,7 @@ const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
 const S = require("../lib/_case_seal.js");
 const RECONCILE = require("../lib/_reconcile_http.js");
+const CP = require("../lib/_case_page.js");
 const T = require("../lib/_reconcile_tapes.js");
 const receipts = require("../lib/_reconcile_receipt.js");
 const checkpoint = require("../lib/_checkpoint.js");
@@ -83,6 +84,7 @@ beforeEach(() => {
   restore = install(gh);
   realSleep = store._putRetry.sleep;
   store._putRetry.sleep = async () => {};
+  S._internal.clearDocumentCache();
 });
 afterEach(() => {
   store._putRetry.sleep = realSleep;
@@ -304,4 +306,216 @@ test("SEALCASE: a seal is never built without signed_under", async () => {
   const args = { reveals: { a: { tape_sha256: "1".repeat(64), salt: "2".repeat(64) }, b: { tape_sha256: "3".repeat(64), salt: "4".repeat(64) } },
     receipt: { kind: "x" }, crossReference: null, revealedAt: "2026-10-10T09:00:00Z" };
   assert.throws(() => S.sealCase(k, args, null), (e) => e instanceof C.CaseError && e.field === "signed_under");
+});
+
+// =============================================================================
+// STEP 2: a reader holds a sealed case to the document it NAMES
+// =============================================================================
+
+const OTHER_KEY = checkpoint.generateKey("arcaeon.io/case-test-unlisted/2026-10-12");
+const OTHER_RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test-unlisted/2026-10-12");
+const CURRENT_COMMIT = "c".repeat(40);
+const revokedIn = (k, since, role) => (role === "reconcile" ? KD.reconcileEntry(k, { status: "revoked", revokedSince: since }) : KD.entry(k, { status: "revoked", revokedSince: since }));
+
+async function sealedCase(scope, { doc = DOC, pinFails = false } = {}) {
+  const c = await committedCase(scope);
+  if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
+  const r = await reveal(revealBody(c.id, c.a, c.b), { doc });
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  return { ...c, k: storedCase(c.id), r };
+}
+// A seal built by hand, as a sealer carrying `named` would have built it,
+// with the receipt signed by `receiptKey` and the case by `caseKey` (null:
+// unsigned); `named` is served at its commit.
+async function handSealed(scope, { named, caseKey = CASE_KEY, receiptKey = RECEIPT_KEY } = {}) {
+  const c = await committedCase(scope);
+  const compared = RECONCILE.compare(c.a.tape, c.b.tape, { env: { [receipts.SIGNER_ENV]: receiptKey.signer }, now: REVEAL_AT,
+    keyDocument: KD.docWith(KD.reconcileEntry(receiptKey)) });
+  const st = S.storableReceipt(compared.receipt);
+  assert.equal(st.ok, true);
+  const signer = caseKey ? { ok: true, keyId: KD.keyIdOf(caseKey), privateKey: checkpoint.parseSignerKey(caseKey.signer).privateKey } : null;
+  const k = S.sealCase(storedCase(c.id), {
+    reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, named, C.utcSeconds(REVEAL_AT)),
+  }, signer);
+  gh.seed(PINS, C.casePath(c.id), k);
+  return { ...c, k };
+}
+async function referenceAs(id, p) {
+  const res = makeRes();
+  await H.handleCaseReference(req("case-reference", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt,
+    cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
+  { now: REVEAL_AT + 3600000, env: KEYS, keyDocument: DOC });
+  return { status: res._status, body: parsed(res) };
+}
+
+test("VALID UNDER THE DOCUMENT IT NAMES: the reader fetches the named document from the public repository at the named commit, with no credentials, and both signatures verify under it", async () => {
+  const { k } = await sealedCase("valid");
+  const heard = [];
+  const viaMock = global.fetch;
+  global.fetch = (url, o) => {
+    heard.push({ url: String(url), headers: (o && o.headers) || {} });
+    return viaMock(url, o);
+  };
+  let got;
+  try {
+    got = await S.sealedRecordReason(k, DOC, { currentCommit: CURRENT_COMMIT });
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual(got, { code: "valid_under_document", ...k.signed_under });
+  const raw = heard.filter((h) => h.url.startsWith("https://raw.githubusercontent.com/"));
+  assert.deepEqual(raw.map((h) => h.url), [`https://raw.githubusercontent.com/${S.KEY_DOCUMENT_REPO}/${k.signed_under.document_commit}/${S.CASE_KEYS_FILE}`]);
+  assert.equal(Object.keys(raw[0].headers).some((h) => /^authorization$/i.test(h)), false, "no credentials");
+  assert.equal(heard.length, raw.length, "nothing else is read");
+  assert.equal(S.sealHolds(got), true);
+});
+
+test("THE CURRENT DOCUMENT DOES NOT DECIDE: a later document that drops a key, retires it, or lists no key at all leaves the answer valid_under_document", async () => {
+  const { k } = await sealedCase("current");
+  for (const [name, current] of [
+    ["the case key dropped", KD.docWith(KD.reconcileEntry(RECEIPT_KEY))],
+    ["the reconcile key dropped", KD.docWith(KD.entry(CASE_KEY))],
+    ["both retired", KD.docWith(KD.entry(CASE_KEY, { status: "retired" }), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }))],
+    ["no key at all", KD.docWith()],
+  ]) {
+    assert.equal((await S.sealedRecordReason(k, current)).code, "valid_under_document", name);
+  }
+});
+
+test("SIGNER SINCE REVOKED: valid under the named document, and the current document marks a key revoked: the case stays sealed, the answer names the key, the revoking commit and revoked_since", async () => {
+  const { id, a, k } = await sealedCase("since revoked", { pinFails: true });
+  const caseRevoked = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY));
+  assert.deepEqual(await S.sealedRecordReason(k, caseRevoked, { currentCommit: CURRENT_COMMIT }), {
+    code: "signer_since_revoked", ...k.signed_under,
+    revoked: [{ role: "case", key_id: KD.keyIdOf(CASE_KEY), revoked_since: "2026-10-11" }], current_commit: CURRENT_COMMIT,
+  });
+  const receiptRevoked = KD.docWith(KD.entry(CASE_KEY), revokedIn(RECEIPT_KEY, "2026-10-12", "reconcile"));
+  const r = await S.sealedRecordReason(k, receiptRevoked, { currentCommit: CURRENT_COMMIT });
+  assert.equal(r.code, "signer_since_revoked");
+  assert.deepEqual(r.revoked, [{ role: "reconcile", key_id: KD.keyIdOf(RECEIPT_KEY), revoked_since: "2026-10-12" }]);
+  assert.equal(S.sealHolds(r), true);
+  // the reader's own commit, when it does not know it, is named as unknown
+  assert.equal((await S.sealedRecordReason(k, caseRevoked)).current_commit, null);
+  // still sealed: the sealer pins it, and a role may append its reference
+  const pinned = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: caseRevoked });
+  assert.equal(pinned.ok, true, JSON.stringify(pinned));
+  assert.equal(pinned.pin, "anchored");
+  const res = makeRes();
+  await H.handleCaseReference(req("case-reference", { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt,
+    cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
+  { now: REVEAL_AT + 3600000, env: KEYS, keyDocument: caseRevoked });
+  assert.equal(res._status, 201, JSON.stringify(parsed(res)));
+});
+
+test("REVOKED IN THE NAMED DOCUMENT: a case key already revoked at retrieved_at in the document the case names is case_signature_invalid; revoked only later is valid under it", async () => {
+  // revoked on the seal's own day
+  const early = await handSealed("revoked at the seal", { named: KD.docWith(revokedIn(CASE_KEY, "2026-10-10"), KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.deepEqual(await S.sealedRecordReason(early.k, DOC), { code: "case_signature_invalid", reason: "signer_revoked" });
+  // the named document marks it revoked from the next day: active when sealed
+  const late = await handSealed("revoked after the seal", { named: KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.equal((await S.sealedRecordReason(late.k, DOC)).code, "valid_under_document");
+  // a retired key, or one listed from a later day, is not active in the named document either
+  const retired = await handSealed("retired at the seal", { named: KD.docWith(KD.entry(CASE_KEY, { status: "retired" }), KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.deepEqual(await S.sealedRecordReason(retired.k, DOC), { code: "case_signature_invalid", reason: "signer_not_active" });
+  const future = await handSealed("listed from a later day", { named: KD.docWith(KD.entry(CASE_KEY, { since: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.deepEqual(await S.sealedRecordReason(future.k, DOC), { code: "case_signature_invalid", reason: "signer_not_active" });
+  // the reconcile key, revoked at the seal in the named document
+  const receipt = await handSealed("receipt key revoked at the seal", { named: KD.docWith(KD.entry(CASE_KEY), revokedIn(RECEIPT_KEY, "2026-10-09", "reconcile")) });
+  assert.deepEqual(await S.sealedRecordReason(receipt.k, DOC), { code: "receipt_unsigned", reason: "signer_not_active" });
+  // the sealer refuses it and pins nothing; the reference refuses it
+  const run = await S.anchorCase(early.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual(run, { ok: false, code: "case_signature_invalid", reason: "signer_revoked" });
+  assert.equal(gh.has(PINS, S.pinPaths(early.id).latest), false);
+  assert.equal((await referenceAs(early.id, early.a)).status, 409);
+});
+
+test("A LATER DOCUMENT NEVER MAKES A FORMERLY UNVERIFIABLE STORED SIGNATURE VERIFY: a key the named document does not list stays unlisted, whatever the current document lists", async () => {
+  const caseUnlisted = await handSealed("case key unlisted", { named: DOC, caseKey: OTHER_KEY });
+  const receiptUnlisted = await handSealed("receipt key unlisted", { named: DOC, receiptKey: OTHER_RECEIPT_KEY });
+  const before = {
+    caseKey: await S.sealedRecordReason(caseUnlisted.k, DOC),
+    receiptKey: await S.sealedRecordReason(receiptUnlisted.k, DOC),
+  };
+  assert.deepEqual(before.caseKey, { code: "case_signature_invalid", reason: "signer_unpublished" });
+  assert.deepEqual(before.receiptKey, { code: "receipt_unsigned", reason: "unknown_signer" });
+  // a later document lists both keys, active
+  const later = KD.docWith(KD.entry(CASE_KEY), KD.entry(OTHER_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.reconcileEntry(OTHER_RECEIPT_KEY));
+  assert.deepEqual(await S.sealedRecordReason(caseUnlisted.k, later), before.caseKey);
+  assert.deepEqual(await S.sealedRecordReason(receiptUnlisted.k, later), before.receiptKey);
+  // and so does the sealer, which pins neither
+  for (const c of [caseUnlisted, receiptUnlisted]) {
+    const run = await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: later });
+    assert.equal(run.ok, false, JSON.stringify(run));
+    assert.equal(gh.has(PINS, S.pinPaths(c.id).latest), false);
+  }
+});
+
+test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, the reference refuses 409 with the reason, and once it can be fetched the next run pins", async () => {
+  const { id, a, k } = await sealedCase("unavailable", { pinFails: true });
+  const commit = k.signed_under.document_commit;
+  const path = S.CASE_KEYS_FILE;
+  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@${commit}:${path}`); // the commit cannot be fetched (404)
+  const missing = await S.sealedRecordReason(k, DOC);
+  assert.deepEqual(missing, { code: "document_unavailable", reason: "http_404", document_commit: commit });
+  assert.equal(S.sealHolds(missing), false);
+  for (const [status, reason] of [[503, "http_503"], [0, "fetch_failed"]]) {
+    KD.serve(gh, DOC);
+    gh.forceRawFailure(1, status);
+    assert.deepEqual(await S.sealedRecordReason(k, DOC), { code: "document_unavailable", reason, document_commit: commit });
+  }
+  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@${commit}:${path}`);
+  const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "http_404" }]);
+  assert.deepEqual(run.refused, []);
+  assert.deepEqual(run.anchored, []);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  const ref = await referenceAs(id, a);
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.equal(ref.body.error_code, "document_unavailable");
+  assert.equal(ref.body.reason, "http_404");
+  // the page: could not look, 503, neither the verdict nor DOES NOT VERIFY
+  const res = makeRes();
+  await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.97.0.1" } }), res,
+    { now: REVEAL_AT + 3600000, keyDocument: DOC, env: {} });
+  const html = String(res._body);
+  assert.equal(res._status, 503);
+  assert.match(html, /<h1>Case: COULD NOT LOOK<\/h1>/);
+  assert.ok(html.includes(commit) && html.includes("http_404"));
+  assert.ok(!html.includes("<h2>The verdict</h2>") && !html.includes("SEALED RECORD DOES NOT VERIFY"));
+  // the document is back: the next run pins
+  KD.serve(gh, DOC);
+  const again = await S.anchorPending({ now: REVEAL_AT + 120000, keyDocument: DOC });
+  assert.deepEqual(again.anchored, [id]);
+  assert.deepEqual(again.could_not_look, []);
+});
+
+test("THE DOCUMENT AT THE COMMIT MUST BE THE ONE NAMED: other bytes at the named commit, or a file there that is not a key document, is case_signature_invalid", async () => {
+  const { k } = await sealedCase("named");
+  const commit = k.signed_under.document_commit;
+  KD.serve(gh, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(OTHER_KEY)), commit);
+  assert.deepEqual(await S.sealedRecordReason(k, DOC), { code: "case_signature_invalid", reason: "document_sha256_mismatch" });
+  // a seal that names, by its true sha256, a document that is not a key document
+  const odd = await handSealed("named unreadable", { named: { ...DOC, schema: "other" } });
+  assert.deepEqual(await S.sealedRecordReason(odd.k, DOC), { code: "case_signature_invalid", reason: "named_document_unreadable" });
+  S._internal.clearDocumentCache();
+  gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, "<html>not json</html>");
+  assert.deepEqual(await S.sealedRecordReason(k, DOC), { code: "document_unavailable", reason: "not_json", document_commit: commit });
+});
+
+test("THE NAMED DOCUMENT IS FETCHED ONCE PER COMMIT: a commit's document never changes, so a read is cached; a failed read is not", async () => {
+  const { k } = await sealedCase("cache");
+  const commit = k.signed_under.document_commit;
+  gh.forceRawFailure(1, 500);
+  assert.equal((await S.sealedRecordReason(k, DOC)).code, "document_unavailable");
+  assert.equal((await S.sealedRecordReason(k, DOC)).code, "valid_under_document", "a failure is not remembered");
+  const reads = gh.rawLog.length;
+  assert.equal((await S.sealedRecordReason(k, DOC)).code, "valid_under_document");
+  assert.equal(gh.rawLog.length, reads, "the second good read fetched nothing");
+  assert.ok(gh.rawLog.every((x) => x.includes(commit)));
+});
+
+test("AN UNREADABLE CURRENT DOCUMENT: whether a key was since revoked cannot be told, so it is could-not-look (document_unavailable), never a yes", async () => {
+  const { k } = await sealedCase("current unreadable");
+  assert.deepEqual(await S.sealedRecordReason(k, null), { code: "document_unavailable", reason: "current_document_unreadable", document_commit: k.signed_under.document_commit });
 });

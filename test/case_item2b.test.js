@@ -100,9 +100,6 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const LOG_ENV = "WITNESS_LOG_SIGNER_KEY";
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer });
-// The service's reconcile verifier, public, as a reader with no signer key
-// (the sealer, a page in this process) is told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // Item 2c: the case key signs only as an ACTIVE entry of the key document,
 // and the anchor retry checks a stored signature against it; the committed
 // document lists no key, so the signing tests hand the seal, the retry and

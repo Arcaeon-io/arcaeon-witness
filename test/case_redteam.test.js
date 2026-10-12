@@ -94,9 +94,6 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const OTHER_KEY = checkpoint.generateKey("arcaeon.io/case-test-unlisted/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
-// The service's reconcile verifier, public, as a reader with no signer key
-// (the sealer, a page in this process) is told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const keyIdOf = (k) => k.verifier.split("+").slice(0, 2).join("+");
 const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status,
   ...(status === "revoked" ? { revoked_since: "2026-10-11" } : {}) });
@@ -429,7 +426,7 @@ test("FIX A: two registrations under two distinct key ids still seal, and the pa
   assert.equal(k.commitments.a.key_id, REG.keyIdOf(REG.KEYS.a));
   assert.equal(k.commitments.b.key_id, REG.keyIdOf(REG.KEYS.b));
   assert.equal(C.singleParty(k), false);
-  assert.equal(S.sealedRecordReason(k, KEYS_DOC), null);
+  assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document");
   for (const r of C.ROLES) {
     const file = gh.read(PINS, C.registrationPath(id, r));
     assert.equal(file.key_id, REG.keyIdOf(REG.KEYS[r]));
@@ -516,7 +513,7 @@ test("FIX A: a VERDICT whose two commitments share a key id (signed by the case 
   assert.deepEqual(C.validateCase(forged), { ok: true }, "fixture: the schema reads it");
   assert.notEqual(forged.sig, null, "fixture: signed by the published case key");
   gh.seed(PINS, C.casePath(id), forged);
-  assert.deepEqual(S.sealedRecordReason(forged, KEYS_DOC), { code: "single_party", reason: "same_key_both_roles" });
+  assert.deepEqual(await S.sealedRecordReason(forged, KEYS_DOC), { code: "single_party", reason: "same_key_both_roles" });
   const page = await casePage(id);
   assert.match(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
   assert.equal(page.html.includes("honest-party-account"), false);
@@ -636,8 +633,9 @@ test('GPT-5.6 §3.1 / §5 / §6.3: "Fabricate a case verdict without actually ru
   assert.doesNotMatch(page.html, /<span class="word pass">MATCHED<\/span>/);
   assert.doesNotMatch(page.html, /The service ran its recorded comparison once/);
   assert.equal(S.checkStoredReceipt(fabricated), "receipt_unsigned");
-  assert.deepEqual(S.sealedRecordReason(fabricated, KEYS_DOC), { code: "receipt_unsigned", reason: "unsigned" });
-  assert.notEqual(S.sealedRecordReason(fabricated, KEYS_DOC), null, "a verdict no comparison produced does not pass the sealed check");
+  assert.deepEqual(await S.sealedRecordReason(fabricated, KEYS_DOC), { code: "receipt_unsigned", reason: "unsigned" });
+  // the named assertion, for the async check (Design I): it does not hold
+  assert.equal(S.sealHolds(await S.sealedRecordReason(fabricated, KEYS_DOC)), false, "a verdict no comparison produced does not pass the sealed check");
 });
 
 // -----------------------------------------------------------------------------
@@ -688,7 +686,7 @@ test("FIX B: the joint reveal with no reconcile signer is 503 signer_unavailable
 // A case sealed exactly as the service seals one, except that its receipt
 // was signed by another reconcile key: the comparison ran, the case key
 // signed the seal, only the receipt's signer is not the service's.
-async function wronglySignedCase(scope) {
+async function wronglySignedCase(scope, named = KEYS_DOC) {
   const { id, a, b } = await committedCase({ scope_digest: sha(scope) });
   // computed under the wrong key's own document, which publishes it
   const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: WRONG_RECEIPT_KEY.signer }, now: REVEAL_AT,
@@ -697,7 +695,7 @@ async function wronglySignedCase(scope) {
   assert.equal(st.ok, true);
   const sealed = S.sealCase(storedCase(id), {
     reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, named, C.utcSeconds(REVEAL_AT)),
   }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
   assert.notEqual(sealed.sig, null, "fixture: the case key signed it");
   assert.equal(S.checkSealedReceipt(sealed), null, "fixture: the receipt is bound to the case");
@@ -708,7 +706,7 @@ async function wronglySignedCase(scope) {
 test("FIX B: a receipt signed by another key than the service's reconcile signer is receipt_unsigned: the sealed check, the page, the sealer and the reference all refuse it", async () => {
   const { id, a, sealed } = await wronglySignedCase("B wrong key");
   assert.equal(S.checkStoredReceipt(sealed), "receipt_unsigned");
-  assert.deepEqual(S.sealedRecordReason(sealed, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
+  assert.deepEqual(await S.sealedRecordReason(sealed, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
   const page = await casePage(id);
   assert.match(page.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
   assert.ok(page.html.includes("receipt_unsigned"));
@@ -722,33 +720,36 @@ test("FIX B: a receipt signed by another key than the service's reconcile signer
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "receipt_unsigned");
   assert.deepEqual(referenceFiles(id), []);
-  // control: it is the signer that decides. A reader told the other key
-  // would take the same bytes.
-  assert.equal(S.sealedRecordReason(sealed, KEYS_DOC, { receiptVerifier: WRONG_RECEIPT_KEY.verifier }), null);
+  // control (Design I): it is the document the case NAMES that decides. The
+  // same receipt in a seal naming a document that publishes that key holds.
+  const named = await wronglySignedCase("B wrong key, named", docWith(entry(CASE_KEY), KD.reconcileEntry(WRONG_RECEIPT_KEY)));
+  assert.equal((await S.sealedRecordReason(named.sealed, KEYS_DOC)).code, "valid_under_document");
 });
 
-test("FIX B: a reader that knows no reconcile verifier refuses every receipt; the verifier is the signer key's public half, or WITNESS_RECONCILE_VERIFIER", async () => {
+test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the case's named document publishes, never to its own environment; WITNESS_RECONCILE_VERIFIER is only the private-side pointer to which published entry is ours", async () => {
   const { id } = await sealedCase({ scope_digest: sha("B readers") });
   const k = storedCase(id);
-  assert.equal(S.sealedRecordReason(k, KEYS_DOC), null, "the service's own receipt holds");
-  assert.deepEqual(S.sealedRecordReason(k, KEYS_DOC, { receiptVerifier: null }), { code: "receipt_unsigned", reason: "no_reconcile_verifier" });
-  assert.equal(S.checkStoredReceipt(k, { receiptVerifier: null }), "receipt_unsigned");
+  assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document", "the service's own receipt holds");
+  // no verifier is set anywhere in this process, and it still holds: the named document publishes it
+  assert.equal(process.env[receipts.VERIFIER_ENV], undefined, "fixture");
+  assert.equal(process.env[receipts.SIGNER_ENV], undefined, "fixture");
+  // checkStoredReceipt holds a receipt to a GIVEN verifier only, and refuses without one
+  assert.equal(S.checkStoredReceipt(k, { receiptVerifier: RECEIPT_KEY.verifier }), null);
+  assert.equal(S.checkStoredReceipt(k), "receipt_unsigned");
+  // the pointer, as the operator's tools read it
   assert.equal(receipts.expectedVerifier({}), null);
   assert.equal(receipts.expectedVerifier({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }), RECEIPT_KEY.verifier);
   assert.equal(receipts.expectedVerifier({ [receipts.VERIFIER_ENV]: ` ${RECEIPT_KEY.verifier}\n` }), RECEIPT_KEY.verifier);
   assert.equal(receipts.expectedVerifier({ [receipts.VERIFIER_ENV]: "not a verifier" }), null);
   assert.equal(receipts.expectedVerifier({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [receipts.VERIFIER_ENV]: WRONG_RECEIPT_KEY.verifier }), RECEIPT_KEY.verifier,
     "the signer key, when this environment holds it, names its own verifier");
-  // the page reads its deployment's environment
-  const pageWith = async (env) => {
+  // the page's environment does not decide either
+  for (const env of [{}, { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { [receipts.VERIFIER_ENV]: WRONG_RECEIPT_KEY.verifier }]) {
     const res = makeRes();
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res,
       { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC, env });
-    return String(res._body);
-  };
-  assert.match(await pageWith({}), /SEALED RECORD DOES NOT VERIFY[\s\S]*no_reconcile_verifier/);
-  assert.match(await pageWith({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }), /<h2>The verdict<\/h2>/);
-  assert.match(await pageWith({ [receipts.VERIFIER_ENV]: RECEIPT_KEY.verifier }), /<h2>The verdict<\/h2>/);
+    assert.match(String(res._body), /<h2>The verdict<\/h2>/, JSON.stringify(Object.keys(env)));
+  }
 });
 
 test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind them [the service-clock fields] to a Git commit ID"',

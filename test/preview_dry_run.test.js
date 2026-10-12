@@ -203,7 +203,8 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   assert.equal(sealed.status, "VERDICT");
   assert.equal(sealed.signed_by, CASE_ENTRY.key_id, "the stand-in signs with the published case key");
   assert.match(r.by.e.line, new RegExp(`no content-length answered HTTP 201 VERDICT for case_id ${id}, verdict MATCHED: signed by ` +
-    `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in public/\\.well-known/arcaeon/case-signing-keys\\.json; ` +
+    `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in public/\\.well-known/arcaeon/case-signing-keys\\.json, ` +
+    `the document it names at commit ${KD.commitOf(TEST_DOC)}; ` +
     `chain ${S.caseChain(sealed)}, the case's own, pin anchored$`));
   assert.match(r.by.f.line, new RegExp(`case ${id} is anchored, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\)`));
   assert.match(r.by.g.line, /README\.md, package\.json, package-lock\.json, lib\/ \d+, tools\/ \d+, test\/ \d+\): every one answered HTTP 404/);
@@ -378,13 +379,15 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   const id = /case_id ([0-9a-f]{64})/.exec(bare.by.b.line)[1];
   assert.equal(gh.read(PINS, C.casePath(id)).sig, null, "it really sealed unsigned");
 
-  // Signed, but by a key this checkout's document does not list, or lists retired.
+  // Sealed under another document than this checkout's: one that does not
+  // list the key, or lists it retired (Design I: the seal names its document).
+  const sealedElsewhere = /it was sealed under the key document [0-9a-f]{64} at commit [0-9a-f]{40}, not this checkout's public\/\.well-known\/arcaeon\/case-signing-keys\.json \([0-9a-f]{64}\)$/;
   const unlisted = await dryRun(t, { keyDocument: COMMITTED_DOC });
   assert.equal(word(unlisted, "e"), "BROKEN");
-  assert.match(unlisted.by.e.line, /its sealed record does not hold against this checkout's public\/\.well-known\/arcaeon\/case-signing-keys\.json \(case_signature_invalid: signer_unpublished\)/);
-  const retired = await dryRun(t, { keyDocument: { ...COMMITTED_DOC, keys: [{ ...CASE_ENTRY, status: "retired" }] } });
+  assert.match(unlisted.by.e.line, sealedElsewhere);
+  const retired = await dryRun(t, { keyDocument: { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => (e.key_id === CASE_ENTRY.key_id ? { ...e, status: "retired" } : e)) } });
   assert.equal(word(retired, "e"), "BROKEN");
-  assert.match(retired.by.e.line, /which public\/\.well-known\/arcaeon\/case-signing-keys\.json lists as retired, not active/);
+  assert.match(retired.by.e.line, sealedElsewhere);
 
   // The answer altered on its way out.
   const arms = [
@@ -489,28 +492,32 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   assert.equal(process.env.GITHUB_PIN_TOKEN, "test-token", "the pin token is put back");
 });
 
-test("(e), (f) RED-TEAM FIX B: the receipt is held to the reconcile verifier the dry run is told; another key's receipt is BROKEN receipt_unsigned, and with none known (e) and (f) are COULD NOT LOOK, saying why", async (t) => {
+test("(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to the reconcile key WITNESS_RECONCILE_VERIFIER names (another key is BROKEN, none is COULD NOT LOOK); (f) holds each case to the document it names, needing no verifier; a named document that cannot be read is COULD NOT LOOK", async (t) => {
   // The preview's receipts are RECONCILE_KEY's; the dry run is told another key.
   const other = checkpoint.generateKey("test.example/dry-run-other-reconcile");
   const wrong = await dryRun(t, { receiptVerifier: other.verifier, pinToken: PIN_TOKEN });
   assert.equal(word(wrong, "e"), "BROKEN", wrong.show);
-  assert.match(wrong.by.e.line, /its sealed record does not hold against this checkout's .* \(receipt_unsigned: unknown_signer\)$/);
-  // A pass told the other key refuses the case the preview sealed.
+  assert.match(wrong.by.e.line, new RegExp(`its receipt is signed by ${RECONCILE_KEY.verifier.replace(/[.+/]/g, "\\$&")}, not the reconcile key WITNESS_RECONCILE_VERIFIER names$`));
+  // (f) needs no verifier: the case holds under the document it names.
   const sealedId = /case_id ([0-9a-f]{64})/.exec(wrong.by.e.line)[1];
   assert.equal(gh.read(PINS, C.casePath(sealedId)).status, "VERDICT", "fixture: the preview sealed it");
-  assert.equal(word(wrong, "f"), "BROKEN", wrong.show);
-  assert.ok(wrong.by.f.line.includes(`refused ${sealedId} (receipt_unsigned)`), wrong.by.f.line);
+  assert.equal(word(wrong, "f"), "COULD NOT LOOK", wrong.show);
+  assert.match(wrong.by.f.line, /no case was sealed in \(e\)/, "(e) did not verify a seal, so (f) has none of this run's to look for");
   // Told no verifier at all.
   const none = await dryRun(t, { receiptVerifier: null, pinToken: PIN_TOKEN });
-  for (const id of ["e", "f"]) {
-    assert.equal(word(none, id), "COULD NOT LOOK", none.show);
-    assert.match(none.by[id].line, /no reconcile verifier is known here \(set WITNESS_RECONCILE_VERIFIER to the public verifier of the preview's WITNESS_RECONCILE_SIGNER_KEY\), so the receipt's signer cannot be checked$/);
-  }
+  assert.equal(word(none, "e"), "COULD NOT LOOK", none.show);
+  assert.match(none.by.e.line, /no reconcile verifier is known here \(set WITNESS_RECONCILE_VERIFIER to the public verifier of the preview's WITNESS_RECONCILE_SIGNER_KEY\), so the receipt's signer cannot be checked$/);
   assert.equal(none.code, 3);
   // control: told the preview's own verifier, both hold
   const right = await dryRun(t, { receiptVerifier: RECONCILE_KEY.verifier, pinToken: PIN_TOKEN });
   assert.equal(word(right, "e"), "VERIFIED", right.show);
   assert.equal(word(right, "f"), "VERIFIED", right.show);
+  // The named document cannot be read from the public repository: (e) could not look.
+  gh.raw.clear();
+  S._internal.clearDocumentCache();
+  const unread = await dryRun(t, { pinToken: PIN_TOKEN });
+  assert.equal(word(unread, "e"), "COULD NOT LOOK", unread.show);
+  assert.match(unread.by.e.line, /the key document it names \(commit [0-9a-f]{40}\) could not be read from the public repository \(http_404\)/);
 });
 
 test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own chain; an anchor read under another chain is BROKEN", async (t) => {

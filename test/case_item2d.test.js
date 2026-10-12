@@ -112,9 +112,6 @@ const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
 const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
-// The service's reconcile verifier, public, as a reader with no signer key
-// (the sealer, a page in this process) is told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const CASE_KEY_ID = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
 const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, since: "2026-10-10", note: "the test environment's case key", status: "active" });
 // The committed document lists no key; these tests hand the seal, the page
@@ -209,7 +206,7 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
   const { id, a } = await sealedCase({ over: { scope_digest: sha("fix 1") } });
   const good = storedCase(id);
   assert.equal(typeof good.sig, "string", "fixture: the case is signed");
-  assert.equal(S.sealedRecordReason(good, KEYS_DOC), null, "fixture: the case as sealed verifies");
+  assert.equal((await S.sealedRecordReason(good, KEYS_DOC)).code, "valid_under_document", "fixture: the case as sealed verifies");
   const k = checkpoint.parseSignerKey(CASE_KEY.signer);
   const plants = {
     // the receipt's compared_at is not the reveal time: the receipt no longer binds

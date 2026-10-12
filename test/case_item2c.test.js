@@ -87,9 +87,6 @@ const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-10
 const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const LOG_ENV = "WITNESS_LOG_SIGNER_KEY";
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer });
-// The service's reconcile verifier, public, as a reader with no signer key
-// (the sealer, a page in this process) is told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const CASE_KEY_ID = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
 const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, since: "2026-10-10", note: "the test environment's case key", status: "active" });
 // The committed document lists the production case key (item 3b), never
@@ -229,7 +226,7 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   const k = checkpoint.parseSignerKey(CASE_KEY.signer);
   const forged = { ...good, sig: crypto.sign(null, Buffer.from("other bytes"), k.privateKey).toString("base64") };
   assert.deepEqual(C.validateCase(forged), { ok: true }, "fixture: schema-valid");
-  assert.equal(S.checkStoredReceipt(forged), null, "fixture: the receipt still binds");
+  assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null, "fixture: the receipt still binds");
   gh.seed(PINS, C.casePath(id), forged);
   const writes = gh.putLog.length;
   const got = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
@@ -243,21 +240,23 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   assert.deepEqual(run.cases.refused, [{ case_id: id, code: "case_signature_invalid", reason: "bad_signature" }]);
   assert.deepEqual(pinFilesOf(id), []);
 
-  // The signer the case names must be in the document, and not revoked.
+  // Since Design I the signer is held to the document the case NAMES; the
+  // current document (anchorCase's keyDocument) only adds a revocation
+  // since, and one that does not read cannot say: could not look.
   gh.seed(PINS, C.casePath(id), good);
-  for (const [name, doc, reason] of [
-    ["the committed document (no key)", undefined, "signer_unpublished"],
-    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_revoked"],
-    ["unreadable", { ...KEYS_DOC, extra: true }, "key_document_unreadable"],
+  for (const [name, doc, code] of [
+    ["the committed document (no test key), current", undefined, "valid_under_document"],
+    ["revoked since, current", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_since_revoked"],
+    ["unreadable, current", { ...KEYS_DOC, extra: true }, "document_unavailable"],
   ]) {
-    const r = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: doc });
-    assert.equal(r.code, "case_signature_invalid", name);
-    assert.equal(r.reason, reason, name);
+    assert.equal((await S.sealedRecordReason(good, doc)).code, code, name);
   }
-  assert.deepEqual(pinFilesOf(id), [], "none of them pinned");
+  const unread = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, extra: true } });
+  assert.deepEqual(unread, { ok: false, code: "could_not_look", reason: "current_document_unreadable" });
+  assert.deepEqual(pinFilesOf(id), [], "not pinned when it could not look");
   // MUST-FAIL ARM: 2b's retry checked the receipt only, which passes the
   // forged case, so only the signature check stood between it and a pin.
-  assert.equal(S.checkStoredReceipt(forged), null);
+  assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null);
   // control: the case as sealed anchors, under a retired key too (a
   // retired key's cases stay trusted: the document's status_meaning)
   const retired = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] } });
@@ -1009,19 +1008,20 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
   assert.ok(pv.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
   assert.match(pv, /listed in the key document as active; the signature verifies under the published verifier/);
-  // the same case through the real dispatch (the committed key document, the
-  // service clock): that document lists no key, so the case's signature is
-  // not confirmed, and since item 2d the page shows the does-not-verify state
-  // instead of the verdict (test/case_item2d.test.js, FIX 1)
+  // the same case through the real dispatch (the committed key document as
+  // the CURRENT one, which does not list the test key, and the service
+  // clock): since Design I the case is held to the document it NAMES, read
+  // at its commit, so the current document does not decide, and the page
+  // shows its verdict (until 2d to Design I it showed DOES NOT VERIFY here)
   const res = makeRes();
   await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: s.id }, headers: { "x-forwarded-for": freshIp() } }), res);
   assert.equal(res._status, 200);
   const pd = String(res._body);
-  assert.match(pd, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
-  assert.match(pd, /signer_unpublished/);
+  assert.match(pd, /<h1>Case: VERDICT<\/h1>/);
+  assert.match(pd, /<span class="word pass">MATCHED<\/span>/);
+  assert.ok(!pd.includes("SEALED RECORD DOES NOT VERIFY"));
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
   assert.ok(pd.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
-  assert.ok(!pd.includes(">MATCHED<") && !pd.includes("anchored: its pin"), "no verdict and no anchor state");
   // an unsigned seal (a document without the case key) verifies through the
   // real dispatch and shows its verdict
   const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: NO_CASE_KEY_DOC });

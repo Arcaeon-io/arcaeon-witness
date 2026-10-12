@@ -82,15 +82,19 @@
 //   --exhaust-quota     run the quota half of (c): up to 21 opens.
 //   --help              this text
 //
-// THE RECONCILE VERIFIER (red-team fix B). (e) and (f) hold the sealed
-// case's reconcile receipt to the service's reconcile verifier, the public
-// half of the preview's WITNESS_RECONCILE_SIGNER_KEY, read from this
-// machine's environment as lib/_reconcile_receipt.js expectedVerifier reads
-// it: WITNESS_RECONCILE_VERIFIER (the verifier string; it is public), or the
-// signer key itself if it is set here. With neither, each of (e) and (f)
-// that gets that far is COULD NOT LOOK, saying so: a receipt's signer that
-// cannot be checked is never VERIFIED. A receipt signed by another key is
-// BROKEN (receipt_unsigned).
+// THE RECONCILE VERIFIER (red-team fix B; Design I). Since Design I a
+// sealed case is held to the key document it NAMES (signed_under), read
+// from the public repository at the commit it names, for both its case
+// signature and its receipt's (lib/_case_seal.js THE SEALED CHECK); (e) and
+// (f) both use that check, and a named document that cannot be read is
+// COULD NOT LOOK. (e) also holds the seal to THIS checkout's document (the
+// one (a) compares): a seal under another document is BROKEN. And it holds
+// the receipt's signer to the preview's own reconcile key, which
+// WITNESS_RECONCILE_VERIFIER names on this machine (the verifier string; it
+// is public), or the signer key itself if it is set here (the private-side
+// pointer to which published reconcile entry is the preview's,
+// lib/_reconcile_receipt.js expectedVerifier). With neither, (e) is COULD
+// NOT LOOK, saying so; a receipt signed by another key is BROKEN.
 //
 // A PROTECTED PREVIEW. The project protects its previews with Vercel
 // Authentication, so a request without the bypass is answered 401 with
@@ -134,6 +138,7 @@ const https = require("https");
 const C = require("../lib/_case.js");
 const S = require("../lib/_case_seal.js");
 const checkpoint = require("../lib/_checkpoint.js"); // generateKey: the run's two registration keys
+const { canonicalBytes } = require("../lib/_check_record.js"); // (e): this checkout's document, as a seal names it
 const receipts = require("../lib/_reconcile_receipt.js"); // expectedVerifier: THE RECONCILE VERIFIER
 
 const ROOT = path.join(__dirname, "..");
@@ -559,15 +564,17 @@ async function checkStampRead(ctx) {
 const HEX64 = /^[0-9a-f]{64}$/;
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
-// THE RECONCILE VERIFIER, above: why (e) and (f) cannot judge a receipt.
+// THE RECONCILE VERIFIER, above: why (e) cannot judge a receipt's signer.
 const NO_RECONCILE_VERIFIER = `no reconcile verifier is known here (set ${receipts.VERIFIER_ENV} to the public verifier of the preview's ` +
   `${receipts.SIGNER_ENV}), so the receipt's signer cannot be checked`;
 
 // (e)'s judgement of a 201 VERDICT answer: the sealed case it carries is
-// signed, its seal holds against this checkout's key document under an
-// ACTIVE entry, and the answer's chain is 64 hex and that case's own.
+// signed, sealed under this checkout's key document, its receipt signed by
+// the preview's own reconcile key, valid under the document it names (read
+// at its commit, so its key was active there and is not revoked here), and
+// the answer's chain is 64 hex and that case's own.
 // -> verified(what was shown) or broken / couldNotLook(why not).
-function sealedAnswer(ctx, id, json) {
+async function sealedAnswer(ctx, id, json) {
   const k = json.case;
   if (!isObject(k)) return broken("it carries no sealed case object");
   const absent = (v) => (v === undefined ? "missing" : v === null ? "null" : null);
@@ -580,15 +587,26 @@ function sealedAnswer(ctx, id, json) {
   if (k.status !== "VERDICT" || k.case_id !== id) return broken(`its sealed case is ${k.status} for case_id ${k.case_id}, not this case's VERDICT`);
   const doc = S.checkKeyDocument(ctx.keyDocument);
   if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the signature cannot be checked`);
+  const mine = crypto.createHash("sha256").update(canonicalBytes(ctx.keyDocument)).digest("hex");
+  if (!isObject(k.signed_under) || k.signed_under.document_sha256 !== mine) {
+    return broken(`it was sealed under ${isObject(k.signed_under) ? `the key document ${k.signed_under.document_sha256} at commit ${k.signed_under.document_commit}` : "no recorded key document"}, ` +
+      `not this checkout's ${S.CASE_KEYS_FILE} (${mine})`);
+  }
   if (!ctx.receiptVerifier) return couldNotLook(NO_RECONCILE_VERIFIER);
-  const unsealed = S.sealedRecordReason(k, ctx.keyDocument, { receiptVerifier: ctx.receiptVerifier });
-  if (unsealed) return broken(`its sealed record does not hold against this checkout's ${S.CASE_KEYS_FILE} (${unsealed.code}: ${unsealed.reason})`);
-  const entry = doc.keys.find((e) => e.key_id === k.signed_by);
-  if (entry.status !== "active") return broken(`it is signed by ${k.signed_by}, which ${S.CASE_KEYS_FILE} lists as ${entry.status}, not active`);
+  const rs = isObject(k.verdict) && isObject(k.verdict.signer) ? k.verdict.signer.verifier : null;
+  if (rs !== ctx.receiptVerifier) return broken(`its receipt is signed by ${rs || "no key"}, not the reconcile key ${receipts.VERIFIER_ENV} names`);
+  const answer = await S.sealedRecordReason(k, ctx.keyDocument);
+  if (answer.code === "document_unavailable") {
+    return couldNotLook(`the key document it names (commit ${answer.document_commit}) could not be read from the public repository (${answer.reason})`);
+  }
+  if (answer.code !== "valid_under_document") {
+    return broken(`its sealed record does not hold under the key document it names (${answer.code}${answer.reason ? `: ${answer.reason}` : ""})`);
+  }
   if (typeof json.chain !== "string" || !HEX64.test(json.chain)) return broken(`its chain ${JSON.stringify(json.chain)} is not 64 hex`);
   const own = S.caseChain(k);
   if (json.chain !== own) return broken(`its chain ${json.chain} is not the sealed case's own (${own})`);
-  return verified(`signed by ${k.signed_by}, verified under its active entry in ${S.CASE_KEYS_FILE}; chain ${json.chain}, the case's own`);
+  return verified(`signed by ${k.signed_by}, verified under its active entry in ${S.CASE_KEYS_FILE}, the document it names at commit ` +
+    `${k.signed_under.document_commit}; chain ${json.chain}, the case's own`);
 }
 
 async function checkChunkedReveal(ctx) {
@@ -621,7 +639,7 @@ async function checkChunkedReveal(ctx) {
   const json = ans.error ? null : tryJson(ans.body);
   if (ans.status === 201 && json && json.case_id === id && json.status === "VERDICT") {
     const head = `case-reveal with ${sent} answered HTTP 201 VERDICT for case_id ${id}`;
-    const seal = sealedAnswer(ctx, id, json);
+    const seal = await sealedAnswer(ctx, id, json);
     if (seal.word !== VERIFIED) return { word: seal.word, text: `${head}, but ${seal.text}` };
     ctx.sealed = { caseId: id, chain: json.chain, pin: json.pin };
     const word = json.verdict && json.verdict.verdict ? `, verdict ${json.verdict.verdict}` : "";
@@ -658,16 +676,15 @@ async function checkSealerPass(ctx) {
     }
     const doc = S.checkKeyDocument(ctx.keyDocument);
     if (!doc.ok) return couldNotLook(`this checkout's ${S.CASE_KEYS_FILE} does not read (${doc.reason} at ${doc.at}), so the pass could not check a seal's signature`);
-    if (!ctx.receiptVerifier) return couldNotLook(`${where}: ${NO_RECONCILE_VERIFIER}`);
     const sealer = require("../lib/_sealer.js");
-    const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument, receiptVerifier: ctx.receiptVerifier });
+    const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument });
     if (!rep.ok) {
       if (rep.reason === "tree_unreadable") return couldNotLook(`${where}: the case pass could not read the tree (${rep.detail})`);
       return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
     }
     const summary = `${where}: the case pass read ${rep.read} of ${rep.candidates} candidates (${rep.deferred} deferred): ` +
       `anchored ${rep.anchored.length}, already ${rep.already.length}, pending ${rep.pending.length}, refused ${rep.refused.length}, ` +
-      `conflict ${rep.conflict.length}, unreadable ${rep.unreadable.length}, terminal ${rep.terminal.length}`;
+      `conflict ${rep.conflict.length}, unreadable ${rep.unreadable.length}, terminal ${rep.terminal.length}, could not look ${rep.could_not_look.length}`;
     const bad = [
       ...rep.refused.map((x) => `refused ${x.case_id} (${x.code})`),
       ...rep.conflict.map((x) => `conflict ${x}`),
@@ -676,6 +693,8 @@ async function checkSealerPass(ctx) {
     if (bad.length) return broken(`${summary}; ${bad.slice(0, 5).join(", ")}${bad.length > 5 ? `, and ${bad.length - 5} more` : ""}`);
     if (rep.truncated) return couldNotLook(`${summary}; the tree came back truncated, so the pass could not see every case`);
     if (!ctx.sealed) return couldNotLook(`${summary}; no case was sealed in (e), so no case of this run shows the pass's anchor`);
+    const unread = rep.could_not_look.find((x) => x.case_id === ctx.sealed.caseId);
+    if (unread) return couldNotLook(`${summary}; the key document case ${ctx.sealed.caseId} names could not be read (${unread.reason}), so the pass did not pin it`);
     const want = ctx.sealed.chain;
     if (typeof want !== "string" || !HEX64.test(want)) return broken(`${summary}; the reveal's chain ${JSON.stringify(want)} is not 64 hex, so no anchor can be for it`);
     const st = await S.anchorState(ctx.sealed.caseId, want);

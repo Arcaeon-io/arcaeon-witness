@@ -1,5 +1,38 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, step 2: a sealed case is held to the document it names, never to the current one (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **THE SEALED CHECK** (`lib/_case_seal.js` `sealedRecordReason`) is now asynchronous. It reads the key document the case names, `signed_under.document_commit`, from this public repository (`raw.githubusercontent.com`, no credentials) via `fetchNamedDocument`. A commit's file never changes, so an answered read is kept for the life of the instance; a failed one is not. Under that document, both keys must have been active at `retrieved_at` (listed from that day or before, and active or revoked only from a later day), and both signatures must verify. The answers:
+  - `valid_under_document`, with the three `signed_under` fields;
+  - `signer_since_revoked`: valid under the named document, but the CURRENT document (the reader's bundled copy) marks a key revoked. It carries `revoked: [{role, key_id, revoked_since}]` and `current_commit`, the reader's own `VERCEL_GIT_COMMIT_SHA`, or null when unknown. The case stays sealed;
+  - `document_unavailable`: the named commit cannot be fetched (404, 5xx, network, not JSON), or the current document does not read. Could-not-look: never a yes and never a no;
+  - `case_signature_invalid`:
+    - the case key was already revoked in the named document at `retrieved_at` (`signer_revoked`);
+    - it was retired, or listed from a later day (`signer_not_active`);
+    - it was not listed (`signer_unpublished`);
+    - the signature does not verify;
+    - the bytes at the named commit are not the document named (`document_sha256_mismatch`), or are not a key document (`named_document_unreadable`);
+  - `receipt_unsigned`: the receipt key is not a reconcile entry of the named document (`unknown_signer`), or not active then (`signer_not_active`);
+  - `document_unrecorded` for a seal with no `signed_under`; step 5 covers it in every reader;
+  - `single_party` and `verdict_unbound` as before.
+  - `sealHolds` names the two holding answers. A later document can never make a formerly unverifiable stored signature verify: the named document alone decides validity.
+- **The reconcile verifier is no longer the reader's environment.** `WITNESS_RECONCILE_VERIFIER` is only the private-side pointer to which published entry is the service's, read by the dry run. `checkStoredReceipt` holds a receipt to a verifier its caller gives, and with none refuses every signed one.
+- **Callers** (consuming the new answers only):
+  - `anchorCase` pins on `valid_under_document` and `signer_since_revoked`. On `document_unavailable` it does nothing and answers `could_not_look`; `anchorPending` lists it in a new `could_not_look` field and the next run tries again. Anything else is refused.
+  - `?op=case-reference` takes a row on the two holding answers, and otherwise refuses 409 with the answer's code and reason (`document_unavailable`, `document_unrecorded`, and the rest as before).
+  - The case page shows a VERDICT on the two holding answers. On `document_unavailable` it is a COULD NOT LOOK page (HTTP 503: the commit it names and why, no verdict, no does-not-verify state). Anything else is the does-not-verify state. Step 3 adds what the page says about the document and the pin.
+  - `lib/_sealer.js` `anchorCases` takes no verifier.
+- **`tools/preview_dry_run.js`.**
+  - (e) holds the seal to this checkout's document: a seal under another is BROKEN.
+  - (e) holds the receipt's signer to the `WITNESS_RECONCILE_VERIFIER` pointer: another key is BROKEN, none is COULD NOT LOOK.
+  - (e) requires `valid_under_document`; a named document it cannot read is COULD NOT LOOK.
+  - (f) needs no verifier, and says COULD NOT LOOK when the pass could not read the sealed case's named document.
+- **Tests.**
+  - `test/case_signed_under.test.js` +9. Valid under the named document, fetched once with no credentials. The current document does not decide. Signer since revoked, still anchored and still referenced. Revoked, retired or later-listed in the named document. A later document never makes an unlisted key verify, for the case key or the receipt key. `document_unavailable` across the sealed check, the sealer, the reference and the page, and the next run pins once it can read. Other bytes at the commit. The cache. An unreadable current document.
+  - Expectations changed by design. Every reader of the old synchronous check now awaits it. The 2c and 2d arms in which the CURRENT document decided (an unlisted, revoked or unreadable current document) now say what Design I says. The 2c page through the real dispatch now shows the verdict, not DOES NOT VERIFY. The FIX B tests about readers' environments now show the environment does not decide.
+  - The two §1.4 red-team todos fail earlier now; step 4 rewrites them.
+  - Suite 1035 -> 1044 tests, 0 fail, 14 todo. Here: 1028 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, step 1: a sealed case records the key document it was signed under (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** GPT-5.6's red-team review, §1.4 and §3.3, CONFIRMED by `test/case_redteam.test.js`: the verdict on a sealed case changed when the public key document changed, and no sealed case recorded which document it was signed under. Design I fixes that in five steps; this is the first.

@@ -77,9 +77,6 @@ const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 // Item 2b: the case key signs only when it can be shown different from BOTH
 // other keys, so the signing environment carries all three.
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
-// The service's reconcile verifier, public, as a reader with no signer key
-// (the sealer, a page in this process) is told it (red-team fix B).
-process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // Item 2c: the case key signs only when it is an ACTIVE entry of the key
 // document (lib/_case_seal.js, PUBLICATION FAILS CLOSED), and the anchor
 // retry checks a stored case's signature against that document. The
