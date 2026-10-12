@@ -65,6 +65,7 @@ const path = require("node:path");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -105,8 +106,10 @@ process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // Item 2c: the case key signs only as an ACTIVE entry of the key document,
 // and the anchor retry checks a stored signature against it; the committed
 // document lists no key, so the signing tests hand the seal, the retry and
-// the sealer a copy that lists the test key (see test/case_reveal.test.js).
-const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" })] });
+// the sealer a copy that lists the test key (see test/case_reveal.test.js),
+// and, since Design I, the reconcile key as a reconcile entry.
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" }),
+  KD.reconcileEntry(RECEIPT_KEY)] });
 const OPEN_KEY = "case-test-open-key-0003";
 const OPEN_AUTH = Object.freeze({ authorization: `Bearer ${OPEN_KEY}` });
 
@@ -194,7 +197,7 @@ function revealBody(id, a, b) {
 }
 async function reveal(body, { now = REVEAL_AT, env = SIGNED, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", body), res, { now, env, keyDocument });
+  await H.handleCaseReveal(req("case-reveal", body), res, { now, env: KD.deployed(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 // A sealed case; `pinFails` leaves it sealed with pin: pending.

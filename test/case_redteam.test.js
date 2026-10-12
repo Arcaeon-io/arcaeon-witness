@@ -77,6 +77,7 @@ const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
 const { canonicalBytes } = require("../lib/_check_record.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const reconcileFixtures = require("./fixtures/reconcile/cases.json");
 
 const PINS = process.env.GITHUB_PIN_REPO;
@@ -97,9 +98,11 @@ const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.S
 // (the sealer, a page in this process) is told it (red-team fix B).
 process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const keyIdOf = (k) => k.verifier.split("+").slice(0, 2).join("+");
-const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status });
+const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status,
+  ...(status === "revoked" ? { revoked_since: "2026-10-11" } : {}) });
 const docWith = (...entries) => ({ ...S.PUBLISHED_KEYS, keys: entries });
-const KEYS_DOC = Object.freeze(docWith(entry(CASE_KEY)));
+// Design I: the document lists the reconcile key too, as a reconcile entry.
+const KEYS_DOC = Object.freeze(docWith(entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)));
 const OPEN_KEY = "case-test-open-key-0021";
 const VICTIM_KEY = "case-test-open-key-0022";
 const OPEN_AUTH = Object.freeze({ authorization: `Bearer ${OPEN_KEY}` });
@@ -197,7 +200,7 @@ function revealBody(id, a, b) {
 }
 async function reveal(body, { now = REVEAL_AT, env = SIGNED, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", body), res, { now, env, keyDocument });
+  await H.handleCaseReveal(req("case-reveal", body), res, { now, env: KD.deployed(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 async function sealedCase(over, { pinFails = false } = {}) {
@@ -623,7 +626,7 @@ test('GPT-5.6 §3.1 / §5 / §6.3: "Fabricate a case verdict without actually ru
   assert.equal(st.ok, true);
   const fabricated = S.sealCase(storedCase(id), {
     reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
   }, { ok: false, code: "case_key_unset", reason: "no case signing key is configured" });
   gh.seed(PINS, C.casePath(id), fabricated);
   const page = await casePage(id);
@@ -660,7 +663,7 @@ test("FIX B: op=reconcile with WITNESS_RECONCILE_SIGNER_KEY absent or unreadable
   }
   assert.equal(port.mock.callCount(), 0, "nothing was compared");
   const ok = makeRes();
-  await RECONCILE.handleReconcile(req("reconcile", body), ok, { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
+  await RECONCILE.handleReconcile(req("reconcile", body), ok, { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, keyDocument: KEYS_DOC });
   const signed = parsed(ok);
   assert.equal(ok._status, 200);
   assert.equal(signed.receipt.signer.verifier, RECEIPT_KEY.verifier, "control: with the signer, a signed receipt");
@@ -687,12 +690,14 @@ test("FIX B: the joint reveal with no reconcile signer is 503 signer_unavailable
 // signed the seal, only the receipt's signer is not the service's.
 async function wronglySignedCase(scope) {
   const { id, a, b } = await committedCase({ scope_digest: sha(scope) });
-  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: WRONG_RECEIPT_KEY.signer }, now: REVEAL_AT });
+  // computed under the wrong key's own document, which publishes it
+  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: WRONG_RECEIPT_KEY.signer }, now: REVEAL_AT,
+    keyDocument: docWith(entry(CASE_KEY), KD.reconcileEntry(WRONG_RECEIPT_KEY)) });
   const st = S.storableReceipt(compared.receipt);
   assert.equal(st.ok, true);
   const sealed = S.sealCase(storedCase(id), {
     reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
   }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
   assert.notEqual(sealed.sig, null, "fixture: the case key signed it");
   assert.equal(S.checkSealedReceipt(sealed), null, "fixture: the receipt is bound to the case");

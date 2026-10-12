@@ -1,5 +1,31 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, step 1: a sealed case records the key document it was signed under (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **Why.** GPT-5.6's red-team review, §1.4 and §3.3, CONFIRMED by `test/case_redteam.test.js`: the verdict on a sealed case changed when the public key document changed, and no sealed case recorded which document it was signed under. Design I fixes that in five steps; this is the first.
+- **The key document's entries gain a role** (`lib/_case_seal.js`, SIGNED UNDER ONE DOCUMENT): `role` is "case" or "reconcile", and absent means case. A revoked entry carries `revoked_since` (an ISO date) beside `status: revoked`; no other entry carries one.
+  - A key signs only in its role. The case key must be an active case entry (`loadCaseSigner`). The reconcile key must be an active reconcile entry (`loadReconcileSigner`, new) of the document the deployment carries.
+  - Without one, `?op=reconcile` and the reveal refuse 503 `signer_unavailable` and compare nothing. The committed document lists no reconcile key yet, so that is the production state until the real entry is minted by hand.
+  - The committed document is unchanged: its one entry has no role, so it is the case key it was.
+- **`signed_under`** (`lib/_case.js`, the one optional top-level field): `{document_sha256, document_commit, retrieved_at}`, inside the signed bytes, on a VERDICT only.
+  - `document_sha256` is the sha256 of the json-c14n:v1 form of the document the sealer carried.
+  - `document_commit` is the sealing deployment's own commit, `VERCEL_GIT_COMMIT_SHA`. The repository is public, and the bundled document is the document at that commit (`sealingDocument`).
+  - `retrieved_at` is the reveal's service time: unverified.
+  - One document commit binds the case key that signed the seal and the reconcile key that signed its receipt. `sealCase` refuses to build a seal without it.
+  - A VERDICT without it still reads; step 5 reads it as `document_unrecorded`.
+- **The reveal** refuses 503 `document_unavailable` before anything is compared when its document does not read or its commit is not a 40-hex id. Nothing is compared or written.
+- **Tests.**
+  - `test/case_signed_under.test.js` (new, 7): the roles and `revoked_since`; a key signs only in its role; reconcile fails closed, including the committed document through the real dispatch; `signed_under` names the sealer's document and is covered by the signature and the chain; the schema; the reveal's `document_unavailable`; `sealCase` without it.
+  - `test/helpers/key_document.js` (new) builds entries and documents, and serves a document from the public repository at a commit derived from it (sha1 of its json-c14n bytes), so the commit a deployment names always holds the document it carries.
+  - `test/helpers/mock_store.js` serves raw files at a commit (`seedRaw`), as `raw.githubusercontent.com` does.
+  - Every sealing test's document lists the reconcile key, every reveal runs on a deployment built at its document's commit, and the hand-built seals carry `signed_under`.
+  - Expectations changed by design:
+    - a reveal under the committed document now refuses (`document_unavailable` with no commit, `signer_unavailable` with one), where it sealed unsigned before. The 2a dispatch test, a 2c test and the dry run's CLI tests say so; the dry run reads that 503 as COULD NOT LOOK;
+    - unsigned seals in the tests come from a document without the case key;
+    - `test/reconcile_endpoint.test.js` sends its POSTs to `handleReconcile` with a document that lists its signer.
+  - The red-team test "No sealed case records the key-document hash" now passes, still under its `todo` until step 4.
+  - Suite 1028 -> 1035 tests, 0 fail, 14 todo. Here: 1019 pass and the 2 environment skips.
+
 ## 2026-10-12: red-team fix B, a receipt is the service's: a stored reconcile receipt holds only when the service's reconcile signer signed it, and no signer means no comparison (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **Why.** GPT-5.6's red-team review, §3.1, CONFIRMED by `test/case_redteam.test.js`: a sealed case built from a receipt no comparison produced, unsigned, passed `sealedRecordReason`. Its page showed MATCHED and "The service ran its recorded comparison once". A stored receipt was checked under the verifier it carried itself, so a receipt signed by any key, or by none, passed.

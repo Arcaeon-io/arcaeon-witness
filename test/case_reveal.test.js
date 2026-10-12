@@ -49,6 +49,7 @@ const crypto = require("node:crypto");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRawReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -85,7 +86,10 @@ process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 // committed document lists no key, so these tests hand the seal and the
 // retry a copy that lists the test key, the way they hand the seal the test
 // env. (loadCaseSigner's key_unpublished answer carries the public half.)
-const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" })] });
+// Design I: the document lists the reconcile key too, as a reconcile entry,
+// and a reveal runs on a deployment built with it (KD.deployed).
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [S.keyDocumentEntry(S.loadCaseSigner(SIGNED), { since: "2026-10-10", note: "the test environment's case key" }),
+  KD.reconcileEntry(RECEIPT_KEY)] });
 
 // The clean cross-repo pair (MATCHED 5 of 5 under reconcile.py), and a pair
 // that is ALTERED at call 2.
@@ -179,7 +183,7 @@ function revealBody(id, a, b, extra = {}) {
 }
 async function reveal(body, { now = REVEAL_AT, env = SIGNED, request, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(request || req("case-reveal", body), res, { now, env, keyDocument });
+  await H.handleCaseReveal(request || req("case-reveal", body), res, { now, env: KD.deployed(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res), res };
 }
 function storedCase(id) {
@@ -249,7 +253,7 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
   // same signed receipt, byte for byte.
   const direct = makeRes();
   await R.handleReconcile(makeReq({ method: "POST", query: { op: "reconcile" }, headers: { "content-type": "application/json", "x-forwarded-for": freshIp() },
-    body: { agent_tape_b64: a.tape.toString("base64"), tool_tape_b64: b.tape.toString("base64") } }), direct, { env: SIGNED, now: REVEAL_AT });
+    body: { agent_tape_b64: a.tape.toString("base64"), tool_tape_b64: b.tape.toString("base64") } }), direct, { env: SIGNED, now: REVEAL_AT, keyDocument: KEYS_DOC });
   const viaReconcile = T._internal.pyLoads(direct._body, false);
   assert.equal(T.wireJson(r.body.verdict), T.wireJson(JSON.parse(T.wireJson(viaReconcile.get("verdict")))), "the verdict is ?op=reconcile's");
   assert.equal(T.wireJson(receipt), T.wireJson(JSON.parse(T.wireJson(viaReconcile.get("receipt")))), "the receipt is ?op=reconcile's");
@@ -257,29 +261,36 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
 
   // MUST-FAIL ARM: the tapes in the other order give a receipt whose tape_a
   // is role b's tape; the slot assertions above are what would catch it.
-  const swapped = R.compare(b.tape, a.tape, { env: SIGNED, now: REVEAL_AT }).receipt;
+  const swapped = R.compare(b.tape, a.tape, { env: SIGNED, now: REVEAL_AT, keyDocument: KEYS_DOC }).receipt;
   assert.notEqual(swapped.tapes.tape_a.digest, RAW(a.tape_sha256));
 });
 
-test("TEST 7: an ALTERED pair seals as ALTERED with the first divergence in the receipt, through the real verify.js dispatch", async (t) => {
+test("TEST 7: an ALTERED pair seals as ALTERED with the first divergence in the receipt; through the real verify.js dispatch, this deployment refuses before comparing", async (t) => {
   const { id, a, b } = await committedCase({ tapeA: ALT_AGENT, tapeB: ALT_TOOL });
   const runs = spyReconcile(t);
-  // The real dispatch reads its clock and keys from the process: the
-  // reconcile signer is set for this test (since red-team fix B nothing is
-  // compared without one), the case key is not, so this seal is unsigned;
-  // its clock is held at 10:00.
-  const res = makeRes();
+  // The real dispatch reads its clock, its keys, its key document and its
+  // commit from the process. Since Design I it seals only under a document
+  // it can name: here no VERCEL_GIT_COMMIT_SHA is set (and the committed
+  // document lists no reconcile key), so it refuses, typed, and compares
+  // nothing, even with the reconcile signer set.
+  const viaDispatch = makeRes();
   const realNow = Date.now;
   Date.now = () => Date.parse("2026-10-10T10:00:00Z");
   process.env[receipts.SIGNER_ENV] = RECEIPT_KEY.signer;
   try {
-    await verifyHandler(req("case-reveal", revealBody(id, a, b)), res);
+    await verifyHandler(req("case-reveal", revealBody(id, a, b)), viaDispatch);
   } finally {
     Date.now = realNow;
     delete process.env[receipts.SIGNER_ENV];
   }
-  const body = parsed(res);
-  assert.equal(res._status, 201, JSON.stringify(body).slice(0, 300));
+  assert.equal(viaDispatch._status, 503, String(viaDispatch._body).slice(0, 300));
+  assert.equal(parsed(viaDispatch).error_code, "document_unavailable");
+  assert.equal(runs(), 0, "nothing compared");
+  // The seal itself, on a deployment that carries the test document; its
+  // clock is held at 10:00.
+  const r = await reveal(revealBody(id, a, b), { now: Date.parse("2026-10-10T10:00:00Z") });
+  const body = r.body;
+  assert.equal(r.status, 201, JSON.stringify(body).slice(0, 300));
   assert.equal(runs(), 1);
   const k = storedCase(id);
   assert.equal(k.verdict.verdict.verdict, "ALTERED");
@@ -586,7 +597,7 @@ test("REVEAL: policy_unavailable when the case's bound version is not the one th
   assert.equal(gh.putLog.length, writes, "nothing written");
   // MUST-FAIL ARM: the comparison would have run happily under this build's
   // version and stamped its own port version into the receipt.
-  assert.equal(R.compare(a2.tape, b2.tape, { env: SIGNED, now: REVEAL_AT }).receipt.method.port_version, real);
+  assert.equal(R.compare(a2.tape, b2.tape, { env: SIGNED, now: REVEAL_AT, keyDocument: KEYS_DOC }).receipt.method.port_version, real);
   assert.notEqual(real, "0.0.9");
   // control: the same case under its own version seals
   const ok = await reveal(revealBody(id, a, b));
@@ -604,7 +615,7 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
   const signer = receipts.loadSigner(SIGNED);
   const ctx = (over = {}) => ({ kase, tapeSha256: { a: a.tape_sha256, b: b.tape_sha256 }, tapeBytes: { a: a.tape.length, b: b.tape.length },
     revealedAt, signer, ...over });
-  const fresh = () => R.compare(a.tape, b.tape, { env: SIGNED, now: REVEAL_AT });
+  const fresh = () => R.compare(a.tape, b.tape, { env: SIGNED, now: REVEAL_AT, keyDocument: KEYS_DOC });
   const { result, receipt } = fresh();
   assert.deepEqual(S.checkReceipt(receipt, ctx({ result })), { ok: true }, "control: the real receipt passes");
 
@@ -720,7 +731,7 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT", "the case file stands");
   assert.deepEqual(C.validateCase(k), { ok: true });
-  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS].sort(), "no anchor or pin field in the case");
+  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, ...C.OPTIONAL_TOP_LEVEL_FIELDS].sort(), "no anchor or pin field in the case");
   assert.equal(gh.has(PINS, paths.seq), false);
   assert.equal(gh.has(PINS, paths.latest), false);
   assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "pending" }, "computed from the pin's absence");

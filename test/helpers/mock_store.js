@@ -38,10 +38,28 @@
 //        path had, so re-seeding a path to change its content in a test never
 //        plants a second commit by accident. addCommit() plants one on
 //        purpose; forceCommitsFailure() makes the read itself fail.
+//
+//   GET  https://raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>
+//        -> 200 <the file's text> | 404
+//        a public repository's file at one commit, read with no credentials
+//        (2026-10-12, case protocol Design I: lib/_case_seal.js reads the key
+//        document a sealed case names, at the commit it names). Served from
+//        seedRaw(repo, ref, path, text), so one path can hold different text
+//        at different commits; nothing else answers on this host. rawLog
+//        records every read, and forceRawFailure() makes reads fail.
 
 "use strict";
 
 const crypto = require("crypto");
+
+function textResponse(status, text) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => JSON.parse(text),
+    text: async () => text,
+  };
+}
 
 function fakeResponse(status, bodyObj) {
   const bodyText = JSON.stringify(bodyObj);
@@ -80,6 +98,20 @@ class MockGitHubStore {
     this._commitSeq = 0;
     this.commitsLog = []; // [path] — every commits-for-path read, in order
     this._forcedCommitsFailure = new Map(); // "repo::path" -> {remaining, status}
+    // Raw reads (see the header): "repo@ref:path" -> text.
+    this.raw = new Map();
+    this.rawLog = []; // ["repo@ref:path"] — every raw read, hit or miss, in order
+    this._forcedRawFailure = null; // {remaining, status} for every raw path
+  }
+
+  // A public file's text at one commit, served on the raw host.
+  seedRaw(repo, ref, path, text) {
+    this.raw.set(`${repo}@${ref}:${path}`, String(text));
+  }
+
+  // Force the next `n` raw reads to fail with `status` (0: a network error).
+  forceRawFailure(n = 1, status = 500) {
+    this._forcedRawFailure = { remaining: n, status };
   }
 
   _commitsOf(repo) {
@@ -159,6 +191,21 @@ class MockGitHubStore {
 
   async handleFetch(url, opts) {
     const u = new URL(String(url));
+
+    // Raw reads: see the header.
+    if (u.hostname === "raw.githubusercontent.com") {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const key = `${parts[0]}/${parts[1]}@${parts[2]}:${parts.slice(3).join("/")}`;
+      this.rawLog.push(key);
+      const forced = this._forcedRawFailure;
+      if (forced && forced.remaining > 0) {
+        forced.remaining -= 1;
+        if (forced.status === 0) throw new TypeError("mock: fetch failed (forced network error)");
+        return textResponse(forced.status, "mock: forced raw read failure");
+      }
+      if (((opts && opts.method) || "GET") !== "GET" || !this.raw.has(key)) return textResponse(404, "404: Not Found");
+      return textResponse(200, this.raw.get(key));
+    }
 
     // Recursive tree read (_store.js getTree / getTreeMeta):
     // GET /repos/<repo>/git/trees/<ref> -> {sha, tree:[{path,type:"blob",sha}...], truncated}.

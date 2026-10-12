@@ -22,9 +22,15 @@ const fixtures = require("./fixtures/reconcile/cases.json");
 
 // The deployment's reconcile signer, a throwaway key made here: since
 // red-team fix B the endpoint compares nothing without one (503
-// signer_unavailable), and the real dispatch reads it from the process.
+// signer_unavailable), and since Design I nothing unless it is an active
+// reconcile entry of the key document the deployment carries. The committed
+// document lists no reconcile key yet (the production state: 503), so the
+// POSTs here go to lib/_reconcile_http.js handleReconcile with a document
+// that lists this key (call, below); its signer comes from the process.
 const SIGNER = checkpoint.generateKey("arcaeon.io/reconcile-endpoint-test/2026-10-12");
 process.env[receipts.SIGNER_ENV] = SIGNER.signer;
+const KD = require("./helpers/key_document.js");
+const DOC = Object.freeze(KD.docWith(KD.reconcileEntry(SIGNER)));
 
 const { pyLoads, pyDumps, chainOf } = T._internal;
 
@@ -44,9 +50,12 @@ function jsonReq(body, headers = {}) {
   });
 }
 
+// A POST ?op=reconcile goes to handleReconcile on a deployment carrying DOC;
+// anything else through the real dispatch.
 async function call(req) {
   const res = makeRes();
-  await verifyHandler(req, res);
+  if (req.method === "POST" && (req.query || {}).op === "reconcile") await H.handleReconcile(req, res, { keyDocument: DOC });
+  else await verifyHandler(req, res);
   let parsed = res._body;
   if (typeof parsed === "string" && /json/.test(String(res._headers["content-type"] || ""))) {
     parsed = JSON.parse(parsed);
@@ -462,7 +471,7 @@ test("RECEIPT, END TO END: the saved answer verifies against the signer, and a d
   const key = checkpoint.generateKey("arcaeon.io/reconcile-test/2026-09-23");
   const req = jsonReq({ agent_tape: AGENT.toString("utf-8"), tool_tape: TOOL.toString("utf-8") });
   const res = makeRes();
-  await H.handleReconcile(req, res, { env: { [receipts.SIGNER_ENV]: key.signer } });
+  await H.handleReconcile(req, res, { env: { [receipts.SIGNER_ENV]: key.signer }, keyDocument: KD.docWith(KD.reconcileEntry(key)) });
   const saved = res._body;
   assert.deepEqual(receipts.verifyReceiptText(saved, key.verifier), { ok: true, reason: "signed", signer: key.verifier });
   const doctored = saved.replace('"summary":"MATCHED 5 of 5"', '"summary":"MATCHED 6 of 6"');

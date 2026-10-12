@@ -55,6 +55,7 @@ const crypto = require("node:crypto");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -82,7 +83,8 @@ const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.S
 // The service's reconcile verifier, public, as this process's readers are
 // told it (red-team fix B).
 process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
-const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [{ key_id: REG.keyIdOf(CASE_KEY), verifier: CASE_KEY.verifier, since: "2026-10-10", note: "a test key", status: "active" }] });
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [{ key_id: REG.keyIdOf(CASE_KEY), verifier: CASE_KEY.verifier, since: "2026-10-10", note: "a test key", status: "active" },
+  KD.reconcileEntry(RECEIPT_KEY)] });
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0031" });
 
 function tapePair() {
@@ -373,7 +375,8 @@ test("H07 (reference, the words for single_party): the refusal says one key regi
 test("S02 (sealCase): a single-party COMMITTED case is never sealed, whatever it is handed", async () => {
   const { id } = await racedSingleParty("S02");
   const k = gh.read(PINS, C.casePath(id));
-  assert.throws(() => S.sealCase(k, { reveals: null, receipt: null, crossReference: null, revealedAt: "2026-10-10T09:00:00Z" }, null),
+  const signedUnder = KD.signedUnder(gh, KEYS_DOC, "2026-10-10T09:00:00Z");
+  assert.throws(() => S.sealCase(k, { reveals: null, receipt: null, crossReference: null, revealedAt: "2026-10-10T09:00:00Z", signedUnder }, null),
     (e) => e instanceof C.CaseError && e.code === "status_inconsistent" && e.field === "commitments");
 });
 
@@ -410,12 +413,14 @@ async function sealedWith(scope, receiptKey = RECEIPT_KEY) {
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
   for (const p of [a, b]) assert.equal((await commit(id, p)).status, 201);
-  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: receiptKey.signer }, now: REVEAL_AT });
+  // computed under a document that publishes `receiptKey`
+  const compared = RECONCILE.compare(AGENT_TAPE, TOOL_TAPE, { env: { [receipts.SIGNER_ENV]: receiptKey.signer }, now: REVEAL_AT,
+    keyDocument: { ...KEYS_DOC, keys: [KEYS_DOC.keys[0], KD.reconcileEntry(receiptKey)] } });
   const st = S.storableReceipt(compared.receipt);
   assert.equal(st.ok, true);
   const sealed = S.sealCase(gh.read(PINS, C.casePath(id)), {
     reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
   }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
   gh.seed(PINS, C.casePath(id), sealed);
   return { id, a, b, sealed };

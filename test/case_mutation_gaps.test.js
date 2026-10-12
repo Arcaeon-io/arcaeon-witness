@@ -50,6 +50,7 @@ const crypto = require("node:crypto");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -366,6 +367,9 @@ async function committedCase() {
 const RECEIPT_KEY = require("../lib/_checkpoint.js").generateKey("arcaeon.io/reconcile-test/2026-10-10");
 const RECEIPT_ENV = Object.freeze({ WITNESS_RECONCILE_SIGNER_KEY: RECEIPT_KEY.signer });
 process.env.WITNESS_RECONCILE_VERIFIER = RECEIPT_KEY.verifier;
+// The document the deployment carries (Design I): the reconcile key as a
+// reconcile entry, and no case key, so the seal is unsigned.
+const RECEIPT_DOC = Object.freeze({ ...require("../lib/_case_seal.js").PUBLISHED_KEYS, keys: [KD.reconcileEntry(RECEIPT_KEY)] });
 async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
   const res = makeRes();
   const body = {
@@ -374,7 +378,7 @@ async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
     tape_a_b64: p.a.tape.toString("base64"),
     tape_b_b64: p.b.tape.toString("base64"),
   };
-  await H.handleCaseReveal(post("case-reveal", body), res, { now, env });
+  await H.handleCaseReveal(post("case-reveal", body), res, { now, env: KD.deployed(gh, env, RECEIPT_DOC), keyDocument: RECEIPT_DOC });
   return { status: res._status, body: typeof res._body === "string" ? JSON.parse(res._body) : res._body };
 }
 

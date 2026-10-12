@@ -66,6 +66,7 @@ const H = require("../lib/_case_http.js");
 const S = require("../lib/_case_seal.js");
 const checkpoint = require("../lib/_checkpoint.js");
 const tool = require("../tools/preview_dry_run.js");
+const KD = require("./helpers/key_document.js");
 
 const ROOT = path.join(__dirname, "..");
 const TOOL = path.join(ROOT, "tools", "preview_dry_run.js");
@@ -101,8 +102,12 @@ const SIGNING_ENV = Object.freeze({
 const COMMITTED_DOC = JSON.parse(fs.readFileSync(path.join(ROOT, ...S.CASE_KEYS_FILE.split("/")), "utf8"));
 const CASE_ENTRY = S.keyDocumentEntry({ keyId: CASE_KEY.verifier.split("+").slice(0, 2).join("+"), verifier: CASE_KEY.verifier },
   { since: "2026-10-10", note: "the dry-run tests' case key" });
-const TEST_DOC = { ...COMMITTED_DOC, keys: [...COMMITTED_DOC.keys, CASE_ENTRY] };
-const SIGNER = Object.freeze({ env: SIGNING_ENV, keyDocument: TEST_DOC });
+// Since Design I the document lists the reconcile key too, as a reconcile
+// entry, and the deployment is built at the commit that holds it
+// (VERCEL_GIT_COMMIT_SHA; test/helpers/key_document.js commitOf), where the
+// mock serves it for readers (beforeEach).
+const TEST_DOC = { ...COMMITTED_DOC, keys: [...COMMITTED_DOC.keys, CASE_ENTRY, KD.reconcileEntry(RECONCILE_KEY)] };
+const SIGNER = Object.freeze({ env: { ...SIGNING_ENV, [S.DEPLOY_COMMIT_ENV]: KD.commitOf(TEST_DOC) }, keyDocument: TEST_DOC });
 
 let gh;
 let restore;
@@ -110,6 +115,7 @@ let realSleep;
 beforeEach(() => {
   gh = new MockGitHubStore();
   restore = install(gh);
+  KD.serve(gh, TEST_DOC);
   realSleep = store._putRetry.sleep;
   store._putRetry.sleep = async () => {};
 });
@@ -365,7 +371,8 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   assert.match(planted.by.e.line, /answered HTTP 201 VERDICT for case_id [0-9a-f]{64}, but the seal is unsigned \(signed_by null, sig null\): the published case signer is not installed$/);
 
   // A deployment with no case signer installed seals unsigned, and says why.
-  const bare = await dryRun(t, { preview: { signer: null } });
+  const { [S.CASE_SIGNER_ENV]: _caseKey, ...noCaseKey } = SIGNER.env; // eslint-disable-line no-unused-vars
+  const bare = await dryRun(t, { preview: { signer: { env: noCaseKey, keyDocument: TEST_DOC } } });
   assert.equal(word(bare, "e"), "BROKEN");
   assert.match(bare.by.e.line, /the seal is unsigned \(signed_by null, sig null; sig_reason: This case is sealed and not signed \(case_key_unset\)/);
   const id = /case_id ([0-9a-f]{64})/.exec(bare.by.b.line)[1];
@@ -669,9 +676,12 @@ test("EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anyth
   assert.equal(three.code, 3);
 });
 
-// What (e) says in a child-process run against the stand-in: unsigned, because
-// no case key is in the stand-in's environment (case_key_unset).
-const UNSIGNED_E = /^BROKEN \(e\) chunked case-reveal: case-reveal with .* answered HTTP 201 VERDICT for case_id [0-9a-f]{64}, but the seal is unsigned \(signed_by null, sig null; sig_reason: This case is sealed and not signed \(case_key_unset\): .*\): the published case signer is not installed$/;
+// What (e) says in a child-process run against the stand-in: the stand-in is
+// this checkout's api/ carrying the committed key document, with no
+// VERCEL_GIT_COMMIT_SHA in its environment, so since Design I its reveal
+// cannot name the document it would seal under and seals nothing (503
+// document_unavailable), which the dry run reads as COULD NOT LOOK.
+const UNSEALED_E = /^COULD NOT LOOK \(e\) chunked case-reveal: case-reveal with .*: HTTP 503 document_unavailable: the preview could not answer this request$/;
 
 function runCli(args, extraEnv = {}) {
   return new Promise((resolve) => {
@@ -704,12 +714,10 @@ test("CLI: seven lines on stdout and nothing else, in order; no key, operator ke
   assert.equal(lines.pop(), "", "stdout ends with a newline");
   assert.equal(lines.length, 7, r.stdout);
   assert.deepEqual(lines.map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`),
-    ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], r.stdout);
-  // (e) is BROKEN because the seal is UNSIGNED. The committed document lists
-  // the production case key (item 3b), and the child checks against it, but
-  // the key's private half is in no tree, so the stand-in (this checkout's
-  // api/ with no case key in its environment) cannot sign with it.
-  assert.match(lines[4], UNSIGNED_E);
+    ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "COULD NOT LOOK e", "COULD NOT LOOK f", "VERIFIED g"], r.stdout);
+  // (e) could not look: the stand-in (this checkout's api/, carrying the
+  // committed document, built at no named commit) seals nothing.
+  assert.match(lines[4], UNSEALED_E);
   assert.equal(r.code, 3);
   for (const s of SECRETS) {
     assert.equal(r.stdout.includes(s), false);
@@ -733,8 +741,8 @@ test("CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET wh
   const words = (r) => r.stdout.trim().split("\n").map((l) => /^(VERIFIED|BROKEN|COULD NOT LOOK) \(([a-g])\)/.exec(l)).map((m) => m && `${m[1]} ${m[2]}`);
 
   const fromEnv = await runCli(["--base", p.base, "--key", KEY], { VERCEL_AUTOMATION_BYPASS_SECRET: BYPASS });
-  assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "BROKEN e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
-  assert.match(fromEnv.stdout.trim().split("\n")[4], UNSIGNED_E, "(e) is BROKEN because the seal is unsigned, as in the CLI test above");
+  assert.deepEqual(words(fromEnv), ["VERIFIED a", "VERIFIED b", "COULD NOT LOOK c", "VERIFIED d", "COULD NOT LOOK e", "COULD NOT LOOK f", "VERIFIED g"], fromEnv.stdout);
+  assert.match(fromEnv.stdout.trim().split("\n")[4], UNSEALED_E, "(e) could not look, as in the CLI test above");
   assert.equal(fromEnv.code, 3);
   assert.match(fromEnv.stderr, /, with a protection bypass$/m);
   const seen = p.requests.length;

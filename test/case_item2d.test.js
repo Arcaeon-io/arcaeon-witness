@@ -49,6 +49,7 @@ const crypto = require("node:crypto");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const keys = require("../lib/_keys.js");
 const C = require("../lib/_case.js");
@@ -117,8 +118,11 @@ process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
 const CASE_KEY_ID = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
 const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, since: "2026-10-10", note: "the test environment's case key", status: "active" });
 // The committed document lists no key; these tests hand the seal, the page
-// and the reference a copy that lists the test key.
-const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY] });
+// and the reference a copy that lists the test key (and, since Design I, the
+// reconcile key as a reconcile entry).
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY, KD.reconcileEntry(RECEIPT_KEY)] });
+// A document without the case key (an unsigned seal), with the reconcile key.
+const NO_CASE_KEY_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [KD.reconcileEntry(RECEIPT_KEY)] });
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0007" });
 const OPERATOR_KEY = "case-test-case-operator-key-0001";
 const ADMIN_KEY = "case-test-admin-key-0001";
@@ -169,7 +173,7 @@ function revealBody(id, a, b, extra = {}) {
 async function sealedCase({ over, keyDocument = KEYS_DOC, extra } = {}) {
   const c = await committedCase({ over });
   const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", revealBody(c.id, c.a, c.b, extra)), res, { now: REVEAL_AT, env: SIGNED, keyDocument });
+  await H.handleCaseReveal(req("case-reveal", revealBody(c.id, c.a, c.b, extra)), res, { now: REVEAL_AT, env: KD.deployed(gh, SIGNED, keyDocument), keyDocument });
   assert.equal(res._status, 201, String(res._body).slice(0, 300));
   return c;
 }
@@ -251,7 +255,7 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
     assert.equal(bad.status === "VERDICT" && C.validateCase(bad).ok, true, `${name}: 2c would have taken it as sealed`);
   }
   // an unsigned seal whose receipt does not bind: the same state, naming no key
-  const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") }, keyDocument: S.PUBLISHED_KEYS });
+  const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") }, keyDocument: NO_CASE_KEY_DOC });
   const ug = storedCase(u.id);
   assert.equal(ug.sig, null, "fixture: unsigned");
   gh.seed(PINS, C.casePath(u.id), { ...ug, verdict: { ...ug.verdict, compared_at: "2026-10-10T09:00:01Z" } });
@@ -412,8 +416,8 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   // the bearer just sent, so 2c would have appended this row as the operator
   assert.equal(process.env.WITNESS_ADMIN_KEY, ADMIN_KEY);
   process.env[H.OPERATOR_KEY_ENV] = OPERATOR_KEY;
-  // (the committed key document lists no key, so the dispatch takes an unsigned seal)
-  const un = await sealedCase({ over: { scope_digest: sha("fix 3 dispatch") }, keyDocument: S.PUBLISHED_KEYS });
+  // (a document without the case key: an unsigned seal, which the dispatch takes)
+  const un = await sealedCase({ over: { scope_digest: sha("fix 3 dispatch") }, keyDocument: NO_CASE_KEY_DOC });
   const res = makeRes();
   await verifyHandler(req("case-reference", { case_id: un.id, cross_reference: XREF }, { authorization: `Bearer ${OPERATOR_KEY}` }), res);
   assert.equal(res._status, 201, JSON.stringify(parsed(res)));

@@ -60,6 +60,7 @@ const path = require("node:path");
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const REG = require("./helpers/case_registration.js");
+const KD = require("./helpers/key_document.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
@@ -94,9 +95,13 @@ const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, 
 // The committed document lists the production case key (item 3b), never
 // this test's; the signing tests hand the seal a copy that lists the test key
 // (lib/_case_seal.js, PUBLICATION FAILS CLOSED), and the tests that need "a
-// document without the case key" hand it a copy that lists no key at all.
-const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY] });
+// document without the case key" hand it a copy that lists no case key.
+// Since Design I every document a reveal seals under lists the reconcile
+// key, as a reconcile entry (without one the reveal compares nothing).
+const RECONCILE_ENTRY = Object.freeze(KD.reconcileEntry(RECEIPT_KEY));
+const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY, RECONCILE_ENTRY] });
 const NO_KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: Object.freeze([]) });
+const NO_CASE_KEY_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: Object.freeze([RECONCILE_ENTRY]) });
 // The production case key's public entry, as item 3b committed it.
 const PRODUCTION_KEY_ID = "case-2026-10+295a9a61";
 const OPEN_KEY = "case-test-open-key-0004";
@@ -191,7 +196,7 @@ function revealBody(id, a, b, extra = {}) {
 }
 async function reveal(body, { now = REVEAL_AT, env = SIGNED, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", body), res, { now, env, keyDocument });
+  await H.handleCaseReveal(req("case-reveal", body), res, { now, env: KD.deployed(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 async function sealedCase({ over, env = SIGNED, pinFails = false, keyDocument = KEYS_DOC, extra } = {}) {
@@ -242,7 +247,7 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   gh.seed(PINS, C.casePath(id), good);
   for (const [name, doc, reason] of [
     ["the committed document (no key)", undefined, "signer_unpublished"],
-    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked" }] }, "signer_revoked"],
+    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_revoked"],
     ["unreadable", { ...KEYS_DOC, extra: true }, "key_document_unreadable"],
   ]) {
     const r = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: doc });
@@ -280,26 +285,32 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   assert.equal(loaded.code, "key_unpublished");
   assert.equal(loaded.privateKey, undefined, "an unpublished key is not handed out");
   assert.equal(loaded.keyId, CASE_KEY_ID, "its public half is, for the entry");
-  assert.deepEqual(NO_KEYS_DOC.keys, [], "fixture: the injected document lists no key");
-  assert.equal(S.checkKeyDocument(NO_KEYS_DOC).ok, true, "fixture: and reads as a key document");
-  const { id, r } = await sealedCase({ keyDocument: NO_KEYS_DOC });
+  assert.deepEqual(NO_CASE_KEY_DOC.keys, [RECONCILE_ENTRY], "fixture: the injected document lists no case key");
+  assert.equal(S.checkKeyDocument(NO_CASE_KEY_DOC).ok, true, "fixture: and reads as a key document");
+  const { id, r } = await sealedCase({ keyDocument: NO_CASE_KEY_DOC });
   const k = storedCase(id);
   assert.equal(k.sig, null, "never signed");
   assert.equal(k.signed_by, null);
   assert.match(k.sig_reason, /^This case is sealed and not signed \(key_unpublished\): /);
   assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
   assert.equal(r.body.sealed_by, null);
-  // with no keyDocument at all, the default is the committed document, which
-  // lists the production key and not this test's
+  // With no keyDocument at all, the default is the committed document, which
+  // lists the production case key and not this test's, and (Design I) no
+  // reconcile key yet: a deployment carrying it seals nothing. With no
+  // commit it cannot name its document (document_unavailable); with one, its
+  // reconcile key is unpublished (signer_unavailable). Nothing is compared.
   const plain = await committedCase({ over: { scope_digest: sha("default document") } });
-  const res = makeRes();
-  await H.handleCaseReveal(req("case-reveal", revealBody(plain.id, plain.a, plain.b)), res, { now: REVEAL_AT, env: SIGNED });
-  assert.equal(res._status, 201);
-  assert.match(storedCase(plain.id).sig_reason, /\(key_unpublished\)/);
+  for (const [env, code] of [[SIGNED, "document_unavailable"], [{ ...SIGNED, [S.DEPLOY_COMMIT_ENV]: "c".repeat(40) }, "signer_unavailable"]]) {
+    const res = makeRes();
+    await H.handleCaseReveal(req("case-reveal", revealBody(plain.id, plain.a, plain.b)), res, { now: REVEAL_AT, env });
+    assert.equal(res._status, 503, JSON.stringify(res._body));
+    assert.equal(parsed(res).error_code, code);
+  }
+  assert.equal(storedCase(plain.id).status, "COMMITTED");
   // the other ways a key is not an active entry
   for (const [name, doc, why] of [
     ["retired", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] }, /listed .* as retired, not active/],
-    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked" }] }, /as revoked, not active/],
+    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }] }, /as revoked, not active/],
     ["a document that does not read", { ...KEYS_DOC, keys: [{ ...ENTRY, note: "" }] }, /does not read/],
     ["no document", null, /does not read/],
   ]) {
@@ -1011,8 +1022,9 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
   assert.ok(pd.includes(`href="/${S.CASE_KEYS_DOC}"`), "the key document, cited");
   assert.ok(!pd.includes(">MATCHED<") && !pd.includes("anchored: its pin"), "no verdict and no anchor state");
-  // an unsigned seal verifies through the real dispatch and shows its verdict
-  const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: S.PUBLISHED_KEYS });
+  // an unsigned seal (a document without the case key) verifies through the
+  // real dispatch and shows its verdict
+  const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: NO_CASE_KEY_DOC });
   const ru = makeRes();
   await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: u.id }, headers: { "x-forwarded-for": freshIp() } }), ru);
   assert.equal(ru._status, 200);
