@@ -544,7 +544,7 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
     case_seal_wrong_record_kind: [{ ...rec, record_kind: "content_head_advance" }, { ...rec, record_kind: "publisher_heartbeat" }],
     case_seal_wrong_auth_level: [{ ...rec, auth_level: "bearer-stage0" }],
     case_seal_wrong_rows: [{ ...rec, rows: 4 }, { ...rec, rows: "3" }],
-    case_seal_wrong_seq: [{ ...rec, seq: 2 }],
+    case_seal_wrong_seq: [{ ...rec, seq: 0 }, { ...rec, seq: "1" }, { ...rec, seq: 100000000 }], // Design J: seq 2 and on are a case's next pins
     case_seal_namespace_unreadable: [{ ...rec, namespace: "acme-prod" }, { ...rec, namespace: `case/${id.toUpperCase()}` }],
     namespace_mismatch: [{ ...rec, namespace: `case/${"9".repeat(64)}` }],
     chain_unreadable: [{ ...rec, chain: rec.chain.toUpperCase() }, { ...rec, chain: "abcdef01" }],

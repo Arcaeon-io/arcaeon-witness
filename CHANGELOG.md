@@ -1,5 +1,34 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design J, step 3: a reference row's answer names its commit, and the case's next pin lists it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §5).** The commit that wrote a reference row appeared neither in the row nor in the answer.
+- **THE ROW'S TWO WRITES** (`lib/_case_seal.js`). The row is written first, and its 201 answer names `row_commit`, the commit its write answered with (null when that answer named none), with `row_commit_note`.
+- **The second phase is the case's NEXT PIN** (`nextPin`, run by the sealer's pass for every pinned case). It:
+  - lists the rows no pin of the case lists yet (at most `REFERENCE_ROW_READS` a run);
+  - reads each row's commit back (the newest touching it) and the row AT that commit;
+  - writes `pins/case/<id>/<seq + 1>.json`, a case_seal record with the case's chain, its `case_commit` and `reference_commits: [{seq, commit}]`;
+  - moves the pointer to it, only from the record it was read at. The record is create-only, and an orphan from a lost pointer write is adopted.
+- **Rows it cannot record.** A row whose read-back finds another row is not listed (`rows_unrecorded`, `pin_commit_mismatch`). One that cannot be read waits for the next run.
+- **What this gives.** A row read without its pin has its commit in its answer, and a row read with its pin has it in two places. A pin from before that names no case commit gets one the same way, recorded in the next pin.
+- **The run's report** gains `rows_unrecorded`. `commits_recorded` names every next pin, with its `reference_commits`.
+- **The judge** (`judgeCaseSeal`).
+  - seq is 1 (the seal's own pin) up to 99999999.
+  - From seq 2 on, `case_commit` is required.
+  - `reference_commits`, when present, is a non-empty list of exactly `{seq, commit}` in ascending seq. Anything else is refused by name.
+  - The seal's own pin stays seq 1, and pinned and anchored are said of it. Every next pin carries the case's chain, so the pointer always does.
+- **The page** (`referenceCommitStates`). Each reference row shown names the commit that wrote it, as the case's pins list it and read at it ("written at commit <link> (listed in pin N)"). Otherwise it says `commit_unrecorded`, `pin_commit_mismatch` (naming the pin and the commit) or `could_not_look`. The pins below the pointer are read at most `PIN_WALK_READS` (20).
+- **Tests.**
+  - `test/case_commits.test.js` +5:
+    - the row's commit in its answer and then in the next pin (two places), with a later row in the pin after;
+    - **the crash between the phases for a row** (the answer lost): the row is never rewritten, and the next run lists it;
+    - **a row swapped during the read-back** is not listed, and a pin listing another row's commit is pin_commit_mismatch for that row;
+    - a pin from before gets its case commit in the next pin;
+    - the next pin's judge.
+  - The §5 red-team test loses its todo and keeps its named assertion. The case_seal judge table's wrong seqs are now 0, "1" and 100000000 (seq 2 is a next pin).
+  - The six todos left each still fail at their own named assertion.
+- Suite 1089 -> 1094 tests, 0 fail, 7 -> 6 todo. Here: 1086 pass and the 2 environment skips.
+
 ## 2026-10-12: Design J, step 2: the pin records the commit that wrote the sealed case, and every reader checks the case file at it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §3.2).** The commit that wrote a sealed case appeared neither in the case nor in its pin.

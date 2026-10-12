@@ -33,6 +33,10 @@
 //     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
 //     commit that wrote the sealed case file, and every reader reads the
 //     case file at it (pin_commit_mismatch when it is another case).
+//   - GPT-5.6 §5, no reference row storing its write commit: Design J, THE
+//     ROW'S TWO WRITES (lib/_case_seal.js). The row's answer names
+//     row_commit, and the case's next pin, written by the sealer's run,
+//     lists the commits of the rows written since the pin before it.
 //   - GPT-5.6 §3.4, anchored meaning only that latest.json exists: Design J,
 //     THE ANCHOR WORDS (lib/_case_seal.js). A reader says pinned (the pin
 //     holds the case's chain at the commit that wrote it, named), anchored
@@ -818,15 +822,18 @@ test('GPT-5.6 §3.4 / §5: "pinChain(), anchorState(), and the page only establi
   assert.ok(reads.length > 1, "anchored is said only after something beyond the pin pointer is read");
 });
 
-test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write commit"',
-  { todo: "CONFIRMED: the commit that wrote a reference row appears neither in the row nor in the answer (the assertion 'the row or its answer names the commit that wrote it' fails)" }, async () => {
-    const { id, a } = await sealedCase({ scope_digest: sha("5 row") });
-    const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
-    assert.equal(r.status, 201);
-    const [c] = gh.commitsFor(PINS, C.referencePath(id, 1));
-    assert.ok(c, "fixture: the row's commit");
-    assert.ok(JSON.stringify(r.body).includes(c.sha) || JSON.stringify(gh.read(PINS, C.referencePath(id, 1))).includes(c.sha), "the row or its answer names the commit that wrote it");
-  });
+test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write commit"', async () => {
+  const { id, a } = await sealedCase({ scope_digest: sha("5 row") });
+  const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
+  assert.equal(r.status, 201);
+  const [c] = gh.commitsFor(PINS, C.referencePath(id, 1));
+  assert.ok(c, "fixture: the row's commit");
+  assert.ok(JSON.stringify(r.body).includes(c.sha) || JSON.stringify(gh.read(PINS, C.referencePath(id, 1))).includes(c.sha), "the row or its answer names the commit that wrote it");
+  // Design J: the answer's row_commit, and the case's next pin lists it too
+  assert.equal(r.body.row_commit, c.sha);
+  await S.anchorPending({ now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
+  assert.deepEqual(gh.read(PINS, S.pinPaths(id).latest).reference_commits, [{ seq: 1, commit: c.sha }]);
+});
 
 // =============================================================================
 // GPT-5.6, section 4: denial of service and cost

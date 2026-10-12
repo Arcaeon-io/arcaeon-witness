@@ -545,3 +545,154 @@ test("SWAPPED FILE: a late retry that would pin a different commit of a swapped 
   assert.deepEqual(again.already, [], "never read as pinned");
   assert.deepEqual(again.refused, [{ case_id: id, code: "pin_commit_mismatch", reason: "case_at_commit_is_another_case" }]);
 });
+
+// =============================================================================
+// STEP 3: a reference row's two writes, the row and then the case's next pin,
+// which lists its commit
+// =============================================================================
+
+const XREF = Object.freeze({ operator: "second-operator.example", reference: "case-ref-0051", url: "https://second-operator.example/cases/0051" });
+async function reference(c, role = "a", ref = "row") {
+  const p = c[role];
+  const res = makeRes();
+  await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
+    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
+  return { status: res._status, body: parsed(res) };
+}
+const rowPath = (id, n) => C.referencePath(id, n);
+const rowCommit = (id, n) => gh.commitsFor(PINS, rowPath(id, n))[0].sha;
+// The row's line on the page, from its label to the end of its table row.
+function rowLine(html, n) {
+  const at = html.indexOf(`reference row ${n}`);
+  assert.ok(at >= 0, `the page shows reference row ${n}`);
+  return html.slice(at, html.indexOf("</tr>", at));
+}
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
+
+test("ROW COMMIT: the row's answer names the commit that wrote it; the page shows it commit_unrecorded until the case's next pin lists it, then names it from that pin, read at that commit; a row read with its pin has its commit in two places", async () => {
+  const c = await sealedCase("J row commit");
+  const r = await reference(c, "a", "row-1");
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.row_commit, rowCommit(c.id, 1), "the answer names the commit the pins repository assigned to the row");
+  assert.match(r.body.row_commit_note, /the case's next pin, written by the operator's sealer run, lists it/);
+  const before = rowLine((await casePage(c.id)).html, 1);
+  assert.match(before, /commit_unrecorded: no pin of this case lists the commit that wrote this row yet/);
+
+  const run = await sealerRun();
+  assert.deepEqual(run.already, [c.id]);
+  const two = S._internal.pinPath(c.id, 2);
+  const pin2 = gh.read(PINS, two);
+  assert.equal(pin2.seq, 2);
+  assert.equal(pin2.chain, chainOf(c.id), "the case's chain, unchanged");
+  assert.equal(pin2.case_commit, sealCommit(c.id));
+  assert.deepEqual(pin2.reference_commits, [{ seq: 1, commit: r.body.row_commit }]);
+  assert.deepEqual(gh.read(PINS, S.pinPaths(c.id).latest), pin2, "the pointer moved to the next pin");
+  assert.deepEqual(run.commits_recorded, [{ case_id: c.id, pin_seq: 2, case_commit: sealCommit(c.id), reference_commits: [{ seq: 1, commit: r.body.row_commit }] }]);
+  assert.ok(gh.rawLog.includes(`${PINS}@${r.body.row_commit}:${rowPath(c.id, 1)}`), "the row was read at its commit before it was listed");
+  const after = rowLine((await casePage(c.id)).html, 1);
+  assert.ok(after.includes(`written at commit <a ${commitLink(r.body.row_commit)}`), "the row's commit, linked");
+  assert.match(after, /listed in pin 2/);
+  const st = await S.anchorState(c.id, chainOf(c.id));
+  assert.equal(st.pin, "pinned", "the case reads pinned through its next pin");
+  assert.equal(st.pin_commit.sha, wroteIt(S.pinPaths(c.id).seq).sha, "and the pin it names is the seal's");
+
+  // a second run with nothing new writes nothing; a later row goes in the pin after
+  const writes = gh.putLog.length;
+  assert.deepEqual((await sealerRun(120000)).commits_recorded, []);
+  assert.equal(gh.putLog.length, writes);
+  const r2 = await reference(c, "b", "row-2");
+  assert.equal(r2.status, 201);
+  await sealerRun(180000);
+  assert.deepEqual(gh.read(PINS, S._internal.pinPath(c.id, 3)).reference_commits, [{ seq: 2, commit: r2.body.row_commit }], "only the rows since the last pin");
+  const page = (await casePage(c.id)).html;
+  assert.match(rowLine(page, 1), /listed in pin 2/);
+  assert.match(rowLine(page, 2), /listed in pin 3/);
+});
+
+test("CRASH BETWEEN THE PHASES, FOR A ROW: the row's write answered without its commit; the answer says so, the page says commit_unrecorded, the row is never written again, and the next run lists the commit, read back and checked", async () => {
+  const c = await sealedCase("J row crash");
+  gh.dropCommitFromAnswer(PINS, rowPath(c.id, 1), 1);
+  const r = await reference(c, "a", "row-lost");
+  assert.equal(r.status, 201);
+  assert.equal(r.body.row_commit, null);
+  assert.match(rowLine((await casePage(c.id)).html, 1), /commit_unrecorded/);
+  const bytes = gh._repoMap(PINS).get(rowPath(c.id, 1)).content;
+  const run = await sealerRun();
+  assert.deepEqual(run.commits_recorded.map((x) => x.reference_commits), [[{ seq: 1, commit: rowCommit(c.id, 1) }]]);
+  assert.equal(gh._repoMap(PINS).get(rowPath(c.id, 1)).content, bytes, "the row is byte for byte as written");
+  assert.equal(gh.commitsFor(PINS, rowPath(c.id, 1)).length, 1, "and was written once");
+  assert.ok(rowLine((await casePage(c.id)).html, 1).includes(`written at commit <a ${commitLink(rowCommit(c.id, 1))}`));
+});
+
+test("A ROW SWAPPED WHILE THE SEALER READS ITS COMMIT BACK IS NOT LISTED; A PIN LISTING A COMMIT THAT HOLDS ANOTHER ROW IS pin_commit_mismatch FOR THAT ROW, NEVER ITS COMMIT", async () => {
+  const c = await sealedCase("J row swapped");
+  assert.equal((await reference(c, "a", "row-original")).status, 201);
+  const p = rowPath(c.id, 1);
+  const original = gh.read(PINS, p);
+  let swapCommit = null;
+  const undo = onFirstRequest(`commits?path=${encodeURIComponent(p)}`, async () => {
+    gh._repoMap(PINS).get(p).content = JSON.stringify({ ...original, recorded_at: "2026-10-10T09:45:00Z" }, null, 2) + "\n";
+    swapCommit = gh.addCommit(PINS, p, "mock: the row rewritten");
+  });
+  let run;
+  try {
+    run = await sealerRun();
+  } finally {
+    undo();
+  }
+  assert.ok(swapCommit, "fixture: the swap happened during the read-back");
+  assert.deepEqual(run.rows_unrecorded, [{ case_id: c.id, seq: 1, code: "pin_commit_mismatch", reason: "reference_at_commit_is_another_row" }]);
+  assert.equal(gh.has(PINS, S._internal.pinPath(c.id, 2)), false, "no pin lists it");
+  // the original put back, and a pin that lists the swapped row's commit for it
+  gh._repoMap(PINS).get(p).content = JSON.stringify(original, null, 2) + "\n";
+  gh.addCommit(PINS, p, "mock: the row put back");
+  const latest = gh.read(PINS, S.pinPaths(c.id).latest);
+  const bad = { ...latest, seq: 2, reference_commits: [{ seq: 1, commit: swapCommit }] };
+  gh.seed(PINS, S._internal.pinPath(c.id, 2), bad);
+  gh.seed(PINS, S.pinPaths(c.id).latest, bad);
+  const line = rowLine((await casePage(c.id)).html, 1);
+  assert.match(line, /pin_commit_mismatch: pin 2 names commit <a [^>]+>[0-9a-f]{12}<\/a> for this row, and the row at that commit is another row/);
+  assert.ok(!line.includes("written at commit"));
+});
+
+test("A PIN FROM BEFORE, NAMING NO CASE COMMIT: the next run records the commit, read back and checked, in the case's next pin; until then commit_unrecorded", async () => {
+  const { id } = await sealedCase("J legacy retry");
+  const chain = chainOf(id);
+  plantPin(id, chain, undefined);
+  assert.equal((await S.anchorState(id, chain)).pin, "commit_unrecorded");
+  const run = await sealerRun();
+  assert.deepEqual(run.commits_recorded, [{ case_id: id, pin_seq: 2, case_commit: sealCommit(id), reference_commits: [] }]);
+  const two = gh.read(PINS, S._internal.pinPath(id, 2));
+  assert.equal(two.case_commit, sealCommit(id));
+  assert.equal(Object.prototype.hasOwnProperty.call(two, "reference_commits"), false, "no rows to list");
+  const st = await S.anchorState(id, chain);
+  assert.equal(st.pin, "pinned");
+  assert.equal(st.case_commit, sealCommit(id));
+});
+
+test("THE NEXT PIN'S RECORD: from seq 2 on a pin carries case_commit; reference_commits, when present, lists {seq, commit} in ascending seq; the judge refuses anything else by name", async () => {
+  const { id } = await sealedCase("J next pin judge");
+  const verdict = require("../lib/_verdict.js");
+  const ns = S.pinNamespace(id);
+  const judge = (rec) => verdict.judgeCaseSeal({ json: rec }, { namespace: ns });
+  const base = { ...gh.read(PINS, S.pinPaths(id).latest), seq: 2, reference_commits: [{ seq: 1, commit: "a".repeat(40) }, { seq: 3, commit: "b".repeat(40) }] };
+  assert.equal(judge(base).ok, true);
+  const { case_commit: _drop, ...noCommit } = base; // eslint-disable-line no-unused-vars
+  const bad = {
+    case_seal_missing_field: [noCommit],
+    case_seal_wrong_seq: [{ ...base, seq: 0 }, { ...base, seq: "2" }, { ...base, seq: 1.5 }, { ...base, seq: 100000000 }],
+    case_seal_reference_commits_unreadable: [
+      { ...base, reference_commits: [] },
+      { ...base, reference_commits: {} },
+      { ...base, reference_commits: [{ seq: 3, commit: "a".repeat(40) }, { seq: 1, commit: "b".repeat(40) }] },
+      { ...base, reference_commits: [{ seq: 1, commit: "a".repeat(40) }, { seq: 1, commit: "b".repeat(40) }] },
+      { ...base, reference_commits: [{ seq: 1, commit: "A".repeat(40) }] },
+      { ...base, reference_commits: [{ seq: 0, commit: "a".repeat(40) }] },
+      { ...base, reference_commits: [{ seq: 1, commit: "a".repeat(40), at: "x" }] },
+      { ...base, reference_commits: [{ seq: 1 }] },
+    ],
+  };
+  for (const [reason, recs] of Object.entries(bad)) {
+    for (const rec of recs) assert.equal(judge(rec).reason, reason, `${reason}: ${JSON.stringify(rec.reference_commits)} ${rec.seq}`);
+  }
+});
