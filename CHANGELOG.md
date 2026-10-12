@@ -1,5 +1,23 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design J, step 4: every commit on the case page is a link into the public repository it is a commit of (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- Steps 1 to 3 already render every commit they add as a link. This step adds the test that holds the page to it.
+- **The sweep.** On the page, every 40-hex commit appears only as a link: in its href, or as a link's own text, never bare. Every commit link points into the repository it is a commit of:
+  - the pins repository: the case file, the pin, the daily anchor record and the head it names, a row;
+  - the stamps repository: the registrations' stamp commits;
+  - this repository: the key document the case names, and the revoking document's commit.
+- **The states covered.**
+  - a sealed, anchored case with a recorded row;
+  - the same case under a document that revokes its key since (the banner);
+  - `pin_commit_mismatch`, and a row's `pin_commit_mismatch`;
+  - the key document's could-not-look page;
+  - `commit_unrecorded`;
+  - a case registered and not revealed.
+- No code changed in this step.
+- **Tests.** `test/case_commits.test.js` +2.
+- Suite 1094 -> 1096 tests, 0 fail, 6 todo. Here: 1088 pass and the 2 environment skips.
+
 ## 2026-10-12: Design J, step 3: a reference row's answer names its commit, and the case's next pin lists it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §5).** The commit that wrote a reference row appeared neither in the row nor in the answer.

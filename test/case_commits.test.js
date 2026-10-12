@@ -696,3 +696,110 @@ test("THE NEXT PIN'S RECORD: from seq 2 on a pin carries case_commit; reference_
     for (const rec of recs) assert.equal(judge(rec).reason, reason, `${reason}: ${JSON.stringify(rec.reference_commits)} ${rec.seq}`);
   }
 });
+
+// =============================================================================
+// STEP 4: every commit on the page is a link into the public repository
+// =============================================================================
+
+// Every 40-hex commit the page carries sits in an href into a public
+// repository, never in the page's text; and every link to a commit shows it.
+function commitsOnPage(html) {
+  const hrefs = [...html.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map((m) => ({ href: m[1], text: m[2] }));
+  const text = html.replace(/<a href="[^"]*"[^>]*>[^<]*<\/a>/g, "");
+  const bare = text.match(/\b[0-9a-f]{40}\b/g) || [];
+  const linked = [];
+  for (const h of hrefs) {
+    const m = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(commit|blob)\/([0-9a-f]{40})(\/|$)/.exec(h.href);
+    if (m) linked.push({ repo: m[1], kind: m[2], sha: m[3], text: h.text });
+  }
+  return { bare, linked };
+}
+
+test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded, and under a since-revoked key, every commit (the key document's, the stamps', the case file's, the pin's, the daily anchor record's and its head, the row's, the revoking document's) is a link into the public repository it is a commit of, and none is bare text", async () => {
+  const c = await sealedCase("J every commit");
+  const r = await reference(c, "a", "row-linked");
+  assert.equal(r.status, 201);
+  await sealerRun();
+  const a = dailyAnchor(dayOf(Date.now() + DAY));
+  const k = storedCase(c.id);
+  const current = "c".repeat(40);
+  const render = async (keyDocument, env) => {
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: c.id }, headers: { "x-forwarded-for": `10.98.1.${(ipSeq += 1) & 255}` } }), res,
+      { now: REVEAL_AT + 3600000, keyDocument, env });
+    return String(res._body);
+  };
+  // the row shows under the document that lists its key active; the banner under one that revokes it since
+  const page = await render(DOC, {});
+  const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
+  const banner = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: current });
+  assert.match(page, /anchored: a daily anchor record holds its pin/, "fixture: anchored");
+  assert.match(rowLine(page, 1), /written at commit/, "fixture: the row, recorded");
+  assert.match(banner, /Revoked since this case was sealed/, "fixture: the banner");
+  const one = commitsOnPage(page);
+  const two = commitsOnPage(banner);
+  assert.deepEqual([...one.bare, ...two.bare], [], "no commit is bare text");
+  const linked = [...one.linked, ...two.linked];
+  const want = [
+    [S.KEY_DOCUMENT_REPO, k.signed_under.document_commit, "the key document the case names"],
+    [S.KEY_DOCUMENT_REPO, current, "the revoking document"],
+    [STAMPS, k.commitments.a.stamp_commit, "role a's stamp"],
+    [STAMPS, k.commitments.b.stamp_commit, "role b's stamp"],
+    [PINS, sealCommit(c.id), "the case file"],
+    [PINS, wroteIt(S.pinPaths(c.id).seq).sha, "the pin"],
+    [PINS, a.commit, "the daily anchor record"],
+    [PINS, a.head, "the head it names"],
+    [PINS, r.body.row_commit, "the row"],
+  ];
+  for (const [repo, sha, what] of want) {
+    assert.ok(linked.some((l) => l.repo === repo && l.sha === sha), `${what}: ${sha} linked into ${repo}`);
+  }
+  for (const l of linked) assert.ok([PINS, STAMPS, S.KEY_DOCUMENT_REPO].includes(l.repo), `a link into a repository the page names: ${l.repo}`);
+});
+
+test("EVERY COMMIT IS A LINK, ON THE OTHER PAGES THAT NAME ONE: pin_commit_mismatch (the commit the pin names), a row's pin_commit_mismatch, could_not_look on the key document, a case not yet pinned, and a case registered and not revealed", async () => {
+  const pages = [];
+  // pin_commit_mismatch
+  const m = await sealedCase("J link mismatch");
+  plantPin(m.id, chainOf(m.id), gh.commitsFor(PINS, C.casePath(m.id)).slice(-1)[0].sha);
+  pages.push(["pin_commit_mismatch", (await casePage(m.id)).html]);
+  // a row whose listed commit holds another row
+  const w = await sealedCase("J link row mismatch");
+  assert.equal((await reference(w, "a", "row-w")).status, 201);
+  await sealerRun();
+  const rp = rowPath(w.id, 1);
+  const row = gh.read(PINS, rp);
+  gh._repoMap(PINS).get(rp).content = JSON.stringify({ ...row, recorded_at: "2026-10-10T09:45:00Z" }, null, 2) + "\n";
+  const other = gh.addCommit(PINS, rp, "mock: another row at this path");
+  gh._repoMap(PINS).get(rp).content = JSON.stringify(row, null, 2) + "\n";
+  gh.addCommit(PINS, rp, "mock: the row put back");
+  const latest = gh.read(PINS, S.pinPaths(w.id).latest);
+  gh.seed(PINS, S.pinPaths(w.id).latest, { ...latest, reference_commits: [{ seq: 1, commit: other }] });
+  pages.push(["row pin_commit_mismatch", (await casePage(w.id)).html]);
+  // the key document the case names could not be read
+  const d = await sealedCase("J link document");
+  gh.forceRawFailure(1, 503, `:${S.CASE_KEYS_FILE}`);
+  S._internal.clearDocumentCache();
+  const dp = await casePage(d.id);
+  assert.equal(dp.status, 503, "fixture: the could-not-look page");
+  pages.push(["document could_not_look", dp.html]);
+  // not pinned yet
+  const p = await sealedCase("J link pending", { pinFails: true });
+  pages.push(["commit_unrecorded", (await casePage(p.id)).html]);
+  // registered, not revealed: the stamp commits
+  const k = await committedCase("J link committed");
+  const kp = (await casePage(k.id)).html;
+  assert.match(kp, /<h1>Case: COMMITTED<\/h1>/, "fixture: the committed page");
+  for (const r of ["a", "b"]) {
+    const sc = gh.read(PINS, C.casePath(k.id)).commitments[r].stamp_commit;
+    assert.ok(kp.includes(`href="https://github.com/${STAMPS}/commit/${sc}"`), `role ${r}'s stamp commit, linked`);
+  }
+  pages.push(["committed", kp]);
+  for (const [name, html] of pages) {
+    const { bare, linked } = commitsOnPage(html);
+    assert.deepEqual(bare, [], `${name}: no commit is bare text`);
+    assert.ok(linked.length > 0, `${name}: it names a commit, linked`);
+  }
+  assert.match(pages[0][1], /pin_commit_mismatch: its pin names commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}"/);
+  assert.match(pages[1][1], /pin_commit_mismatch: pin 2 names commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}"/);
+});
