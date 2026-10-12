@@ -688,3 +688,396 @@ test("ONE SIGNATURE RULE: the reveal seals only signed; without a case key the c
   }
   assert.equal(compare.mock.callCount(), 0, "nothing compared");
 });
+
+// =============================================================================
+// THE MUST-FAIL PASS: tests for the planted defects the tests above let through
+// =============================================================================
+
+test("MUST-FAIL GAP (L04, L05, L06): a case lock record that names a held lease but cannot be read as one (an expiry that does not parse, an unknown state, another kind) is 503 case_lock_unreadable, never free, and nothing is written", async () => {
+  const id = await openCase("gap lock forms");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const held = { kind: "case-lock", v: 1, case_id: id, holder: "someone-else", op: "commit", acquired_at: C.utcSeconds(NOW),
+    expires_at: new Date(NOW + 600000).toISOString(), state: "held" };
+  for (const [name, rec] of [["expiry", { ...held, expires_at: "not a time" }], ["state", { ...held, state: "taken" }], ["kind", { ...held, kind: "quota" }]]) {
+    gh.seed(USAGE, H._internal.caseLockPath(id), rec);
+    const r = await commit(id, a);
+    assert.deepEqual([r.status, r.body.error_code], [503, "case_lock_unreadable"], `${name}: ${JSON.stringify(r.body).slice(0, 200)}`);
+    assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false, name);
+    assert.deepEqual(lockOf(id), rec, `${name}: never written over`);
+  }
+  // control: the same lease, released, is free
+  gh.seed(USAGE, H._internal.caseLockPath(id), { ...held, state: "released" });
+  assert.equal((await commit(id, a)).status, 201);
+});
+
+test("MUST-FAIL GAP (L32, U04, U05, U08, U09, U10): the race-lost removal is one DELETE of the pins repository's registration file, at the blob sha its write left, on the pin branch, with the pin token", async () => {
+  const id = await openCase("gap removal request");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  plantStamp(b.commitment_sha256);
+  const rpath = C.registrationPath(id, "b");
+  const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+    () => withdraw(id, a, { now: late }),
+    () => commit(id, b, NOW + 1000),
+  );
+  assert.equal(r.out.body.registration_removed, true, JSON.stringify(r.out.body));
+  const wrote = gh.putLog.filter((w) => w.repo === PINS && w.path === rpath);
+  assert.equal(wrote.length, 1);
+  assert.deepEqual(gh.deleteLog, [{ repo: PINS, path: rpath, sha: wrote[0].sha, branch: "main", authorization: "Bearer test-token" }]);
+  assert.equal(gh.has(PINS, rpath), false);
+});
+
+test("MUST-FAIL GAP (U06, U07, U09): the removal names the store's configured branch and answers the commit that removed the file, and a store that refuses it (another blob sha: 409) is an error, with the file left standing", async () => {
+  const U = require("../lib/_case_unregister.js");
+  const id = "a".repeat(64);
+  const rpath = C.registrationPath(id, "a");
+  gh.seed(PINS, rpath, { a: 1 });
+  const blob = gh.repos.get(PINS).get(rpath).sha;
+  await assert.rejects(U.removeRegistrationAfterWithdrawal(rpath, "0".repeat(40), "m"), /github remove .* -> 409/);
+  assert.equal(gh.has(PINS, rpath), true, "a refused removal removes nothing");
+  // the request names the store's configured branch, whatever it is (U09)
+  const branch = store.BRANCH;
+  store.BRANCH = "pins-test-branch";
+  let out;
+  try {
+    out = await U.removeRegistrationAfterWithdrawal(rpath, blob, "m");
+  } finally {
+    store.BRANCH = branch;
+  }
+  assert.equal(gh.has(PINS, rpath), false);
+  assert.deepEqual(out, { commit: gh.commitsFor(PINS, rpath)[0].sha }, "the removal's own commit");
+  assert.equal(gh.deleteLog.at(-1).branch, "pins-test-branch");
+});
+
+test("MUST-FAIL GAP (R04): an unsigned seal reads case_signature_invalid (unsigned_seal) even when the document it names cannot be fetched: the rule needs no document, so it never reads could-not-look", async () => {
+  const u = await handSealed("gap unsigned unfetchable", S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { keyDocument: DOC }));
+  const elsewhere = { ...u.sealed, signed_under: { ...u.sealed.signed_under, document_commit: "f".repeat(40) } };
+  assert.deepEqual(await S.sealedRecordReason(elsewhere, DOC), { code: "case_signature_invalid", reason: "unsigned_seal" });
+  // control: a signed seal naming that commit could not be looked at
+  const signed = await handSealed("gap signed unfetchable", S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  const s2 = S.signCase({ ...signed.sealed, signed_under: { ...signed.sealed.signed_under, document_commit: "f".repeat(40) }, sig: null, sig_reason: null, signed_by: null },
+    S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.equal((await S.sealedRecordReason(s2, DOC)).code, "document_unavailable");
+});
+
+test("MUST-FAIL GAP (L09, L13, L12): a live lock is waited on twice between three attempts before case_busy; a lock write the store refuses (not a conflict) is case_lock_unreachable at once, never retried as if busy", async () => {
+  const id = await openCase("gap lock waits");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const lpath = H._internal.caseLockPath(id);
+  gh.seed(USAGE, lpath, { kind: "case-lock", v: 1, case_id: id, holder: "someone-else", op: "commit", acquired_at: C.utcSeconds(NOW),
+    expires_at: new Date(NOW + 600000).toISOString(), state: "held" });
+  const waits = [];
+  store._putRetry.sleep = async (ms) => { waits.push(ms); };
+  const busy = await commit(id, a);
+  assert.equal(busy.body.error_code, "case_busy");
+  assert.equal(waits.length, 2, "two waits between three attempts");
+  assert.ok(waits.every((ms) => ms > 0));
+  // a lock write the store refuses
+  gh.seed(USAGE, lpath, { kind: "case-lock", v: 1, case_id: id, holder: "x", op: "commit", acquired_at: C.utcSeconds(NOW),
+    expires_at: C.utcSeconds(NOW), state: "released" });
+  gh.forceFailure(USAGE, lpath, 3, 502);
+  waits.length = 0;
+  const r = await commit(id, a);
+  assert.deepEqual([r.status, r.body.error_code], [503, "case_lock_unreachable"], JSON.stringify(r.body));
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(waits.length, 0, "a refused write is not waited on as a busy lock");
+});
+
+test("MUST-FAIL GAP (L16, L17): the lock lives at case_locks/<case_id>.json in the private usage repository, and a holder releases only its own lease: a lease another request took meanwhile is left as it is", async () => {
+  const id = await openCase("gap lock holder");
+  assert.equal(H._internal.caseLockPath(id), `case_locks/${id}.json`);
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const other = { kind: "case-lock", v: 1, case_id: id, holder: "another-request", op: "withdraw", acquired_at: C.utcSeconds(NOW),
+    expires_at: new Date(NOW + 600000).toISOString(), state: "held" };
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`),
+    async () => gh.seed(USAGE, `case_locks/${id}.json`, other),
+    () => commit(id, a),
+  );
+  assert.equal(r.out.status, 201, JSON.stringify(r.out.body));
+  assert.deepEqual(gh.read(USAGE, `case_locks/${id}.json`), other, "another holder's lease is not released");
+});
+
+test("MUST-FAIL GAP (L23): a case that cannot be read again under the lock, before the registration's write, is 503 store_unreachable and nothing is registered", async () => {
+  const id = await openCase("gap reread");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(id)}`),
+    async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
+    () => commit(id, a),
+  );
+  assert.deepEqual([r.out.status, r.out.body.error_code], [503, "store_unreachable"], JSON.stringify(r.out.body));
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(lockOf(id).state, "released");
+});
+
+// The race lost after the write, with `before` run first (a fault planted).
+async function lostRace(scope, before = () => {}) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  plantStamp(b.commitment_sha256);
+  const rpath = C.registrationPath(id, "b");
+  before(rpath);
+  const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+    () => withdraw(id, a, { now: late }),
+    () => commit(id, b, NOW + 1000),
+  );
+  assert.equal(r.out.body.error_code, "case_withdrawn", JSON.stringify(r.out.body));
+  return { id, rpath, out: r.out.body, wrote: gh.putLog.filter((w) => w.repo === PINS && w.path === rpath) };
+}
+
+test("MUST-FAIL GAP (L30, L31): the log event names the commit that wrote the removed file: from the write's answer, and from the path's history when the answer names none", async () => {
+  // the answer names it, and the history could not be read: still named
+  let x = await lostRace("gap commit from answer", (rpath) => gh.forceCommitsFailure(PINS, rpath, 5, 500));
+  let ev = gh.read(PINS, x.out.log_event);
+  assert.match(ev.registration_commit, /^[0-9a-f]{40}$/);
+  assert.equal(ev.registration_commit, gh.commitsFor(PINS, x.rpath)[1].sha);
+  // the answer names none: read from the path's history, before the removal
+  x = await lostRace("gap commit from history", (rpath) => gh.dropCommitFromAnswer(PINS, rpath, 1));
+  ev = gh.read(PINS, x.out.log_event);
+  assert.equal(ev.registration_commit, gh.commitsFor(PINS, x.rpath)[1].sha, "the write's commit, not the removal's");
+});
+
+test("MUST-FAIL GAP (L33): a removal the store refuses is reported as not removed (registration_removed false) and the log event is still written", async (t) => {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
+  t.after(() => { global.fetch = viaMock; });
+  const x = await lostRace("gap removal refused");
+  assert.equal(x.out.registration_removed, false);
+  assert.ok(x.out.log_event, "the attempt is still not invisible");
+  assert.equal(gh.read(PINS, x.out.log_event).event, "commit_after_withdrawal");
+});
+
+test("MUST-FAIL GAP (L35, L36, L37, L38): the case log takes the next seq after the highest present, writes only a valid event, retries a lost create race at the next seq, and never writes over another event", async () => {
+  const id = "c".repeat(64);
+  const ev = { kind: "case-event", v: 1, case_id: id, seq: 1, event: "commit_after_withdrawal", at: "2026-10-10T08:00:40Z", role: "b",
+    commitment_sha256: "d".repeat(64), registered_at: "2026-10-10T08:00:01Z", registration_commit: null, withdrawal_at: "2026-10-10T08:00:32Z" };
+  const append = H._internal.appendCaseEvent;
+  assert.deepEqual(await append(id, ev), { ok: true, path: C.caseLogPath(id, 1) });
+  assert.deepEqual(await append(id, ev), { ok: true, path: C.caseLogPath(id, 2) });
+  assert.equal(gh.read(PINS, C.caseLogPath(id, 2)).seq, 2);
+  // an invalid event is not written
+  assert.deepEqual(await append(id, { ...ev, event: "nothing_known" }), { ok: false });
+  assert.equal(gh.has(PINS, C.caseLogPath(id, 3)), false);
+  // another writer creates seq 3 between the listing and this write (a 422 create race): retried at seq 4
+  const theirs = { ...ev, seq: 3, role: "a" };
+  let r = await during(
+    (url, method) => method === "PUT" && url.includes(`/contents/${C.caseLogPath(id, 3)}`),
+    async () => gh.seed(PINS, C.caseLogPath(id, 3), theirs),
+    () => append(id, ev),
+  );
+  assert.deepEqual(r.out, { ok: true, path: C.caseLogPath(id, 4) });
+  assert.deepEqual(gh.read(PINS, C.caseLogPath(id, 3)), theirs, "theirs stands");
+  // the same race seen as a 409 after a branch-ref retry (the store abandons the write): retried, never written over
+  const theirs5 = { ...ev, seq: 5, role: "a" };
+  r = await during(
+    (url, method) => method === "PUT" && url.includes(`/contents/${C.caseLogPath(id, 5)}`),
+    async () => { gh.seed(PINS, C.caseLogPath(id, 5), theirs5); gh.forceConflict(PINS, C.caseLogPath(id, 5), 1); },
+    () => append(id, ev),
+  );
+  assert.deepEqual(r.out, { ok: true, path: C.caseLogPath(id, 6) });
+  assert.deepEqual(gh.read(PINS, C.caseLogPath(id, 5)), theirs5, "theirs stands");
+  assert.equal(gh.read(PINS, C.caseLogPath(id, 6)).seq, 6);
+});
+
+test("MUST-FAIL GAP (D04): anchorState with {anchor: false} answers pinned with anchor {not_looked_up: true}, so no reader takes it for 'not anchored'", async () => {
+  const c = await sealedCase("gap not looked up");
+  await sealerRun();
+  const st = await S.anchorState(c.id, S.caseChain(storedCase(c.id)), { anchor: false });
+  assert.equal(st.pin, "pinned");
+  assert.deepEqual(st.anchor, { not_looked_up: true });
+});
+
+const portRaises = () => {
+  const e = new Error("port raised");
+  e.portError = true;
+  e.causeName = "TypeError";
+  throw e;
+};
+
+test("MUST-FAIL GAP (E11, E12): a seal the schema refuses is recorded seal_build_failed, and a verdict a JSON record cannot hold is recorded verdict_not_sealable", async (t) => {
+  const c = await committedCase("gap seal build");
+  const m = t.mock.method(S, "sealCase", () => { throw new C.CaseError("malformed_field", "verdict", "planted"); });
+  const r = await reveal(c);
+  assert.equal(r.status, 500, JSON.stringify(r.body).slice(0, 200));
+  assert.equal(r.body.reveal_failure_recorded, true);
+  assert.deepEqual(storedCase(c.id).reveal_failure, { reason: "seal_build_failed", at: C.utcSeconds(REVEAL_AT) });
+  m.mock.restore();
+  const d = await committedCase("gap not sealable");
+  t.mock.method(S, "storableReceipt", () => ({ ok: false, reason: "integer_beyond_json" }));
+  const rd = await reveal(d);
+  assert.deepEqual([rd.status, rd.body.error_code, rd.body.reveal_failure_recorded], [422, "verdict_not_sealable", true]);
+  assert.deepEqual(storedCase(d.id).reveal_failure, { reason: "verdict_not_sealable", at: C.utcSeconds(REVEAL_AT) });
+});
+
+test("MUST-FAIL GAP (E08): a failure write the store abandons (the case moved after the attempt) is answered reveal_failure_recorded false, and what moved it stands", async (t) => {
+  const c = await committedCase("gap failure abandoned");
+  let theirs = null;
+  t.mock.method(RECONCILE, "compare", () => {
+    theirs = { ...storedCase(c.id), reveal_attempt: { ...storedCase(c.id).reveal_attempt, at: "2026-10-10T09:00:30Z" } };
+    gh.seed(PINS, C.casePath(c.id), theirs);
+    portRaises();
+  });
+  const r = await reveal(c);
+  assert.equal(r.status, 500);
+  assert.equal(r.body.reveal_failure_recorded, false);
+  assert.deepEqual(storedCase(c.id), theirs);
+});
+
+test("MUST-FAIL GAP (E05): an attempt write whose answer names no blob sha is followed by a read for it, and the seal is written over the attempt", async () => {
+  const c = await committedCase("gap attempt sha");
+  const viaMock = global.fetch;
+  let first = true;
+  global.fetch = async (url, o) => {
+    const resp = await viaMock(url, o);
+    if (first && (o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`)) {
+      first = false;
+      const body = await resp.json();
+      return { ok: resp.ok, status: resp.status, json: async () => ({ commit: body.commit }), text: async () => JSON.stringify({ commit: body.commit }) };
+    }
+    return resp;
+  };
+  let r;
+  try {
+    r = await reveal(c);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(first, false, "the attempt's answer was stripped");
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(storedCase(c.id).status, "VERDICT");
+});
+
+test("MUST-FAIL GAP (E19): a withdrawal whose root write meets a case that now records a reveal attempt does not write over it: 409 reveal_attempted, and the attempt stays", async (t) => {
+  const c = await committedCase("gap withdraw meets attempt");
+  t.mock.method(RECONCILE, "compare", portRaises);
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(c.id)}`),
+    () => reveal(c),
+    () => withdraw(c.id, c.a, { now: REVEAL_AT - 1000 }),
+  );
+  assert.equal(r.inner.status, 500, "the reveal left its attempt and failure");
+  assert.deepEqual([r.out.status, r.out.body.error_code], [409, "reveal_attempted"], JSON.stringify(r.out.body));
+  assert.equal(storedCase(c.id).status, "COMMITTED");
+  assert.ok(storedCase(c.id).reveal_attempt);
+});
+
+test("MUST-FAIL GAP (N15, N17, N19, N20, N22, N23, N24): the refusal receipt's checker names each defect, and a withdrawal record built without a reason gets party_choice", async () => {
+  const at = C.utcSeconds(REVEAL_AT);
+  const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
+  const rr = S.refusalReceipt({ caseId: "c".repeat(64), at }, signer);
+  assert.deepEqual(S.verifyRefusalReceipt(rr, DOC), { ok: true });
+  const { sig_reason: _gone, ...missing } = rr; // eslint-disable-line no-unused-vars
+  const resigned = (over) => S.signRecord({ kind: "comparison_refused", v: 1, case_id: "c".repeat(64), at, reason: "consent_not_jointly_held", ...over },
+    signer, "This refusal receipt is not signed");
+  for (const [name, rec, doc, want] of [
+    ["a field missing", missing, DOC, "missing_field"],
+    ["a case id that is not one", resigned({ case_id: "C".repeat(64) }), DOC, "malformed_field"],
+    ["a time that is not one", resigned({ at: "2026-10-10 09:00:00" }), DOC, "malformed_field"],
+    ["another version", resigned({ v: 2 }), DOC, "malformed_field"],
+    ["a document that does not read", rr, { not: "a key document" }, "key_document_unreadable"],
+    ["the case key revoked", rr, KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)), "signer_revoked"],
+    ["signed by the reconcile key", S.refusalReceipt({ caseId: "c".repeat(64), at }, S.loadReconcileSigner(KEYS, { keyDocument: DOC })), DOC, "signer_unpublished"],
+  ]) {
+    assert.deepEqual(S.verifyRefusalReceipt(rec, doc), { ok: false, reason: want }, name);
+  }
+  // the record builder's own default
+  const c = await committedCase("gap withdrawn default");
+  const w = S.withdrawnRecord(storedCase(c.id), { role: "a", at: C.utcSeconds(NOW + 2000), salt: c.a.salt }, signer);
+  assert.equal(w.withdrawal.reason, "party_choice");
+});
+
+test("MUST-FAIL GAP (L39): a case that reads under the lock but is not a valid case record (here: WITHDRAWN with no withdrawal) cannot say whether it was withdrawn: 503 case_record_unreadable, nothing registered", async () => {
+  const id = await openCase("gap invalid under lock");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const open = storedCase(id);
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(id)}`),
+    async () => gh.seed(PINS, C.casePath(id), { ...open, status: "WITHDRAWN" }),
+    () => commit(id, a),
+  );
+  assert.equal(C.validateCase({ ...open, status: "WITHDRAWN" }).ok, false, "fixture: not a valid record");
+  assert.deepEqual([r.out.status, r.out.body.error_code], [503, "case_record_unreadable"], JSON.stringify(r.out.body));
+  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(lockOf(id).state, "released");
+});
+
+test("MUST-FAIL GAP (L42): a withdrawal whose root write the store refuses releases the case lock: 503 store_error, and the next request takes the lock at once", async () => {
+  const c = await committedCase("gap withdraw store error");
+  gh.forceFailure(PINS, C.casePath(c.id), 1, 502);
+  const w = await withdraw(c.id, c.a);
+  assert.deepEqual([w.status, w.body.error_code], [503, "store_error"], JSON.stringify(w.body));
+  assert.equal(lockOf(c.id).state, "released");
+  assert.equal((await withdraw(c.id, c.a, { now: NOW + 3000 })).status, 201);
+});
+
+test("MUST-FAIL GAP (C04): a reveal attempt with a field missing is missing_field by that field's name", async () => {
+  const c = await committedCase("gap attempt missing");
+  const k = storedCase(c.id);
+  const attempt = { commitments: { a: c.a.commitment_sha256, b: c.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: "2026-10-10T09:00:00Z" };
+  for (const f of ["commitments", "input_sha256", "at"]) {
+    const { [f]: _gone, ...rest } = attempt; // eslint-disable-line no-unused-vars
+    const v = C.validateCase({ ...k, reveal_attempt: rest });
+    assert.deepEqual([v.code, v.field], ["missing_field", `reveal_attempt.${f}`], f);
+  }
+});
+
+test("MUST-FAIL GAP (C09, C10, C11, C12, C13, C15, G03, G07, G08): the attempt's input hash is pinned to its formula; each malformed attempt, failure or log event is refused by name; the log lives at cases/<id>/log/<8 digits>.json", async () => {
+  const checkRecord = require("../lib/_check_record.js");
+  const id = "c".repeat(64);
+  const tapes = { a: "a".repeat(64), b: "b".repeat(64) };
+  const want = sha(checkRecord.canonicalBytes({ kind: "case-reveal-input", v: 1, case_id: id, policy_version: C.SUPPORTED_POLICY_VERSION,
+    tape_a_sha256: tapes.a, tape_b_sha256: tapes.b }));
+  assert.equal(C.revealInputSha256({ case_id: id, policy_version: C.SUPPORTED_POLICY_VERSION, tape_sha256: tapes }), want);
+  assert.notEqual(C.revealInputSha256({ case_id: id, policy_version: "another-port/9", tape_sha256: tapes }), want, "the policy version is an input");
+  // the schema, field by field
+  const c = await committedCase("gap attempt forms");
+  const k = storedCase(c.id);
+  const attempt = { commitments: { a: c.a.commitment_sha256, b: c.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: "2026-10-10T09:00:00Z" };
+  const failure = { reason: "case_seal_failed", at: "2026-10-10T09:00:00Z" };
+  for (const [rec, code, field] of [
+    [{ ...k, reveal_attempt: { ...attempt, commitments: { ...attempt.commitments, c: "f".repeat(64) } } }, "unknown_field", "reveal_attempt.commitments.c"],
+    [{ ...k, reveal_attempt: { ...attempt, commitments: { ...attempt.commitments, a: "E".repeat(64) } } }, "malformed_field", "reveal_attempt.commitments.a"],
+    [{ ...k, reveal_attempt: attempt, reveal_failure: { ...failure, at: "soon" } }, "malformed_field", "reveal_failure.at"],
+    [{ ...k, reveal_attempt: attempt, reveal_failure: { ...failure, note: "x" } }, "unknown_field", "reveal_failure.note"],
+  ]) {
+    const v = C.validateCase(rec);
+    assert.deepEqual([v.code, v.field], [code, field], JSON.stringify(v));
+  }
+  // the log event's times, each in its form
+  const ev = { kind: "case-event", v: 1, case_id: id, seq: 1, event: "commit_after_withdrawal", at: "2026-10-10T08:00:40Z", role: "b",
+    commitment_sha256: "d".repeat(64), registered_at: "2026-10-10T08:00:01Z", registration_commit: null, withdrawal_at: "2026-10-10T08:00:32Z" };
+  for (const f of ["registered_at", "withdrawal_at"]) {
+    const v = C.validateCaseEvent({ ...ev, [f]: "2026-10-10 08:00:01" });
+    assert.deepEqual([v.code, v.field], ["malformed_field", f]);
+  }
+  // where the log lives
+  assert.equal(C.caseLogDir(id), `cases/${id}/log`);
+  assert.equal(C.caseLogPath(id, 7), `cases/${id}/log/00000007.json`);
+});
+
+test("MUST-FAIL GAP (PG06): a withdrawal record from before the reason existed reads, and its page says none was recorded rather than naming one", async () => {
+  const c = await committedCase("gap legacy withdrawal");
+  assert.equal((await withdraw(c.id, c.a)).status, 201);
+  const rec = storedCase(c.id);
+  const { reason: _r, ...legacyWithdrawal } = rec.withdrawal; // eslint-disable-line no-unused-vars
+  const legacy = S.signRecord({ ...rec, withdrawal: legacyWithdrawal, sig: null, sig_reason: null, signed_by: null },
+    S.loadCaseSigner(KEYS, { keyDocument: DOC }), "This case is withdrawn and not signed");
+  assert.deepEqual(C.validateCase(legacy), { ok: true });
+  gh.seed(PINS, C.casePath(c.id), legacy);
+  const html = (await casePage(c.id)).html;
+  assert.ok(html.includes('<th>reason</th><td><span class="muted">none recorded</span></td>'));
+  assert.ok(!/<th>reason<\/th><td><code>/.test(html), "no reason is made up");
+});

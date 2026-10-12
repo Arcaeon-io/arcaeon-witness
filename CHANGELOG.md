@@ -1,5 +1,30 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: The must-fail pass over this unit (fixes C, D, E, Design N, the one signature rule), the tests that close its gaps, and two defects it found (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The pass.** 148 defects were planted one at a time in the code this unit added or changed: `lib/_case_http.js`, `lib/_case.js`, `lib/_case_seal.js`, `lib/_case_page.js`, `lib/_case_unregister.js` and `tools/preview_dry_run.js`. The whole suite ran against each one. The unit's own tests caught 99. 21 new tests in `test/case_consent.test.js` close the 49 that survived, except E15, which is equivalent: the receipt check reads only the case's `policy_version`, which the case with and without its attempt share.
+- **Two defects the survivors pointed at, each fixed with its test first** (`lib/_case_http.js`):
+  - **The case log** (L38's survivor). `appendCaseEvent` reported success when the store abandoned its write. That happens when, after a branch-ref retry, the path is found taken by another request's event. It answered that other event's path and wrote nothing of its own. An abandoned write now takes the next seq, and nothing is ever written over another event.
+  - **The commit under the lock** (L39's survivor). A case record that read again under the lock but was missing or not a valid case record was taken as "not withdrawn", and the registration was written. It is now refused 503 `case_record_unreadable` and nothing is registered: a commit that cannot tell whether the case was withdrawn writes nothing.
+- **The mock store's DELETE** (`test/helpers/mock_store.js`) now behaves as the contents API does. It removes a file only at the blob sha the request names: 404 with no file, 409 for another sha. It answers the removal's commit and logs each removal (`deleteLog`), so a test can see the request the one deletion makes.
+- **What the new tests pin**:
+  - the lock record's forms, waits and refusals;
+  - the lock's path and holder;
+  - the removal request (DELETE, blob sha, branch, token) and its commit;
+  - the log event's commit, from the write's answer or the history;
+  - a refused removal;
+  - the log's seq rules;
+  - `anchorState`'s `not_looked_up`;
+  - each recorded failure reason;
+  - an abandoned failure write;
+  - the attempt sha read back;
+  - a withdrawal meeting an attempt;
+  - the attempt's input-hash formula and schema;
+  - the refusal receipt checker's every reason;
+  - an unsigned seal under an unfetchable document;
+  - a legacy withdrawal page.
+- Suite 1130 -> 1151 tests, 0 fail, 3 todo. Here: 1146 pass and the 2 environment skips.
+
 ## 2026-10-12: One signature rule: verifyCase is deleted, an unsigned seal never verifies, and the reveal seals only signed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The two flagged items.** `verifyCase` checked a case under a verifier its caller chose and passed an unsigned receipt; THE SEALED CHECK (`sealedRecordReason`) is the check every reader runs. A seal with `sig: null` read `valid_under_document`.

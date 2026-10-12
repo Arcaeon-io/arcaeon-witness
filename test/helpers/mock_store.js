@@ -92,6 +92,7 @@ class MockGitHubStore {
     this.repos = new Map(); // repo -> Map(path -> {content, sha})
     this.commitCounter = 0;
     this.putLog = []; // [{repo, path, sha}] — every successful write, in order
+    this.deleteLog = []; // [{repo, path, sha, branch, authorization}] — every successful removal, in order
     // Every GET, in order. Reader-side evidence: the STORE records what was asked
     // for, so a test can assert which records a handler actually walked instead of
     // trusting a count the handler itself printed. Added 2026-08-22 on ColonistOne's
@@ -398,9 +399,17 @@ class MockGitHubStore {
     }
 
     if (method === "DELETE") {
+      // The contents API removes a file only at the blob sha the request
+      // names: 404 with no file there, 409 when the sha is not the file's.
+      // The answer names the removal's commit, as a PUT's does.
+      const body = opts.body ? JSON.parse(opts.body) : {};
+      const cur = map.get(path);
+      if (!cur) return fakeResponse(404, { message: "Not Found" });
+      if (body.sha !== cur.sha) return fakeResponse(409, { message: "sha does not match current file sha" });
       map.delete(path);
-      this._recordCommit(repo, path, "mock: delete");
-      return fakeResponse(200, { ok: true });
+      const commitSha = this._recordCommit(repo, path, body.message || "mock: delete");
+      this.deleteLog.push({ repo, path, sha: cur.sha, branch: body.branch, authorization: (opts.headers && opts.headers.authorization) || null });
+      return fakeResponse(200, { content: null, commit: { sha: commitSha } });
     }
 
     return fakeResponse(405, { message: `mock: unsupported method ${method}` });
