@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: The page says two keys, never two parties (decision on the A + B report; branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- Two key ids prove two keys, not two holders. The single-party page's status line now reads "not shown as a case between two keys", and the page header comment says the same. No page state says "two parties".
+- **Tests.** `test/case_redteam.test.js` +1: the single-party page says "two keys", and neither it nor a sealed page says "two parties". Must-fail: 2 planted in `lib/_case_page.js` (the old words back; the clause dropped), 2 caught.
+- Suite 1059 -> 1060 tests, 0 fail, 11 todo. Here: 1047 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, the must-fail pass: 84 planted defects, 83 caught, 1 equivalent (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - 84 defects planted one at a time in the code Design I added or changed, with the whole suite run against each. The harness is not committed.

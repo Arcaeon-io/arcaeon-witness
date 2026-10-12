@@ -523,6 +523,20 @@ test("FIX A: the case page shows such a case as single_party and names no second
   assert.equal(page.html.includes("<h2>Parties</h2>"), false);
 });
 
+// DECISION ON THE A + B REPORT: two key ids prove two keys, not two holders,
+// so the page says "two keys" and never "two parties", on the single-party
+// page and on a sealed one.
+test("A + B DECISION: the page says two keys, never two parties", async () => {
+  const single = await racedSingleParty("A page in words");
+  const one = await casePage(single.id);
+  assert.match(one.html, /not shown as a case between two keys/);
+  assert.equal(/two parties/i.test(one.html), false, "the single-party page");
+  const sealed = await sealedCase({ scope_digest: sha("A sealed page in words") });
+  const two = await casePage(sealed.id);
+  assert.match(two.html, /<h2>The verdict<\/h2>/, "fixture: a sealed page");
+  assert.equal(/two parties/i.test(two.html), false, "the sealed page");
+});
+
 test("FIX A: a VERDICT whose two commitments share a key id (signed by the case key) is still not sealed: page, sealed check, sealer and reference all refuse it", async () => {
   const { id, a } = await sealedCase({ scope_digest: sha("A forged verdict"), party_a: ATTACKER, party_b: HONEST }, { pinFails: true });
   const k = storedCase(id);
