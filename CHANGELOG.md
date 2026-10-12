@@ -1,5 +1,42 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design J, step 5: the must-fail pass, 108 planted defects, 107 caught, 1 equivalent (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- 108 defects planted one at a time in the code Design J added or changed, with the whole suite run against each. The harness is not committed.
+
+  | file | planted | caught by steps 1-4 | closed by these tests | equivalent |
+  |---|---|---|---|---|
+  | `lib/_case_seal.js` | 64 | 47 | A03, A11, A12, B03, C01, C02, C03, C04, C05, C06, C08, C13, C14, C17, C18, C21, C23 | |
+  | `lib/_case_page.js` | 15 | 12 | P03, P07, P15 | |
+  | `lib/_verdict.js` | 8 | 8 | | |
+  | `lib/_case_http.js` | 6 | 5 | | H06 |
+  | `tools/preview_dry_run.js` | 5 | 3 | T03, T05 | |
+  | `lib/_status_json.js` | 1 | 1 | | |
+  | `api/status.js` | 2 | 0 | S01, S02 | |
+  | `test/helpers/mock_store.js` | 7 | 7 | | |
+  | total | 108 | 83 | 24 | 1 |
+
+  `lib/_status_data.js` changed only in a comment, so nothing was planted there.
+- **The 24 are caught now.** Rerun against the new tests, all 24 are killed.
+  - C06 (an older pin's listing overriding a newer one) survived the first gap test: one row stops the walk at the newer pin. The test now has two rows, so the walk goes on, and C06 is killed.
+- **What the new tests hold.**
+  - A record from the day before the pin's day anchors it.
+  - The record's commit is the newest touching it, and the record at that commit must name the same head.
+  - A case commit holding no JSON is pin_commit_mismatch.
+  - A numbered record is held to its own seq, and an orphan saying another is never adopted.
+  - The walk down the pins stops at the rows it needs and reads at most `PIN_WALK_READS`.
+  - A pin below the pointer that is not the case's stops the walk, and the newer pin's listing of a row wins.
+  - Twenty-one rows are listed over two runs.
+  - A pointer moved meanwhile is not counted written, and the next run adopts the record.
+  - A row of an unpinned case is commit_unrecorded.
+  - A row holding no JSON at its commit is not listed.
+  - The page says when the anchor could not be looked up, and never shows a mismatched case commit as the case's.
+  - The status row's pinned column.
+  - The dry run's (f) waiting and could-not-look lines.
+- **H06 is equivalent.** It logs a pinned seal as a failure: a server log line that no answer and no record carries.
+- **Tests.** `test/case_commits.test.js` +12, `test/preview_dry_run.test.js` +2.
+- Suite 1096 -> 1110 tests, 0 fail, 6 todo. Here: 1102 pass and the 2 environment skips.
+
 ## 2026-10-12: Design J, step 4: every commit on the case page is a link into the public repository it is a commit of (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - Steps 1 to 3 already render every commit they add as a link. This step adds the test that holds the page to it.

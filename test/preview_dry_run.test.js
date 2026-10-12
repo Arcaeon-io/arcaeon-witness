@@ -802,3 +802,30 @@ test("CLI usage: --base and --key are required, --base is an origin, no flag is 
   assert.match(h.stdout, /\[--bypass <secret>\] \[--operator-key <k>\] \[--pin-token <t>\] \[--exhaust-quota\]/);
   assert.match(h.stdout, /VERCEL_AUTOMATION_BYPASS_SECRET/);
 });
+
+test("T03 (f) DESIGN J: a case still not pinned after the pass, its pin write failing at the reveal and in the pass, is COULD NOT LOOK with the pass's reason, never BROKEN", async (t) => {
+  // every write of the numbered pin fails: at the reveal and in the pass
+  let failed = 0;
+  intercept((u, opts) => {
+    if ((opts.method || "GET") === "PUT" && /^\/repos\/test-owner\/test-pins\/contents\/pins\/case\/[0-9a-f]{64}\/00000001\.json$/.test(u.pathname)) {
+      failed += 1;
+      return answer(500, { message: "mock: every pin write fails" });
+    }
+    return undefined;
+  });
+  const waiting = await dryRun(t, { pinToken: PIN_TOKEN });
+  assert.ok(failed >= 2, "fixture: the reveal's write and the pass's both failed");
+  assert.equal(word(waiting, "f"), "COULD NOT LOOK", waiting.show);
+  assert.match(waiting.by.f.line, /; case [0-9a-f]{64} is not pinned yet \(store_error\)$/);
+});
+
+test("T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, naming why", async (t) => {
+  const real = S.anchorState;
+  S.anchorState = async () => ({ pin: "could_not_look", reason: "pin_commit_unreadable" });
+  t.after(() => {
+    S.anchorState = real;
+  });
+  const r = await dryRun(t, { pinToken: PIN_TOKEN });
+  assert.equal(word(r, "f"), "COULD NOT LOOK", r.show);
+  assert.match(r.by.f.line, /; the pin of case [0-9a-f]{64} could not be read \(pin_commit_unreadable\)$/);
+});

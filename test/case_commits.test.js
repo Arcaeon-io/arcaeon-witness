@@ -803,3 +803,228 @@ test("EVERY COMMIT IS A LINK, ON THE OTHER PAGES THAT NAME ONE: pin_commit_misma
   assert.match(pages[0][1], /pin_commit_mismatch: its pin names commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}"/);
   assert.match(pages[1][1], /pin_commit_mismatch: pin 2 names commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}"/);
 });
+
+// =============================================================================
+// THE MUST-FAIL PASS OVER DESIGN J: the gaps it found
+// =============================================================================
+// 108 defects planted, one at a time, in the code Design J added or changed:
+// lib/_case_seal.js (64), lib/_case_page.js (15), lib/_verdict.js (8),
+// lib/_case_http.js (6), tools/preview_dry_run.js (5), lib/_status_json.js
+// (1), api/status.js (2) and test/helpers/mock_store.js (7), the whole suite
+// run against each. 83 were caught by steps 1 to 4. Of the 25 that survived,
+// 24 are closed by the tests below (two of them, T03 and T05, in
+// test/preview_dry_run.test.js) and one is equivalent:
+//   - H06, lib/_case_http.js: the reveal logging a pinned seal as a failure,
+//     a server log line no answer and no record carries.
+// The test names carry the mutant ids.
+
+test("A03 (the day before the pin): a daily anchor record named the day before the pin's commit, whose head holds the pin, anchors it", async () => {
+  const { id } = await sealedCase("J day before");
+  const before = dayOf(Date.parse(`${pinDay(id)}T00:00:00Z`) - DAY);
+  const a = dailyAnchor(before);
+  const st = await S.anchorState(id, chainOf(id));
+  assert.equal(st.pin, "anchored");
+  assert.equal(st.anchor.path, a.path);
+});
+
+test("A11, A12 (the record's own commit): it is the commit that wrote the text read, the newest touching it, and the record at that commit must name the same head", async () => {
+  const { id } = await sealedCase("J record commit");
+  const chain = chainOf(id);
+  const day = pinDay(id);
+  const path = `anchors/${day}-head.txt`;
+  const head = gh.headOf(PINS);
+  // written twice: the first text names a head that does not hold the pin, the second the head that does
+  const first = gh.seedText(PINS, path, `${"0".repeat(40)} ${day}T03:15:00+00:00\n`);
+  gh._repoMap(PINS).get(path).content = `${head} ${day}T03:15:00+00:00\n`;
+  const second = gh.addCommit(PINS, path, "mock: the record rewritten");
+  const st = await S.anchorState(id, chain);
+  assert.equal(st.pin, "anchored");
+  assert.equal(st.anchor.record_commit.sha, second, "the commit that wrote the text read");
+  assert.notEqual(second, first);
+  // the text now read names a head the record at its own commit does not: no claim
+  S._internal.clearCommitFiles();
+  gh.seedText(PINS, `anchors/${dayOf(Date.now() + 9 * DAY)}-head.txt`, "x"); // a new head, which holds the pin too
+  gh._repoMap(PINS).get(path).content = `${gh.headOf(PINS)} ${day}T03:15:00+00:00\n`; // changed with no commit of its own
+  const st2 = await S.anchorState(id, chain);
+  assert.equal(st2.pin, "pinned");
+  assert.deepEqual(st2.anchor, { could_not_look: "anchor_record_changed" });
+});
+
+test("B03 (a commit whose case file is not JSON): a pin naming it is pin_commit_mismatch, not could_not_look", async () => {
+  const { id } = await sealedCase("J not json");
+  const p = C.casePath(id);
+  const kept = gh._repoMap(PINS).get(p).content;
+  gh._repoMap(PINS).get(p).content = "this is not a case file\n";
+  const garbage = gh.addCommit(PINS, p, "mock: not JSON");
+  gh._repoMap(PINS).get(p).content = kept;
+  gh.addCommit(PINS, p, "mock: put back");
+  plantPin(id, chainOf(id), garbage);
+  const st = await S.anchorState(id, chainOf(id));
+  assert.equal(st.pin, "pin_commit_mismatch");
+  assert.equal(st.reason, "case_at_commit_is_another_case");
+});
+
+test("C01, C02 (a numbered record holds its own seq): the seal's record read at its commit with another seq is a conflict, and an orphan at seq 1 that says seq 2 is never adopted", async () => {
+  const { id } = await sealedCase("J own seq");
+  const { seq } = S.pinPaths(id);
+  const mine = gh.read(PINS, seq);
+  gh.seed(PINS, seq, { ...mine, seq: 2 });
+  gh._repoMap(PINS).get(seq).content = JSON.stringify(mine, null, 2) + "\n";
+  gh.addCommit(PINS, seq, "mock: put back to seq 1");
+  const st = await S.anchorState(id, chainOf(id));
+  assert.equal(st.pin, "conflict");
+  assert.equal(st.reason, "pin_at_its_commit_holds_another_chain");
+
+  const o = await sealedCase("J orphan seq", { pinFails: true });
+  const op = S.pinPaths(o.id);
+  gh.seed(PINS, op.seq, { ...S._internal.pinRecord(o.id, chainOf(o.id), REVEAL_AT, sealCommit(o.id)), seq: 2 });
+  const r = await S.anchorCase(o.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.equal(r.pin, "conflict");
+  assert.equal(gh.has(PINS, op.latest), false, "no pointer to it");
+});
+
+// Pins planted directly: the seal's at seq 1 and next pins up to `top`,
+// `lists` mapping a pin seq to its reference_commits.
+function plantPins(id, top, lists = {}) {
+  const chain = chainOf(id);
+  const base = gh.read(PINS, S.pinPaths(id).seq);
+  let rec = base;
+  for (let n = 2; n <= top; n += 1) {
+    rec = { ...base, seq: n, ...(lists[n] ? { reference_commits: lists[n] } : {}) };
+    gh.seed(PINS, S._internal.pinPath(id, n), rec);
+  }
+  gh.seed(PINS, S.pinPaths(id).latest, rec);
+  return chain;
+}
+
+test("C03, C04 (the walk down the pins): a page reads no pin below the ones that list its rows, and reads at most PIN_WALK_READS below the pointer", async () => {
+  assert.equal(S.PIN_WALK_READS, 20);
+  const c = await sealedCase("J walk");
+  assert.equal((await reference(c, "a", "walk-1")).status, 201);
+  const commit = rowCommit(c.id, 1);
+  // listed in pin 4, the pointer's: pins 3, 2 and 1 are not read
+  plantPins(c.id, 4, { 4: [{ seq: 1, commit }] });
+  const g0 = gh.getLog.length;
+  assert.match(rowLine((await casePage(c.id)).html, 1), /listed in pin 4/);
+  const read = gh.getLog.slice(g0);
+  for (const n of [1, 2, 3]) assert.ok(!read.includes(S._internal.pinPath(c.id, n)), `pin ${n} is not read`);
+  // listed in pin 2 under a pointer at 22: twenty reads reach it; at 23 they do not
+  const top = S._internal.listedReferences;
+  const chain = plantPins(c.id, 22, { 2: [{ seq: 1, commit }] });
+  const at22 = await top(c.id, chain, gh.read(PINS, S.pinPaths(c.id).latest), new Set([1]));
+  assert.equal(at22.ok, true);
+  assert.deepEqual(at22.listed.get(1), { commit, pin_seq: 2 });
+  plantPins(c.id, 23, { 2: [{ seq: 1, commit }] });
+  const at23 = await top(c.id, chain, gh.read(PINS, S.pinPaths(c.id).latest), new Set([1]));
+  assert.deepEqual([at23.ok, at23.reason], [false, "pins_not_read"]);
+  assert.match(rowLine((await casePage(c.id)).html, 1), /could_not_look: its commit could not be read on this request \(pins_not_read\)/);
+});
+
+test("C05, C06 (which pins count): a pin below the pointer that is not this case's stops the walk, and a row two pins list is read from the newer", async () => {
+  const c = await sealedCase("J which pins");
+  assert.equal((await reference(c, "a", "which-1")).status, 201);
+  const commit = rowCommit(c.id, 1);
+  // pin 2 holds another chain: what it lists does not count
+  plantPins(c.id, 3, {});
+  gh.seed(PINS, S._internal.pinPath(c.id, 2), { ...gh.read(PINS, S._internal.pinPath(c.id, 2)), chain: sha("not this case"), reference_commits: [{ seq: 1, commit }] });
+  assert.match(rowLine((await casePage(c.id)).html, 1), /could_not_look: its commit could not be read on this request \(pin_unreadable\)/);
+  // row 1 listed in pin 3 at its commit and in pin 2 at another; row 2 only in pin 2, so the walk reads both:
+  // the newer pin's listing of row 1 is the one read
+  assert.equal((await reference(c, "b", "which-2")).status, 201);
+  const commit2 = rowCommit(c.id, 2);
+  plantPins(c.id, 3, { 2: [{ seq: 1, commit: sealCommit(c.id) }, { seq: 2, commit: commit2 }], 3: [{ seq: 1, commit }] });
+  const page = (await casePage(c.id)).html;
+  assert.match(rowLine(page, 1), /written at commit .*listed in pin 3/);
+  assert.match(rowLine(page, 2), /written at commit .*listed in pin 2/, "fixture: the walk went on to pin 2");
+});
+
+test("C08 (at most REFERENCE_ROW_READS rows a run): twenty-one rows are listed over two runs, twenty and then one", async () => {
+  const c = await sealedCase("J twenty-one");
+  for (let i = 0; i < 21; i += 1) assert.equal((await reference(c, i < 20 ? "a" : "b", `bulk-${i}`)).status, 201);
+  const one = await sealerRun();
+  assert.equal(one.commits_recorded[0].reference_commits.length, S.REFERENCE_ROW_READS);
+  const two = await sealerRun(120000);
+  assert.deepEqual(two.commits_recorded[0].reference_commits.map((x) => x.seq), [21]);
+});
+
+test("C13 (the pointer moved from the record read): when another writer moves the pointer meanwhile, the next pin is not counted written, the run says so, and the next run adopts the record", async () => {
+  const c = await sealedCase("J pointer moved");
+  assert.equal((await reference(c, "a", "moved-1")).status, 201);
+  const { latest } = S.pinPaths(c.id);
+  // the pointer changes under the run, right before it is moved
+  const viaMock = global.fetch;
+  let moved = false;
+  global.fetch = async (url, o) => {
+    if (!moved && (o && o.method) === "PUT" && String(url).includes(`/contents/${latest}`)) {
+      moved = true;
+      const rec = gh._repoMap(PINS).get(latest);
+      rec.content = rec.content.replace(/\n$/, " \n"); // the same record, written again: a new blob sha
+      rec.sha = crypto.randomBytes(20).toString("hex");
+    }
+    return viaMock(url, o);
+  };
+  let run;
+  try {
+    run = await sealerRun();
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.ok(moved, "fixture: the pointer moved");
+  assert.deepEqual(run.commits_recorded, [], "not counted written");
+  assert.deepEqual(run.pending, [{ case_id: c.id, reason: "pin_pointer_moved" }]);
+  assert.equal(gh.has(PINS, S._internal.pinPath(c.id, 2)), true, "the record landed");
+  assert.equal(gh.read(PINS, latest).seq, 1, "the pointer did not move to it");
+  const again = await sealerRun(120000);
+  assert.deepEqual(again.pending, []);
+  assert.equal(gh.read(PINS, latest).seq, 2, "the next run adopts it");
+  assert.match(rowLine((await casePage(c.id)).html, 1), /listed in pin 2/);
+});
+
+test("C18 (a row of a case not pinned yet): its commit is commit_unrecorded, the case's own second phase not done, never could_not_look", async () => {
+  const c = await sealedCase("J row unpinned", { pinFails: true });
+  assert.equal((await reference(c, "a", "early-row")).status, 201, "fixture: a reference before the pin (GPT-5.6 §1.2, still todo)");
+  const line = rowLine((await casePage(c.id)).html, 1);
+  assert.match(line, /commit_unrecorded: no pin of this case lists the commit that wrote this row yet/);
+  assert.ok(!line.includes("could_not_look"));
+});
+
+test("C23 (a row whose commit holds no JSON there): the sealer does not list it and reports pin_commit_mismatch, not could_not_look", async () => {
+  const c = await sealedCase("J row not json");
+  assert.equal((await reference(c, "a", "row-x")).status, 201);
+  const p = rowPath(c.id, 1);
+  const kept = gh._repoMap(PINS).get(p).content;
+  gh._repoMap(PINS).get(p).content = "not a row\n";
+  gh.addCommit(PINS, p, "mock: not JSON at the newest commit");
+  gh._repoMap(PINS).get(p).content = kept; // the file read now is the row; its newest commit holds no JSON
+  const run = await sealerRun();
+  assert.deepEqual(run.rows_unrecorded, [{ case_id: c.id, seq: 1, code: "pin_commit_mismatch", reason: "reference_at_commit_is_another_row" }]);
+  assert.deepEqual(run.commits_recorded, []);
+});
+
+test("P03, P07 (the page's words for a pin it read): an anchor it could not look up is said, and a case file commit that holds another case is never shown as the case's", async () => {
+  const { id } = await sealedCase("J page words");
+  gh.forceGetFailure(PINS, "anchors", 1, 503);
+  const page = (await casePage(id)).html;
+  assert.match(page, /pinned; whether a daily anchor record holds its pin could not be read on this request \(could_not_look: anchors_unreadable\), so no anchor is claimed\./);
+  assert.ok(!page.includes("pinned, not anchored yet"));
+  const opened = gh.commitsFor(PINS, C.casePath(id)).slice(-1)[0].sha;
+  plantPin(id, chainOf(id), opened);
+  const m = (await casePage(id)).html;
+  assert.ok(m.includes(`not shown: the commit its pin names, <a ${commitLink(opened)}`), "the case commit row");
+  assert.ok(!m.includes("written at commit"), "never shown as the commit that wrote the case");
+});
+
+test("S01, S02 (the status page's case row): the column says pinned and holds the pinned count", async () => {
+  const statusHandler = require("../api/status.js");
+  await sealedCase("J status one");
+  await sealedCase("J status two");
+  await sealedCase("J status pending", { pinFails: true });
+  const res = makeRes();
+  await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": "10.98.2.1" } }), res);
+  const page = String(res._body);
+  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pinned<\/th><th>pending<\/th><th>withdrawn<\/th>/);
+  const row = /<td><code>pins\/case\/<\/code>[\s\S]*?<\/tr>/.exec(page);
+  assert.ok(row, "the case row");
+  assert.deepEqual([...row[0].matchAll(/<td>(\d+)<\/td>/g)].map((x) => Number(x[1])), [3, 2, 1, 0]);
+  assert.match(page, /<em>Pinned<\/em> means the case has both registration files and a pin pointer, by path alone/);
+});
