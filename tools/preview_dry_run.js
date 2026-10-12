@@ -649,6 +649,13 @@ async function checkChunkedReveal(ctx) {
     const word = json.verdict && json.verdict.verdict ? `, verdict ${json.verdict.verdict}` : "";
     return verified(`${head}${word}: ${seal.text}, pin ${json.pin}`);
   }
+  // The one signature rule (lib/_case_seal.js): a preview without a case key
+  // its document lists seals nothing and says so. That is the deployment's
+  // configuration, not an answer it could not give: BROKEN.
+  if (ans.status === 503 && json && json.error_code === "case_signer_unavailable") {
+    return broken(`case-reveal with ${sent} answered HTTP 503 case_signer_unavailable (${json.reason}): the published case signer is not ` +
+      "installed, so the preview seals nothing");
+  }
   const why = unlooked(ans);
   if (why) return couldNotLook(`case-reveal with ${sent}: ${why}`);
   return broken(`case-reveal with ${sent} answered ${said(ans)}${ans.status === 201 ? " without a sealed VERDICT for this case" : ", not 201"}`);

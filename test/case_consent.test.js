@@ -611,3 +611,80 @@ test("DESIGN N (3): a withdrawal that lands while the reveal reads the case, bef
   assert.equal(compare.mock.callCount(), 0, "nothing compared");
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
 });
+
+// =============================================================================
+// ONE SIGNATURE RULE: verifyCase is gone; an unsigned seal never verifies
+// =============================================================================
+
+// A seal built by hand, as a sealer carrying DOC would build it, with the
+// receipt the service's own and the case signed by `caseSigner` (a loaded
+// signer, or a refused one: unsigned).
+async function handSealed(scope, caseSigner) {
+  const c = await committedCase(scope);
+  const compared = RECONCILE.compare(c.a.tape, c.b.tape, { env: KEYS, now: REVEAL_AT, keyDocument: DOC });
+  const st = S.storableReceipt(compared.receipt);
+  assert.equal(st.ok, true);
+  const sealed = S.sealCase(storedCase(c.id), {
+    reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, DOC, C.utcSeconds(REVEAL_AT)),
+  }, caseSigner);
+  gh.seed(PINS, C.casePath(c.id), sealed);
+  return { ...c, sealed };
+}
+
+test("ONE SIGNATURE RULE: verifyCase is deleted (no caller outside the tests); nothing in lib/, api/ or tools/ defines, exports or calls it", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  assert.equal(S.verifyCase, undefined);
+  const root = path.join(__dirname, "..");
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(path.join(root, d), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${d}/${e.name}`);
+      else if (/\.js$/.test(e.name)) files.push(`${d}/${e.name}`);
+    }
+  };
+  for (const d of ["lib", "api", "tools"]) walk(d);
+  // a definition, a call or an export entry; the seal module's header names it once, as history
+  assert.deepEqual(files.filter((f) => /\bverifyCase\s*[(,]|function\s+verifyCase\b/.test(fs.readFileSync(path.join(root, f), "utf8"))), []);
+});
+
+test("ONE SIGNATURE RULE: a seal with sig null reads case_signature_invalid (unsigned_seal), never valid_under_document: the sealer pins nothing, a reference is refused, the page shows no verdict", async () => {
+  const signed = await handSealed("sig rule signed", S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.equal((await S.sealedRecordReason(signed.sealed, DOC)).code, "valid_under_document", "control: the same seal, signed");
+  const u = await handSealed("sig rule unsigned", S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { keyDocument: DOC }));
+  assert.equal(u.sealed.sig, null, "fixture: unsigned");
+  assert.deepEqual(await S.sealedRecordReason(u.sealed, DOC), { code: "case_signature_invalid", reason: "unsigned_seal" });
+  assert.equal(S.sealHolds(await S.sealedRecordReason(u.sealed, DOC)), false);
+  // under any document, the current one included
+  assert.equal((await S.sealedRecordReason(u.sealed, KD.docWith(KD.reconcileEntry(RECEIPT_KEY)))).reason, "unsigned_seal");
+  const one = await S.anchorCase(u.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual([one.ok, one.code, one.reason], [false, "case_signature_invalid", "unsigned_seal"]);
+  assert.equal(gh.has(PINS, S.pinPaths(u.id).latest), false, "never pinned");
+  const r = await reference(u);
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "case_signature_invalid", "unsigned_seal"]);
+  const page = (await casePage(u.id)).html;
+  assert.match(page, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(page.includes("<code>unsigned_seal</code>"));
+});
+
+test("ONE SIGNATURE RULE: the reveal seals only signed; without a case key the current document lists, it is 503 case_signer_unavailable before anything is written or compared", async (t) => {
+  const compare = t.mock.method(RECONCILE, "compare");
+  for (const [name, env, keyDocument, code] of [
+    ["no case key", { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer }, DOC, "case_key_unset"],
+    ["the case key unlisted", KEYS, KD.docWith(KD.reconcileEntry(RECEIPT_KEY)), "key_unpublished"],
+    ["separation not shown", { [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, DOC, "key_separation_unverifiable"],
+  ]) {
+    const c = await committedCase(`sig rule ${name}`);
+    const before = storedCase(c.id);
+    const writes = gh.putLog.filter((w) => w.repo === PINS).length;
+    const r = await reveal(c, { env, keyDocument });
+    assert.equal(r.status, 503, `${name}: ${JSON.stringify(r.body).slice(0, 200)}`);
+    assert.equal(r.body.error_code, "case_signer_unavailable", name);
+    assert.equal(r.body.reason, code, name);
+    assert.ok(!JSON.stringify(r.body).includes("PRIVATE"), "never a key");
+    assert.deepEqual(storedCase(c.id), before, `${name}: no attempt, no seal`);
+    assert.equal(gh.putLog.filter((w) => w.repo === PINS).length, writes, `${name}: nothing written`);
+  }
+  assert.equal(compare.mock.callCount(), 0, "nothing compared");
+});

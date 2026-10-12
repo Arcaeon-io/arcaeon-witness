@@ -371,13 +371,14 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   assert.equal(word(planted, "e"), "BROKEN", planted.show);
   assert.match(planted.by.e.line, /answered HTTP 201 VERDICT for case_id [0-9a-f]{64}, but the seal is unsigned \(signed_by null, sig null\): the published case signer is not installed$/);
 
-  // A deployment with no case signer installed seals unsigned, and says why.
+  // A deployment with no case signer installed seals nothing (the one
+  // signature rule), and says why.
   const { [S.CASE_SIGNER_ENV]: _caseKey, ...noCaseKey } = SIGNER.env; // eslint-disable-line no-unused-vars
   const bare = await dryRun(t, { preview: { signer: { env: noCaseKey, keyDocument: TEST_DOC } } });
   assert.equal(word(bare, "e"), "BROKEN");
-  assert.match(bare.by.e.line, /the seal is unsigned \(signed_by null, sig null; sig_reason: This case is sealed and not signed \(case_key_unset\)/);
+  assert.match(bare.by.e.line, /answered HTTP 503 case_signer_unavailable \(case_key_unset\): the published case signer is not installed, so the preview seals nothing$/);
   const id = /case_id ([0-9a-f]{64})/.exec(bare.by.b.line)[1];
-  assert.equal(gh.read(PINS, C.casePath(id)).sig, null, "it really sealed unsigned");
+  assert.equal(gh.read(PINS, C.casePath(id)).status, "COMMITTED", "it really sealed nothing");
 
   // Sealed under another document than this checkout's: one that does not
   // list the key, or lists it retired (Design I: the seal names its document).

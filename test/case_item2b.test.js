@@ -290,7 +290,7 @@ function guard2a(env) {
   return true;
 }
 
-test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS_RECONCILE_SIGNER_KEY unset seals UNSIGNED, key_separation_unverifiable", async () => {
+test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS_RECONCILE_SIGNER_KEY unset is never used to sign, key_separation_unverifiable (since the one signature rule nothing is sealed unsigned)", async () => {
   const env = { [S.CASE_SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer };
   const loaded = S.loadCaseSigner(env);
   assert.equal(loaded.ok, false);
@@ -303,15 +303,17 @@ test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS
   assert.equal(refused.status, 503, JSON.stringify(refused.body).slice(0, 200));
   assert.equal(refused.body.error_code, "signer_unavailable");
   assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed, so never signed with the receipt key");
-  // The unsigned seal itself, where separation cannot be shown beside a
-  // reconcile signer: the log key unset.
-  const { id } = await sealedCase({ over: { scope_digest: sha("log key unset") }, env: { [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
-  const k = storedCase(id);
-  assert.equal(k.sig, null, "never signed");
-  assert.equal(k.signed_by, null);
-  assert.match(k.sig_reason, /^This case is sealed and not signed \(key_separation_unverifiable\): .*WITNESS_LOG_SIGNER_KEY is not set/);
-  assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
-  assert.equal(S.verifyCase(k, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "unsigned");
+  // Where separation cannot be shown beside a reconcile signer (the log key
+  // unset), the case is never signed: since the one signature rule the
+  // reveal seals only signed, so it refuses, and nothing is sealed.
+  const u = await committedCase({ over: { scope_digest: sha("log key unset") } });
+  const unsep = await reveal(revealBody(u.id, u.a, u.b), { env: { [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
+  assert.equal(unsep.status, 503, JSON.stringify(unsep.body).slice(0, 200));
+  assert.deepEqual([unsep.body.error_code, unsep.body.reason], ["case_signer_unavailable", "key_separation_unverifiable"]);
+  assert.equal(storedCase(u.id).status, "COMMITTED", "never sealed, so never signed");
+  const why = S.loadCaseSigner({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer });
+  assert.match(why.reason, /WITNESS_LOG_SIGNER_KEY is not set/);
+  assert.ok(!JSON.stringify(unsep.body).includes("PRIVATE") && !why.reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
   // MUST-FAIL ARM: the 2a guard could not see the receipt key and would have
   // signed the case with it.
   assert.equal(guard2a(env), true);
@@ -336,7 +338,9 @@ test("FIX 2: a legitimately separate case key signs when both other keys are pre
   const k = storedCase(id);
   assert.equal(typeof k.sig, "string");
   assert.equal(k.sig_reason, null);
-  assert.deepEqual(S.verifyCase(k, CASE_KEY.verifier, { nowMs: REVEAL_AT, receiptVerifier: RECEIPT_KEY.verifier }), { ok: true, chain: r.body.chain });
+  // the one signature rule: the sealed check, under the document the case names
+  assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document");
+  assert.equal(S.caseChain(k), r.body.chain);
   // the log key's bytes under a new name: a different verifier string, the same key
   const seed = Buffer.from(LOG_KEY.signer.split("+").slice(4).join("+"), "base64").subarray(1);
   const pub = checkpoint.parseSignerKey(LOG_KEY.signer).pub;
@@ -584,7 +588,7 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
 // SIGNED_BY and the published key document
 // =============================================================================
 
-test("SIGNED_BY: the reveal writes the case signer's key id inside the signed bytes; an unsigned seal and an open case carry null; the schema refuses a mismatch", async () => {
+test("SIGNED_BY: the reveal writes the case signer's key id inside the signed bytes; an unsigned record and an open case carry null; the schema refuses a mismatch", async () => {
   const keyId = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
   const vk = checkpoint.parseVerifierKey(CASE_KEY.verifier);
   assert.equal(keyId, `${vk.name}+${vk.hash}`, "fixture: lib/_checkpoint.js's key naming");
@@ -595,19 +599,22 @@ test("SIGNED_BY: the reveal writes the case signer's key id inside the signed by
   assert.equal(k.signed_by, keyId);
   assert.ok(checkRecord.preimage(k).toString("utf-8").includes(`"signed_by":"${keyId}"`), "inside the signed bytes");
   assert.equal(r.body.case.signed_by, keyId);
-  assert.deepEqual(S.verifyCase(k, CASE_KEY.verifier, { nowMs: REVEAL_AT }), { ok: true, chain: r.body.chain });
+  assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document");
+  assert.equal(S.caseChain(k), r.body.chain);
   // altering signed_by breaks the signature (it is signed), and a case signed
   // by the right key that names another is refused as a signer mismatch
-  assert.equal(S.verifyCase({ ...k, signed_by: "arcaeon.io/other+12345678" }, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "bad_signature");
+  assert.equal(S.signatureReason({ ...k, signed_by: "arcaeon.io/other+12345678" }, CASE_KEY.verifier).reason, "bad_signature");
   const lying = S.signCase({ ...k, sig: null, sig_reason: null }, { ...S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }), keyId: "arcaeon.io/other+12345678" });
-  assert.equal(S.verifyCase(lying, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, "signer_mismatch");
-  // unsigned seals carry null
-  const u = await sealedCase({ over: { scope_digest: sha("unsigned signed_by") }, env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
-  assert.equal(storedCase(u.id).signed_by, null);
-  assert.match(storedCase(u.id).sig_reason, /\(case_key_unset\)/);
+  assert.equal(S.signatureReason(lying, CASE_KEY.verifier).reason, "signer_mismatch");
+  // an unsigned record carries null (built the seal module's way: since the
+  // one signature rule the reveal itself never seals unsigned)
+  const unsigned = S.signRecord({ ...k, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }),
+    "This case is sealed and not signed");
+  assert.equal(unsigned.signed_by, null);
+  assert.match(unsigned.sig_reason, /\(case_key_unset\)/);
   // the schema: signed with no key id, a key id with no signature, a malformed key id
   assert.equal(C.validateCase({ ...k, signed_by: null }).code, "malformed_field");
-  assert.equal(C.validateCase({ ...storedCase(u.id), signed_by: keyId }).code, "malformed_field");
+  assert.equal(C.validateCase({ ...unsigned, signed_by: keyId }).code, "malformed_field");
   for (const badId of ["no-plus-here", "name+1234567", "name+ABCDEF12", "two words+12345678", `${CASE_KEY.verifier}`]) {
     assert.equal(C.validateCase({ ...k, signed_by: badId }).field, "signed_by", badId);
   }
@@ -645,7 +652,7 @@ test("KEY DOCUMENT: .well-known/arcaeon/case-signing-keys.json is valid JSON wit
   const found = S.publishedEntry(withKey, k.signed_by);
   assert.deepEqual(found, entry);
   assert.equal(found.verifier, CASE_KEY.verifier);
-  assert.equal(S.verifyCase(k, found.verifier, { nowMs: REVEAL_AT }).ok, true);
+  assert.equal(S.signatureReason(k, found.verifier), null);
   assert.equal(S.publishedEntry(doc, k.signed_by), null, "the test key is not in the committed document");
 
   // MUST-FAIL ARMs: a document the checker refuses

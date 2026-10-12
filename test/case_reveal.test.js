@@ -882,14 +882,23 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
   // the rule, by hand: Ed25519 over json-c14n:v1 of the whole case minus sig
   const vk = checkpoint.parseVerifierKey(CASE_KEY.verifier);
   assert.equal(crypto.verify(null, checkRecord.preimage(k), vk.publicKey, Buffer.from(k.sig, "base64")), true);
-  assert.deepEqual(S.verifyCase(k, CASE_KEY.verifier, { nowMs: REVEAL_AT, receiptVerifier: RECEIPT_KEY.verifier }), { ok: true, chain: r.body.chain });
+  // the one signature rule: the sealed check, under the document the case names
+  assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document");
+  assert.equal(S.caseChain(k), r.body.chain);
   // the four limits and the receipt are inside the signed bytes
   const pre = checkRecord.preimage(k).toString("utf-8");
   for (const l of C.LIMITS) assert.ok(pre.includes(l), l);
   assert.ok(pre.includes(k.verdict.sig), "the receipt, signature and all");
 
+  // what a reader holds a record to: the schema, then the sealed check
+  const verdictOf = async (rec) => {
+    const v = C.validateCase(rec);
+    if (!v.ok) return v.code;
+    const answer = await S.sealedRecordReason(rec, KEYS_DOC);
+    return answer.code === "valid_under_document" ? "valid" : answer.reason;
+  };
   // an unknown field is refused, before any signature is looked at
-  assert.equal(S.verifyCase({ ...k, anchor: "pending" }, CASE_KEY.verifier).reason, "unknown_field");
+  assert.equal(await verdictOf({ ...k, anchor: "pending" }), "unknown_field");
   // a change anywhere breaks the signature, or the receipt's binding first
   const plants = {
     bad_signature: [
@@ -902,10 +911,10 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
     receipt_tape_a_mismatch: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
   };
   for (const [reason, recs] of Object.entries(plants)) {
-    for (const rec of recs) assert.equal(S.verifyCase(rec, CASE_KEY.verifier, { nowMs: REVEAL_AT }).reason, reason);
+    for (const rec of recs) assert.equal(await verdictOf(rec), reason);
   }
   // the receipt key does not verify a case, and the case key does not verify a receipt
-  assert.equal(S.verifyCase(k, RECEIPT_KEY.verifier, { nowMs: REVEAL_AT }).reason, "bad_signature");
+  assert.equal(S.signatureReason(k, RECEIPT_KEY.verifier).reason, "bad_signature");
   assert.equal(receipts.verifyReceiptText(T.wireJson(k.verdict), CASE_KEY.verifier).reason, "unknown_signer");
   // MUST-FAIL ARM: on a signed record an added field also breaks the
   // signature (it lands inside the preimage), so the unknown-field fence is
@@ -914,31 +923,28 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
   assert.equal(crypto.verify(null, checkRecord.preimage({ ...k, anchor: "pending" }), vk.publicKey, Buffer.from(k.sig, "base64")), false);
   // (item 2b: an unsigned case carries signed_by null, so the hand-unsigned copy does too)
   const unsignedWithExtra = { ...k, signed_by: null, sig: null, sig_reason: "unsigned in this test", anchor: "pending" };
-  assert.equal(S.verifyCase(unsignedWithExtra, CASE_KEY.verifier).reason, "unknown_field");
+  assert.equal(await verdictOf(unsignedWithExtra), "unknown_field");
   const { anchor, ...unsignedClean } = unsignedWithExtra; // eslint-disable-line no-unused-vars
-  assert.equal(S.verifyCase(unsignedClean, CASE_KEY.verifier).reason, "unsigned", "control: without the field it is merely unsigned");
+  assert.equal(await verdictOf(unsignedClean), "unsigned_seal", "control: without the field it is an unsigned seal, which never verifies");
 });
 
-test("TEST 9: with no case key the seal is unsigned and says why; the log key, the receipt key or an unparseable key is never used to sign", async () => {
+test("TEST 9: with no usable case key nothing is sealed (the one signature rule: an unsigned seal never verifies) and the refusal says why; the log key, the receipt key or an unparseable key is never used to sign", async () => {
   const variants = {
-    unset: [{ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, /WITNESS_CASE_SIGNER_KEY is not set/],
-    receipt_key: [{ [S.CASE_SIGNER_ENV]: RECEIPT_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, /reconcile receipt key/],
-    log_key: [{ [S.CASE_SIGNER_ENV]: LOG_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, /witness log's key/],
-    unparseable: [{ [S.CASE_SIGNER_ENV]: "PRIVATE+KEY+nope", [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, /does not parse/],
+    unset: [{ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, "case_key_unset", /WITNESS_CASE_SIGNER_KEY is not set/],
+    receipt_key: [{ [S.CASE_SIGNER_ENV]: RECEIPT_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, "case_key_is_other_key", /reconcile receipt key/],
+    log_key: [{ [S.CASE_SIGNER_ENV]: LOG_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, "case_key_is_other_key", /witness log's key/],
+    unparseable: [{ [S.CASE_SIGNER_ENV]: "PRIVATE+KEY+nope", [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, "case_key_unparseable", /does not parse/],
   };
-  for (const [name, [env, why]] of Object.entries(variants)) {
+  for (const [name, [env, code, why]] of Object.entries(variants)) {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha(`unsigned ${name}`) } });
+    const before = storedCase(id);
     const r = await reveal(revealBody(id, a, b), { env });
-    assert.equal(r.status, 201, `${name}: ${JSON.stringify(r.body).slice(0, 300)}`);
-    const k = storedCase(id);
-    assert.equal(k.sig, null, name);
-    assert.match(k.sig_reason, why, name);
-    assert.ok(!k.sig_reason.includes("PRIVATE"), `${name}: the reason never quotes a key`);
-    assert.deepEqual(C.validateCase(k), { ok: true }, name);
-    assert.equal(r.body.sealed_by, null, name);
-    assert.equal(S.verifyCase(k, CASE_KEY.verifier).reason, "unsigned", name);
-    assert.equal(k.verdict.sig === null, false, `${name}: the receipt is still signed with its own key`);
-    assert.equal(r.body.pin, "pinned", `${name}: an unsigned seal is still sealed and pinned`);
+    assert.equal(r.status, 503, `${name}: ${JSON.stringify(r.body).slice(0, 300)}`);
+    assert.deepEqual([r.body.error_code, r.body.reason], ["case_signer_unavailable", code], name);
+    assert.deepEqual(storedCase(id), before, `${name}: nothing sealed, nothing written`);
+    const l = S.loadCaseSigner(env, { keyDocument: KEYS_DOC });
+    assert.match(l.reason, why, name);
+    assert.ok(!l.reason.includes("PRIVATE") && !JSON.stringify(r.body).includes("PRIVATE"), `${name}: the reason never quotes a key`);
   }
   // MUST-FAIL ARM: unsigned with no reason is not a valid case
   const { id, a, b } = await committedCase({ over: { scope_digest: sha("no reason") } });

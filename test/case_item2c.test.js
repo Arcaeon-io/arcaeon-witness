@@ -265,19 +265,26 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   assert.equal(retired.chain, S.caseChain(good));
 });
 
-test("FIX 1: an unsigned seal is still a seal and anchors with no signature to check", async () => {
-  const { id } = await sealedCase({ pinFails: true, env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
+test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the reveal will not make one, and the sealer refuses one it finds (case_signature_invalid, unsigned_seal) and pins nothing", async () => {
+  const c = await committedCase({ over: { scope_digest: sha("unsigned refused") } });
+  const refused = await reveal(revealBody(c.id, c.a, c.b), { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer } });
+  assert.deepEqual([refused.status, refused.body.error_code, refused.body.reason], [503, "case_signer_unavailable", "case_key_unset"]);
+  assert.equal(storedCase(c.id).status, "COMMITTED");
+  // one found in the store (built the seal module's way, unsigned)
+  const { id } = await sealedCase({ pinFails: true });
+  const k = storedCase(id);
+  gh.seed(PINS, C.casePath(id), S.signRecord({ ...k, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed"));
   assert.equal(storedCase(id).sig, null);
-  const r = await S.anchorCase(id, { now: REVEAL_AT + 60000 });
-  assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(r.pin, "pinned");
+  const r = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
+  assert.deepEqual([r.ok, r.code, r.reason], [false, "case_signature_invalid", "unsigned_seal"]);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "never pinned");
 });
 
 // =============================================================================
 // FIX 2: signing fails closed unless the key is an active published entry
 // =============================================================================
 
-test("FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the reveal seals UNSIGNED, key_unpublished", async () => {
+test("FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since the one signature rule the reveal seals nothing", async () => {
   // the three keys are distinct and valid, so separation holds
   const loaded = S.loadCaseSigner(SIGNED, { keyDocument: NO_KEYS_DOC });
   assert.equal(loaded.ok, false);
@@ -286,13 +293,11 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   assert.equal(loaded.keyId, CASE_KEY_ID, "its public half is, for the entry");
   assert.deepEqual(NO_CASE_KEY_DOC.keys, [RECONCILE_ENTRY], "fixture: the injected document lists no case key");
   assert.equal(S.checkKeyDocument(NO_CASE_KEY_DOC).ok, true, "fixture: and reads as a key document");
-  const { id, r } = await sealedCase({ keyDocument: NO_CASE_KEY_DOC });
-  const k = storedCase(id);
-  assert.equal(k.sig, null, "never signed");
-  assert.equal(k.signed_by, null);
-  assert.match(k.sig_reason, /^This case is sealed and not signed \(key_unpublished\): /);
-  assert.ok(!k.sig_reason.includes("PRIVATE") && !k.sig_reason.includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the reason never quotes a key");
-  assert.equal(r.body.sealed_by, null);
+  const unlisted = await committedCase({ over: { scope_digest: sha("case key unlisted") } });
+  const r = await reveal(revealBody(unlisted.id, unlisted.a, unlisted.b), { keyDocument: NO_CASE_KEY_DOC });
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "case_signer_unavailable", "key_unpublished"]);
+  assert.equal(storedCase(unlisted.id).status, "COMMITTED", "never sealed, so never signed");
+  assert.ok(!JSON.stringify(r.body).includes("PRIVATE") && !JSON.stringify(r.body).includes(CASE_KEY.verifier.split("+").slice(2).join("+")), "the answer never quotes a key");
   // With no keyDocument at all, the default is the committed document, which
   // lists the production case key and not this test's, and (Design I) no
   // reconcile key yet: a deployment carrying it seals nothing. With no
@@ -1028,15 +1033,17 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(!pd.includes("SEALED RECORD DOES NOT VERIFY"));
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
   assert.ok(pd.includes(`/blob/${named.document_commit}/${S.CASE_KEYS_FILE}"`), "the key document it names, cited");
-  // an unsigned seal (a document without the case key) verifies through the
-  // real dispatch and shows its verdict
-  const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") }, keyDocument: NO_CASE_KEY_DOC });
+  // an unsigned seal, through the real dispatch: since the one signature rule
+  // it does not verify, and no verdict is shown
+  const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") } });
+  const uk = storedCase(u.id);
+  gh.seed(PINS, C.casePath(u.id), S.signRecord({ ...uk, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed"));
   const ru = makeRes();
   await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: u.id }, headers: { "x-forwarded-for": freshIp() } }), ru);
   assert.equal(ru._status, 200);
-  assert.match(String(ru._body), /<h1>Case: VERDICT<\/h1>/);
-  assert.match(String(ru._body), /<span class="word pass">MATCHED<\/span>/);
-  assert.match(String(ru._body), /unsigned: This case is sealed and not signed \(key_unpublished\)/);
+  assert.match(String(ru._body), /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(String(ru._body).includes("<code>unsigned_seal</code>"));
+  assert.ok(!String(ru._body).includes(">MATCHED<"));
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
   assert.match((await casePage(p.id)).html, /commit_unrecorded: the second of this case&#39;s two writes/);

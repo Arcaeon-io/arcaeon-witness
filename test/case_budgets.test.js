@@ -159,7 +159,10 @@ test("FIX F: the keyless ops stay per-IP, and a bearer key on one of them does n
 // Throwaway keys, made here, written nowhere.
 const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test-budgets/2026-10-12");
 const RECEIPT_KEY = checkpoint.generateKey("arcaeon.io/reconcile-test-budgets/2026-10-12");
-const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer });
+const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test-budgets/2026-10-12");
+// The log key too: the reveal seals only signed (one signature rule), and the
+// case key is used only when it can be shown apart from both other keys.
+const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
 const KEYS_DOC = Object.freeze(KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)));
 const OPERATOR_KEY = "case-budgets-operator-key";
 const OPERATOR_ENV = Object.freeze({ ...SIGNED, [H.OPERATOR_KEY_ENV]: OPERATOR_KEY });

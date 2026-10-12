@@ -364,10 +364,15 @@ async function committedCase() {
 // The service's reconcile signer (red-team fix B: with none, nothing is
 // compared).
 const RECEIPT_KEY = require("../lib/_checkpoint.js").generateKey("arcaeon.io/reconcile-test/2026-10-10");
-const RECEIPT_ENV = Object.freeze({ WITNESS_RECONCILE_SIGNER_KEY: RECEIPT_KEY.signer });
+// The one signature rule: the reveal seals only signed, so this
+// environment carries a case key (and the log key, to show it apart) and
+// the document lists it.
+const CASE_KEY_G = require("../lib/_checkpoint.js").generateKey("arcaeon.io/case-test-gaps/2026-10-12");
+const LOG_KEY_G = require("../lib/_checkpoint.js").generateKey("arcaeon.io/log-test-gaps/2026-10-12");
+const RECEIPT_ENV = Object.freeze({ WITNESS_RECONCILE_SIGNER_KEY: RECEIPT_KEY.signer, WITNESS_CASE_SIGNER_KEY: CASE_KEY_G.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY_G.signer });
 // The document the deployment carries (Design I): the reconcile key as a
 // reconcile entry, and no case key, so the seal is unsigned.
-const RECEIPT_DOC = Object.freeze({ ...require("../lib/_case_seal.js").PUBLISHED_KEYS, keys: [KD.reconcileEntry(RECEIPT_KEY)] });
+const RECEIPT_DOC = Object.freeze({ ...require("../lib/_case_seal.js").PUBLISHED_KEYS, keys: [KD.entry(CASE_KEY_G), KD.reconcileEntry(RECEIPT_KEY)] });
 async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
   const res = makeRes();
   const body = {

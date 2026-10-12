@@ -1,5 +1,18 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: One signature rule: verifyCase is deleted, an unsigned seal never verifies, and the reveal seals only signed (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The two flagged items.** `verifyCase` checked a case under a verifier its caller chose and passed an unsigned receipt; THE SEALED CHECK (`sealedRecordReason`) is the check every reader runs. A seal with `sig: null` read `valid_under_document`.
+- **verifyCase is deleted** (`lib/_case_seal.js`). It had no caller outside the tests. The tests that used it now run the sealed check under the document the case names, or `signatureReason` for a bare signature question.
+- **An unsigned seal never verifies.** `sealedRecordReason` reads a VERDICT with `sig: null` as `case_signature_invalid`, reason `unsigned_seal`, under any document, before the named document is fetched. So the sealer pins nothing for it, a reference to it is refused, and the case page shows no verdict.
+- **The reveal seals only signed** (`lib/_case_http.js`). Without a case key the document it carries lists (`loadCaseSigner`), the reveal refuses 503 `case_signer_unavailable` with the signer's code as `reason`, before the attempt is written or anything is compared, the way it refuses without a reconcile signer. **(Beyond the literal ask; see the report.)**
+- **The preview dry run** (`tools/preview_dry_run.js`) reads that 503 as BROKEN: the published case signer is not installed, so the preview seals nothing.
+- **What is unchanged.** Unsigned reference rows and unsigned withdrawal records still read valid and unsigned: the rule is about seals. `signCase` still writes `sig: null` with `sig_reason` when it has no key; nothing writes that as a seal any more.
+- **Tests.**
+  - `test/case_consent.test.js` +3: verifyCase defined, exported or called nowhere in lib/, api/ or tools/; an unsigned seal reads `case_signature_invalid` (`unsigned_seal`), the sealer pins nothing, a reference is refused and the page shows no verdict; the reveal's 503 for each missing-signer code, with nothing written.
+  - Updated by design: tests that sealed unsigned through the reveal now expect the 503, or build the unsigned record the seal module's way (`case_item2b` FIX 2 and SIGNED_BY, `case_item2c` FIX 1, FIX 2 and the page, `case_item2d`, `case_reveal` TEST 9, `preview_dry_run` (e)); fixtures that sealed without the log key now carry it so the case key can be shown apart (`case_budgets`, `case_mutation_gaps`).
+- Suite 1127 -> 1130 tests, 0 fail, 3 todo. Here: 1125 pass and the 2 environment skips.
+
 ## 2026-10-12: Design N: a withdrawal's reason, a joint reveal after it refused before its tapes are read, and a signed refusal receipt (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **(1) THE REASON** (`lib/_case.js`). The withdrawal event gains `reason` beside `by_role` and `at`.

@@ -118,8 +118,6 @@ const ENTRY = Object.freeze({ key_id: CASE_KEY_ID, verifier: CASE_KEY.verifier, 
 // and the reference a copy that lists the test key (and, since Design I, the
 // reconcile key as a reconcile entry).
 const KEYS_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [ENTRY, KD.reconcileEntry(RECEIPT_KEY)] });
-// A document without the case key (an unsigned seal), with the reconcile key.
-const NO_CASE_KEY_DOC = Object.freeze({ ...S.PUBLISHED_KEYS, keys: [KD.reconcileEntry(RECEIPT_KEY)] });
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0007" });
 const OPERATOR_KEY = "case-test-case-operator-key-0001";
 const ADMIN_KEY = "case-test-admin-key-0001";
@@ -252,8 +250,10 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
     assert.equal(bad.status === "VERDICT" && C.validateCase(bad).ok, true, `${name}: 2c would have taken it as sealed`);
   }
   // an unsigned seal whose receipt does not bind: the same state, naming no key
-  const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") }, keyDocument: NO_CASE_KEY_DOC });
-  const ug = storedCase(u.id);
+  // (built the seal module's way: since the one signature rule the reveal
+  // never seals unsigned)
+  const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") } });
+  const ug = S.signRecord({ ...storedCase(u.id), signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed");
   assert.equal(ug.sig, null, "fixture: unsigned");
   gh.seed(PINS, C.casePath(u.id), { ...ug, verdict: { ...ug.verdict, compared_at: "2026-10-10T09:00:01Z" } });
   const up = await casePage(u.id);
@@ -418,8 +418,10 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   // the bearer just sent, so 2c would have appended this row as the operator
   assert.equal(process.env.WITNESS_ADMIN_KEY, ADMIN_KEY);
   process.env[H.OPERATOR_KEY_ENV] = OPERATOR_KEY;
-  // (a document without the case key: an unsigned seal, which the dispatch takes)
-  const un = await sealedCase({ over: { scope_digest: sha("fix 3 dispatch") }, keyDocument: NO_CASE_KEY_DOC });
+  // a signed seal, held to the document it names (the dispatch carries the
+  // committed document as the current one; since the one signature rule an
+  // unsigned seal would not verify)
+  const un = await sealedCase({ over: { scope_digest: sha("fix 3 dispatch") } });
   const res = makeRes();
   await verifyHandler(req("case-reference", { case_id: un.id, cross_reference: XREF }, { authorization: `Bearer ${OPERATOR_KEY}` }), res);
   assert.equal(res._status, 201, JSON.stringify(parsed(res)));
