@@ -717,10 +717,10 @@ async function checkSealerPass(ctx) {
     if (st.pin === "could_not_look") {
       return couldNotLook(`${summary}; the pin of case ${ctx.sealed.caseId} could not be read (${st.reason})`);
     }
-    if (st.pin === "pending" && waiting) {
+    if (st.pin === "commit_unrecorded" && waiting) {
       return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not pinned yet (${waiting.reason || "store unreachable"})`);
     }
-    if (st.pin === "pending" && !rep.newly_pinned.includes(ctx.sealed.caseId) && rep.deferred > 0) {
+    if (st.pin === "commit_unrecorded" && !rep.newly_pinned.includes(ctx.sealed.caseId) && rep.deferred > 0) {
       return couldNotLook(`${summary}; case ${ctx.sealed.caseId} is not pinned yet and fell outside this run's window`);
     }
     return broken(`${summary}; case ${ctx.sealed.caseId} reads pin ${st.pin}${st.reason ? ` (${st.reason})` : ""}, not pinned under the reveal's chain`);

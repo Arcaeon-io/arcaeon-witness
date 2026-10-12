@@ -201,7 +201,7 @@ async function sealedCase({ over, env = SIGNED, pinFails = false, keyDocument = 
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
   const r = await reveal(revealBody(c.id, c.a, c.b, extra), { env, keyDocument });
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
+  assert.equal(r.body.pin, pinFails ? "commit_unrecorded" : "pinned");
   return { ...c, r };
 }
 function storedCase(id) {
@@ -1035,7 +1035,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(String(ru._body), /unsigned: This case is sealed and not signed \(key_unpublished\)/);
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
-  assert.match((await casePage(p.id)).html, /sealed, not pinned yet/);
+  assert.match((await casePage(p.id)).html, /commit_unrecorded: the second of this case&#39;s two writes/);
   // ALTERED: the word and the first divergence; and a reference row makes it two records, with the cross-reference shown
   const alt = await committedWith({ scope_digest: sha("page altered") }, ALT_AGENT, ALT_TOOL);
   assert.equal((await reveal(revealBody(alt.id, alt.a, alt.b))).status, 201);

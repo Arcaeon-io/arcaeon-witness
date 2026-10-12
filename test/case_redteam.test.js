@@ -29,6 +29,10 @@
 //     only when the service's reconcile signer signed it (receipt_unsigned
 //     otherwise, and the page does not verify the record), and with no
 //     reconcile signer nothing is compared (503 signer_unavailable).
+//   - GPT-5.6 §3.2, no commit bound to a sealed case: Design J, THE PIN IS
+//     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
+//     commit that wrote the sealed case file, and every reader reads the
+//     case file at it (pin_commit_mismatch when it is another case).
 //   - GPT-5.6 §3.4, anchored meaning only that latest.json exists: Design J,
 //     THE ANCHOR WORDS (lib/_case_seal.js). A reader says pinned (the pin
 //     holds the case's chain at the commit that wrote it, named), anchored
@@ -218,7 +222,7 @@ async function sealedCase(over, { pinFails = false } = {}) {
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
   const r = await reveal(revealBody(c.id, c.a, c.b));
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
+  assert.equal(r.body.pin, pinFails ? "commit_unrecorded" : "pinned");
   return c;
 }
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
@@ -303,7 +307,7 @@ test('GPT-5.6 §1.1: "It also creates a public registration dated after a redact
 test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"',
   { todo: "CONFIRMED: a role's reference to a sealed case whose pin is pending is 201 (the assertion 'a reference row is appended only once the case is anchored' fails)" }, async () => {
     const { id, a } = await sealedCase({ scope_digest: sha("1.2") }, { pinFails: true });
-    assert.equal((await S.anchorState(id, S.caseChain(storedCase(id)))).pin, "pending", "fixture: not anchored");
+    assert.equal((await S.anchorState(id, S.caseChain(storedCase(id)))).pin, "commit_unrecorded", "fixture: not pinned");
     const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
     assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
     assert.deepEqual(referenceFiles(id), []);
@@ -789,14 +793,15 @@ test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the c
   }
 });
 
-test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind them [the service-clock fields] to a Git commit ID"',
-  { todo: "CONFIRMED: the commit that wrote the sealed case appears neither in the case nor in its pin (the assertion 'the sealed case or its pin names the commit that wrote it' fails)" }, async () => {
-    const { id } = await sealedCase({ scope_digest: sha("3.2") });
-    const commits = gh.commitsFor(PINS, C.casePath(id)).map((c) => c.sha);
-    assert.ok(commits.length >= 2, "fixture: the case file's commits (open, registrations, seal)");
-    const text = JSON.stringify(storedCase(id)) + JSON.stringify(gh.read(PINS, S.pinPaths(id).latest));
-    assert.ok(commits.some((c) => text.includes(c)), "the sealed case or its pin names the commit that wrote it");
-  });
+test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind them [the service-clock fields] to a Git commit ID"', async () => {
+  const { id } = await sealedCase({ scope_digest: sha("3.2") });
+  const commits = gh.commitsFor(PINS, C.casePath(id)).map((c) => c.sha);
+  assert.ok(commits.length >= 2, "fixture: the case file's commits (open, registrations, seal)");
+  const text = JSON.stringify(storedCase(id)) + JSON.stringify(gh.read(PINS, S.pinPaths(id).latest));
+  assert.ok(commits.some((c) => text.includes(c)), "the sealed case or its pin names the commit that wrote it");
+  // Design J: the pin names the commit that wrote the SEALED file, the newest touching it
+  assert.equal(gh.read(PINS, S.pinPaths(id).latest).case_commit, commits[0]);
+});
 
 test('GPT-5.6 §3.4 / §5: "pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion in any daily anchor"', async () => {
   const { id } = await sealedCase({ scope_digest: sha("3.4") });

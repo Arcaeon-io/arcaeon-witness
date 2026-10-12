@@ -203,7 +203,7 @@ async function sealedCase({ over, env = SIGNED, pinFails = false } = {}) {
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(c.id).seq, 1, 502);
   const r = await reveal(revealBody(c.id, c.a, c.b), { env });
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
+  assert.equal(r.body.pin, pinFails ? "commit_unrecorded" : "pinned");
   return { ...c, r };
 }
 function storedCase(id) {
@@ -527,7 +527,7 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
   const { id } = await sealedCase();
   const { ns, seq, latest } = S.pinPaths(id);
   const rec = gh.read(PINS, latest);
-  assert.deepEqual(Object.keys(rec).sort(), [...verdict.CASE_SEAL_FIELDS].sort());
+  assert.deepEqual(Object.keys(rec).sort(), [...verdict.CASE_SEAL_FIELDS, "case_commit"].sort(), "Design J: every pin since names the commit that wrote the case file");
   assert.deepEqual(gh.read(PINS, seq), rec);
   const ok = verdict.judgeCaseSeal(asRead(rec), { what: latest, namespace: ns });
   assert.equal(ok.ok, true, JSON.stringify(ok));
@@ -684,7 +684,7 @@ test("SEALER: a sealer run with one pending case pins it once; a second run pins
   const chain = r.body.chain;
   assert.equal(chain, S.caseChain(sealed));
   // MUST-FAIL ARM: without a trigger the case stays pending (2a)
-  assert.deepEqual(await S.anchorState(id, chain), { pin: "pending" });
+  assert.deepEqual(await S.anchorState(id, chain), { pin: "commit_unrecorded", reason: "not_pinned" });
 
   const writes = gh.putLog.length;
   const run1 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });

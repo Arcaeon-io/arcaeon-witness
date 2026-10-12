@@ -724,14 +724,14 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   gh.forceFailure(PINS, paths.seq, 1, 502);
   const r = await reveal(revealBody(id, a, b));
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, "pending");
+  assert.equal(r.body.pin, "commit_unrecorded");
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT", "the case file stands");
   assert.deepEqual(C.validateCase(k), { ok: true });
   assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, ...C.OPTIONAL_TOP_LEVEL_FIELDS].sort(), "no anchor or pin field in the case");
   assert.equal(gh.has(PINS, paths.seq), false);
   assert.equal(gh.has(PINS, paths.latest), false);
-  assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "pending" }, "computed from the pin's absence");
+  assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "commit_unrecorded", reason: "not_pinned" }, "computed from the pin's absence");
   // MUST-FAIL ARM: storing the state in the case is refused by the schema
   assert.equal(C.validateCase({ ...k, anchor: "pending" }).code, "unknown_field");
   assert.equal(C.validateCase({ ...k, pin: "pending" }).code, "unknown_field");
@@ -759,7 +759,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   const paths = S.pinPaths(id);
   gh.forceFailure(PINS, paths.seq, 1, 502);
   const r = await reveal(revealBody(id, a, b), { now: REVEAL_AT });
-  assert.equal(r.body.pin, "pending");
+  assert.equal(r.body.pin, "commit_unrecorded");
   const chain = r.body.chain;
   const k = storedCase(id);
   assert.equal(chain, sha(checkRecord.preimage(k)), "chain = sha256(json-c14n(case minus sig))");
@@ -793,7 +793,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   const p2 = S.pinPaths(c2.id);
   gh.forceFailure(PINS, p2.latest, 1, 502);
   const r2 = await reveal(revealBody(c2.id, c2.a, c2.b));
-  assert.equal(r2.body.pin, "pending");
+  assert.equal(r2.body.pin, "commit_unrecorded");
   const orphan = gh.read(PINS, p2.seq);
   assert.equal(orphan.chain, r2.body.chain);
   const retry2 = await S.anchorCase(c2.id, { now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
@@ -808,7 +808,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   const p3 = S.pinPaths(c3.id);
   gh.forceFailure(PINS, p3.seq, 1, 502);
   const r3 = await reveal(revealBody(c3.id, c3.a, c3.b));
-  assert.equal(r3.body.pin, "pending");
+  assert.equal(r3.body.pin, "commit_unrecorded");
   // Item 2b: the squatter is a well-formed case_seal record (lib/_verdict.js
   // judgeCaseSeal) holding another chain, so it reads as a conflict; one
   // missing the type's auth fields reads as unreadable. Neither is written over.

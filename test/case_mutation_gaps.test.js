@@ -432,7 +432,7 @@ async function sealedCase({ pinFails = false } = {}) {
   if (pinFails) gh.forceFailure(PINS, S.pinPaths(ID).seq, 1, 502);
   const r = await reveal(p);
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.pin, pinFails ? "pending" : "pinned");
+  assert.equal(r.body.pin, pinFails ? "commit_unrecorded" : "pinned");
   return p;
 }
 async function page(id = ID, keyDocument = S.PUBLISHED_KEYS) {

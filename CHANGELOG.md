@@ -1,5 +1,35 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design J, step 2: the pin records the commit that wrote the sealed case, and every reader checks the case file at it (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- **The defect (GPT-5.6 §3.2).** The commit that wrote a sealed case appeared neither in the case nor in its pin.
+- **THE PIN IS THE SECOND PHASE** (`lib/_case_seal.js` TWO WRITES). The pin records `case_commit`, the commit the pins repository assigned to the write of the sealed case file. The case file cannot name the commit that writes it; the pin, written after it and already read by the page, does.
+  - **The reveal** takes the commit from the case write's own answer (GitHub's `{commit: {sha}}`) and carries it as `case_commit`. With none, it writes no pin.
+  - **The pin judge** (`lib/_verdict.js` `judgeCaseSeal`) accepts `case_commit`, 40 lowercase hex, and refuses anything else by name. It is absent only from a pin written before.
+- **commit_unrecorded.** A write whose second phase has not completed reads `commit_unrecorded`, a could-not-look class answer like `document_unrecorded`: never pinned, never anchored. That covers no pin (`not_pinned`), and a pin from before that names no commit (`no_case_commit`).
+  - The reveal answers `pin: "commit_unrecorded"` where it said `pending`.
+  - The page says so in words.
+- **The retry** (`anchorCase`, `caseCommitOf`). The sealer's next run:
+  - reads the commit back (the newest commit touching the case file);
+  - reads the case file AT that commit from the public pins repository;
+  - pins only when that file's chain is the chain it pins. Otherwise it is `pin_commit_mismatch` (refused, nothing written), and a read that fails is `could_not_look`.
+- **Nothing is backfilled.** The case file is never written again, and the run's report names each commit it recorded (`commits_recorded: [{case_id, pin_seq, case_commit}]`).
+- A pin from before that names no commit is reported `pending` (`no_case_commit`); step 3's next pin records it.
+- **The verifier never trusts case_commit as an id.** `anchorState`, and `anchorCase` for a pin it finds, read the case file at the commit the pin names and require its chain to be the pin's.
+  - Another case there is `pin_commit_mismatch`: never pinned, never anchored, whatever a daily anchor record says.
+  - A file it could not read there is `could_not_look`.
+- **The page.** The anchor row says `commit_unrecorded` or `pin_commit_mismatch` (naming the commit, linked). A new "case commit" row names the commit, linked, for a pinned or anchored case.
+- **Tests.**
+  - `test/case_commits.test.js` +5:
+    - the two writes;
+    - the verifier (a commit holding another case, a commit not served, a read that fails);
+    - commit_unrecorded (no pin, a pin with no case commit, with a daily anchor record present);
+    - **the crash between the phases**: the pin write fails, and separately the case write's answer is lost. The page says commit_unrecorded, the case file is untouched, and the next run records the commit, read back and checked;
+    - **the swapped file**: the file is swapped while the sealer reads its commit back, so the retry pins nothing and reports pin_commit_mismatch. A pin that names the swapped file's commit is pin_commit_mismatch to every reader, with a daily anchor record present.
+  - The §3.2 red-team test loses its todo and keeps its named assertion. The §1.2 todo's fixture line now reads `commit_unrecorded`, so it still fails at its own named assertion.
+  - `test/helpers/mock_store.js`: `dropCommitFromAnswer`.
+- Suite 1084 -> 1089 tests, 0 fail, 8 -> 7 todo. Here: 1080 pass and the 2 environment skips.
+
 ## 2026-10-12: Design J, step 1: pinned, anchored or could_not_look; anchored only with a daily anchor record and its commit (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The defect (GPT-5.6 §3.4 / §5).** `anchorState` answered "anchored" after reading `pins/case/<id>/latest.json` and nothing else, so "anchored" meant only "a pin file exists".

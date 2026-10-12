@@ -458,7 +458,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   });
   const healed = await dryRun(t, { pinToken: PIN_TOKEN });
   assert.equal(failed, 1);
-  assert.match(healed.by.e.line, /pin pending/);
+  assert.match(healed.by.e.line, /pin commit_unrecorded/);
   assert.equal(word(healed, "f"), "VERIFIED", healed.show);
   assert.match(healed.by.f.line, /pinned 1, already 0[^;]*; case [0-9a-f]{64} is pinned at commit [0-9a-f]{40}, chain [0-9a-f]{64} \(pinned by this pass\); not anchored yet$/);
 

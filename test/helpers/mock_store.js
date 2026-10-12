@@ -102,6 +102,7 @@ class MockGitHubStore {
     this._forced = new Map(); // "repo::path" -> remaining forced-conflict count
     this._forcedFailure = new Map(); // "repo::path" -> {remaining, status}
     this._forcedGetFailure = new Map(); // "repo::path" -> {remaining, status}
+    this._droppedCommit = new Map(); // "repo::path" -> remaining PUT answers with no commit
     // GET /repos/<repo>/git/trees/<branch>?recursive=1 -> {tree:[{path,type}], truncated}
     // Added 2026-09-20 for tools/reconcile_batches.js: the reconciler walks the
     // whole repo through store.getTreeMeta, and `truncated` is the field that
@@ -232,6 +233,12 @@ class MockGitHubStore {
   // refund — this fixture is what makes that regression reproducible).
   forceFailure(repo, path, n = 1, status = 500) {
     this._forcedFailure.set(`${repo}::${path}`, { remaining: n, status });
+  }
+
+  // The next `n` successful PUTs to `path` answer with no `commit` (the write
+  // lands; its answer is lost, as when a process dies right after it).
+  dropCommitFromAnswer(repo, path, n = 1) {
+    this._droppedCommit.set(`${repo}::${path}`, n);
   }
 
   // Force the next `n` contents-API GETs of `path` to fail with `status`
@@ -379,6 +386,11 @@ class MockGitHubStore {
       this.commitCounter += 1;
       this.putLog.push({ repo, path, sha: newSha });
       const commitSha = this._recordCommit(repo, path, body.message, decoded);
+      const dropped = this._droppedCommit.get(forceKey);
+      if (dropped && dropped > 0) {
+        this._droppedCommit.set(forceKey, dropped - 1);
+        return fakeResponse(200, { content: { sha: newSha, path } });
+      }
       return fakeResponse(200, {
         content: { sha: newSha, path },
         commit: { sha: commitSha },
