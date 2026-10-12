@@ -1,5 +1,35 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-12: Design I, the must-fail pass: 84 planted defects, 83 caught, 1 equivalent (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
+
+- 84 defects planted one at a time in the code Design I added or changed, with the whole suite run against each. The harness is not committed.
+
+  | file | planted | caught by steps 1-5 | closed by these tests | equivalent |
+  |---|---|---|---|---|
+  | `lib/_case.js` | 9 | 8 | K06 | |
+  | `lib/_reconcile_http.js` | 2 | 2 | | |
+  | `lib/_case_http.js` | 9 | 7 | H09 | H08 |
+  | `lib/_case_seal.js` | 42 | 38 | S21, S24, S32, S44 | |
+  | `lib/_case_page.js` | 15 | 13 | P03, P13 | |
+  | `lib/_sealer.js` | 1 | 0 | L01 | |
+  | `tools/preview_dry_run.js` | 6 | 4 | T06, T07 | |
+  | total | 84 | 72 | 11 | 1 |
+
+  `lib/_reconcile_receipt.js` changed only in comments, so nothing was planted there.
+- **The 11 survivors are caught now.** Rerun against the new tests, each fails exactly the test written for it.
+  - **K06**: a `signed_under` missing a field is `missing_field`.
+  - **H09**: the reference's 409 `document_unavailable` says the document could not be read, and that this is not a no.
+  - **S21, S24**: a key counts only in its own role in the named document.
+  - **S32**: a reader commit that is not 40 hex is not named as the revoking commit; the page says it is not known.
+  - **S44**: `checkStoredReceipt` with no verifier given refuses every signed receipt, even where the environment names one.
+  - **P03**: the page names the commit that wrote the numbered pin record, the oldest touching it.
+  - **P13**: a case not pinned yet reads no pin-commit history.
+  - **L01**: `anchorCases` reads the document it is handed; an unreadable one is `could_not_look`, not a pin.
+  - **T06, T07**: the dry run's (f) is COULD NOT LOOK when the pass could not read the document this run's case names, and its summary counts it.
+- **H08 is equivalent.** `?op=case-reference` not passing its own commit to the sealed check changes nothing it does: it reads only an answer's code and reason. `current_commit` appears only in `signer_since_revoked`, which the reference accepts without reading further.
+- **Tests.** `test/case_signed_under.test.js` +8, `test/preview_dry_run.test.js` +1.
+- Suite 1050 -> 1059 tests, 0 fail, 11 todo. Here: 1046 pass and the 2 environment skips.
+
 ## 2026-10-12: Design I, step 5: a seal that names no key document is document_unrecorded, never valid (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - A stored VERDICT with no `signed_under` (a seal from before Design I) reads as `document_unrecorded` (reason `no_signed_under`), signed or not, under any current document, readable or not. It is never `valid_under_document`, and no document is fetched for it.

@@ -648,3 +648,95 @@ test("DOCUMENT UNRECORDED, THE READERS: the page shows the record as not verifyi
   assert.equal(ref.body.error_code, "document_unrecorded");
   assert.match(ref.body.error, /it names no key document it was signed under/);
 });
+
+// =============================================================================
+// THE MUST-FAIL PASS OVER DESIGN I (harness not committed): the gaps it found
+// =============================================================================
+// 84 defects planted, one at a time, in the code Design I added or changed:
+// lib/_case.js (9), lib/_reconcile_http.js (2), lib/_case_http.js (9),
+// lib/_case_seal.js (42), lib/_case_page.js (15), lib/_sealer.js (1) and
+// tools/preview_dry_run.js (6). 72 were caught by the suite with Design I's
+// own tests. Of the 12 that survived, 11 are closed by the tests below (two
+// of them, T06 and T07, in test/preview_dry_run.test.js) and one is
+// equivalent:
+//   - H08, lib/_case_http.js ?op=case-reference not passing its own commit
+//     to the sealed check: the reference reads only an answer's code and
+//     reason, and current_commit appears only in signer_since_revoked,
+//     which it accepts without reading further.
+
+const sealer = require("../lib/_sealer.js");
+
+test("K06 (checkSignedUnder): a signed_under missing a field is missing_field, named", async () => {
+  const { k } = await sealedCase("K06");
+  for (const f of C.SIGNED_UNDER_FIELDS) {
+    const { [f]: _gone, ...rest } = k.signed_under; // eslint-disable-line no-unused-vars
+    const v = C.validateCase({ ...k, signed_under: rest });
+    assert.deepEqual([v.code, v.field], ["missing_field", `signed_under.${f}`], f);
+  }
+});
+
+test("H09 (reference, the words for document_unavailable): the refusal says the document could not be read, and that this is not a no", async () => {
+  const { id, a, k } = await sealedCase("H09");
+  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@${k.signed_under.document_commit}:${S.CASE_KEYS_FILE}`);
+  const ref = await referenceAs(id, a);
+  assert.equal(ref.status, 409);
+  assert.match(ref.body.error, /the key document it names could not be read on this request, which is not a no/);
+});
+
+test("S21, S24 (the sealed check, each key in its role): a receipt key the named document lists only as a case key, or a case key it lists only as a reconcile key, does not count", async () => {
+  const receiptAsCase = await handSealed("S21", { named: KD.docWith(KD.entry(CASE_KEY), KD.entry(RECEIPT_KEY)) });
+  assert.deepEqual(await S.sealedRecordReason(receiptAsCase.k, DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
+  const caseAsReconcile = await handSealed("S24", { named: KD.docWith(KD.reconcileEntry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)) });
+  assert.deepEqual(await S.sealedRecordReason(caseAsReconcile.k, DOC), { code: "case_signature_invalid", reason: "signer_unpublished" });
+});
+
+test("S32 (the reader's own commit): a value that is not a 40-hex commit is not named as the revoking commit; the page says it is not known", async () => {
+  const { id, k } = await sealedCase("S32");
+  const revoked = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY));
+  for (const bad of ["not-a-commit", "C".repeat(40), "c".repeat(39)]) {
+    assert.equal((await S.sealedRecordReason(k, revoked, { currentCommit: bad })).current_commit, null, bad);
+  }
+  const p = await pageOf(id, { keyDocument: revoked, env: { [S.DEPLOY_COMMIT_ENV]: "<script>" } });
+  assert.ok(p.html.includes("the key document this deployment carries (its commit is not known here)"));
+  assert.ok(!p.html.includes("<script>"));
+});
+
+test("S44 (checkStoredReceipt): with no verifier given it refuses every signed receipt, even where the environment names one", async () => {
+  const { k } = await sealedCase("S44");
+  process.env[receipts.VERIFIER_ENV] = RECEIPT_KEY.verifier;
+  process.env[receipts.SIGNER_ENV] = RECEIPT_KEY.signer;
+  try {
+    assert.equal(S.checkStoredReceipt(k), "receipt_unsigned");
+    assert.equal(S.checkStoredReceipt(k, { receiptVerifier: RECEIPT_KEY.verifier }), null, "control: given, it holds");
+  } finally {
+    delete process.env[receipts.VERIFIER_ENV];
+    delete process.env[receipts.SIGNER_ENV];
+  }
+});
+
+test("P03 (pinCommitOf): the page names the commit that WROTE the numbered pin record, the oldest touching it, not a later one", async () => {
+  const { id } = await sealedCase("P03");
+  const seq = S.pinPaths(id).seq;
+  const wrote = gh.commitsFor(PINS, seq)[0];
+  const later = gh.addCommit(PINS, seq, "mock: a later commit touching the pin record");
+  assert.deepEqual(gh.commitsFor(PINS, seq).map((c) => c.sha), [later, wrote.sha], "fixture: newest first");
+  const p = await pageOf(id);
+  assert.ok(p.html.includes(`/commit/${wrote.sha}"`), "the commit that wrote it");
+  assert.ok(!p.html.includes(`/commit/${later}"`));
+});
+
+test("P13 (the page's reads): a case not pinned yet reads no pin commit history", async () => {
+  const { id } = await sealedCase("P13", { pinFails: true });
+  const before = gh.commitsLog.length;
+  const p = await pageOf(id);
+  assert.ok(p.html.includes("not pinned yet"));
+  assert.deepEqual(gh.commitsLog.slice(before), [], "no commits listing");
+});
+
+test("L01 (lib/_sealer.js anchorCases): the current document it is handed is the one the pass reads; an unreadable one is could_not_look, not a pin", async () => {
+  const { id } = await sealedCase("L01", { pinFails: true });
+  const run = await sealer.anchorCases({ now: new Date(REVEAL_AT + 60000), keyDocument: { ...DOC, extra: true } });
+  assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "current_document_unreadable" }]);
+  assert.deepEqual(run.anchored, []);
+  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
+});

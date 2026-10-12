@@ -520,6 +520,21 @@ test("(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to th
   assert.match(unread.by.e.line, /the key document it names \(commit [0-9a-f]{40}\) could not be read from the public repository \(http_404\)/);
 });
 
+test("T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it", async (t) => {
+  // The pass reports this run's case as could_not_look (its named document
+  // did not read), and nothing anchored.
+  const real = S.anchorPending;
+  t.mock.method(S, "anchorPending", async (o) => {
+    const rep = await real(o);
+    const ids = [...rep.anchored, ...rep.already];
+    return { ...rep, anchored: [], already: [], could_not_look: ids.map((case_id) => ({ case_id, reason: "http_404" })) };
+  });
+  const r = await dryRun(t, { pinToken: PIN_TOKEN });
+  assert.equal(word(r, "e"), "VERIFIED", r.show);
+  assert.equal(word(r, "f"), "COULD NOT LOOK", r.show);
+  assert.match(r.by.f.line, /, could not look 1; the key document case [0-9a-f]{64} names could not be read \(http_404\), so the pass did not pin it$/);
+});
+
 test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own chain; an anchor read under another chain is BROKEN", async (t) => {
   const real = S.anchorState;
   S.anchorState = async () => ({ pin: "anchored", record: { chain: "0".repeat(64) } });
