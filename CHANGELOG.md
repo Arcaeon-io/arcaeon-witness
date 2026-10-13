@@ -1,5 +1,56 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-J2: the row sentence claims no future pin, conflicts and mismatches worded by reason, a commit not shown yet is could_not_look, and the page cache keeps only definite pages (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **B2, the blocker: the signed row sentence, version 3** (an architect decision; `lib/_case.js`, `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js`, README).
+  - `REFERENCE_ANCHOR_NOTE` is "This row has no pin of its own. It is recorded by the pins-repository commit that writes it. A later pin of the case may list that commit. This row is anchored only if a pin that lists it is, and no anchoring is asserted here."
+  - `note_version` is 3. Version 2 was never issued, and the code comment, the README (a new section, "A reference row's sentence") and this change log say so.
+  - A row with `note_version` 2 is `row_note_v2`; a row with none is `row_note_v1`, reported by what it lacks. Neither is counted.
+  - The 201 body's `row_commit_note` no longer states a future pin.
+  - The page says a row is "recorded by commit X" and "listed by pin N" only where it read that pin, shows each row's anchor state as "not computed", and never calls a row anchored. A row no pin lists says no pin read lists it.
+  - Rows are not refused for a case whose pin chain cannot advance, and the pin walk is untouched.
+- **B1, the blocker: a conflict is worded by its reason** (`conflictWords`). On the page and in the reference's 409 `anchor_conflict`, "holds another chain" is said only for `pointer_holds_another_chain`, `pin_at_its_commit_holds_another_chain` and `anchored_head_holds_another_chain`:
+  - `anchored_head_off_branch` says the daily anchor record names a head that is not on the published branch;
+  - `anchored_head_not_json` and `pin_at_its_commit_not_json` say the record there could not be read as a pin.
+- **M1.** A commit the host does not show on the branch yet (`commitOnBranch` answering not_found) is `could_not_look`: `case_commit_not_shown` and `reference_commit_not_shown`, and `anchor_head_not_shown` for a head. A definite off-branch answer stays a mismatch or a conflict.
+- **M2, the page cache.**
+  - A page is kept only when every state on it was read with a definite answer: no `could_not_look` and no `pin_commit_mismatch` anywhere. A page that does not verify is never kept.
+  - An unsealed case's entry ends at its deadline.
+  - Every view reads the case root first, and is answered from the cache only for the same root blob.
+  - Every case page prints "read at <UTC time>", and "on this request" is now "when this page was read".
+- **Minors.**
+  - **n1.** The row link names the row's commit once the row reads recorded.
+  - **n2.** The sealer's row read-back uses `servedAtCommit`, so its reason is `reference_at_commit_differs`.
+  - **n3.** The general anchor sentence is printed only beside a case that reads pinned or anchored; otherwise the page says what it read.
+  - **n4.** `tools/preview_dry_run.js` says the anchor's proof is not checked by it.
+  - **n5.** Given a chain the case served does not have, `anchorState` answers `case_served_differs` before any read at the commit.
+  - **n6, n7.** The mismatch sentences say "in canonical form (json-c14n:v1)" and are worded by reason. An off-branch commit, or one the repository does not have, is not called "that commit of the pins repository's branch".
+  - **n8.** This entry, and the corrected J1, J5 and J6 lines in the R-J entry below.
+- **Tests.**
+  - New: `test/case_rj2.test.js`, 12 tests, each failing before the change.
+  - Updated by design:
+    - the page phrases in `test/case_commits.test.js`, `case_item2c`, `case_item2d`, `case_mutation_gaps`, `case_signed_under` and `case_trust_root`;
+    - the J1 tests and the cache read counts in `test/case_rj.test.js`;
+    - the sealer's row read-back reason.
+- **The must-fail pass, and the gap-test commit** (74644f9).
+  - 56 defects were planted, one at a time, over every line R-J2 changed, with the whole suite run against each. The unit's own tests caught 43.
+  - The 13 that survived:
+    - S04: the sealer's row read failure read as a mismatch;
+    - S07: n5's mismatch without its commit;
+    - S12: the default conflict words;
+    - P16: the anchor sentence beside an anchored case;
+    - P18, P19, P21, P22, P23, P30: the cache keeping a page with a pin, rows or a row not read definitely, or one that does not verify;
+    - P25: a sealed page held to the deadline;
+    - P31: a single-party page past its deadline;
+    - P32: a withdrawn page never kept.
+  - Seven gap tests in `test/case_rj2.test.js` catch all 13. None is left as equivalent.
+  - They also found a defect in the cache: a withdrawn or expired page has no deadline cap, `Math.min` with `undefined` gave NaN, and those pages were never kept. A missing cap now means none.
+  - That fix and the `mismatchWords` export are two more defects planted (X01, X02), both caught.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - b1b58cf (R-J2): 1328 tests, 1324 pass, 2 skipped, 0 fail, 2 todo.
+  - 74644f9 (gap tests): 1335 tests, 1331 pass, 2 skipped, 0 fail, 2 todo. A bare `node --test`: 1342 and 1338.
+  - The change log commit changes no test, and the final tip prints what 74644f9 prints.
+
 ## 2026-10-13: Unit R-J: the row sentence, what "anchored" claims, a wrong commit is a mismatch, and the case checked by bytes; and seven follow-ups to R-N4 (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The follow-ups to R-N4** (17c7cf9, the unit's first commit).
@@ -14,10 +65,10 @@
     - `?op=reconcile` compares the tape;
     - the other role's request does not repair the listing;
     - the withdrawer's retry writes it, and the tape is then refused.
-- **J1, the blocker: the row's sentence, version 2** (`lib/_case.js`, `lib/_case_seal.js`).
-  - `REFERENCE_ANCHOR_NOTE` is "This row has no pin of its own. It is recorded by the pins-repository commit that writes it and listed by the case's next pin; it is anchored only when that pin is."
-  - Rows carry `note_version: 2`. The judge accepts only version 2; a row without `note_version` is `row_note_v1`.
-  - The 201 body's `anchor_note` and `row_commit_note` agree.
+- **J1, the blocker: the row's sentence, version 2** (`lib/_case.js`, `lib/_case_seal.js`). (Corrected in unit R-J2, B2: version 2 was never issued. It stated a future event, "listed by the case's next pin", as fact, and R-J2 replaced it with version 3 before any row was written under it.)
+  - `REFERENCE_ANCHOR_NOTE` was "This row has no pin of its own. It is recorded by the pins-repository commit that writes it and listed by the case's next pin; it is anchored only when that pin is."
+  - Rows carried `note_version: 2`. The judge accepted only version 2; a row without `note_version` was `row_note_v1`.
+  - The 201 body's `anchor_note` and `row_commit_note` agreed with each other, and both stated the next pin as fact.
 - **J2.** "anchored" claims what is checked. The anchor state carries `proof: "unchecked"`. The page says "a daily anchor record in this repository names a head that holds this pin; this page does not check the OpenTimestamps proof." `ANCHOR_NOTE`, the seal module's header and the README say the same.
 - **J3, J4, J6: one standard for the case and its rows** (`servedAtCommit`).
   - The record served must be the file at the commit a pin names, byte for byte in json-c14n:v1, signature included (`sameRecord`), on the pins repository's branch (`commitOnBranch`).
@@ -29,8 +80,8 @@
   - Only a read that failed is `could_not_look`.
   - `anchorState` takes the case served; given a chain, it reads the case from the branch and serves it only when it has that chain.
   - The page's "the case file" link names `case_commit` once the case reads pinned or anchored.
-  - An anchor head off the branch is an anchor conflict.
-- **J5.** Non-JSON at a pin's oldest commit, or at the head a daily anchor record names, is `conflict`. A reference refuses every anchor conflict as 409 `anchor_conflict`.
+  - An anchor head off the branch is an anchor conflict. (Corrected in unit R-J2, M1: a commit the host does not show on the branch yet is `could_not_look`, never a mismatch or a conflict.)
+- **J5.** Non-JSON at a pin's oldest commit, or at the head a daily anchor record names, is `conflict`. A reference refuses every anchor conflict as 409 `anchor_conflict`. (Corrected in unit R-J2, B1: until then the page and the 409 said every conflict "holds another chain"; since then each is worded by its reason.)
 - **J7.** A 200 case page is kept per case for sixty seconds per instance, by the page's clock and for the same key document; at most 500 cases. The per-IP limiter runs first.
 - **J8.** `case_not_anchored` is `case_not_pinned`.
 - **Tests.**
