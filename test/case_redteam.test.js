@@ -320,7 +320,7 @@ async function commitAcrossWithdrawal() {
 
 test('GPT-5.6 §1.1 / §6.2: "A commitment can land after withdrawal ... project() then rereads, sees WITHDRAWN, and returns case_withdrawn, but the registration file remains written"', async () => {
   const { id } = await commitAcrossWithdrawal();
-  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "no registration file is written after the case was withdrawn");
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "b")), false, "no registration file is written after the case was withdrawn");
 });
 
 test('GPT-5.6 §1.1: "It also creates a public registration dated after a redacted withdrawal": the commit\'s arrival, the registered_at it would have recorded, is before withdrawal.at, and since FIX C no registration is created at all', async () => {
@@ -329,7 +329,7 @@ test('GPT-5.6 §1.1: "It also creates a public registration dated after a redact
   assert.equal(res._body.registration_recorded, false);
   assert.ok(Date.parse(res._body.received_at) < Date.parse(w.at), `${res._body.received_at} vs ${w.at}`);
   // FIX C: no write of b's file at all, before or after the redacted root
-  assert.ok(!gh.putLog.some((x) => x.path === C.registrationPath(id, "b")), "no registration file is written");
+  assert.ok(!gh.putLog.some((x) => x.path === REG.pathOf(gh, id, "b")), "no registration file is written");
 });
 
 test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"', async () => {
@@ -455,7 +455,7 @@ test('GPT-5.6 §2A: "Create a seemingly bilateral case using an honest party\'s 
   const second = await commit(id, b, NOW, one);
   assert.equal(second._status, 409, JSON.stringify(second._body));
   assert.equal(second._body.error_code, "same_key_both_roles");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "nothing was registered for role b");
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "b")), false, "nothing was registered for role b");
   assert.equal(storedCase(id).status, "OPEN");
   const r = await reveal(revealBody(id, a, b));
   assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 200));
@@ -500,7 +500,7 @@ test("FIX A: two registrations under two distinct key ids still seal, and the pa
   assert.equal(C.singleParty(k), false);
   assert.equal((await S.sealedRecordReason(k, KEYS_DOC)).code, "valid_under_document");
   for (const r of C.ROLES) {
-    const file = gh.read(PINS, C.registrationPath(id, r));
+    const file = gh.read(PINS, REG.pathOf(gh, id, r));
     assert.equal(file.key_id, REG.keyIdOf(REG.KEYS[r]));
     assert.equal(file.verifier, REG.KEYS[r].verifier);
     assert.deepEqual(C.validateRegistrationRecord(file), { ok: true });
@@ -535,7 +535,7 @@ async function racedSingleParty(scope) {
   assert.equal(r.fired, true, "role a registered inside role b's request");
   assert.equal(r.inner._status, 201, JSON.stringify(r.inner._body));
   assert.deepEqual([r.out._status, r.out._body.error_code], [409, "same_key_both_roles"], JSON.stringify(r.out._body));
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.pathOf(gh, id, "b");
   assert.equal(gh.has(PINS, rpath), true, "role b's file stays");
   assert.equal(storedCase(id).commitments.b, null, "and is not projected");
   // the root written by hand, projecting role b's file too

@@ -574,8 +574,8 @@ function referenceFiles(id) {
 test("TEST 10: a withdrawal before the joint reveal publishes only the redacted record, signed with the case key, with no labels or commitments; the marker is written; withdrawal after the seal is refused", async () => {
   const { id, a, b } = await committedCase({ over: { scope_digest: sha("test 10") } });
   const before = storedCase(id);
-  const regA = gh.read(PINS, C.registrationPath(id, "a"));
-  const regB = gh.read(PINS, C.registrationPath(id, "b"));
+  const regA = gh.read(PINS, REG.pathOf(gh, id, "a"));
+  const regB = gh.read(PINS, REG.pathOf(gh, id, "b"));
   const w = await withdraw(proofOf(id, a));
   assert.equal(w.status, 201, JSON.stringify(w.body));
   assert.equal(w.body.ok, true);
@@ -601,8 +601,8 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   // the marker, create-only, and the registrations left in place, said in words
   assert.equal(w.body.marker, "written");
   assert.equal(gh.read(PINS, C.withdrawnMarkerPath(id)).case_id, id);
-  assert.deepEqual(gh.read(PINS, C.registrationPath(id, "a")), regA);
-  assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), regB);
+  assert.deepEqual(gh.read(PINS, REG.pathOf(gh, id, "a")), regA);
+  assert.deepEqual(gh.read(PINS, REG.pathOf(gh, id, "b")), regB);
   assert.match(w.body.registrations_note, /remain in the public record/);
   assert.match(w.body.registrations_note, /does not stand/);
   // the preimage is spent: no reveal (unit R-N, N3: a party naming its role
@@ -770,7 +770,7 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   assert.equal(r3.inner._status, 201, JSON.stringify(r3.inner._body));
   assert.equal(r3.outer.status, 201, JSON.stringify(r3.outer.body));
   assert.equal(storedCase(o).status, "WITHDRAWN");
-  assert.equal(gh.read(PINS, C.registrationPath(o, "b")).commitment_sha256, pb.commitment_sha256, "b's registration file stands");
+  assert.equal(gh.read(PINS, REG.pathOf(gh, o, "b")).commitment_sha256, pb.commitment_sha256, "b's registration file stands");
   // MUST-FAIL ARM: without the CAS (a blind write over whatever is there)
   // the loser of race (2) would have overwritten the sealed case; the
   // withdrawal's PUT in (2) was sent with the sha it read, which is what
@@ -1023,7 +1023,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
     const e = storedCase(c.id).commitments[r];
     assert.ok(pc.html.includes(`role ${r} registered at`), r);
     assert.ok(pc.html.includes(`https://github.com/${STAMPS}/commit/${e.stamp_commit}`), `${r}: the stamp commit`);
-    assert.ok(pc.html.includes(`https://github.com/${PINS}/commits/main/${C.registrationPath(c.id, r)}`), `${r}: the registration record`);
+    assert.ok(pc.html.includes(`https://github.com/${PINS}/commits/main/${REG.pathOf(gh, c.id, r)}`), `${r}: the registration record`);
   }
 
   // VERDICT, anchored, signed, with the test key listed in the key document
@@ -1089,7 +1089,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pw.html.includes(S.WITHDRAWN_REGISTRATIONS_NOTE), "registrations remain public, in words");
   // (the first limit itself says "Labels are recorded, never verified"; the
   // page's own labels sentence, beside the labels, is what must be absent)
-  for (const absent of [AGENT.label, TOOL.label, "registered at", CP.LABELS_SENTENCE, C.registrationPath(w.id, "a"), STAMPS]) {
+  for (const absent of [AGENT.label, TOOL.label, "registered at", CP.LABELS_SENTENCE, REG.pathOf(gh, w.id, "a"), STAMPS]) {
     assert.ok(!pw.html.includes(absent), `a withdrawn page shows ${absent}`);
   }
   for (const l of LIMIT_LINES) assert.ok(pw.html.includes(l));

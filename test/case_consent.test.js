@@ -177,8 +177,8 @@ test("FIX C: a withdrawal the commit sees under the case lock writes nothing: 40
   assert.equal(r.out.body.error_code, "case_withdrawn");
   assert.equal(r.out.body.registration_recorded, false);
   assert.equal(r.out.body.received_at, C.utcSeconds(NOW + 1000), "the commit's arrival, before the withdrawal");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false, "no registration file");
-  assert.ok(!gh.putLog.some((x) => x.path === C.registrationPath(id, "b")), "never written");
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "b")), false, "no registration file");
+  assert.ok(!gh.putLog.some((x) => x.path === REG.pathOf(gh, id, "b")), "never written");
   assert.deepEqual(logFiles(id), [], "nothing was written, so nothing to log");
   assert.equal(lockOf(id).state, "released");
 });
@@ -195,7 +195,7 @@ test("FIX C: a live case lock held by another request: the commit and the withdr
   const c = await commit(id, b, NOW + 1000);
   assert.equal(c.status, 503, JSON.stringify(c.body));
   assert.equal(c.body.error_code, "case_busy");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "b")), false);
   const w = await withdraw(id, a, { now: NOW + 2000 });
   assert.equal(w.status, 503);
   assert.equal(w.body.error_code, "case_busy");
@@ -215,12 +215,12 @@ test("FIX C: a case lock that cannot be read, or is unreadable, is 503 and nothi
   const r = await commit(id, a);
   assert.equal(r.status, 503);
   assert.equal(r.body.error_code, "case_lock_unreachable");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
   gh.seed(USAGE, H._internal.caseLockPath(id), { not: "a lock" });
   const r2 = await commit(id, a);
   assert.equal(r2.status, 503);
   assert.equal(r2.body.error_code, "case_lock_unreadable");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
 });
 
 test("FIX C: the case log event's schema: exactly its fields, a known event, the times and hashes in their forms; anything else refused by name", () => {
@@ -679,7 +679,7 @@ test("MUST-FAIL GAP (L04, L05, L06): a case lock record that names a held lease 
     gh.seed(USAGE, H._internal.caseLockPath(id), rec);
     const r = await commit(id, a);
     assert.deepEqual([r.status, r.body.error_code], [503, "case_lock_unreadable"], `${name}: ${JSON.stringify(r.body).slice(0, 200)}`);
-    assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false, name);
+    assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false, name);
     assert.deepEqual(lockOf(id), rec, `${name}: never written over`);
   }
   // control: the same lease, released, is free
@@ -718,7 +718,7 @@ test("MUST-FAIL GAP (L09, L13, L12): a live lock is waited on twice between thre
   waits.length = 0;
   const r = await commit(id, a);
   assert.deepEqual([r.status, r.body.error_code], [503, "case_lock_unreachable"], JSON.stringify(r.body));
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
   assert.equal(waits.length, 0, "a refused write is not waited on as a busy lock");
 });
 
@@ -730,7 +730,7 @@ test("MUST-FAIL GAP (L16, L17): the lock lives at case_locks/<case_id>.json in t
   const other = { kind: "case-lock", v: 1, case_id: id, holder: "another-request", op: "withdraw", acquired_at: C.utcSeconds(NOW),
     expires_at: new Date(NOW + 600000).toISOString(), state: "held" };
   const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${REG.dirOf(id, "a")}/`),
     async () => gh.seed(USAGE, `case_locks/${id}.json`, other),
     () => commit(id, a),
   );
@@ -748,7 +748,7 @@ test("MUST-FAIL GAP (L23): a case that cannot be read again under the lock, befo
     () => commit(id, a),
   );
   assert.deepEqual([r.out.status, r.out.body.error_code], [503, "store_unreachable"], JSON.stringify(r.out.body));
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
   assert.equal(lockOf(id).state, "released");
 });
 
@@ -878,7 +878,7 @@ test("MUST-FAIL GAP (L39): a case that reads under the lock but is not a valid c
   );
   assert.equal(C.validateCase({ ...open, status: "WITHDRAWN" }).ok, false, "fixture: not a valid record");
   assert.deepEqual([r.out.status, r.out.body.error_code], [503, "case_record_unreadable"], JSON.stringify(r.out.body));
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
+  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
   assert.equal(lockOf(id).state, "released");
 });
 

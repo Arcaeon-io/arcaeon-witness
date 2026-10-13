@@ -30,4 +30,28 @@ function keyFields({ case_id, role, commitment_sha256 }, key = KEYS[role] || KEY
   return { key_id: keyIdOf(key), verifier: key.verifier, sig: C.signRegistration({ case_id, role, commitment_sha256 }, key.signer) };
 }
 
-module.exports = { KEYS, keyIdOf, signedBody, keyFields };
+// THE CLAIM (unit R-L4c, c4; lib/_case.js): a registration file is keyed by
+// the fields a party supplies, registrations/<case_id>/<role>/<claim>.json.
+// recordPath: the path of the file holding registration record `rec`.
+// dirOf: role `role`'s folder of claim files. filesOf: the claim files a mock
+// pins repository holds for the role. pathOf: the one claim file there (a
+// path no file is at when there is none); a test that holds two claim files
+// for a role names the one it means.
+const recordPath = (rec) => C.registrationPath(rec.case_id, rec.role, C.claimSha256(rec));
+// claimPath: the path a registration of {case_id, role, commitment_sha256}
+// under `key` is written at, known before it is written.
+function claimPath({ case_id, role, commitment_sha256 }, key = KEYS[role] || KEYS.a) {
+  return recordPath({ case_id, role, commitment_sha256, ...keyFields({ case_id, role, commitment_sha256 }, key) });
+}
+const dirOf = (caseId, role) => `registrations/${caseId}/${role}`;
+function filesOf(gh, caseId, role, repo = process.env.GITHUB_PIN_REPO) {
+  const prefix = `${dirOf(caseId, role)}/`;
+  return [...gh._repoMap(repo).keys()].filter((p) => p.startsWith(prefix)).sort();
+}
+function pathOf(gh, caseId, role, repo = process.env.GITHUB_PIN_REPO) {
+  const files = filesOf(gh, caseId, role, repo);
+  if (files.length > 1) throw new Error(`pathOf: role ${role} of case ${caseId.slice(0, 12)} has ${files.length} claim files; name the one meant`);
+  return files.length ? files[0] : `${dirOf(caseId, role)}/no-claim-file.json`;
+}
+
+module.exports = { KEYS, keyIdOf, signedBody, keyFields, recordPath, claimPath, dirOf, filesOf, pathOf };

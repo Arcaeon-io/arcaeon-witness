@@ -220,7 +220,7 @@ async function lostRace(scope, { deleteFails = false } = {}) {
   const b = party(id, "b", TOOL_TAPE);
   await register(id, a);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.claimPath({ case_id: id, ...b }, b.key);
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const viaMock = global.fetch;
   if (deleteFails) {
@@ -357,13 +357,13 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   // the file projected, or missing, is DAMAGED), 3. the proof, 4. the
   // signer and the record
   const r1 = await committedCase("RN4 sweep reg read");
-  gh.forceGetFailure(PINS, C.registrationPath(r1.id, "a"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, r1.id, "a"), 1, 503);
   await drive("registration read", "tail", 503, "could_not_look", () => withdraw(r1.id, r1.b));
   const r2 = await committedCase("RN4 sweep reg junk");
-  gh.seed(PINS, C.registrationPath(r2.id, "b"), { not: "a registration" });
+  gh.seed(PINS, REG.pathOf(gh, r2.id, "b"), { not: "a registration" });
   await drive("registration junk", "tail", 409, "case_damaged", () => withdraw(r2.id, r2.b));
   const r3 = await committedCase("RN4 sweep reg missing");
-  gh.repos.get(PINS).delete(C.registrationPath(r3.id, "a"));
+  gh.repos.get(PINS).delete(REG.pathOf(gh, r3.id, "a"));
   await drive("registration missing", "tail", 409, "case_damaged", () => withdraw(r3.id, r3.b));
   const p1 = await committedCase("RN4 sweep proof");
   await drive("proof", "tail", 403, "withdraw_unauthorized", () => withdraw(p1.id, p1.b, { salt: C.newSalt() }));
@@ -411,7 +411,7 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   await drive("again: lost to a deadline", "tail", 409, "expired", () => withdraw(lostLate.c.id, lostLate.c.b, { now: NOW + 5000 }));
   const rt = await committedCase("RN4 sweep retry read");
   assert.equal((await withdraw(rt.id, rt.b)).status, 201);
-  gh.forceGetFailure(PINS, C.registrationPath(rt.id, "b"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, rt.id, "b"), 1, 503);
   await drive("again: withdrawn, registration unread", "plain", 503, "store_unreachable", () => withdraw(rt.id, rt.b, { now: NOW + 5000 }));
 
   for (const { label, kind, r } of out) {
@@ -474,7 +474,7 @@ test("MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other 
   gh.forceGetFailure(PINS, C.casePath(c.id), 1, 503);
   const caseRead = await reference(c);
   assert.deepEqual([caseRead.status, caseRead.body.error], [503, "the case record could not be read; this is not a 'no', and no row was written"]);
-  gh.forceGetFailure(PINS, C.registrationPath(c.id, "a"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "a"), 1, 503);
   const regRead = await reference(c);
   // (since unit R-L4 the projection's file read, said by its role and reason)
   assert.deepEqual([regRead.status, regRead.body.error],
@@ -501,7 +501,7 @@ test("f1: a withdrawal whose lock could not be read or written (a write that may
 test("f4: the withdrawer's retry on a WITHDRAWN case whose registration cannot be read (a read failure, not an absence) is 503 'The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.'", async () => {
   const c = await committedCase("f4 retry read fails");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
-  gh.forceGetFailure(PINS, C.registrationPath(c.id, "b"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "b"), 1, 503);
   const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.deepEqual([r.status, r.body.error_code, r.body.error, r.body.case_id],
     [503, "store_unreachable", "The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.", c.id], JSON.stringify(r.body));

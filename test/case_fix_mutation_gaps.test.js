@@ -188,7 +188,7 @@ async function racedSingleParty(scope) {
   const r = await during(stampGet(b), () => commit(id, a, REG.KEYS.a), () => commit(id, b, REG.KEYS.a));
   assert.equal(r.inner.status, 201);
   assert.deepEqual([r.out.status, r.out.body.error_code], [409, "same_key_both_roles"]);
-  const text = gh._repoMap(PINS).get(C.registrationPath(id, "b")).content;
+  const text = gh._repoMap(PINS).get(REG.pathOf(gh, id, "b")).content;
   gh.seed(PINS, C.casePath(id), C.applyRegistration(gh.read(PINS, C.casePath(id)), JSON.parse(text), sha(Buffer.from(text, "utf8"))), { keepHistory: true });
   assert.equal(C.singleParty(gh.read(PINS, C.casePath(id))), true, "fixture: single party");
   return { id, a, b };
@@ -261,7 +261,7 @@ test("A11, A12 (validateRegistrationRecord): a stored registration whose key_id 
   const id = await openCase("A11");
   const a = party(id, "a", AGENT_TAPE);
   assert.equal((await commit(id, a)).status, 201);
-  const file = gh.read(PINS, C.registrationPath(id, "a"));
+  const file = gh.read(PINS, REG.pathOf(gh, id, "a"));
   assert.deepEqual(C.validateRegistrationRecord(file), { ok: true });
   const otherKeyId = { ...file, key_id: REG.keyIdOf(REG.KEYS.b) };
   assert.equal(C.validateRegistrationRecord(otherKeyId).field, "key_id");
@@ -270,7 +270,7 @@ test("A11, A12 (validateRegistrationRecord): a stored registration whose key_id 
   // planted under the projection, either one is not the file the case root
   // projects: the case is DAMAGED to the next registration (since unit R-L4)
   for (const bad of [otherKeyId, otherSig]) {
-    gh.seed(PINS, C.registrationPath(id, "a"), bad);
+    gh.seed(PINS, REG.pathOf(gh, id, "a"), bad);
     const b = party(id, "b", TOOL_TAPE);
     const res = await commit(id, b);
     assert.equal(res.status, 409, JSON.stringify(res.body));
@@ -329,7 +329,7 @@ test("H03 (commit step 4b; since unit R-L4, THE PROJECTION): role b's file raced
   assert.equal(C.singleParty(k), false);
 });
 
-test("H05 (commit, the lost race): another key's registration of the same commitment for this role lands first; this one is registration_exists (since unit R-L4), never answered as its own", async () => {
+test("H05 (commit, the lost race; since unit R-L4c, c4, THE CLAIM): another key's registration of the same commitment for this role lands first and is projected; this one is another claim, never projected and never answered as its own: 409 role_already_committed naming the projected sha256", async () => {
   const id = await openCase("H05");
   const a = party(id, "a", AGENT_TAPE);
   const thief = checkpoint.generateKey("someone-else.example/case-registration");
@@ -337,9 +337,11 @@ test("H05 (commit, the lost race): another key's registration of the same commit
   const r = await during(stampGet(a), () => commit(id, a, thief), () => commit(id, a, REG.KEYS.a));
   assert.equal(r.inner.status, 201, "the other key landed first");
   assert.equal(r.out.status, 409, JSON.stringify(r.out.body));
-  // the other key's file is at the path, and it is not this registration
-  assert.equal(r.out.body.error_code, "registration_exists");
-  assert.equal(gh.read(PINS, C.registrationPath(id, "a")).key_id, REG.keyIdOf(thief));
+  const thiefPath = REG.claimPath({ case_id: id, role: "a", commitment_sha256: a.commitment_sha256 }, thief);
+  assert.equal(gh.read(PINS, thiefPath).key_id, REG.keyIdOf(thief));
+  assert.deepEqual([r.out.body.error_code, r.out.body.projected_sha256],
+    ["role_already_committed", crypto.createHash("sha256").update(gh._repoMap(PINS).get(thiefPath).content).digest("hex")]);
+  assert.equal(gh.read(PINS, C.casePath(id)).commitments.a.key_id, REG.keyIdOf(thief));
 });
 
 test("H08 (commit step 4b; since unit R-L4 the other role's PROJECTION, not its file): role a's file is written and unprojected; role b under the same key is projected, and a's re-send is then 409 same_key_both_roles", async () => {

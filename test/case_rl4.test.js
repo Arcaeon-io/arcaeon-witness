@@ -241,7 +241,11 @@ const fileText = (rpath) => gh._repoMap(PINS).get(rpath).content;
 const fileSha256 = (rpath) => sha(Buffer.from(fileText(rpath), "utf8"));
 // What the case root projects for the file at `rpath` (unit R-L4, rule 2):
 // the registration's entry and the sha256 of the file's bytes.
-const projectionOf = (rpath) => ({ ...C.commitmentEntry(gh.read(PINS, rpath)), registration_sha256: fileSha256(rpath) });
+// Since unit R-L4c (c4) the entry names the file's claim too: the sha256 of
+// the json-c14n:v1 bytes of the fields a party supplies, computed here.
+const PARTY = ["case_id", "role", "commitment_sha256", "verifier", "key_id", "sig"];
+const claimOf = (rec) => sha(canonicalBytes(Object.fromEntries(PARTY.map((k) => [k, rec[k]]))));
+const projectionOf = (rpath) => ({ ...C.commitmentEntry(gh.read(PINS, rpath)), registration_sha256: fileSha256(rpath), claim_sha256: claimOf(gh.read(PINS, rpath)) });
 // How many writes of the case root put role `role` into it (null before, an
 // entry after).
 function projectionsOf(id, role) {
@@ -263,7 +267,7 @@ async function unconfirmedA(scope, { now = NOW } = {}) {
   const id = await openCase(scope);
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
+  const rpath = REG.claimPath({ case_id: id, ...a }, a.key);
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
     async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
@@ -283,11 +287,12 @@ function registrationsOf(html) {
 // THE WORDS, exactly
 const UNCONFIRMED = "the registration file is written and is not yet confirmed; send the same registration again";
 const WITHDRAWN_BEFORE_CONFIRMED = "the case was withdrawn before this registration was confirmed; the registration file is written and has no standing";
-const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this role was never confirmed; it has no standing " +
-  "and cannot acquire it";
-const WRITTEN_NOT_CONFIRMED = "written, not confirmed";
-const WRITTEN_NEVER_CONFIRMED = "written, never confirmed; this file has no standing and cannot acquire it";
-const WRITTEN_UNDER_WITHDRAWAL = "written; the case is withdrawn, so this file has no standing and cannot acquire it";
+// since unit R-L4c: no "cannot acquire it"
+const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was never confirmed; it has no standing";
+// since unit R-L4c (c4): the page lists no claim file; a role the root does
+// not project is said to have no confirmed registration, and the WITHDRAWN
+// and EXPIRED pages show no registration rows
+const NO_REGISTRATION = "no registration is confirmed for this role";
 // since unit R-L4c (c3), scoped to a case's own files
 const PROPERTY = "No file that belongs to a case is ever deleted. A case's registration files, reference rows, withdrawal record and seal " +
   "are written once and never changed. The case root is the one case file that is updated, and only by a compare-and-swap that every " +
@@ -298,7 +303,7 @@ const PREVIEW_REMOVALS = "Files under removals/ that a preview pins repository m
 // THE RULE
 // =============================================================================
 
-test("R-L4: the confirming read fails: 503 in the rule's words, the file is there, the case root does not project it, and the page says written, not confirmed", async () => {
+test("R-L4: the confirming read fails: 503 in the rule's words, the file is there, the case root does not project it, and the page says no registration is confirmed for the role (since unit R-L4c, c4)", async () => {
   const u = await unconfirmedA("RL4 unconfirmed");
   assert.deepEqual([u.out.status, u.out.body.error_code, u.out.body.error, u.out.body.registration_recorded],
     [503, "registration_unconfirmed", UNCONFIRMED, null], JSON.stringify(u.out.body));
@@ -306,7 +311,7 @@ test("R-L4: the confirming read fails: 503 in the rule's words, the file is ther
   assert.equal(storedCase(u.id).commitments.a, null, "the case root does not project it");
   assert.equal(deletes(), 0);
   const rows = registrationsOf((await casePage(u.id, NOW + 5000)).html);
-  assert.ok(rows.includes(`role a ${WRITTEN_NOT_CONFIRMED}`), rows);
+  assert.ok(rows.includes(`role a ${NO_REGISTRATION}`), rows);
 });
 
 test("R-L4: the same registration sent again finds the file and projects it, with the file's sha256: 200, and no second file", async () => {
@@ -324,7 +329,7 @@ test("R-L4: two overlapping sends of the same registration: exactly one file, ex
   const id = await openCase("RL4 overlap");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
+  const rpath = REG.claimPath({ case_id: id, ...a }, a.key);
   // the second send arrives once the first's lease has run out, and writes first
   const late = NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const r = await during(
@@ -341,19 +346,6 @@ test("R-L4: two overlapping sends of the same registration: exactly one file, ex
   for (const x of [r.inner, r.out]) assert.deepEqual(x.body.case.commitments.a, held);
 });
 
-test("R-L4: a different registration for a role whose file is written and not projected is 409 registration_exists naming the file's sha256, and nothing is written", async () => {
-  const u = await unconfirmedA("RL4 exists");
-  const other = party(u.id, "a", AGENT_TAPE);
-  plantStamp(other.commitment_sha256);
-  const before = gh._commitsOf(PINS).length;
-  const r = await commit(u.id, other, NOW + 1500);
-  assert.deepEqual([r.status, r.body.error_code, r.body.existing_sha256, r.body.differs, r.body.registration_recorded],
-    [409, "registration_exists", fileSha256(u.rpath), "commitment_sha256", false], JSON.stringify(r.body));
-  assert.match(r.body.error, /its commitment_sha256 is not this registration's/);
-  assert.equal(gh._commitsOf(PINS).length, before, "nothing written");
-  assert.equal(storedCase(u.id).commitments.a, null);
-});
-
 test("R-L4: a file with no projection past the deadline is written, never confirmed, and the case never commits on it", async () => {
   const u = await unconfirmedA("RL4 late");
   await register(u.id, party(u.id, "b", TOOL_TAPE));
@@ -363,7 +355,7 @@ test("R-L4: a file with no projection past the deadline is written, never confir
   assert.deepEqual([late.status, late.body.error_code, late.body.error], [409, "late_commitment", LATE_UNCONFIRMED], JSON.stringify(late.body));
   assert.deepEqual([storedCase(u.id).status, storedCase(u.id).commitments.a], ["OPEN", null]);
   const rows = registrationsOf((await casePage(u.id, after)).html);
-  assert.ok(rows.includes(`role a ${WRITTEN_NEVER_CONFIRMED}`), rows);
+  assert.equal(rows, "", "an EXPIRED page shows no registration rows");
   assert.equal(gh.has(PINS, u.rpath), true);
 });
 
@@ -373,7 +365,7 @@ test("R-L4: a registration written after its case's withdrawal is 409 case_withd
   const b = party(id, "b", TOOL_TAPE);
   await register(id, a);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.claimPath({ case_id: id, ...b }, b.key);
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
@@ -388,12 +380,12 @@ test("R-L4: a registration written after its case's withdrawal is 409 case_withd
   assert.equal(deletes(), 0);
   assert.deepEqual(pinsPaths().filter((p) => p.startsWith("removals/")), []);
   const rows = registrationsOf((await casePage(id)).html);
-  assert.ok(rows.includes(`role b ${WRITTEN_UNDER_WITHDRAWAL}`), rows);
+  assert.equal(rows, "", "a WITHDRAWN page shows no registration rows");
 });
 
 test("R-L4: a projected sha256 that the file at the path does not match, or a file missing under a projection, is DAMAGED: never sealed, never pinned, shown plainly", async () => {
   const c = await committedCase("RL4 damaged");
-  const rpath = C.registrationPath(c.id, "a");
+  const rpath = REG.pathOf(gh, c.id, "a");
   gh._repoMap(PINS).get(rpath).content += " "; // the same JSON, other bytes
   const r = await reveal(c);
   assert.deepEqual([r.status, r.body.error_code, r.body.role, r.body.reason], [409, "case_damaged", "a", "registration_file_differs"],
@@ -405,7 +397,7 @@ test("R-L4: a projected sha256 that the file at the path does not match, or a fi
   const run = await sealerRun();
   assert.deepEqual(run.damaged, [{ case_id: c.id, role: "a", reason: "registration_file_differs" }]);
   const d = await committedCase("RL4 damaged missing");
-  gh._repoMap(PINS).delete(C.registrationPath(d.id, "b"));
+  gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
   const m = await reveal(d);
   assert.deepEqual([m.status, m.body.error_code, m.body.role, m.body.reason], [409, "case_damaged", "b", "registration_file_missing"]);
   assert.equal(storedCase(d.id).status, "COMMITTED");
@@ -422,7 +414,7 @@ test("R-L4: a reveal racing a withdrawal: exactly one of them writes the case ro
   assert.deepEqual([r.inner.status, r.out.status, r.out.body.error_code], [201, 409, "case_withdrawn"], JSON.stringify(r.out.body).slice(0, 300));
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
   const rows = registrationsOf((await casePage(c.id)).html);
-  assert.ok(rows.includes(`role a ${WRITTEN_UNDER_WITHDRAWAL}`) && rows.includes(`role b ${WRITTEN_UNDER_WITHDRAWAL}`), rows);
+  assert.equal(rows, "", "a WITHDRAWN page shows no registration rows");
   // the reveal lands between the withdrawal's read and its write
   const d = await committedCase("RL4 race reveal first");
   const s = await during(
@@ -433,7 +425,7 @@ test("R-L4: a reveal racing a withdrawal: exactly one of them writes the case ro
   assert.deepEqual([s.inner.status, s.out.status, s.out.body.error_code], [201, 409, "case_sealed"], JSON.stringify(s.out.body).slice(0, 300));
   const k = storedCase(d.id);
   assert.equal(k.status, "VERDICT");
-  for (const role of C.ROLES) assert.deepEqual(k.commitments[role], projectionOf(C.registrationPath(d.id, role)));
+  for (const role of C.ROLES) assert.deepEqual(k.commitments[role], projectionOf(REG.pathOf(gh, d.id, role)));
 });
 
 test("R-L4: no code in lib/ deletes from the pins store, and the one module that did is gone", () => {
@@ -460,7 +452,7 @@ test("R-L4: the README states the public property verbatim, says removals/ files
 test("R-L4: the sealer's index and the status counts read no registration file: a case is a candidate by its root, and files make no count", () => {
   const id = "a".repeat(64);
   const bare = [{ path: C.casePath(id), type: "blob" }];
-  const withFiles = [...bare, { path: C.registrationPath(id, "a"), type: "blob" }, { path: C.registrationPath(id, "b"), type: "blob" }];
+  const withFiles = [...bare, { path: REG.pathOf(gh, id, "a"), type: "blob" }, { path: REG.pathOf(gh, id, "b"), type: "blob" }];
   assert.deepEqual(S.caseTreeIndex(bare).sealable, [id]);
   assert.deepEqual(S.caseTreeIndex(withFiles).sealable, [id]);
   assert.deepEqual(S.caseAnchorSummary(bare), S.caseAnchorSummary(withFiles));
@@ -497,21 +489,11 @@ test("R-L4 (rule 3 corrected): a file holding the same party-supplied fields in 
   assert.equal(storedCase(u.id).commitments.a.registration_sha256, sha(Buffer.from(other, "utf8")));
 });
 
-test("R-L4 (rule 3 corrected): the same role under a different key is 409 registration_exists naming the existing sha256 and the field that differs, and nothing is written", async () => {
-  const u = await unconfirmedA("RL4 corrected other key");
-  const before = gh._commitsOf(PINS).length;
-  const r = await commit(u.id, { ...u.a, key: REG.KEYS.b }, NOW + 1500);
-  assert.deepEqual([r.status, r.body.error_code, r.body.existing_sha256, r.body.differs], [409, "registration_exists", fileSha256(u.rpath), "verifier"],
-    JSON.stringify(r.body));
-  assert.equal(gh._commitsOf(PINS).length, before, "nothing written");
-  assert.equal(storedCase(u.id).commitments.a, null);
-});
-
 test("R-L4 (rule 3 corrected): two overlapping sends of the same registration with different clocks are answered by the one file: both answers carry its registered_at", async () => {
   const id = await openCase("RL4 corrected overlap clocks");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
+  const rpath = REG.claimPath({ case_id: id, ...a }, a.key);
   const late = NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
@@ -544,10 +526,10 @@ async function singlePartyByHand(scope) {
   await register(id, a);
   const b = party(id, "b", TOOL_TAPE);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
   const rec = C.registrationRecord({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256, registered_at: C.utcSeconds(NOW),
     stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(b.commitment_sha256))[0].sha, stamped_at: "2026-10-10T07:45:00.123Z",
     ...REG.keyFields({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256 }, REG.KEYS.a) });
+  const rpath = REG.recordPath(rec);
   gh.seed(PINS, rpath, rec);
   gh.seed(PINS, C.casePath(id), C.applyRegistration(storedCase(id), rec, fileSha256(rpath)), { keepHistory: true });
   assert.equal(C.singleParty(storedCase(id)), true, "fixture: single party");
@@ -556,13 +538,13 @@ async function singlePartyByHand(scope) {
 
 test("MUST-FAIL GAP (H03, S19, S18, S20): DAMAGED says what was read, by its reason: a file not the one projected, a file missing, a root entry its file does not hold", async () => {
   const c = await committedCase("RL4 gap damaged words");
-  const apath = C.registrationPath(c.id, "a");
+  const apath = REG.pathOf(gh, c.id, "a");
   gh._repoMap(PINS).get(apath).content += " ";
   const r = await reveal(c);
   assert.ok(r.body.error.startsWith(`the case is DAMAGED: role a's registration file, ${apath}, is not the file the case root projects ` +
     "(registration_file_differs). A damaged case is never sealed, and nothing here resolves it"), r.body.error);
   const d = await committedCase("RL4 gap damaged missing words");
-  const bpath = C.registrationPath(d.id, "b");
+  const bpath = REG.pathOf(gh, d.id, "b");
   gh._repoMap(PINS).delete(bpath);
   const m = await reveal(d);
   assert.ok(m.body.error.includes(`role b's registration file, ${bpath}, is missing, and the case root projects it (registration_file_missing)`), m.body.error);
@@ -571,7 +553,7 @@ test("MUST-FAIL GAP (H03, S19, S18, S20): DAMAGED says what was read, by its rea
   gh.seed(PINS, C.casePath(e.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
   const x = await reveal(e);
   assert.deepEqual([x.status, x.body.error_code, x.body.reason], [409, "case_damaged", "projection_differs_from_file"]);
-  assert.ok(x.body.error.includes(`the case root's entry for role b is not the registration its file, ${C.registrationPath(e.id, "b")}, holds ` +
+  assert.ok(x.body.error.includes(`the case root's entry for role b is not the registration its file, ${REG.pathOf(gh, e.id, "b")}, holds ` +
     "(projection_differs_from_file)"), x.body.error);
 });
 
@@ -584,7 +566,7 @@ test("MUST-FAIL GAP (H09, H10): a replay of a projected registration is not refu
   plantStamp(other.commitment_sha256);
   const r = await commit(c.id, other, NOW + 1500);
   assert.deepEqual([r.status, r.body.error_code], [409, "role_already_committed"]);
-  assert.deepEqual(r.body.registered, C.commitmentEntry(gh.read(PINS, C.registrationPath(c.id, "a"))));
+  assert.deepEqual(r.body.registered, C.commitmentEntry(gh.read(PINS, REG.pathOf(gh, c.id, "a"))));
 });
 
 test("MUST-FAIL GAP (H11, H20, H38): the refusals after a write carry the time it was received and say the root does not project it", async () => {
@@ -599,7 +581,7 @@ test("MUST-FAIL GAP (H11, H20, H38): the refusals after a write carry the time i
   plantStamp(a.commitment_sha256);
   plantStamp(b.commitment_sha256);
   const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.registrationPath(id, "b")}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${REG.dirOf(id, "b")}/`),
     () => commit(id, { ...a, key: REG.KEYS.a }, LATER()),
     () => commit(id, { ...b, key: REG.KEYS.a }, NOW),
   );
@@ -628,7 +610,7 @@ test("MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
   const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${REG.dirOf(id, "a")}/`),
     async () => gh.seed(PINS, C.casePath(id), { not: "a case" }, { keepHistory: true }),
     () => commit(id, a),
   );
@@ -676,7 +658,7 @@ test("MUST-FAIL GAP (H23, H29): a projection another send made first is answered
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
   const s = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${REG.dirOf(id, "a")}/`),
     () => commit(id, a, LATER()),
     () => commit(id, a, NOW),
   );
@@ -703,11 +685,11 @@ test("MUST-FAIL GAP (H36, H45): the file at the path that could not be read writ
   const id = await openCase("RL4 gap path unread");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  gh.forceGetFailure(PINS, C.registrationPath(id, "a"), 1, 503);
+  gh.forceGetFailure(PINS, REG.claimPath({ case_id: id, ...a }, a.key), 1, 503);
   const r = await commit(id, a);
   assert.deepEqual([r.status, r.body.error_code], [503, "store_unreachable"]);
-  assert.equal(gh.has(PINS, C.registrationPath(id, "a")), false);
-  gh.forceConflict(PINS, C.registrationPath(id, "a"), 10);
+  assert.equal(gh.has(PINS, REG.claimPath({ case_id: id, ...a }, a.key)), false);
+  gh.forceConflict(PINS, REG.claimPath({ case_id: id, ...a }, a.key), 10);
   const lost = await commit(id, a);
   assert.deepEqual([lost.status, lost.body.error_code, lost.body.registration_recorded], [503, "store_error", false], JSON.stringify(lost.body));
 });
@@ -715,7 +697,7 @@ test("MUST-FAIL GAP (H36, H45): the file at the path that could not be read writ
 test("MUST-FAIL GAP (H55): a retried withdrawal whose root before the withdrawal projects a file no longer at its path is DAMAGED", async () => {
   const c = await committedCase("RL4 gap retry damaged");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
-  gh._repoMap(PINS).get(C.registrationPath(c.id, "b")).content += " ";
+  gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "b")).content += " ";
   const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.deepEqual([again.status, again.body.error_code], [409, "case_damaged"], JSON.stringify(again.body).slice(0, 200));
 });
@@ -744,14 +726,14 @@ test("MUST-FAIL GAP (S21, S22, S24): the marker repair says a case it could not 
   assert.deepEqual(await S.repairWithdrawn(c.id), { case_id: c.id, marker: null, reason: "case_unreadable" });
   assert.equal(await S.repairWithdrawn(c.id), null, "a root that is not withdrawn");
   assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c.id)), false);
-  gh.forceGetFailure(PINS, C.registrationPath(c.id, "a"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "a"), 1, 503);
   const run = await sealerRun();
   assert.deepEqual(run.could_not_look, [{ case_id: c.id, reason: "registration_unreadable" }]);
 });
 
-test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18): the page reads each projected file once, says a file it could not read and is then not kept, links a file written and not confirmed, shows an EXPIRED case no registrations, and keeps no DAMAGED page", async () => {
+test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file): the page reads each projected file once, says a file it could not read and is then not kept, shows an EXPIRED case no registrations, and keeps no DAMAGED page", async () => {
   const c = await committedCase("RL4 gap page reads");
-  const apath = C.registrationPath(c.id, "a");
+  const apath = REG.pathOf(gh, c.id, "a");
   const from = gh.getLog.length;
   assert.equal((await render(c.id)).definite, true, "fixture: a page that is kept");
   assert.equal(gh.getLog.slice(from).filter((p) => p === apath).length, 1, "the projected file, read once");
@@ -760,15 +742,9 @@ test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18): the page reads eac
   assert.ok(registrationsOf(unread.html).includes("role a its registration file could not be read when this page was read (registration_unreadable)"),
     registrationsOf(unread.html));
   assert.equal(unread.definite, false);
-  // a role with no projection whose path could not be read
-  const id = await openCase("RL4 gap page presence");
-  gh.forceGetFailure(PINS, C.registrationPath(id, "a"), 1, 503);
-  const presence = await render(id);
-  assert.ok(registrationsOf(presence.html).includes("role a its registration file could not be read when this page was read (registration_unreadable)"));
-  assert.equal(presence.definite, false);
-  // a file written and not confirmed is linked
+  // a file written and not confirmed is neither read nor linked
   const u = await unconfirmedA("RL4 gap page link");
-  assert.ok((await render(u.id)).html.includes(`href="https://github.com/${PINS}/commits/main/${u.rpath}"`));
+  assert.equal((await render(u.id)).html.includes(u.rpath), false);
   // EXPIRED, every role projected: no registrations panel
   assert.doesNotMatch((await render(c.id, Date.parse(DEADLINE) + 1000)).html, /<h2>Registrations<\/h2>/);
   // DAMAGED is never kept
@@ -783,7 +759,7 @@ test("MUST-FAIL GAP (C02): a case root whose projection's sha256 is not 64 hex i
   assert.deepEqual([r.ok, r.field], [false, "commitments.a.registration_sha256"]);
 });
 
-test("MUST-FAIL GAP (X01, X06, X07): the party-supplied comparison names the field: a file of another case, or another role, under the same key; and a file that is not a registration record at all", async () => {
+test("MUST-FAIL GAP (X01, X06, X07; since unit R-L4c, c4, a file at the claim's path that is not the claim): the party-supplied comparison names the field: a file of another case, or another role, under the same key; and a file that is not a registration record at all", async () => {
   const u = await unconfirmedA("RL4 gap tuple fields");
   const other = await openCase("RL4 gap tuple other case");
   const asRecord = (over) => C.registrationRecord({ case_id: u.id, role: "a", commitment_sha256: u.a.commitment_sha256, registered_at: C.utcSeconds(NOW),
@@ -793,7 +769,8 @@ test("MUST-FAIL GAP (X01, X06, X07): the party-supplied comparison names the fie
     ["record", { ...gh.read(PINS, u.rpath), note: "a field no registration has" }]]) {
     gh.seed(PINS, u.rpath, rec);
     const r = await commit(u.id, u.a, NOW + 1500);
-    assert.deepEqual([r.status, r.body.error_code, r.body.differs], [409, "registration_exists", differs], JSON.stringify(r.body).slice(0, 300));
+    assert.deepEqual([r.status, r.body.error_code, r.body.differs, r.body.registration_path], [503, "registration_record_unreadable", differs, u.rpath],
+      JSON.stringify(r.body).slice(0, 300));
   }
   assert.equal(storedCase(u.id).commitments.a, null);
 });
@@ -802,7 +779,7 @@ test("MUST-FAIL GAP (X14): in the lost create-only race the winner's file is pro
   const id = await openCase("RL4 gap race bytes");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
+  const rpath = REG.claimPath({ case_id: id, ...a }, a.key);
   let winner;
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),

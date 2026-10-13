@@ -235,7 +235,7 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
   for (const [slot, p] of [["tape_a", a], ["tape_b", b]]) {
     assert.equal(receipt.tapes[slot].digest, RAW(p.tape_sha256), slot);
     assert.equal(receipt.tapes[slot].bytes, p.tape.length, slot);
-    const reg = gh.read(PINS, C.registrationPath(id, p.role));
+    const reg = gh.read(PINS, REG.pathOf(gh, id, p.role));
     assert.equal(C.commitmentSha256({ case_id: id, role: p.role, tape_sha256: receipt.tapes[slot].digest.slice(-64), salt: p.salt }),
       reg.commitment_sha256, `${slot}'s received hash recomputes role ${p.role}'s registered commitment`);
   }
@@ -247,7 +247,7 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
   });
   assert.equal(k.records, 1);
   assert.equal(k.cross_reference, null);
-  const aFile = gh._repoMap(PINS).get(C.registrationPath(id, "a")).content;
+  const aFile = gh._repoMap(PINS).get(REG.pathOf(gh, id, "a")).content;
   assert.deepEqual(k.commitments.a, C.caseEntry(JSON.parse(aFile), sha(aFile)), "the commitments are untouched");
 
   // EXACTLY AS ?op=reconcile: the same two tapes (role a's as agent_tape, the
@@ -443,7 +443,7 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
   });
   plant("a registration file gone", 409, "case_damaged", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("file gone") } });
-    gh.repos.get(PINS).delete(C.registrationPath(id, "b"));
+    gh.repos.get(PINS).delete(REG.pathOf(gh, id, "b"));
     return revealBody(id, a, b);
   });
   plant("the stamp-size reveal path: role a's stamp now records a tape's size", 409, "stamp_size_mismatch", async () => {
@@ -589,7 +589,7 @@ test("REVEAL: policy_unavailable when the case's bound version is not the one th
     regs[p.role] = C.registrationRecord({ case_id: id2, role: p.role, commitment_sha256: p.commitment_sha256, registered_at: "2026-10-10T08:00:00Z",
       stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha, stamped_at: "2026-10-10T07:45:00.123Z",
       ...REG.keyFields({ case_id: id2, role: p.role, commitment_sha256: p.commitment_sha256 }) });
-    gh.seed(PINS, C.registrationPath(id2, p.role), regs[p.role]);
+    gh.seed(PINS, REG.recordPath(regs[p.role]), regs[p.role]);
   }
   const committed = { ...kase, commitments: { a: seeded(regs.a), b: seeded(regs.b) }, status: "COMMITTED" };
   assert.deepEqual(C.validateCase(committed), { ok: true }, "fixture: a valid COMMITTED case bound to 0.0.9");

@@ -392,7 +392,7 @@ test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment
     const commit = p.role === "b" ? null : gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha;
     regs[p.role] = C.registrationRecord({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256, registered_at: "2026-10-10T08:00:00Z",
       stamp_commit: commit, stamped_at: "2026-10-10T07:45:00.123Z", ...REG.keyFields({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }) });
-    gh.seed(PINS, C.registrationPath(id, p.role), regs[p.role]);
+    gh.seed(PINS, REG.recordPath(regs[p.role]), regs[p.role]);
   }
   const committed = { ...kase, commitments: { a: seeded(regs.a), b: seeded(regs.b) }, status: "COMMITTED" };
   assert.deepEqual(C.validateCase(committed), { ok: true }, "fixture: the schema still reads the item-one form");
@@ -409,7 +409,7 @@ test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment
   assert.equal(storedCase(id).status, "COMMITTED");
   // MUST-FAIL ARM: the same case with role b's commit filled in reveals.
   const filled = C.registrationRecord({ ...regs.b, stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(b.commitment_sha256))[0].sha });
-  gh.seed(PINS, C.registrationPath(id, "b"), filled);
+  gh.seed(PINS, REG.recordPath(filled), filled);
   gh.seed(PINS, C.casePath(id), { ...committed, commitments: { ...committed.commitments, b: seeded(filled) } });
   const ok = await reveal(revealBody(id, a, b));
   assert.equal(ok.status, 201, JSON.stringify(ok.body).slice(0, 300));

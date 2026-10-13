@@ -293,12 +293,12 @@ async function withCasePutRace(plant, fn) {
 test("H36 (since unit R-L4, the projection): a projected registration file that is present and not the file projected is DAMAGED, never read as absent", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
-  gh.seed(PINS, C.registrationPath(ID, "a"), { kind: "not-a-registration" });
+  gh.seed(PINS, REG.pathOf(gh, ID, "a"), { kind: "not-a-registration" });
   const res = await commit("b", commitmentFor("b", "tape b"));
   assert.equal(res._status, 409, JSON.stringify(res._body));
   assert.deepEqual([res._body.error_code, res._body.reason], ["case_damaged", "registration_file_differs"]);
   assert.equal(res._body.role, "a");
-  assert.equal(gh.has(PINS, C.registrationPath(ID, "b")), false, "nothing registered");
+  assert.equal(gh.has(PINS, REG.pathOf(gh, ID, "b")), false, "nothing registered");
 });
 
 // ---- the joint reveal (an unsigned seal: no case key in this environment) ----
@@ -350,7 +350,7 @@ async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
 test("H41 (reveal step 2b): a stamp whose one public commit is no longer the commit its registration recorded is refused case_record_inconsistent; nothing is sealed", async () => {
   const p = await committedCase();
   const spath = stamp.stampPath(p.b.commitment_sha256);
-  const registered = gh.read(PINS, C.registrationPath(ID, "b")).stamp_commit;
+  const registered = gh.read(PINS, REG.pathOf(gh, ID, "b")).stamp_commit;
   // the same stamp record, same stamped_at, now held by exactly one OTHER commit
   gh.seed(STAMPS, spath, gh.read(STAMPS, spath));
   const now = gh.commitsFor(STAMPS, spath);

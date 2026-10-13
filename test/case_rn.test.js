@@ -238,7 +238,7 @@ async function lostRace(scope) {
   const b = party(id, "b", TOOL_TAPE);
   await register(id, a);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.claimPath({ case_id: id, ...b }, b.key);
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
@@ -798,8 +798,8 @@ test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdr
   assert.equal(has(parsed(res), "refusal_receipt"), false);
   // a registration file changed after the root projected it (since unit R-L4: DAMAGED)
   const d = await committedCase("RN gap bad registration");
-  const reg = gh.read(PINS, C.registrationPath(d.id, "a"));
-  gh.seed(PINS, C.registrationPath(d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
+  const reg = gh.read(PINS, REG.pathOf(gh, d.id, "a"));
+  gh.seed(PINS, REG.pathOf(gh, d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
   const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
   const r = await reveal(d, { body: ownOpening(d, "a") });

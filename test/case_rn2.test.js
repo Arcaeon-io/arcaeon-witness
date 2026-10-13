@@ -386,7 +386,7 @@ test("R-N2 m10 (since unit R-L4, the root's projection): registration_recorded o
   const b = party(id, "b", TOOL_TAPE);
   await register(id, a);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.claimPath({ case_id: id, ...b }, b.key);
   let puts = 0;
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(id)}`) && ++puts === 1,
@@ -398,12 +398,13 @@ test("R-N2 m10 (since unit R-L4, the root's projection): registration_recorded o
   assert.deepEqual([r.out.status, r.out.body.error_code], [409, "case_withdrawn"], JSON.stringify(r.out.body));
   assert.equal(r.out.body.registration_recorded, false, "the root does not project it");
   assert.equal(gh.has(PINS, rpath), true, "the file stays, inert");
-  // the abandoned branch: another registration for the role landed first
+  // the abandoned branch: a file that is not this registration landed first
+  // at its claim's path (since unit R-L4c, c4, only a plant can be there)
   const id2 = await openCase("RN2 abandoned");
   const a2 = party(id2, "a", AGENT_TAPE);
   plantStamp(a2.commitment_sha256);
   const other = party(id2, "a", AGENT_TAPE);
-  const rpath2 = C.registrationPath(id2, "a");
+  const rpath2 = REG.claimPath({ case_id: id2, ...a2 }, a2.key);
   const r2 = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath2}`),
     async () => {
@@ -414,10 +415,9 @@ test("R-N2 m10 (since unit R-L4, the root's projection): registration_recorded o
     },
     () => commit(id2, a2),
   );
-  assert.equal(r2.out.status, 409, JSON.stringify(r2.out.body));
-  // (since unit R-L4: another file at the path is registration_exists, by its sha256)
-  assert.equal(r2.out.body.error_code, "registration_exists");
-  assert.equal(r2.out.body.existing_sha256, crypto.createHash("sha256").update(gh._repoMap(PINS).get(rpath2).content).digest("hex"));
+  assert.equal(r2.out.status, 503, JSON.stringify(r2.out.body));
+  // (since unit R-L4c: a file at the claim's path that is not the claim is never projected)
+  assert.deepEqual([r2.out.body.error_code, r2.out.body.differs, r2.out.body.registration_path], ["registration_record_unreadable", "commitment_sha256", rpath2]);
   assert.equal(r2.out.body.registration_recorded, false, "this registration is not the one on file");
 });
 
@@ -507,7 +507,7 @@ test("MUST-FAIL GAP (T05): on the abandoned branch, a read-back that fails leave
   const id = await openCase("RN2 gap abandoned unread");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
+  const rpath = REG.claimPath({ case_id: id, ...a }, a.key);
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
     async () => {

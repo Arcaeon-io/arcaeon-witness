@@ -1483,12 +1483,14 @@ test("R-L3 (a): a record whose branch answer is unknown, whose commits could not
 // withdrawn, sealed or past its deadline, that it can never stand. A row per
 // state: the fixture that makes it, the page's time, and the words.
 // =============================================================================
+// Since unit R-L4c (c4, as the architect ruled) the page lists no claim
+// file: a role the root does not project has no confirmed registration,
+// whether or not a claim file was written for it, and the WITHDRAWN and
+// EXPIRED pages show no registration rows (no_rows).
 const REG_WORDS = Object.freeze({
   projected: "registered at",
-  none: "not registered",
-  written_not_confirmed: "written, not confirmed",
-  written_never_confirmed: "written, never confirmed; this file has no standing and cannot acquire it",
-  written_under_withdrawal: "written; the case is withdrawn, so this file has no standing and cannot acquire it",
+  not_confirmed: "no registration is confirmed for this role",
+  no_rows: null,
 });
 async function openOnly(scope) {
   const o = makeRes();
@@ -1510,7 +1512,7 @@ async function writtenNotConfirmed(scope) {
   const viaMock = global.fetch;
   let fired = false;
   global.fetch = async (url, o) => {
-    if (!fired && (o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`)) {
+    if (!fired && (o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${REG.dirOf(id, "a")}/`)) {
       fired = true;
       gh.forceGetFailure(PINS, C.casePath(id), 1, 503);
     }
@@ -1542,12 +1544,12 @@ const REG_FIXTURES = {
 };
 const REGISTRATION_TABLE = [
   { state: "projected", fx: "committed", role: "a", now: REVEAL_AT + 3600000 },
-  { state: "none", fx: "open", role: "a", now: REVEAL_AT + 3600000 },
-  { state: "written_not_confirmed", fx: "unconfirmed", role: "a", now: REVEAL_AT + 3600000 },
-  { state: "none", fx: "unconfirmed", role: "b", now: REVEAL_AT + 3600000 },
-  { state: "written_never_confirmed", fx: "unconfirmed_late", role: "a", now: PAST_DEADLINE },
-  { state: "written_under_withdrawal", fx: "withdrawn", role: "a", now: REVEAL_AT + 3600000 },
-  { state: "written_under_withdrawal", fx: "withdrawn", role: "b", now: REVEAL_AT + 3600000 },
+  { state: "not_confirmed", fx: "open", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "not_confirmed", fx: "unconfirmed", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "not_confirmed", fx: "unconfirmed", role: "b", now: REVEAL_AT + 3600000 },
+  { state: "no_rows", fx: "unconfirmed_late", role: "a", now: PAST_DEADLINE },
+  { state: "no_rows", fx: "withdrawn", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "no_rows", fx: "withdrawn", role: "b", now: REVEAL_AT + 3600000 },
 ];
 function registrationRows(html) {
   const i = html.indexOf("<h2>Registrations</h2>");
@@ -1556,10 +1558,13 @@ function registrationRows(html) {
 for (const t of REGISTRATION_TABLE) {
   test(`R-L4 TABLE (registration file): ${t.fx}, role ${t.role} -> ${t.state}: "${REG_WORDS[t.state]}"`, async () => {
     const id = await REG_FIXTURES[t.fx]();
-    const rows = registrationRows((await casePage(id, { now: t.now })).html);
-    assert.ok(rows.includes(`role ${t.role} ${REG_WORDS[t.state]}`), rows);
+    const html = (await casePage(id, { now: t.now })).html;
+    const rows = registrationRows(html);
+    if (REG_WORDS[t.state] === null) assert.equal(rows, "", "no registration rows");
+    else assert.ok(rows.includes(`role ${t.role} ${REG_WORDS[t.state]}`), rows);
     for (const [state, words] of Object.entries(REG_WORDS)) {
-      if (state !== t.state) assert.ok(!rows.includes(`role ${t.role} ${words}`), `${state} is not said: ${rows}`);
+      if (state !== t.state && words !== null) assert.ok(!rows.includes(`role ${t.role} ${words}`), `${state} is not said: ${rows}`);
     }
+    assert.doesNotMatch(html, /written, not confirmed|never confirmed|cannot acquire/);
   });
 }

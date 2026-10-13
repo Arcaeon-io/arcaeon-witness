@@ -59,6 +59,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
+const REG = require("./helpers/case_registration.js");
 const { startPreview, readVercel, vercelBody } = require("./helpers/vercel_preview.js");
 const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
@@ -202,7 +203,7 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
   assert.equal(gh.read(USAGE, H._internal.openQuotaPath(KEY, today())).count, 20, "the real counter, in the usage repository");
   const commit = /commit ([0-9a-f]{40})/.exec(r.by.d.line)[1];
   assert.match(r.by.d.line, new RegExp(`read stamp_commit ${commit}, the same commit`));
-  assert.equal(gh.read(PINS, C.registrationPath(id, "a")).stamp_commit, commit);
+  assert.equal(gh.read(PINS, REG.pathOf(gh, id, "a")).stamp_commit, commit);
   const sealed = gh.read(PINS, C.casePath(id));
   assert.equal(sealed.status, "VERDICT");
   assert.equal(sealed.signed_by, CASE_ENTRY.key_id, "the stand-in signs with the published case key");
@@ -479,8 +480,6 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   restore = install(gh);
   const bad = "ab".repeat(32);
   gh.seed(PINS, C.casePath(bad), { not: "a case" });
-  gh.seed(PINS, C.registrationPath(bad, "a"), {});
-  gh.seed(PINS, C.registrationPath(bad, "b"), {});
   const refused = await dryRun(t, { pinToken: PIN_TOKEN });
   assert.equal(word(refused, "f"), "BROKEN");
   assert.match(refused.by.f.line, new RegExp(`refused ${bad} \\(case_record_unreadable\\)`));

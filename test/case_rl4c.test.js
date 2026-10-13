@@ -299,10 +299,7 @@ const D = Date.parse(DEADLINE);
 const clockOverWrite = (id, before, after) => () => (C.ROLES.some((r) => regFiles(id, r).length) ? after : before);
 
 // THE WORDS, exactly
-const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this role was never confirmed; it has no standing " +
-  "and cannot acquire it";
-const WRITTEN_NOT_CONFIRMED = "written, not confirmed";
-const WRITTEN_NEVER_CONFIRMED = "written, never confirmed; this file has no standing and cannot acquire it";
+const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was never confirmed; it has no standing";
 const PROPERTY = "No file that belongs to a case is ever deleted. A case's registration files, reference rows, withdrawal record and seal " +
   "are written once and never changed. The case root is the one case file that is updated, and only by a compare-and-swap that every " +
   "reader can follow in the repository's history.";
@@ -410,5 +407,161 @@ test("R-L4c c3: the README states the property of a case's files verbatim, then 
   for (const f of [...jsFiles("lib"), ...jsFiles("api"), ...jsFiles("tools"), "README.md", "public/PRACTICES.md"]) {
     assert.equal(read(f).replace(/\s+/g, " ").includes(OLD_PROPERTY), false, f);
     assert.doesNotMatch(read(f).replace(/\s+/g, " "), /The case root is the one file that is updated/, f);
+  }
+});
+
+// =============================================================================
+// c4 (M1), as the architect ruled: a registration file is keyed by its
+// claim; a file is written only when the root as read shows the case open
+// and the role unprojected; the compare-and-swap on the root decides, and a
+// lost one re-reads once; the page lists no claim file
+// =============================================================================
+
+// The claim path of `p`'s registration under `key` (the role's own key by default).
+const claimPathOf = (id, p, key = undefined) => {
+  const body = REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, p.key || key);
+  return `registrations/${id}/${p.role}/${claimOf({ ...body, key_id: REG.keyIdOf(p.key || key || REG.KEYS[p.role]) })}.json`;
+};
+const NO_REGISTRATION = "no registration is confirmed for this role";
+
+test("R-L4c c4: a registration file is keyed by its claim, registrations/<case_id>/<role>/<sha256 of the party-supplied fields>.json, written once, and the root's entry names the claim", async () => {
+  const id = await openCase("RL4c c4 path");
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  const want = claimPathOf(id, a);
+  assert.deepEqual(regFiles(id, "a"), [want]);
+  assert.equal(gh.commitsFor(PINS, want).length, 1, "written once");
+  const rec = gh.read(PINS, want);
+  assert.equal(storedCase(id).commitments.a.claim_sha256, claimOf(rec));
+  assert.deepEqual(storedCase(id).commitments.a, projectionOf(want));
+});
+
+test("R-L4c c4: a different registration for a role the root projects writes no file: 409 role_already_committed naming the projected sha256", async () => {
+  const c = await committedCase("RL4c c4 second tuple");
+  const projected = storedCase(c.id).commitments.a.registration_sha256;
+  const before = gh._commitsOf(PINS).length;
+  for (const other of [party(c.id, "a", AGENT_TAPE), { ...c.a, key: REG.KEYS.b }]) {
+    plantStamp(other.commitment_sha256);
+    const r = await commit(c.id, other, NOW + 1500);
+    assert.deepEqual([r.status, r.body.error_code, r.body.projected_sha256], [409, "role_already_committed", projected], JSON.stringify(r.body).slice(0, 300));
+  }
+  assert.equal(gh._commitsOf(PINS).length, before, "no file written");
+  assert.equal(regFiles(c.id, "a").length, 1);
+});
+
+test("R-L4c c4: a registration for a withdrawn, sealed or expired case writes no file", async () => {
+  const w = await openCase("RL4c c4 none withdrawn");
+  const wa = party(w, "a", AGENT_TAPE);
+  await register(w, wa);
+  assert.equal((await withdraw(w, wa)).status, 201);
+  const wb = party(w, "b", TOOL_TAPE);
+  plantStamp(wb.commitment_sha256);
+  const s = await sealedCase("RL4c c4 none sealed");
+  const sa = party(s.id, "a", AGENT_TAPE);
+  plantStamp(sa.commitment_sha256);
+  const x = await openCase("RL4c c4 none expired");
+  const xa = party(x, "a", AGENT_TAPE);
+  plantStamp(xa.commitment_sha256);
+  for (const [id, p, now, code] of [[w, wb, NOW + 5000, "case_not_open"], [s.id, sa, REVEAL_AT + 1000, "case_not_open"], [x, xa, D, "late_commitment"]]) {
+    const before = gh._commitsOf(PINS).length;
+    const files = regFiles(id, p.role).length;
+    const r = await commit(id, p, now);
+    assert.deepEqual([r.status, r.body.error_code], [409, code], JSON.stringify(r.body).slice(0, 200));
+    assert.equal(gh._commitsOf(PINS).length, before, `${code}: nothing written`);
+    assert.equal(regFiles(id, p.role).length, files);
+  }
+});
+
+test("R-L4c c4: a claim whose projection was refused does not hold the role: an honest registration for that role is another file, projected, and the case commits", async () => {
+  const id = await openCase("RL4c c4 refused claim");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  // role b's send under role a's key, overtaken by role a's own registration
+  const r = await during(regPut(id, "b"), () => commit(id, { ...a, key: REG.KEYS.a }, NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000),
+    () => commit(id, { ...b, key: REG.KEYS.a }, NOW));
+  assert.deepEqual([r.inner.status, r.out.status, r.out.body.error_code], [201, 409, "same_key_both_roles"], JSON.stringify(r.out.body).slice(0, 200));
+  assert.equal(regFiles(id, "b").length, 1, "the refused claim's file stays");
+  const honest = await commit(id, b, NOW + 2000);
+  assert.equal(honest.status, 201, JSON.stringify(honest.body).slice(0, 300));
+  assert.equal(regFiles(id, "b").length, 2, "another file");
+  assert.equal(storedCase(id).status, "COMMITTED");
+  assert.deepEqual(storedCase(id).commitments.b, projectionOf(claimPathOf(id, b)));
+});
+
+test("R-L4c c4: no registration_exists: a different claim for a role whose file is written and not projected is another file, and the compare-and-swap decides; the loser re-reads once and is 409 role_already_committed naming the projected sha256", async () => {
+  const u = await unconfirmedA("RL4c c4 two claims");
+  const other = party(u.id, "a", AGENT_TAPE);
+  plantStamp(other.commitment_sha256);
+  // the first claim's re-send loses its compare-and-swap to the second claim
+  const r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(u.id)}`),
+    () => commit(u.id, other, NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000), () => commit(u.id, u.a, NOW + 1000));
+  assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body).slice(0, 300));
+  const winner = claimPathOf(u.id, other);
+  assert.deepEqual(storedCase(u.id).commitments.a, projectionOf(winner));
+  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.projected_sha256], [409, "role_already_committed", fileSha256(winner)],
+    JSON.stringify(r.out.body).slice(0, 300));
+  assert.equal(regFiles(u.id, "a").length, 2, "both claims' files stay");
+  assert.equal(projectionsOf(u.id, "a"), 1);
+});
+
+test("R-L4c c4: a lost compare-and-swap is never retried: the root moved for the other role, so the answer is 503, the file is written and not confirmed, and the same registration sent again projects it", async () => {
+  const id = await openCase("RL4c c4 lost swap");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  const r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(id)}`),
+    () => commit(id, b, NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000), () => commit(id, a, NOW));
+  assert.equal(r.inner.status, 201);
+  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.registration_recorded], [503, "registration_unconfirmed", false],
+    JSON.stringify(r.out.body).slice(0, 300));
+  assert.equal(storedCase(id).commitments.a, null, "not projected over the moved root");
+  assert.equal(r.out.body.registration_path, claimPathOf(id, a), "the answer names the file");
+  const again = await commit(id, a, NOW + 2000);
+  assert.deepEqual([again.status, again.body.existing, again.body.status], [200, true, "COMMITTED"]);
+});
+
+test("R-L4c c4: every answer after a file is written names its path", async () => {
+  const u = await unconfirmedA("RL4c c4 path named");
+  assert.equal(u.out.body.registration_path, claimPathOf(u.id, u.a));
+  const again = await commit(u.id, u.a, NOW + 1500);
+  assert.equal(again.body.registration_path, claimPathOf(u.id, u.a));
+  const id = await openCase("RL4c c4 path named fresh");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const fresh = await commit(id, a);
+  assert.deepEqual([fresh.status, fresh.body.registration_path], [201, claimPathOf(id, a)]);
+});
+
+test("R-L4c c4: the page says only that no registration is confirmed for a role the root does not project; it lists, counts and links no claim file", async () => {
+  const u = await unconfirmedA("RL4c c4 page");
+  for (const at of [NOW + 5000, D + 1000]) {
+    const html = (await casePage(u.id, at)).html;
+    const rows = registrationsOf(html);
+    if (at < D) assert.ok(rows.includes(`role a ${NO_REGISTRATION}`), rows);
+    assert.equal(html.includes(u.rpath), false, "no claim file named or linked");
+    assert.doesNotMatch(html, /written, not confirmed|never confirmed|cannot acquire/);
+  }
+  const c = await committedCase("RL4c c4 page projected");
+  const html = (await casePage(c.id, NOW + 5000)).html;
+  assert.ok(html.includes(`https://github.com/${PINS}/commits/main/${claimPathOf(c.id, c.a)}`), "a projected file is linked");
+});
+
+test("R-L4c c4: the page never reads the registrations folder: it reads only the files the root projects", async () => {
+  const u = await unconfirmedA("RL4c c4 page reads");
+  await register(u.id, party(u.id, "b", TOOL_TAPE));
+  const projectedB = regFiles(u.id, "b");
+  const from = gh.getLog.length;
+  await casePage(u.id, NOW + 5000);
+  const regReads = gh.getLog.slice(from).filter((p) => p.startsWith(`registrations/${u.id}`) || p.startsWith(`cases/${u.id}/commit_`));
+  assert.deepEqual(regReads, projectedB, "role b's projected file alone; no listing, and no read of role a's claim");
+});
+
+test("R-L4c c4: registration_exists is gone, and 'cannot acquire it' is printed nowhere", () => {
+  for (const f of jsFiles("lib")) {
+    assert.equal(read(f).includes("registration_exists"), false, f);
+    assert.equal(/cannot acquire it/.test(read(f).replace(/\s+/g, " ")), false, f);
   }
 });

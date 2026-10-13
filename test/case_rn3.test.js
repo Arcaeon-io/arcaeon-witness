@@ -258,7 +258,7 @@ async function lostRace(scope, { deleteFails = false } = {}) {
   const b = party(id, "b", TOOL_TAPE);
   await register(id, a);
   plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
+  const rpath = REG.claimPath({ case_id: id, ...b }, b.key);
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const viaMock = global.fetch;
   if (deleteFails) {
@@ -435,7 +435,7 @@ test("MUST-FAIL GAP (H21): the retry's 503 names its case; and a signed record's
   assert.equal(again.status, 200);
   assert.deepEqual(again.body.case, storedCase(c.id), "signed: shown whole, sig_reason: null included");
   // (since unit R-L, L1: the retry's 503 is its registration read failing)
-  gh.forceGetFailure(PINS, C.registrationPath(c.id, "b"), 1, 503);
+  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "b"), 1, 503);
   const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.deepEqual([r.status, r.body.error_code, r.body.case_id], [503, "store_unreachable", c.id], JSON.stringify(r.body));
 });

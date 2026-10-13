@@ -852,24 +852,31 @@ pointers (`pins/<namespace>/latest.json`, and a case's
 `pins/case/<case_id>/latest.json`, which each new pin of that case moves).
 
 A registration file is a claim, and it stands only once the case root
-projects it: the root's entry for the role carries the sha256 of the file's
-bytes, and the registration writes that projection only after a fresh read
-of the root shows no withdrawal and no seal, by a compare-and-swap on the
-root. If that read or that write fails, nothing more is written and the
-answer is 503 `registration_unconfirmed`: the registration file is written
-and is not yet confirmed; send the same registration again. The same
-registration is the same fields a party supplies (the case, the role, the
-commitment, the registering key and its signature), never the same bytes:
-sent again, it finds the file and projects that file as it is, with the
-time it was first received. A registration whose party-supplied fields
-differ is 409 `registration_exists`, naming the sha256 of the file that is
-there and the field that differs. A file the root does not project has no
-standing: the case page says it is written and not confirmed while the case
-is open, and, once the case is withdrawn, sealed or past its deadline, that
-it has no standing and cannot acquire it. Every reader takes a case's
-registrations from the root's projection and checks the file at each path
-against the sha256 projected; a file missing or not the one projected makes
-the case DAMAGED, which is shown as that, never sealed and never pinned.
+projects it. Each claim has its own file,
+`registrations/<case_id>/<role>/<claim>.json`, written once: the claim is
+the sha256 of the json-c14n:v1 bytes of the fields a party supplies (the
+case, the role, the commitment, the registering key and its signature), so
+the same registration sent again is the same claim and finds its own file.
+A file is written only when the case root as read shows the case open and
+the role not yet projected; the root projects at most one claim per role,
+and its entry carries the claim and the sha256 of the file's bytes. The
+registration projects only after a fresh read of the root shows no
+withdrawal and no seal, before the deadline by this service's clock read
+just before the write, by a compare-and-swap on the root. The
+compare-and-swap decides between two claims: one that loses is not retried,
+and the root, read once more, is the answer (`role_already_committed`,
+naming the projected sha256, when another claim holds the role). If the
+read or the write fails, nothing more is written and the answer is 503
+`registration_unconfirmed`: the registration file is written and is not yet
+confirmed; send the same registration again. Every answer after a file is
+written names its path. A role the root projects for another claim is 409
+`role_already_committed` and nothing is written. A file the root does not
+project has no standing, and the case page neither lists nor links it: for
+a role the root does not project, the page says only that no registration
+is confirmed for that role. Every reader takes a case's registrations from
+the root's projection and checks the file at each projected path against
+the sha256 projected; a file missing or not the one projected makes the
+case DAMAGED, which is shown as that, never sealed and never pinned.
 
 Files under removals/ that a preview pins repository may hold are ignored:
 no code reads or writes them.
