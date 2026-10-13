@@ -13,6 +13,21 @@
 - **Two sentences (L6).** Revocation (README and the key document's `revoked` meaning): "A key once shown revoked by a valid marker stays revoked. If the marker file is later removed, the answer is that the marker cannot be read, never that the key is trusted again." The case page, beside the key document it names: "Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document."
 - **Follow-ups to R-J3 (g1-g8), the first commit.** `anchor_record_changed` says the record was read and named a different head (g1). A daily anchor record whose head the repository does not show no longer holds the cases behind it (g2). The case-commit cell of `case_commit_not_shown` says what was read (g3). "Not shown by the repository" is one wording, and "yet" only for `could_not_look` (g4). A pin commit list longer than this service reads, or empty, has its own reason and words (g5). The preview tool says `pin_unavailable` as could-not-look (g6). The anchor record's own commit is said as that (g7). The (state, reason) table in `test/case_rj3.test.js` now has 148 rows, and the R-J3 line that said "every pair" says what the table covers (g8).
 - **Tests.** New: `test/case_rl.test.js`, 25 tests; on the follow-ups commit 24 fail, and the one that passes holds a verdict to its own case's key ids, which was already so. Deleted: every test of the listing, and the red-team todo about a stranger listing a published digest. Updated by design: the tests whose fixtures went through the listing or a removal (`case_consent`, `case_item2c`, `case_redteam`, `case_rn`, `case_rn2`, `case_rn3`, `case_rn4`, `no_delete_record`, `reconcile_endpoint`, `response_bodies`).
+- **The must-fail pass, and the gap-test commit** (1535f38).
+  - 185 defects were planted, one at a time, over every line the follow-ups and R-L changed in `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js`, `lib/_verdict.js`, `lib/_case_unregister.js` and `tools/preview_dry_run.js`, with the whole suite run against each. The unit's own tests caught 105, and none timed out.
+  - The 80 that survived, by place:
+    - the index reader and the next pin (L5): a failed, absent or foreign pin's reason, the wanted-row filter, a walk that stops, and the pin's `auth_note`;
+    - the marker read again from the cache (L6), and the first miss kept over later ones (g2), with an unread record passed over;
+    - the repair note (L3): every form check, every verifier check, every guard before the note is written, the read-back, the verification before the removal, two of the sealer's three paths passing the run's key, and the removal guard's field checks;
+    - the page's removals (L3): what it says when a read failed, a note at the wrong name or of another case, a file still there, a role never registered, the rule, the panel on OPEN and EXPIRED pages, and that a page whose removals could not be read is never kept;
+    - the answers: the C2 refusal's words and `repair_note`, the withdrawal's `withdrawal_note` and `preimage_note`, the `reason` field of `anchor_unreadable`, and the revoked-key could-not-look page for a history longer than this service reads (g5).
+  - 25 gap tests (21 in `test/case_rl.test.js`, 4 in `test/case_rj3.test.js`) catch 78 of them.
+  - Two are left as equivalent, both in `lib/_verdict.js` `listedByOk`. V03 drops "an index on the seal's own pin": every entry there already fails the pin range. V04 drops "an entry that is not an object": no JSON value that is not an object has both keys.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - 9e35cd7 (the follow-ups): 1494 tests, 1490 pass, 2 skipped, 0 fail, 2 todo.
+  - 39caaae (R-L): 1503 tests, 1500 pass, 2 skipped, 0 fail, 1 todo. The todo removed is the red-team question about a stranger listing a published digest.
+  - 1535f38 (gap tests): 1528 tests, 1525 pass, 2 skipped, 0 fail, 1 todo. A bare `node --test`: 1535 and 1532.
+  - The change log commit changes no test, and the final tip prints what 1535f38 prints.
 
 ## 2026-10-13: Unit R-J3: every pin, anchor, case-commit and row cell, and every refusal about a pin, anchor, commit or row, says only what was read, by state and reason (branch `case-protocol-2026-10-10`, NOT deployed)
 
