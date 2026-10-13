@@ -1015,3 +1015,17 @@ test("MUST-FAIL GAP (P04): the page names the latest attempt", async () => {
   const page = await casePage(c.id);
   assert.match(page.html, /The latest: A joint reveal was attempted at 2026-10-10T09:01:00Z/);
 });
+
+test("MUST-FAIL GAP (S05): a next page that is not a page number is a list that cannot be read", async () => {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const r = await viaMock(url, o);
+    if (!String(url).includes("/commits?")) return r;
+    return { ...r, headers: { get: (h) => (h.toLowerCase() === "link" ? `<https://api.github.com/repos/${PINS}/commits?path=x&page=next>; rel="next"` : null) } };
+  };
+  try {
+    await assert.rejects(store.listCommitsPage("x", { perPage: 100, page: 1 }), /next page/);
+  } finally {
+    global.fetch = viaMock;
+  }
+});
