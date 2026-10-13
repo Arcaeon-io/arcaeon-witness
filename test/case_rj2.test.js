@@ -498,3 +498,109 @@ test("n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for 
   const off = (await casePage(id)).html;
   assert.ok(off.includes("that commit is not on the published branch of the pins repository (case_commit_off_branch)"));
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-J2): the mutants the pass over the lines R-J2 changed
+// left alive, each caught here
+// =============================================================================
+
+// Two views a few seconds apart: whether the second was made afresh (it
+// says it was read at its own time) rather than answered from the cache.
+async function readAgain(id, t0) {
+  await casePage(id, { now: t0 });
+  const second = await casePage(id, { now: t0 + 5000, cached: true });
+  return { again: second.html.includes(`read at ${utc(t0 + 5000)}`), html: second.html };
+}
+
+test("MUST-FAIL GAP (S04): the sealer's row read-back that cannot read the row at its commit is could_not_look, never a mismatch", async () => {
+  const c = await sealedCase("RJ2 gap sealer row read");
+  assert.equal((await reference(c)).status, 201);
+  gh.forceRawFailure(1, 503, `:${rowPath(c.id, 1)}`);
+  const run = await sealerRun();
+  assert.deepEqual(run.rows_unrecorded, [{ case_id: c.id, seq: 1, code: "could_not_look", reason: "reference_at_commit_http_503" }]);
+});
+
+test("MUST-FAIL GAP (S07): n5's mismatch names the commit the pin names", async () => {
+  const { id } = await sealedCase("RJ2 gap n5 commit");
+  plantPin(id, sha("another chain"), sealCommit(id));
+  const st = await S.anchorState(id, sha("another chain"));
+  assert.deepEqual([st.pin, st.reason, st.case_commit], ["pin_commit_mismatch", "case_served_differs", sealCommit(id)]);
+});
+
+test("MUST-FAIL GAP (S12, P06): a reason the words do not know claims no chain and no bytes", () => {
+  assert.equal(S.conflictWords("some_other_reason"), "a pin under this case's namespace is in conflict with this case");
+  assert.equal(CP._internal.mismatchWords("case_served_differs", "case file"), "the case file there is not shown to be this case file in canonical form (json-c14n:v1)");
+});
+
+test("MUST-FAIL GAP (P16): a page whose case reads anchored prints the general anchor sentence", async () => {
+  const { id } = await sealedCase("RJ2 gap anchored note");
+  dailyAnchor(pinDay(id));
+  const html = (await casePage(id)).html;
+  assert.match(html, /anchored: a daily anchor record/, "fixture: anchored");
+  assert.ok(html.includes(CP._internal.esc(S.ANCHOR_NOTE)));
+});
+
+test("MUST-FAIL GAP (P18, P19, P21, P22, P23, P30): a page is not kept when its pin could not be read or mismatches, when its rows could not be read, when a row could not be read or mismatches, or when it does not verify", async () => {
+  const t0 = REVEAL_AT + 3600000;
+  // the pin pointer could not be read
+  const a = await sealedCase("RJ2 gap pin cnl");
+  gh.forceGetFailure(PINS, S.pinPaths(a.id).latest, 1, 503);
+  assert.equal((await readAgain(a.id, t0)).again, true, "pin could_not_look");
+  // a mismatch
+  const b = await sealedCase("RJ2 gap pin mismatch");
+  plantPin(b.id, chainOf(b.id), "f".repeat(40));
+  assert.equal((await readAgain(b.id, t0)).again, true, "pin_commit_mismatch");
+  // the reference rows could not be listed
+  const c = await sealedCase("RJ2 gap rows cnl");
+  assert.equal((await reference(c)).status, 201);
+  gh.forceGetFailure(PINS, C.referencesDir(c.id), 1, 503);
+  assert.equal((await readAgain(c.id, t0)).again, true, "rows could not be read");
+  // a row's commit could not be read, and a row's commit that mismatches
+  const d = await sealedCase("RJ2 gap row cnl");
+  assert.equal((await reference(d)).status, 201);
+  await sealerRun();
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(1, 503, `:${rowPath(d.id, 1)}`);
+  const dv = await readAgain(d.id, t0);
+  assert.match(rowLine(dv.html, 1), /recorded by commit/, "fixture: read again, and this time recorded");
+  assert.equal(dv.again, true, "a row could_not_look");
+  const e = await sealedCase("RJ2 gap row mismatch");
+  assert.equal((await reference(e)).status, 201);
+  await sealerRun();
+  const latest = S.pinPaths(e.id).latest;
+  gh.seed(PINS, latest, { ...gh.read(PINS, latest), reference_commits: [{ seq: 1, commit: "e".repeat(40) }] });
+  assert.equal((await readAgain(e.id, t0)).again, true, "a row pin_commit_mismatch");
+  // a page that does not verify
+  const f = await sealedCase("RJ2 gap unverified");
+  const k = storedCase(f.id);
+  gh.seed(PINS, C.casePath(f.id), { ...k, sig: k.sig.replace(/.$/, (ch) => (ch === "A" ? "B" : "A")) }, { keepHistory: true });
+  const fv = await readAgain(f.id, t0);
+  assert.match(fv.html, /does not verify|DOES NOT VERIFY|not verify/i, "fixture: the page does not verify");
+  assert.equal(fv.again, true, "an unverified page");
+});
+
+test("MUST-FAIL GAP (P25, P32): a sealed page viewed after the deadline is kept, and so is a withdrawn page", async () => {
+  const dl = Date.parse(DEADLINE);
+  const { id } = await sealedCase("RJ2 gap sealed late");
+  assert.equal((await readAgain(id, dl + 3600000)).again, false, "a VERDICT page is not held to the deadline");
+  const w = await committedCase("RJ2 gap withdrawn kept");
+  const res = makeRes();
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: w.id, role: "b", tape_sha256: w.b.tape_sha256, salt: w.b.salt }), res, { now: NOW + 2000, env: KEYS, keyDocument: DOC });
+  assert.equal(res._status, 201, JSON.stringify(res._body).slice(0, 200));
+  const wv = await readAgain(w.id, REVEAL_AT);
+  assert.match(wv.html, /WITHDRAWN/);
+  assert.equal(wv.again, false, "a withdrawn page is kept");
+});
+
+test("MUST-FAIL GAP (P31): a single-party page of an unsealed case is kept no later than its deadline", async () => {
+  const c = await committedCase("RJ2 gap single party");
+  const k = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_id: k.commitments.a.key_id } } }, { keepHistory: true });
+  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: one key id in both commitments");
+  const dl = Date.parse(DEADLINE);
+  const before = await casePage(c.id, { now: dl - 2000 });
+  assert.equal(before.status, 200, before.html.slice(0, 200));
+  assert.doesNotMatch(before.html, /past its deadline/);
+  const after = await casePage(c.id, { now: dl + 1000, cached: true });
+  assert.match(after.html, /past its deadline/);
+});
