@@ -86,6 +86,13 @@
 //   --exhaust-quota     run the quota half of (c): up to 21 opens.
 //   --help              this text
 //
+//   KEY_DOCUMENT_BRANCH (environment; unit R-I2) the key document's published
+//                       branch, main unless set. (e) and (f) hold each sealed
+//                       case's named document commit to it (lib/_case_seal.js
+//                       commitOnBranch), so this shell must set the same
+//                       value as the preview deployment, or a preview of
+//                       another branch reads as not published here.
+//
 // THE RECONCILE VERIFIER (red-team fix B; Design I). Since Design I a
 // sealed case is held to the key document it NAMES (signed_under), read
 // from the public repository at the commit it names, for both its case

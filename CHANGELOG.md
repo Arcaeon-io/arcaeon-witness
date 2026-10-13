@@ -1,5 +1,32 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-I2: fixes from the second reader's pass over R-I (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **B1, R past the first page** (`lib/_case_seal.js`).
+  - **The defect.** The reader took R from one page of the marker path's commits, the newest 100. With 100 and more rewrites of the marker after a forged case was pinned, R moved after it, and the forged case held.
+  - **The fix.** The reader now walks every page (`allCommitsOf`, at most `COMMIT_LIST_PAGES` = 50 pages of 100). Past the bound it answers `revocation_marker_unreadable`, which is `signer_revoked`. `commitsOf`, the pins-repository read Design J's commits use, pages the same way.
+- **M1, R is the first VALID marker.**
+  - R is the oldest commit on the path at which the file reads as a valid marker for the key: `checkRevocationMarker`, the reader's whole check, including the revoking commit on the published branch and the document there listing the key revoked.
+  - Content that is not a valid marker is skipped; a commit that removed the file reads as nothing there.
+  - An earlier valid marker always wins, so no later write moves R.
+  - A read that fails before the first valid marker is found answers unreadable, never a later commit.
+  - With none valid it is `revocation_marker_invalid`.
+  - `tools/record_key_revocation.js` runs the same check on the marker it would write, against the readers' published branch (`KEY_DOCUMENT_BRANCH` of its shell), and refuses one a reader would reject: `marker_rejected`, nothing written.
+- **M2, the banner says what is proven** (`lib/_case_page.js`). "The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked from its commit W." P links to the case_commit, R to the marker's commit, and W to the document at the marker's `revoked_in_commit`. "Pinned before the revocation" is gone from the page, the refusal words and the notes.
+- **The minor findings, m1 to m7.**
+  - **m1, the notes on retired keys.** A retired key still verifies seals under a document where it was active, with no commit order, and a key suspected of compromise must be revoked, not retired. "Pinned before it" is defined as the case-file commit the pin records.
+  - **m2, the pin's state in the reason.** A case under a revoked key whose pin is not pinned says why: `case_not_pinned`, `pin_commit_mismatch`, or `pin_unreadable:<reason>`.
+  - **m3, the DOES NOT VERIFY notice** has one sentence each for `signer_unlisted` and `signer_revoked`.
+  - **m4, a compare 404.** It is off the branch only when the branch exists: one branch read, kept once it does (`store.branchExists`). A branch that does not exist, or a failed branch read, is `branch_unreadable`. The could-not-look page for a commit off the branch says so, and does not say "try again".
+  - **m5, KEY_DOCUMENT_BRANCH is documented** in both tools' usage and in a README section.
+  - **m6, the mock** keeps a path's history when asked (`seed(..., {keepHistory: true})`), and answers branch reads.
+  - **m7, the notes on legacy pins.** A legacy pin with no case_commit under a revoked key reads case_not_pinned and cannot be upgraded.
+- **The flake.** `test/preview_dry_run.test.js` clears the seal module's caches before each test. Its TIMEOUTS test now gives each case its own clocks, the other one 30s out, so the idle timer and the deadline cannot fire in the other order under load. The failure did not reproduce here: 4 runs of the old file beside a full parallel suite each passed 26/26.
+- **Tests.**
+  - `test/case_trust_root.test.js` +10, and M3's test rewritten to 105 later commits with a case pinned between R and them. At 5517ea8, 13 tests failed. The m6 test passed there: it guards that the reader keeps reading at R.
+  - **By design:** the banner wording (`case_signed_under`, `case_redteam`, `case_commits`), and two `commitOnBranch` assertions for a branch that does not exist (now `branch_unreadable`).
+- Suite 1182 -> 1192 tests, 0 fail, 3 todo. Here: 1187 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-I, the must-fail pass over the lines it changed, and the tests that close its gaps (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The pass.** One pass over the lines unit R-I changed: `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js`, `lib/_store.js`, `tools/record_key_revocation.js`, `tools/preview_dry_run.js` and the key document's notes. 114 defects were planted one at a time, with the whole suite run against each.

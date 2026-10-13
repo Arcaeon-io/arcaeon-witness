@@ -379,7 +379,7 @@ test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or
   const revoked = docWith(entry(CASE_KEY, "revoked"), KD.reconcileEntry(RECEIPT_KEY));
   // unit R-I (I1): a revocation is ordered against the case's pin by commit:
   // the document's revocation published on the branch, then the key's marker
-  // recorded in the pins repository, after this case was pinned
+  // recorded in the pins repository, after this case's file was written
   KD.serve(gh, revoked);
   const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
   assert.equal(marked.ok, true, JSON.stringify(marked));
@@ -390,8 +390,8 @@ test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or
     "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key");
   assert.equal(answer.code, "signer_since_revoked");
   assert.match(page.html, /<h2>The verdict<\/h2>/);
-  assert.match(page.html, /A key was revoked after this case was pinned/);
-  assert.ok(page.html.includes(`revoked in commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R, the marker's commit");
+  assert.match(page.html, /A key that signed this case is revoked\./);
+  assert.ok(page.html.includes(`recorded in the pins repository at commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R, the marker's commit");
 });
 
 test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid"', async () => {

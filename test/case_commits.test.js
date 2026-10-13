@@ -734,7 +734,7 @@ test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded
   const page = await render(DOC, {});
   // unit R-I: a revocation counts by commit order: the document's
   // revocation on the branch (W), then the key's marker in the pins
-  // repository (R), after this case was pinned
+  // repository (R), after this case's file was written
   const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
   const W = KD.serve(gh, revoked);
   const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
@@ -742,7 +742,7 @@ test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded
   const banner = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: current });
   assert.match(page, /anchored: a daily anchor record holds its pin/, "fixture: anchored");
   assert.match(rowLine(page, 1), /written at commit/, "fixture: the row, recorded");
-  assert.match(banner, /A key was revoked after this case was pinned/, "fixture: the banner");
+  assert.match(banner, /A key that signed this case is revoked\./, "fixture: the banner");
   const one = commitsOnPage(page);
   const two = commitsOnPage(banner);
   assert.deepEqual([...one.bare, ...two.bare], [], "no commit is bare text");

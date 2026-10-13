@@ -769,6 +769,21 @@ After `npx vercel build`, `.vercel/output/static` must hold exactly the three
 files above. `.vercel/` is gitignored, and stays local: `vercel pull` writes
 the environment's variables into it.
 
+### KEY_DOCUMENT_BRANCH: the key document's published branch
+
+`KEY_DOCUMENT_BRANCH` names the branch of this repository on which the case
+key document is published (default `main`). A sealed case names the
+commit of the key document it was sealed under, and every reader holds that
+commit to this branch (`lib/_case_seal.js` `commitOnBranch`): a commit that
+is not on it is not a published document, and the case reads as could not
+look. The joint reveal refuses to seal from a deployment whose own commit is
+not on it, and `tools/record_key_revocation.js` checks the marker it writes
+against it. A preview deployment of another branch sets it to that branch.
+The operator's shell must set the same value as the deployment it checks:
+`tools/preview_dry_run.js` holds the preview's sealed cases to it in its
+steps (e) and (f), and `tools/record_key_revocation.js` holds the marker to
+it.
+
 ## Testing
 
 `npm test` (or `node --test "test/*.test.js"`) — a no-framework harness on

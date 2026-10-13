@@ -201,6 +201,12 @@ async function pageOf(id, keyDocument) {
   return { status: res._status, html: String(res._body) };
 }
 const verdictShown = (html) => html.includes("<h2>The verdict</h2>");
+// unit R-I2 (M2): the banner's sentence for a key, P, R and W linked as the page links them
+const aTo = (href, sha) => `<a href="${href}" rel="nofollow noopener noreferrer">${sha.slice(0, 12)}</a>`;
+const bannerSentence = (P, R, W) =>
+  `The case file was written at commit ${aTo(`https://github.com/${store.REPO}/commit/${P}`, P)}, before this key's revocation was recorded in ` +
+  `the pins repository at commit ${aTo(`https://github.com/${store.REPO}/commit/${R}`, R)}. The key document lists the key as revoked from ` +
+  `its commit ${aTo(`https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${W}/${S.CASE_KEYS_FILE}`, W)}.`;
 
 // The revocation, published: the current document served at a later commit
 // of the published branch, then the marker written by the tool. -> {W, R}.
@@ -228,8 +234,9 @@ test("I1: a signer revoked in commit R, the case pinned at P before R: signer_si
   const p = await pageOf(c.id, CASE_REVOKED);
   assert.equal(p.status, 200);
   assert.ok(verdictShown(p.html), "the verdict is shown");
-  assert.ok(p.html.includes(`revoked in commit <a href="https://github.com/${store.REPO}/commit/${R}"`), "R, linked");
-  assert.ok(p.html.includes(`after this case was pinned in commit <a href="https://github.com/${store.REPO}/commit/${c.P}"`), "P, linked");
+  // unit R-I2 (M2): the banner says exactly what is proven, P, R and W each linked
+  assert.ok(p.html.includes(bannerSentence(c.P, R, W)), "the banner, word for word");
+  assert.ok(!/pinned before the revocation|revoked after this case was pinned/.test(p.html), "never more than is proven");
   assert.ok(!p.html.includes("Revoked since this case was sealed"), "no date-based banner");
   // the reconcile key, the same way
   const d = await sealedCase("I1 before, reconcile");
@@ -571,7 +578,9 @@ test("MUST-FAIL GAP (ST03, B03, A09, A04, A05, A06, A07): commitOnBranch reads o
   assert.equal(gh.compareLog.length, n, "neither is asked");
   // on main, and kept for main only
   assert.deepEqual(await S.commitOnBranch(c), { on: true });
-  assert.equal((await S.commitOnBranch(c, { branch: "other-branch" })).on, false, "another branch is asked, not taken from main's answer");
+  // another branch is asked, not taken from main's answer; one that does not
+  // exist is not "off" (unit R-I2, m4)
+  assert.deepEqual(await S.commitOnBranch(c, { branch: "other-branch" }), { unknown: "branch_unreadable" });
   // the read carries the pin token (rate limits)
   const heard = [];
   global.fetch = async (url, o) => {
@@ -634,12 +643,16 @@ test("MUST-FAIL GAP (P01): a case whose pin records the revoking commit itself (
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "pinned_at_or_after_revocation"]);
 });
 
-test("MUST-FAIL GAP (K01, K02, K10): R is the commit that wrote the marker, whatever touched its path since; a marker list that cannot be read is unreadable; a marker read is kept per key", async () => {
+test("MUST-FAIL GAP (K01, K02, K10; unit R-I2 M3, B1): R is the commit that wrote the first valid marker, whatever touched its path since, 101 and more later commits included; a case pinned between R and them is signer_revoked; a marker list that cannot be read is unreadable; a marker read is kept per key", async () => {
   const c = await sealedCase("gap marker commits");
   const { R, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
-  gh.addCommit(PINS, mp);
+  const late = await sealedCase("gap marker commits, late");
+  for (let i = 0; i < 105; i += 1) gh.addCommit(PINS, mp); // the same valid marker, rewritten
   S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
   assert.equal((await S.sealedRecordReason(c.k, CASE_REVOKED)).revoked[0].revoking_commit, R, "the oldest commit, the one that wrote it");
+  const lateAnswer = await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.deepEqual([lateAnswer.code, lateAnswer.reason], ["signer_revoked", "pinned_at_or_after_revocation"], "pinned after R, before the rewrites: never holds");
   const n = gh.commitsLog.filter((p) => p === mp).length;
   await S.sealedRecordReason(c.k, CASE_REVOKED);
   assert.equal(gh.commitsLog.filter((p) => p === mp).length, n, "kept for the instance");
@@ -709,8 +722,8 @@ test("MUST-FAIL GAP (H03, H04, G04, G05): the reference and the page say signer_
   assert.ok((await pageOf(c.id, noCase)).html.includes("the current key document: a key that signed it is not listed there in its role"));
   KD.serve(gh, CASE_REVOKED); // no marker: signer_revoked
   const r = await referenceAs(c.id, c.a, CASE_REVOKED);
-  assert.match(r.body.error, /a key that signed it is revoked in the current key document, and the case is not shown pinned before the revoking commit/);
-  assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes("a key that signed it is revoked in the current key document, and this case is not shown pinned before the revoking commit"));
+  assert.match(r.body.error, /a key that signed it is revoked in the current key document, and the case file is not shown written before the revocation was recorded in the pins repository/);
+  assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes("a key that signed it is revoked in the current key document, and this case&#39;s file is not shown written before the revocation was recorded in the pins repository"));
 });
 
 test("MUST-FAIL GAP (T02, T04, T10, T11, T12, T13, T14, T15): the tool refuses an existing marker even in a dry run, never writes over a marker another writer created mid-write, says a store error, an unlisted key, and each read it could not make", async () => {
@@ -773,7 +786,175 @@ test("MUST-FAIL GAP (B01): KEY_DOCUMENT_BRANCH names the branch: a deployment of
   const commit = KD.serve(gh, doc);
   const c = await committedCase("gap branch env");
   const unnamed = await reveal(revealBody(c.id, c.a, c.b), { env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: commit }, keyDocument: doc });
-  assert.deepEqual([unnamed.status, unnamed.body.reason], [503, "commit_not_on_branch"], "main is not this repository's branch here");
+  assert.deepEqual([unnamed.status, unnamed.body.reason], [503, "branch_unreadable"], "main is not this repository's branch here (unit R-I2, m4: unknown, not off)");
   const named = await reveal(revealBody(c.id, c.a, c.b), { env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: commit, [S.KEY_DOCUMENT_BRANCH_ENV]: "preview-branch" }, keyDocument: doc });
   assert.equal(named.status, 201, JSON.stringify(named.body).slice(0, 200));
+});
+
+// =============================================================================
+// UNIT R-I2 (2026-10-13): fixes from the second reader's pass over R-I
+// =============================================================================
+
+// A valid marker for `k` revoked in the document at W, written to its path
+// as another write, keeping the path's history. -> the commit.
+const writeMarker = (k, W, over = {}) => gh.seed(PINS, markerPath(k), { ...goodMarker(k, W), ...over }, { keepHistory: true });
+
+test("R-I2 B1: R is found by walking every page of the marker path's commits; past the bound it is unreadable (signer_revoked), never a later commit", async () => {
+  const c = await sealedCase("R-I2 bound");
+  const { R, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  for (let i = 0; i < S.COMMIT_LIST_PAGES * 100; i += 1) gh.addCommit(PINS, mp);
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], "the oldest commit cannot be reached within the bound");
+  assert.notEqual(a.revoked.revoking_commit, R);
+});
+
+test("R-I2 B1 (commitsOf): the commit that wrote a pin record is the oldest touching it, past the first page of its history", async () => {
+  const c = await sealedCase("R-I2 commitsOf");
+  const { seq } = S.pinPaths(c.id);
+  const wrote = gh.commitsFor(PINS, seq);
+  assert.equal(wrote.length, 1, "fixture: written once");
+  for (let i = 0; i < 105; i += 1) gh.addCommit(PINS, seq);
+  S._internal.clearCommitFiles();
+  const st = await S.anchorState(c.id, S.caseChain(c.k), { anchor: false });
+  assert.equal(st.pin, "pinned");
+  assert.equal(st.pin_commit.sha, wrote[0].sha, "the commit that wrote it, not the 100th newest");
+});
+
+test("R-I2 M1: R is the oldest commit at which the path reads as a VALID marker for the key: a stray earlier write is skipped, not fatal; a later valid marker never moves R; with none valid it is revocation_marker_invalid", async () => {
+  const c = await sealedCase("R-I2 first valid");
+  const W = KD.serve(gh, CASE_REVOKED);
+  // a stray first write: a marker naming a commit where the key is active
+  gh.seed(PINS, markerPath(CASE_KEY), goodMarker(CASE_KEY, KD.commitOf(DOC)));
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "none valid yet");
+  const R = writeMarker(CASE_KEY, W);
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(a.code, "signer_since_revoked", JSON.stringify(a));
+  assert.equal(a.revoked[0].revoking_commit, R, "the first valid one");
+  // a later valid marker (another revoking document) never moves R
+  const W2 = KD.serve(gh, KD.docWith(revokedIn(CASE_KEY, "2026-10-12"), KD.reconcileEntry(RECEIPT_KEY)));
+  writeMarker(CASE_KEY, W2);
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const b = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([b.revoked[0].revoking_commit, b.revoked[0].revoked_in_document_commit], [R, W]);
+  // a read that fails before the first valid marker is found fails closed
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const stray = gh.commitsFor(PINS, markerPath(CASE_KEY)).slice(-1)[0].sha;
+  gh.forceRawFailure(1, 503, `${PINS}@${stray}`);
+  const u = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([u.code, u.reason], ["signer_revoked", "revocation_marker_unreadable"]);
+});
+
+test("R-I2 m6: the marker is read at R, not at the path's head: a later write of other content does not change what R says", async () => {
+  const c = await sealedCase("R-I2 at R");
+  const { R, W, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  gh.seed(PINS, mp, { not: "a marker" }, { keepHistory: true });
+  assert.deepEqual(gh.read(PINS, mp), { not: "a marker" }, "fixture: the head differs");
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(a.code, "signer_since_revoked", JSON.stringify(a));
+  assert.deepEqual([a.revoked[0].revoking_commit, a.revoked[0].revoked_in_document_commit], [R, W]);
+});
+
+test("R-I2 M1 (the tool): the tool runs the reader's check on the marker it would write, against the readers' published branch, and refuses one the reader would reject", async () => {
+  // the operator walks a branch the readers do not use
+  gh.setBranch(S.KEY_DOCUMENT_REPO, "release");
+  KD.serve(gh, CASE_REVOKED);
+  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, branch: "release", write: true });
+  assert.deepEqual([out.ok, out.code], [false, "marker_rejected"], JSON.stringify(out));
+  assert.match(out.reason, /revocation_marker_(invalid|unreadable)/);
+  assert.equal(gh.has(PINS, markerPath(CASE_KEY)), false, "nothing written");
+  // the readers' branch named: it passes, and is written
+  process.env.KEY_DOCUMENT_BRANCH = "release";
+  const ok = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+});
+
+test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case_not_pinned (no pin, or a legacy one with no case_commit), pin_commit_mismatch, or pin_unreadable:<reason>", async () => {
+  const c = await sealedCase("R-I2 pin states");
+  await revoke(CASE_KEY, CASE_REVOKED);
+  const { latest, seq } = S.pinPaths(c.id);
+  const pin = gh.read(PINS, latest);
+  // the pin names the commit that opened the case: the file there is another case
+  const opened = gh.commitsFor(PINS, C.casePath(c.id)).slice(-1)[0].sha;
+  gh.seed(PINS, latest, { ...pin, case_commit: opened });
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "pin_commit_mismatch"]);
+  gh.seed(PINS, latest, pin);
+  S._internal.clearDocumentCache();
+  gh.forceGetFailure(PINS, latest, 1, 503);
+  const u = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([u.code, u.reason], ["signer_revoked", "pin_unreadable:pin_pointer_unreadable"]);
+  // a legacy pin with no case_commit
+  const { case_commit: _cc, ...legacy } = pin; // eslint-disable-line no-unused-vars
+  gh.seed(PINS, latest, legacy);
+  gh.seed(PINS, seq, legacy);
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "case_not_pinned"]);
+});
+
+test("R-I2 m3: the DOES NOT VERIFY notice says the current document's two rules, one sentence each", async () => {
+  const c = await sealedCase("R-I2 notice");
+  const unlisted = await pageOf(c.id, KD.docWith(KD.reconcileEntry(RECEIPT_KEY)));
+  const revoked = await pageOf(c.id, (KD.serve(gh, CASE_REVOKED), CASE_REVOKED));
+  for (const p of [unlisted, revoked]) {
+    assert.match(p.html, /Each key that signed it must also be listed in its role in the current key document; a key that is not makes the record signer_unlisted\./);
+    assert.match(p.html, /A key the current key document lists as revoked holds only for a case whose case file was written before the key&#39;s revocation was recorded in the pins repository|A key the current key document lists as revoked holds only for a case whose case file was written before the key's revocation was recorded in the pins repository/);
+  }
+});
+
+test("R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the branch read is kept; the page does not say 'try again' for a commit off the branch", async () => {
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false }, "main exists: a commit it does not have is off");
+  const n = gh.branchLog.length;
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false });
+  assert.equal(gh.branchLog.length, n, "the branch read is kept");
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40), { branch: "no-such-branch" }), { unknown: "branch_unreadable" });
+  S._internal.clearDocumentCache();
+  gh.forceBranchFailure(1, 503);
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { unknown: "branch_unreadable" });
+  // the page, for a case naming a commit off the branch
+  const c = await committedCase("R-I2 page off branch");
+  const compared = RECONCILE.compare(c.a.tape, c.b.tape, { env: KEYS, now: REVEAL_AT, keyDocument: DOC });
+  const named = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY));
+  const side = KD.serveOffBranch(gh, named, "3".repeat(40));
+  const k = S.sealCase(storedCase(c.id), {
+    reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
+    receipt: S.storableReceipt(compared.receipt).receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side, retrieved_at: C.utcSeconds(REVEAL_AT) },
+  }, S.loadCaseSigner(KEYS, { keyDocument: named }));
+  gh.seed(PINS, C.casePath(c.id), k);
+  const p = await pageOf(c.id, DOC);
+  assert.equal(p.status, 503);
+  assert.ok(p.html.includes("is not on the published branch"), "says what it is");
+  assert.ok(!p.html.includes("try again"), "no retry will change it");
+});
+
+test("R-I2 m1, m7: the key document's notes say a retired key still verifies seals under a document where it was active with no commit order, that a key suspected of compromise must be revoked, not retired, and that a legacy pin with no case_commit under a revoked key reads case_not_pinned and cannot be upgraded", () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", ".well-known", "arcaeon", "case-signing-keys.json"), "utf8"));
+  assert.equal(S.checkKeyDocument(doc).ok, true);
+  const all = `${doc.description} ${JSON.stringify(doc.status_meaning)} ${doc.rotation}`;
+  assert.match(doc.status_meaning.retired, /still verifies .* no commit order/);
+  assert.match(all, /suspected of compromise must be revoked, not retired/);
+  assert.match(all, /a legacy pin with no case_commit .* reads case_not_pinned and cannot be upgraded/);
+});
+
+test("R-I2 M2, m5: no reader, tool or note says more than is proven ('pinned before the revocation', 'revoked after this case was pinned'); KEY_DOCUMENT_BRANCH is documented in both tools' usage and in README.md", () => {
+  const root = path.join(__dirname, "..");
+  const files = ["lib/_case_page.js", "lib/_case_seal.js", "lib/_case_http.js", "public/.well-known/arcaeon/case-signing-keys.json", "tools/record_key_revocation.js"];
+  for (const f of files) {
+    assert.ok(!/pinned before the revocation|revoked after this case was pinned/.test(fs.readFileSync(path.join(root, f), "utf8")), f);
+  }
+  const usage = (f) => {
+    const text = fs.readFileSync(path.join(root, f), "utf8");
+    const at = text.search(/usage|USAGE|OPERATOR COMMAND/);
+    return text.slice(at, at + 4000);
+  };
+  for (const f of ["tools/preview_dry_run.js", "tools/record_key_revocation.js"]) assert.match(usage(f), /KEY_DOCUMENT_BRANCH/, f);
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+  assert.match(readme, /^#+ .*KEY_DOCUMENT_BRANCH/m, "a README section");
+  assert.match(readme, /default `?main`?/);
+  assert.match(readme, /steps \(e\) and \(f\)/);
 });

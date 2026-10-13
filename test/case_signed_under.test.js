@@ -587,7 +587,7 @@ test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and 
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 
-test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order): the banner names the key, \"revoked in commit R, after this case was pinned in commit P\" (both linked), and the document's commit that lists it revoked; the case stays sealed and its verdict word does not change", async () => {
+test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order; since unit R-I2 word for word what is proven): the banner names the key and says \"The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked from its commit W.\", each linked; the case stays sealed and its verdict word does not change", async () => {
   const { id } = await sealedCase("page since revoked");
   const before = await pageOf(id);
   const P = gh.read(PINS, S.pinPaths(id).latest).case_commit;
@@ -597,11 +597,13 @@ test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order): the ba
   const p = await pageOf(id, { keyDocument: revoked, env: { [S.DEPLOY_COMMIT_ENV]: CURRENT_COMMIT } });
   assert.equal(p.status, 200);
   assert.match(p.html, /<h1>Case: VERDICT<\/h1>/);
-  assert.ok(p.html.includes("A key was revoked after this case was pinned"), "the banner");
-  assert.ok(p.html.includes(`The case key <code>${KD.keyIdOf(CASE_KEY)}</code> was revoked in commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`));
-  assert.ok(p.html.includes(`after this case was pinned in commit <a href="https://github.com/${store.REPO}/commit/${P}"`));
-  assert.ok(p.html.includes(`href="https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${W}/${S.CASE_KEYS_FILE}"`), "the document's commit that lists it revoked");
-  assert.ok(p.html.includes("revoked_since 2026-10-11"), "the stated day, as stated");
+  assert.ok(p.html.includes("A key that signed this case is revoked."), "the banner");
+  const a = (href, sha) => `<a href="${href}" rel="nofollow noopener noreferrer">${sha.slice(0, 12)}</a>`;
+  assert.ok(p.html.includes(`The case key <code>${KD.keyIdOf(CASE_KEY)}</code> is revoked. The case file was written at commit ` +
+    `${a(`https://github.com/${store.REPO}/commit/${P}`, P)}, before this key's revocation was recorded in the pins repository at commit ` +
+    `${a(`https://github.com/${store.REPO}/commit/${marked.commit}`, marked.commit)}. The key document lists the key as revoked from its commit ` +
+    `${a(`https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${W}/${S.CASE_KEYS_FILE}`, W)}.`), "word for word");
+  assert.ok(!/pinned before the revocation|revoked after this case was pinned/.test(p.html), "never more than is proven");
   assert.ok(!p.html.includes(CURRENT_COMMIT), "never the reader's own deployment");
   assert.equal(verdictWord(p.html), verdictWord(before.html));
   assert.ok(!p.html.includes("SEALED RECORD DOES NOT VERIFY"));
@@ -610,7 +612,7 @@ test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order): the ba
   KD.serve(gh, receiptRevoked);
   assert.equal((await TOOL.recordRevocation({ keyId: KD.keyIdOf(RECEIPT_KEY), currentDocument: receiptRevoked, write: true })).ok, true);
   const r = await pageOf(id, { keyDocument: receiptRevoked });
-  assert.ok(r.html.includes(`The reconcile key <code>${KD.keyIdOf(RECEIPT_KEY)}</code> was revoked in commit`));
+  assert.ok(r.html.includes(`The reconcile key <code>${KD.keyIdOf(RECEIPT_KEY)}</code> is revoked. The case file was written at commit`));
   assert.equal(verdictWord(r.html), verdictWord(before.html));
 });
 
@@ -735,7 +737,7 @@ test("S32, SINCE UNIT R-I (m3): the revoking commit shown is R, the commit that 
   const marked = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
   for (const own of [CURRENT_COMMIT, "<script>"]) {
     const p = await pageOf(id, { keyDocument: revoked, env: { [S.DEPLOY_COMMIT_ENV]: own } });
-    assert.ok(p.html.includes(`revoked in commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R");
+    assert.ok(p.html.includes(`recorded in the pins repository at commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R");
     assert.ok(!p.html.includes(own), `never the deployment's own ${own}`);
   }
 });

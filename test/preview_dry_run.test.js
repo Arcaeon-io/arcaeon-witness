@@ -115,6 +115,10 @@ let realSleep;
 beforeEach(() => {
   gh = new MockGitHubStore();
   restore = install(gh);
+  // the seal module's per-instance caches start empty for each test (unit
+  // R-I2: one test's kept reads never answer for another's mock)
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
   KD.serve(gh, TEST_DOC);
   realSleep = store._putRetry.sleep;
   store._putRetry.sleep = async () => {};
@@ -425,20 +429,26 @@ test("TIMEOUTS: an answer that stalls mid-body, one that trickles forever, and o
   }));
   const base = `http://127.0.0.1:${server.address().port}`;
   // Each clock ends its own case: the answer's idle timer the stall, the
-  // deadline (four idle periods) the trickle, the request's the silence.
-  for (const [p, want] of [["/stall", /^the answer stalled mid-body \(nothing for 0\.4s\)$/], ["/trickle", /^no complete answer in 1\.6s$/],
-    ["/silent", /^no answer in 0\.4s$/]]) {
+  // deadline the trickle, the request's the silence. Unit R-I2 (a file-level
+  // failure in 1 of 5 parallel runs): each case sets the OTHER clock far out
+  // (30s), so under load the two can never fire in the other order; the
+  // trickle writes every 50ms against a 10s idle timer.
+  for (const [p, opts, want] of [
+    ["/stall", { timeoutMs: 400, deadlineMs: 30000 }, /^the answer stalled mid-body \(nothing for 0\.4s\)$/],
+    ["/trickle", { timeoutMs: 10000, deadlineMs: 1600 }, /^no complete answer in 1\.6s$/],
+    ["/silent", { timeoutMs: 400, deadlineMs: 30000 }, /^no answer in 0\.4s$/],
+  ]) {
     const t0 = Date.now();
     let guard;
     const r = await Promise.race([
-      tool._internal.request(base, "GET", p, { timeoutMs: 400 }),
+      tool._internal.request(base, "GET", p, opts),
       new Promise((resolve) => {
-        guard = setTimeout(() => resolve({ error: "the request never ended" }), 5000);
+        guard = setTimeout(() => resolve({ error: "the request never ended" }), 20000);
       }),
     ]);
     clearTimeout(guard);
     assert.match(String(r.error), want, `${p}: ${JSON.stringify(r).slice(0, 200)}`);
-    assert.ok(Date.now() - t0 < 3000, `${p} ended in ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 10000, `${p} ended in ${Date.now() - t0} ms`);
   }
 });
 

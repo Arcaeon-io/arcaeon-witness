@@ -31,6 +31,15 @@
 // list (not_listed) or does not list as revoked (not_revoked), and writes
 // nothing when the revoking commit cannot be found or read.
 //
+// THE READER'S OWN CHECK (unit R-I2, M1). Before it writes, the command runs
+// the check every reader runs on a marker (lib/_case_seal.js
+// checkRevocationMarker) against the readers' published branch,
+// KEY_DOCUMENT_BRANCH of this shell (main unless set), whatever branch it
+// was told to walk, and refuses one a reader would reject
+// (marker_rejected): a marker naming a commit that is not on that branch, or
+// whose document does not list the key revoked, would make every case under
+// the key read revocation_marker_invalid until a valid one is written.
+//
 // OPERATOR COMMAND
 //
 //   GITHUB_PIN_TOKEN=...  \
@@ -38,9 +47,11 @@
 //   node tools/record_key_revocation.js <key_id> [--write]
 //
 // Without --write it prints the marker it would write and writes nothing.
-// KEY_DOCUMENT_BRANCH names the published branch (main unless set). It prints
-// one JSON object and exits 0 when the marker was written (or would be), 1
-// otherwise. It never prints or reads private key material.
+// KEY_DOCUMENT_BRANCH names the key document's published branch (main unless
+// set); set it to the value the deployment carries, since the readers hold
+// the marker to that branch. It prints one JSON object and exits 0 when the
+// marker was written (or would be), 1 otherwise. It never prints or reads
+// private key material.
 "use strict";
 
 const store = require("../lib/_store.js");
@@ -95,6 +106,12 @@ async function recordRevocation({ keyId, currentDocument = S.PUBLISHED_KEYS, bra
   if (!found.ok) return found;
   const marker = S.revocationMarkerFor(entry, found.commit);
   const path = S.revocationMarkerPath(entry.verifier);
+  // THE READER'S OWN CHECK (above), against the readers' published branch
+  const check = await S.checkRevocationMarker(entry, marker);
+  if (!check.ok) {
+    return { ok: false, code: "marker_rejected", reason: `a reader would reject this marker (${check.reason}): its revoking commit ${found.commit} ` +
+      `is not, or could not be read as, a commit of ${S.keyDocumentBranch()} at which the key document lists ${keyId} revoked`, path };
+  }
   let existing;
   try {
     existing = await store.getFile(path);
@@ -117,7 +134,8 @@ async function recordRevocation({ keyId, currentDocument = S.PUBLISHED_KEYS, bra
 async function main(argv) {
   const keyId = argv.find((a) => !a.startsWith("--"));
   if (!keyId) {
-    process.stdout.write(`${JSON.stringify({ ok: false, code: "usage", reason: "node tools/record_key_revocation.js <key_id> [--write]" })}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, code: "usage",
+      reason: "node tools/record_key_revocation.js <key_id> [--write]; KEY_DOCUMENT_BRANCH names the key document's published branch (main unless set)" })}\n`);
     return 1;
   }
   const out = await recordRevocation({ keyId, write: argv.includes("--write") });

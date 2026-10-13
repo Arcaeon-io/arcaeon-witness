@@ -72,6 +72,12 @@
 //   GET  /repos/<repo>/commits?...&page=<n> pages the list per_page at a time
 //        (1-based), as GitHub does.
 //
+//   GET  /repos/<repo>/branches/<name> -> 200 {name, commit} | 404 (unit R-I2:
+//        whether the branch a compare read named exists). branchLog records
+//        every read, and forceBranchFailure() makes reads fail. seed(repo,
+//        path, obj, {keepHistory: true}) adds a commit to a path without
+//        erasing its earlier ones.
+//
 //   Commit shas are unique across every store in one process (a reader may
 //   cache a file at a commit, which never changes on GitHub, so one test's
 //   commit must never be another test's). seedText() plants a text file
@@ -144,6 +150,8 @@ class MockGitHubStore {
     this._forcedCompareFailure = null; // {remaining, status, match}
     this.sideCommits = new Map(); // repo -> Set of shas on no branch
     this.branches = new Map(); // repo -> its branch's name ("main" unless set)
+    this.branchLog = []; // ["repo:name"] — every branch read, in order
+    this._forcedBranchFailure = null; // {remaining, status}
   }
 
   // A public file's text at one commit, served on the raw host.
@@ -172,6 +180,11 @@ class MockGitHubStore {
   // The name of `repo`'s one branch (see the header).
   setBranch(repo, name) {
     this.branches.set(repo, name);
+  }
+
+  // Force the next `n` branch reads to fail with `status` (0: network error).
+  forceBranchFailure(n = 1, status = 500) {
+    this._forcedBranchFailure = { remaining: n, status };
   }
 
   // Force the next `n` compare reads (only those whose "repo:base...head"
@@ -252,13 +265,15 @@ class MockGitHubStore {
     return crypto.randomBytes(20).toString("hex");
   }
 
-  // Seed a file as it would exist BEFORE any handler under test runs.
-  seed(repo, path, obj) {
+  // Seed a file as it would exist BEFORE any handler under test runs. With
+  // {keepHistory: true} (unit R-I2) the path keeps its earlier commits and
+  // this one is added after them, as another write to it would be.
+  seed(repo, path, obj, { keepHistory = false } = {}) {
     const content = JSON.stringify(obj, null, 2) + "\n";
     this._repoMap(repo).set(path, { content, sha: this._newSha() });
-    // exactly one commit for a seeded path (see the header)
+    // exactly one commit for a seeded path (see the header), unless kept
     const list = this._commitsOf(repo);
-    for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === path) list.splice(i, 1);
+    if (!keepHistory) for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === path) list.splice(i, 1);
     return this._recordCommit(repo, path, "mock: seeded", content);
   }
 
@@ -339,6 +354,22 @@ class MockGitHubStore {
       const tree = [];
       for (const [p, r] of this._repoMap(tm[1])) tree.push({ path: p, type: "blob", sha: r.sha });
       return fakeResponse(200, { sha: "mock-tree", tree, truncated: this.treeTruncated === true });
+    }
+
+    // Branch read (lib/_store.js branchExists; unit R-I2): the repository's
+    // one branch by its name, 404 for any other.
+    const br = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/branches\/(.+)$/);
+    if (br && ((opts && opts.method) || "GET") === "GET") {
+      const name = decodeURIComponent(br[2]);
+      this.branchLog.push(`${br[1]}:${name}`);
+      const forced = this._forcedBranchFailure;
+      if (forced && forced.remaining > 0) {
+        forced.remaining -= 1;
+        if (forced.status === 0) throw new TypeError("mock: fetch failed (forced network error)");
+        return fakeResponse(forced.status, { message: "mock: forced branch read failure" });
+      }
+      if (name !== (this.branches.get(br[1]) || "main")) return fakeResponse(404, { message: "Branch not found" });
+      return fakeResponse(200, { name, commit: { sha: this.headOf(br[1]) } });
     }
 
     // Compare read (lib/_store.js compareCommits): see the header.
