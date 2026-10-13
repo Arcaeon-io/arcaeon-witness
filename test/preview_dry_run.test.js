@@ -851,6 +851,18 @@ test("T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, namin
   assert.match(r.by.f.line, /; the pin of case [0-9a-f]{64} could not be read \(pin_commit_unreadable\)$/);
 });
 
+test("MUST-FAIL GAP (T04, unit R-PIN): a case the pass did not pin, not pending and with no candidate deferred, reads not_pinned and is BROKEN, never 'fell outside this run's window'", async (t) => {
+  const real = S.pinState;
+  S.pinState = async () => ({ pin: "not_pinned" });
+  t.after(() => {
+    S.pinState = real;
+  });
+  const r = await dryRun(t, { pinToken: PIN_TOKEN });
+  S.pinState = real;
+  assert.equal(word(r, "f"), "BROKEN", r.show);
+  assert.match(r.by.f.line, /\(0 deferred\)[^;]*; case [0-9a-f]{64} reads pin not_pinned, not pinned under the reveal's chain$/);
+});
+
 test("MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROKEN in (e), saying so; a document it could not read stays COULD NOT LOOK", async (t) => {
   const other = { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => ({ ...e, note: `${e.note} (another copy)` })) };
   for (const [commit, reason] of [[KD.serve(gh, other), "bundled_document_differs"], [KD.serveOffBranch(gh, TEST_DOC, "4".repeat(40)), "commit_not_on_branch"]]) {

@@ -390,3 +390,62 @@ test("R-PIN 10: two page requests read the store twice", async () => {
   assert.ok(first > 1, `fixture: a page reads more than the case file (${first})`);
   assert.equal(second, first, "the second page is not served from a cache");
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-PIN): the planted defects the suite above let through
+// =============================================================================
+
+test("MUST-FAIL GAP (S02): only pins/case/<id>/00000001.json is a case's pin: a root with only a preview's latest.json or 00000002.json is a candidate, never counted pinned", () => {
+  const id = "d".repeat(64);
+  const entries = [{ path: C.casePath(id), type: "blob" },
+    { path: `pins/case/${id}/latest.json`, type: "blob" }, { path: `pins/case/${id}/00000002.json`, type: "blob" }];
+  const idx = S.caseTreeIndex(entries);
+  assert.deepEqual([idx.candidates, [...idx.pinned]], [[id], []]);
+  assert.equal(S.caseAnchorSummary(entries).pinned, 0);
+});
+
+test("MUST-FAIL GAP (S10): pinChain writes no pin for a case commit that is not 40 lowercase hex", async () => {
+  const c = await sealedUnpinned("RPIN gap commit not hex");
+  const chain = S.caseChain(storedCase(c.id));
+  for (const bad of ["c".repeat(39), "C".repeat(40), `${"c".repeat(40)}\n`]) {
+    assert.deepEqual(await S.pinChain(c.id, chain, REVEAL_AT, bad), { pin: "commit_unrecorded", reason: "case_commit_unknown" }, JSON.stringify(bad));
+  }
+  assert.deepEqual(pinTree(c.id), [], "no pin written");
+});
+
+test("MUST-FAIL GAP (S24): the sealer's candidates are sorted, whatever order the tree lists them in", () => {
+  const ids = ["f", "1", "a"].map((x) => x.repeat(64));
+  assert.deepEqual(S.caseTreeIndex(ids.map((id) => ({ path: C.casePath(id), type: "blob" }))).candidates, ids.slice().sort());
+});
+
+test("MUST-FAIL GAP (S25, S29): a root with the withdrawn marker is counted withdrawn and never pinned, by the sealer's run and by the status row, a pin file beside it notwithstanding", async () => {
+  const id = "e".repeat(64);
+  const entries = [{ path: C.casePath(id), type: "blob" }, { path: pinFile(id), type: "blob" }, { path: C.withdrawnMarkerPath(id), type: "blob" }];
+  assert.deepEqual([S.caseAnchorSummary(entries).pinned, S.caseAnchorSummary(entries).withdrawn], [0, 1]);
+  for (const e of entries) gh.seed(PINS, e.path, { planted: e.path });
+  const run = await sealerRun();
+  assert.deepEqual([run.candidates, run.pinned, run.withdrawn_skipped], [0, 0, 1]);
+});
+
+test("MUST-FAIL GAP (P02): a reference row's link is the history of its file, which names the commit that wrote it", async () => {
+  const c = await sealedCase("RPIN gap row link");
+  assert.equal((await reference(c)).status, 201);
+  const html = (await casePage(c.id)).html;
+  assert.ok(html.includes(`href="https://github.com/${PINS}/commits/${store.BRANCH}/${C.referencePath(c.id, 1)}"`), "the row's history");
+  assert.ok(!html.includes(`/blob/${store.BRANCH}/${C.referencePath(c.id, 1)}`));
+});
+
+test("MUST-FAIL GAP (P03): a pin commit the repository gave no time for says so, never an empty time", () => {
+  const html = CP._internal.cells.pin({ pin: "pinned", pin_commit: { sha: "a".repeat(40), date: null }, case_commit: "b".repeat(40) });
+  assert.ok(html.includes("(the pins repository&#39;s commit time, a time the repository did not give)"), html);
+});
+
+test("MUST-FAIL GAP (A02): a tree that cannot be read fills the status page's case row across its three count columns", async () => {
+  const statusHandler = require("../api/status.js");
+  gh.treeStatus = 502;
+  const res = makeRes();
+  await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": nextIp() } }), res);
+  const page = String(res._body);
+  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pinned<\/th><th>withdrawn<\/th>/);
+  assert.match(page, /<td><code>pins\/case\/<\/code><\/td><td colspan="3">case anchors not counted: /);
+});
