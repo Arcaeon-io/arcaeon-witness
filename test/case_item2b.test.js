@@ -93,6 +93,10 @@ const NOW = Date.parse("2026-10-10T08:00:00Z"); // open and register
 const DEADLINE = "2026-10-10T20:00:00Z";
 const REVEAL_AT = Date.parse("2026-10-10T09:00:00Z");
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
+// A case root's entry for a registration file seeded whole (since unit
+// R-L4, THE PROJECTION: the entry carries the sha256 of the file's bytes,
+// as the mock writes them).
+const seeded = (reg) => C.caseEntry(reg, sha(JSON.stringify(reg, null, 2) + "\n"));
 
 // Throwaway keys, made here, written nowhere.
 const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
@@ -390,7 +394,7 @@ test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment
       stamp_commit: commit, stamped_at: "2026-10-10T07:45:00.123Z", ...REG.keyFields({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }) });
     gh.seed(PINS, C.registrationPath(id, p.role), regs[p.role]);
   }
-  const committed = { ...kase, commitments: { a: C.commitmentEntry(regs.a), b: C.commitmentEntry(regs.b) }, status: "COMMITTED" };
+  const committed = { ...kase, commitments: { a: seeded(regs.a), b: seeded(regs.b) }, status: "COMMITTED" };
   assert.deepEqual(C.validateCase(committed), { ok: true }, "fixture: the schema still reads the item-one form");
   gh.seed(PINS, C.casePath(id), committed);
   const writes = gh.putLog.length;
@@ -406,7 +410,7 @@ test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment
   // MUST-FAIL ARM: the same case with role b's commit filled in reveals.
   const filled = C.registrationRecord({ ...regs.b, stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(b.commitment_sha256))[0].sha });
   gh.seed(PINS, C.registrationPath(id, "b"), filled);
-  gh.seed(PINS, C.casePath(id), { ...committed, commitments: { ...committed.commitments, b: C.commitmentEntry(filled) } });
+  gh.seed(PINS, C.casePath(id), { ...committed, commitments: { ...committed.commitments, b: seeded(filled) } });
   const ok = await reveal(revealBody(id, a, b));
   assert.equal(ok.status, 201, JSON.stringify(ok.body).slice(0, 300));
   assert.equal(runs(), 1);
@@ -457,7 +461,8 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   assert.equal(withThree.caseAnchors.case_files, 3);
   assert.equal(withThree.caseAnchors.pinned, 1);
   // item 2c (fix 3): by the tree alone the committed case and the sealed one
-  // waiting for its pin are both pending (both registration files, no pin)
+  // waiting for its pin are both pending (no pin; since unit R-L4 no
+  // registration file is counted)
   assert.equal(withThree.caseAnchors.pending, 2);
   assert.equal(withThree.caseAnchors.withdrawn, 0);
 

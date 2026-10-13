@@ -69,6 +69,10 @@ const NOW = Date.parse("2026-10-10T08:00:00Z"); // open and register
 const DEADLINE = "2026-10-10T20:00:00Z";
 const REVEAL_AT = Date.parse("2026-10-10T09:00:00Z");
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
+// A case root's entry for a registration file seeded whole (since unit
+// R-L4, THE PROJECTION: the entry carries the sha256 of the file's bytes,
+// as the mock writes them).
+const seeded = (reg) => C.caseEntry(reg, sha(JSON.stringify(reg, null, 2) + "\n"));
 
 // Throwaway keys, made here, written nowhere.
 const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
@@ -243,7 +247,8 @@ test("TEST 7: the accepted reveal runs reconcile exactly once and seals; the rec
   });
   assert.equal(k.records, 1);
   assert.equal(k.cross_reference, null);
-  assert.deepEqual(k.commitments.a, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "a"))), "the commitments are untouched");
+  const aFile = gh._repoMap(PINS).get(C.registrationPath(id, "a")).content;
+  assert.deepEqual(k.commitments.a, C.caseEntry(JSON.parse(aFile), sha(aFile)), "the commitments are untouched");
 
   // EXACTLY AS ?op=reconcile: the same two tapes (role a's as agent_tape, the
   // first argument), the same clock and key, give the same verdict and the
@@ -429,13 +434,14 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     [body.tape_a_b64, body.tape_b_b64] = [body.tape_b_b64, body.tape_a_b64];
     return body;
   });
-  plant("a projection that disagrees with its registration file", 503, "case_record_inconsistent", async () => {
+  // since unit R-L4 (THE PROJECTION): a projection its file does not hold, or a projected file gone, is DAMAGED
+  plant("a projection that disagrees with its registration file", 409, "case_damaged", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("inconsistent") } });
     const k = storedCase(id);
     gh.seed(PINS, C.casePath(id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
     return revealBody(id, a, b);
   });
-  plant("a registration file gone", 503, "case_record_inconsistent", async () => {
+  plant("a registration file gone", 409, "case_damaged", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("file gone") } });
     gh.repos.get(PINS).delete(C.registrationPath(id, "b"));
     return revealBody(id, a, b);
@@ -585,7 +591,7 @@ test("REVEAL: policy_unavailable when the case's bound version is not the one th
       ...REG.keyFields({ case_id: id2, role: p.role, commitment_sha256: p.commitment_sha256 }) });
     gh.seed(PINS, C.registrationPath(id2, p.role), regs[p.role]);
   }
-  const committed = { ...kase, commitments: { a: C.commitmentEntry(regs.a), b: C.commitmentEntry(regs.b) }, status: "COMMITTED" };
+  const committed = { ...kase, commitments: { a: seeded(regs.a), b: seeded(regs.b) }, status: "COMMITTED" };
   assert.deepEqual(C.validateCase(committed), { ok: true }, "fixture: a valid COMMITTED case bound to 0.0.9");
   gh.seed(PINS, C.casePath(id2), committed);
   const r2 = await reveal(revealBody(id2, a2, b2));

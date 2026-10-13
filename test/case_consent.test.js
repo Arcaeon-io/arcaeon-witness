@@ -183,39 +183,6 @@ test("FIX C: a withdrawal the commit sees under the case lock writes nothing: 40
   assert.equal(lockOf(id).state, "released");
 });
 
-test("FIX C: the race lost after the write (the commit's lock lease ran out and the withdrawal took it over): the registration is removed inside the same critical section; since unit R-N (N4) no case log event is written; since unit R-L (L3) a signed repair note is written first, and the removal's commit names it", async () => {
-  const id = await openCase("C lost");
-  const a = party(id, "a", AGENT_TAPE);
-  const b = party(id, "b", TOOL_TAPE);
-  await register(id, a);
-  plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
-  const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000; // past the commit's lease, by the withdrawal's clock
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-    () => withdraw(id, a, { now: late }),
-    () => commit(id, b, NOW + 1000),
-  );
-  assert.equal(r.fired, true);
-  assert.equal(r.inner.status, 201, `the withdrawal took over the expired lock: ${JSON.stringify(r.inner.body)}`);
-  assert.equal(r.out.status, 409, JSON.stringify(r.out.body));
-  assert.equal(r.out.body.error_code, "case_withdrawn");
-  assert.equal(r.out.body.registration_recorded, false);
-  assert.equal(r.out.body.registration_removed, true);
-  assert.equal(gh.has(PINS, rpath), false, "the registration does not stand");
-  const history = gh.commitsFor(PINS, rpath);
-  assert.equal(history.length, 2, "written, then removed: both are commits of the public history");
-  assert.match(history[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//, "the removal's commit names its note");
-  // (since unit R-L2, M1: the note kept for the file, its blob and the commit that created it)
-  const created = history[1];
-  const note = gh.read(PINS, S.repairNotePath(id, rpath, gh.putLog.filter((w) => w.path === rpath).at(-1).sha, created.sha));
-  assert.deepEqual([note.removed_path, note.created_in_commit], [rpath, created.sha], "the note, the record of the removal decided");
-  assert.deepEqual(logFiles(id), [], "no public entry on the withdrawn case (unit R-N, N4)");
-  assert.equal(Object.prototype.hasOwnProperty.call(r.out.body, "log_event"), false);
-  assert.equal(r.out.body.received_at, C.utcSeconds(NOW + 1000));
-  assert.equal(storedCase(id).status, "WITHDRAWN");
-});
-
 test("FIX C: a live case lock held by another request: the commit and the withdrawal each wait, then answer 503 case_busy and write nothing; an expired lock is taken over", async () => {
   const id = await openCase("C busy");
   const a = party(id, "a", AGENT_TAPE);
@@ -720,58 +687,6 @@ test("MUST-FAIL GAP (L04, L05, L06): a case lock record that names a held lease 
   assert.equal((await commit(id, a)).status, 201);
 });
 
-test("MUST-FAIL GAP (L32, U04, U05, U08, U09, U10): the race-lost removal is one DELETE of the pins repository's registration file, at the blob sha its write left, on the pin branch, with the pin token", async () => {
-  const id = await openCase("gap removal request");
-  const a = party(id, "a", AGENT_TAPE);
-  const b = party(id, "b", TOOL_TAPE);
-  await register(id, a);
-  plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
-  const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-    () => withdraw(id, a, { now: late }),
-    () => commit(id, b, NOW + 1000),
-  );
-  assert.equal(r.out.body.registration_removed, true, JSON.stringify(r.out.body));
-  const wrote = gh.putLog.filter((w) => w.repo === PINS && w.path === rpath);
-  assert.equal(wrote.length, 1);
-  assert.deepEqual(gh.deleteLog, [{ repo: PINS, path: rpath, sha: wrote[0].sha, branch: "main", authorization: "Bearer test-token" }]);
-  assert.equal(gh.has(PINS, rpath), false);
-});
-
-test("MUST-FAIL GAP (U06, U07, U09): the removal names the store's configured branch and answers the commit that removed the file, and a store that refuses it (another blob sha: 409) is an error, with the file left standing", async () => {
-  const U = require("../lib/_case_unregister.js");
-  const id = "a".repeat(64);
-  const rpath = C.registrationPath(id, "a");
-  gh.seed(PINS, rpath, { a: 1 });
-  const blob = gh.repos.get(PINS).get(rpath).sha;
-  // unit R-L (L3): a removal is asked only with a repair note naming the
-  // file; since unit R-L2, the note kept for that file, signed
-  const created = gh.commitsFor(PINS, rpath)[0].sha;
-  const at = C.utcSeconds(NOW);
-  const note = (sha) => gh.seed(PINS, S.repairNotePath(id, rpath, sha, created), S.repairNote({ caseId: id, removedPath: rpath, removedBlobSha: sha,
-    createdInCommit: created, removedFileSha256: "2".repeat(64), reason: "registration_unconfirmed", withdrawalCommit: null, at,
-    signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC })));
-  const opts = { createdInCommit: created, keyDocument: DOC };
-  note("0".repeat(40));
-  await assert.rejects(U.removeRegistrationAfterWithdrawal(rpath, "0".repeat(40), "m", opts), /github remove .* -> 409/);
-  note(blob);
-  assert.equal(gh.has(PINS, rpath), true, "a refused removal removes nothing");
-  // the request names the store's configured branch, whatever it is (U09)
-  const branch = store.BRANCH;
-  store.BRANCH = "pins-test-branch";
-  let out;
-  try {
-    out = await U.removeRegistrationAfterWithdrawal(rpath, blob, "m", opts);
-  } finally {
-    store.BRANCH = branch;
-  }
-  assert.equal(gh.has(PINS, rpath), false);
-  assert.deepEqual(out, { commit: gh.commitsFor(PINS, rpath)[0].sha }, "the removal's own commit");
-  assert.equal(gh.deleteLog.at(-1).branch, "pins-test-branch");
-});
-
 test("MUST-FAIL GAP (R04): an unsigned seal reads case_signature_invalid (unsigned_seal) even when the document it names cannot be fetched: the rule needs no document, so it never reads could-not-look", async () => {
   const u = await handSealed("gap unsigned unfetchable", S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { keyDocument: DOC }));
   const elsewhere = { ...u.sealed, signed_under: { ...u.sealed.signed_under, document_commit: "f".repeat(40) } };
@@ -837,34 +752,6 @@ test("MUST-FAIL GAP (L23): a case that cannot be read again under the lock, befo
   assert.equal(lockOf(id).state, "released");
 });
 
-// The race lost after the write, with `before` run first (a fault planted).
-async function lostRace(scope, before = () => {}) {
-  const id = await openCase(scope);
-  const a = party(id, "a", AGENT_TAPE);
-  const b = party(id, "b", TOOL_TAPE);
-  await register(id, a);
-  plantStamp(b.commitment_sha256);
-  const rpath = C.registrationPath(id, "b");
-  before(rpath);
-  const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-    () => withdraw(id, a, { now: late }),
-    () => commit(id, b, NOW + 1000),
-  );
-  assert.equal(r.out.body.error_code, "case_withdrawn", JSON.stringify(r.out.body));
-  return { id, rpath, out: r.out.body, wrote: gh.putLog.filter((w) => w.repo === PINS && w.path === rpath) };
-}
-
-test("MUST-FAIL GAP (L33): a removal the store refuses is reported as not removed (registration_removed false), and since unit R-N (C1) registration_recorded says the file is still there", async (t) => {
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
-  t.after(() => { global.fetch = viaMock; });
-  const x = await lostRace("gap removal refused");
-  assert.equal(x.out.registration_removed, false);
-  assert.equal(x.out.registration_recorded, true, "the file's real state");
-  assert.equal(gh.has(PINS, x.rpath), true);
-});
 
 test("MUST-FAIL GAP (D04): anchorState with {anchor: false} answers pinned with anchor {not_looked_up: true}, so no reader takes it for 'not anchored'", async () => {
   const c = await sealedCase("gap not looked up");

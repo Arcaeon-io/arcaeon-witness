@@ -833,7 +833,7 @@ A withdrawal (`?op=case-withdraw`) proves the requesting role by its
 commitment preimage, takes the case's lock, writes the signed withdrawal
 record over the OPEN or COMMITTED case, writes the withdrawn marker, and
 answers. A withdrawal that loses to a seal, a reveal attempt or the deadline
-writes nothing to the pins repository and removes nothing. A withdrawal
+writes nothing to the pins repository. A withdrawal
 request that wrote nothing says "This request wrote nothing."
 
 A listing of withdrawn tape digests was added in unit R-N and removed before
@@ -841,48 +841,30 @@ release (see the change log). Files under withdrawn_commitments/ that a pins
 repository may hold from before this release are ignored: no code reads or
 writes them.
 
-This repository is create-only except for removals that carry a signed
-repair note. A registration file written after its case's withdrawal (the
-registration's lease ran out and the withdrawal took it over), or one whose
-case could not be read after its write, is removed only after a repair note
-for that file is written create-only and read back. A note records that a
-removal was decided, never that it was made: a removal of this file was
-recorded for its reason. A file is its path, its blob and the commit that
-created it, so a note is kept at `removals/<case_id>/<sha256 of removed_path,
-removed_blob_sha and created_in_commit, a newline between each>.json`:
-`{kind: "case-repair-note", v: 2, case_id, removed_path, removed_blob_sha,
-created_in_commit, removed_file_sha256, reason, withdrawal_commit, at,
-signed_under, signed_by, sig, sig_reason: null}`, signed with a case key
-under the one signature rule, `reason` either
-`registration_after_withdrawal` or `registration_unconfirmed` (then
-`withdrawal_commit` is null). A file created later at the same path,
-byte-identical or not, is another file and needs a note of its own. A note
-that cannot be written and read back means nothing is removed, and the
-removal itself checks the note's signature and that the file at the path is
-the one the note names. A removal that fails after its note leaves the note.
-The sealer's runs complete a recorded removal whose file is still at its
-path, for every reason, without a second note, unless the case has sealed
-with that registration: then nothing is removed, and the case page says a
-repair note was written and the removal was not made; the registration
-stood and the case sealed. Nothing is removed under a sealed case. A note in
-the form written before this (`v: 1`, kept at `removals/<case_id>/<sha256
-of removed_path>.json`, with no `created_in_commit`) is read and labelled
-as the old form, and nothing acts on it.
+No file in the pins repository is ever deleted. Registration files,
+reference rows, pins, withdrawal records and seals are written once and
+never changed. The case root is the one file that is updated, and only by a
+compare-and-swap that every reader can follow in the repository's history.
 
-A registration file under a verified repair note never stands: no reader or
-handler counts it, and a case is not COMMITTED and cannot reveal while
-either role's only file is such a file. Sending that registration again
-removes the file under its note and writes a fresh one, which past the
-deadline is refused late_commitment.
+A registration file is a claim, and it stands only once the case root
+projects it: the root's entry for the role carries the sha256 of the file's
+bytes, and the registration writes that projection only after a fresh read
+of the root shows no withdrawal and no seal, by a compare-and-swap on the
+root. If that read or that write fails, nothing more is written and the
+answer is 503 `registration_unconfirmed`: the registration file is written
+and is not yet confirmed; send the same registration again. The same
+registration sent again finds the file and projects it, and a different
+registration for that role is 409 `registration_exists`, naming the sha256
+of the file that is there. A file the root does not project has no
+standing: the case page says it is written and not confirmed while the case
+is open, and, once the case is withdrawn, sealed or past its deadline, that
+it has no standing and cannot acquire it. Every reader takes a case's
+registrations from the root's projection and checks the file at each path
+against the sha256 projected; a file missing or not the one projected makes
+the case DAMAGED, which is shown as that, never sealed and never pinned.
 
-The case page lists a case's repair notes, each said as a removal of a file
-recorded for its reason, with what the page read at its path (the file
-still there and the removal not made, nothing there, or another file there)
-and its check under the key document it names. For each file of the case
-the page reads as removed, it says when there is no note at all (a removal
-without a record), when its note could not be verified when the page was
-read (not a finding; the page is not kept), and when its note does not
-verify, with the reason.
+Files under removals/ that a preview pins repository may hold are ignored:
+no code reads or writes them.
 
 ### A reference row's sentence
 

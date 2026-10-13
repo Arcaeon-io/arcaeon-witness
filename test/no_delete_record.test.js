@@ -25,13 +25,9 @@ const ROOT = path.join(__dirname, "..");
 // file -> why a DELETE there is not a deletion from the public record.
 const ALLOWED_DELETE = {
   "lib/_balance.js": "private usage/balance store (GITHUB_USAGE_REPO), not the pin repo; no callers",
-  // Red-team fix C (2026-10-12): the one deletion from the pin repo, decided
-  // in the case protocol's design: a registration file written after its
-  // case was withdrawn (a race lost after the write) is removed inside the
-  // case lock, and a case log event (commit_after_withdrawal) is appended so
-  // the attempt stays visible. The removal is itself a commit, so the file
-  // stays in the repository's history. The module refuses any other path.
-  "lib/_case_unregister.js": "the pin repo, but only a registration file written after its case's withdrawal (red-team fix C), and only one the signed repair note kept for that file names, its signature checked here (unit R-L, unit R-L2); the module refuses every other path",
+  // (lib/_case_unregister.js, the one deletion from the pin repo that red-team
+  // fix C added, was taken out in unit R-L4: nothing in the pins repository
+  // is ever deleted; test/case_rl4.test.js)
   "tools/ceiling_probe.js": "deletes only the throwaway probe repository it created itself",
 };
 
@@ -252,38 +248,4 @@ test("malformed namespace is refused before any network call", async () => {
   const st = fakeStore({});
   await supersede({ namespace: "veltest-h", reason: "audit fixture done", now: NOW }, st);
   assert.ok(st.reads > 0);
-});
-
-test("the one pin-repository deletion (red-team fix C) refuses every path but a case's registration file, before any request", async () => {
-  const U = require("../lib/_case_unregister.js");
-  assert.deepEqual(Object.keys(U), ["removeRegistrationAfterWithdrawal"]);
-  const original = global.fetch;
-  let asked = 0;
-  // unit R-L (L3): the repair note's read answers a note naming commit_b at blob b...b
-  const note = (id) => JSON.stringify({ case_id: id, removed_path: `cases/${id}/commit_b.json`, removed_blob_sha: "b".repeat(40) });
-  global.fetch = async (url, o) => {
-    asked += 1;
-    if (((o && o.method) || "GET") === "GET") {
-      return { ok: true, status: 200, json: async () => ({ content: Buffer.from(note("a".repeat(64))).toString("base64"), sha: "c".repeat(40) }), text: async () => "" };
-    }
-    return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
-  };
-  try {
-    const id = "a".repeat(64);
-    for (const p of [`cases/${id}.json`, `cases/${id}/withdrawn`, `cases/${id}/references/00000001.json`, `cases/${id}/log/00000001.json`,
-      "pins/acme/latest.json", `pins/case/${id}/latest.json`, `cases/${id}/commit_c.json`, `cases/${id}/commit_a.json.bak`, `x/cases/${id}/commit_a.json`]) {
-      await assert.rejects(U.removeRegistrationAfterWithdrawal(p, "b".repeat(40), "m"), /only a case's registration file/, p);
-    }
-    await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_a.json`, "not-a-sha", "m"), /blob sha/);
-    // unit R-L2: the commit that created the file is required too
-    await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_a.json`, "b".repeat(40), "m"), /the commit that created the file is required/);
-    assert.equal(asked, 0, "nothing was asked of the store");
-    // control: a registration file's path reaches the store (the note is read), and a note that is not the one kept
-    // for that file, signed (lib/_case_seal.js THE REPAIR NOTE), removes nothing
-    await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_b.json`, "b".repeat(40), "m", { createdInCommit: "c".repeat(40) }),
-      /no repair note names/);
-    assert.equal(asked, 1, "control: the note read, and no removal asked");
-  } finally {
-    global.fetch = original;
-  }
 });

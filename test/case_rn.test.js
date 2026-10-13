@@ -23,7 +23,9 @@
 //
 // The binding decisions (N1-N4, C1-C3, E1, D1, T1) and the owner's four
 // answers of 2026-10-13: C1 deletes only a registration whose creating
-// commit comes after the withdrawal's; the lease race writes no log event;
+// commit comes after the withdrawal's (since unit R-L4 nothing is deleted,
+// and the tests of C1's removals and C2's unwind were deleted with them);
+// the lease race writes no log event;
 // the refusal names the requester by a `role` field; the withdrawn tape was
 // recorded at withdrawn_commitments/<sha256(tape_sha256)>.json (removed
 // before release by unit R-L, L1: test/case_rl.test.js).
@@ -228,8 +230,9 @@ async function during(match, inner, outer) {
   }
 }
 // The race lost after the write (the commit's lease ran out and the
-// withdrawal took it over), the removal refused when `deleteFails`.
-async function lostRace(scope, { deleteFails = false } = {}) {
+// withdrawal took it over): the file stays, inert (since unit R-L4 nothing
+// is deleted).
+async function lostRace(scope) {
   const id = await openCase(scope);
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
@@ -237,20 +240,11 @@ async function lostRace(scope, { deleteFails = false } = {}) {
   plantStamp(b.commitment_sha256);
   const rpath = C.registrationPath(id, "b");
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
-  const viaMock = global.fetch;
-  if (deleteFails) {
-    global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
-  }
-  let r;
-  try {
-    r = await during(
-      (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-      () => withdraw(id, a, { now: late }),
-      () => commit(id, b, NOW + 1000),
-    );
-  } finally {
-    global.fetch = viaMock;
-  }
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+    () => withdraw(id, a, { now: late }),
+    () => commit(id, b, NOW + 1000),
+  );
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
   assert.equal(r.out.body.error_code, "case_withdrawn", JSON.stringify(r.out.body));
   return { id, a, b, rpath, out: r.out.body };
@@ -421,7 +415,7 @@ test("R-N N3: the counterparty's opening is never read or hashed: the hasher nev
 });
 
 test("R-N N3, C1: a registration written after the withdrawal does not stand: its role is not a party to a refusal (404 not_a_party), while the role registered before it is", async () => {
-  const x = await lostRace("RN post-withdrawal party", { deleteFails: true });
+  const x = await lostRace("RN post-withdrawal party");
   assert.equal(gh.has(PINS, x.rpath), true, "fixture: the late registration file is there");
   const c = { id: x.id, a: x.a, b: x.b };
   const late = await reveal(c, { body: ownOpening(c, "b") });
@@ -455,39 +449,9 @@ test("R-N N4: a withdrawal that lands after the reveal hashed its tapes, before 
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
 });
 
-test("R-N N4: the commit's lost race writes no case log event; since unit R-L (L3) the removal's record is its signed repair note, which the removal's commit names", async () => {
-  const x = await lostRace("RN no log");
-  assert.deepEqual(logFiles(x.id), [], "no public entry on the withdrawn case");
-  assert.equal(has(x.out, "log_event"), false);
-  assert.equal(x.out.registration_removed, true);
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//); // unit R-L (L3)
-});
-
 // =============================================================================
 // C1, C2: a registration never stands after a withdrawal, nor on an assumption
 // =============================================================================
-
-test("R-N C1: a late registration whose removal fails: registration_recorded true while the file is there; the sealer's withdrawn path removes it (one compare read), keeps the registration from before the withdrawal, and says so", async () => {
-  const x = await lostRace("RN repair", { deleteFails: true });
-  assert.equal(x.out.registration_removed, false);
-  assert.equal(x.out.registration_recorded, true, "the file's real state");
-  assert.equal(gh.has(PINS, x.rpath), true);
-  const page = await casePage(x.id);
-  assert.match(page.html, /does not stand/, "the page says a registration under a withdrawn case does not stand");
-  const c0 = gh.compareLog.length;
-  const run = await sealerRun();
-  assert.equal(gh.has(PINS, x.rpath), false, "removed by the sealer's repair");
-  assert.equal(gh.has(PINS, C.registrationPath(x.id, "a")), true, "the registration from before the withdrawal stays");
-  const entry = run.withdrawn_repaired.find((e) => e.case_id === x.id);
-  assert.ok(entry, JSON.stringify(run.withdrawn_repaired));
-  assert.deepEqual([entry.removed, entry.kept], [["b"], ["a"]]);
-  assert.ok(gh.compareLog.slice(c0).filter((k) => k.startsWith(`${PINS}:`)).length >= 2, "one compare read per registration");
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//); // unit R-L (L3)
-  // a second run removes nothing more
-  const again = await sealerRun(120000);
-  const e2 = again.withdrawn_repaired.find((e) => e.case_id === x.id);
-  assert.deepEqual(e2 ? e2.removed : [], []);
-});
 
 test("R-N C1: the sealer's withdrawn path rewrites a withdrawn marker that failed", async () => {
   const c = await committedCase("RN sealer marker");
@@ -500,26 +464,6 @@ test("R-N C1: the sealer's withdrawn path rewrites a withdrawn marker that faile
   assert.deepEqual(gh.read(PINS, mpath), { kind: "case-withdrawn-marker", v: 1, case_id: c.id, withdrawn_at: storedCase(c.id).withdrawal.at });
   const entry = run.withdrawn_repaired.find((e) => e.case_id === c.id);
   assert.equal(entry.marker, "written");
-});
-
-test("R-N C2: a case that cannot be read after the registration's write: the registration is unwound (removed) and the answer is 503; the same registration again registers", async () => {
-  const id = await openCase("RN after read");
-  const a = party(id, "a", AGENT_TAPE);
-  plantStamp(a.commitment_sha256);
-  const rpath = C.registrationPath(id, "a");
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-    async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
-    () => commit(id, a),
-  );
-  assert.deepEqual([r.out.status, r.out.body.error_code], [503, "registration_unconfirmed"], JSON.stringify(r.out.body));
-  assert.equal(r.out.body.registration_recorded, false);
-  assert.equal(r.out.body.registration_removed, true);
-  assert.equal(gh.has(PINS, rpath), false, "never stands on an assumption");
-  assert.equal(gh.commitsFor(PINS, rpath).length, 2, "written, then removed");
-  assert.equal(lockOf(id).state, "released");
-  const again = await commit(id, a);
-  assert.equal(again.status, 201, JSON.stringify(again.body));
 });
 
 // =============================================================================
@@ -779,30 +723,6 @@ test("MUST-FAIL GAP (R07): a case the tree shows withdrawn with no registration 
   assert.deepEqual(run.withdrawn_repaired, []);
 });
 
-test("MUST-FAIL GAP (R14, R15, R16, R17): the withdrawal's commit is the oldest of the newest WITHDRAWN run, read at most five deep, and a read that fails says so", async () => {
-  // many commits before the withdrawal are not read past the run
-  const c = await committedCase("RN gap W deep");
-  for (let i = 0; i < 5; i += 1) gh.addCommit(PINS, C.casePath(c.id));
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  const W = gh.commitsFor(PINS, C.casePath(c.id))[0].sha;
-  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: true, commit: W });
-  // a rewrite of the withdrawn root: W stays the first
-  const W2 = gh.addCommit(PINS, C.casePath(c.id));
-  S._internal.clearCommitFiles();
-  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: true, commit: W }, "not the rewrite");
-  assert.notEqual(W, W2);
-  // six WITHDRAWN commits are past the bound
-  for (let i = 0; i < 4; i += 1) gh.addCommit(PINS, C.casePath(c.id));
-  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: false, reason: "withdrawal_commit_beyond_bound" });
-  // a read that fails
-  const d = await committedCase("RN gap W unread");
-  assert.equal((await withdraw(d.id, d.b)).status, 201);
-  const newest = gh.commitsFor(PINS, C.casePath(d.id))[0].sha;
-  S._internal.clearCommitFiles();
-  gh.forceRawFailure(1, 503, `${PINS}@${newest}:${C.casePath(d.id)}`);
-  assert.deepEqual(await S.withdrawalCommitOf(d.id), { ok: false, reason: "case_at_commit_http_503" });
-});
-
 test("MUST-FAIL GAP (R18, H14): a role with no registration file on a withdrawn case is not a party (404), never could-not-look", async () => {
   const id = await openCase("RN gap unregistered role");
   const a = party(id, "a", AGENT_TAPE);
@@ -811,25 +731,6 @@ test("MUST-FAIL GAP (R18, H14): a role with no registration file on a withdrawn 
   assert.equal((await withdraw(id, a)).status, 201);
   const r = await reveal({ id, a, b }, { body: { ...revealBody(id, a, b), role: "b" } });
   assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body));
-});
-
-test("MUST-FAIL GAP (R19, R23, R24): the withdrawn path removes nothing it cannot order: an order neither before nor after, or a withdrawal commit it cannot read, is unknown; an absent file is passed over", async () => {
-  const x = await lostRace("RN gap repair unknown", { deleteFails: true });
-  // the first pins compare of the repair (role a's) answers 404
-  gh.forceCompareFailure(1, 404, `${PINS}:`);
-  const deployment = { env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC }; // unit R-L (L3): the repair signs its notes
-  const one = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
-  assert.deepEqual(one.unknown, [{ role: "a", reason: "registration_order_not_found" }]);
-  assert.deepEqual(one.removed, ["b"]);
-  assert.equal(gh.has(PINS, C.registrationPath(x.id, "a")), true, "a registration it cannot order stays");
-  // the withdrawal's commit cannot be read: every role unknown, by that reason
-  gh.forceCommitsFailure(PINS, C.casePath(x.id), 1, 503);
-  S._internal.clearCommitFiles();
-  const two = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
-  assert.deepEqual(two.unknown, [{ role: "a", reason: "commits_unreadable" }, { role: "b", reason: "commits_unreadable" }]);
-  // b is gone now: passed over, not unknown
-  const three = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
-  assert.deepEqual([three.unknown, three.kept, three.removed], [[], ["a"], []]);
 });
 
 test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a reconcile key the named document lists as retired, does not verify", async () => {
@@ -880,78 +781,30 @@ test("MUST-FAIL GAP (H04): the lease is released at the lease clock's time", asy
   assert.ok(Date.parse(lock.released_at) <= t);
 });
 
-// A lost race whose DELETE answers `status` after doing `then` to the store.
-async function lostRaceDelete(scope, status, then) {
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    if ((o && o.method) === "DELETE") {
-      await then(String(url), o, viaMock);
-      return { ok: false, status, json: async () => ({}), text: async () => "" };
-    }
-    return viaMock(url, o);
-  };
-  try {
-    return await lostRace(scope);
-  } finally {
-    global.fetch = viaMock;
-  }
-}
 
-test("MUST-FAIL GAP (H06, H07): registration_recorded is read back when the removal is not confirmed: a removal that landed but answered 500 is false; a read-back that fails says it may be there (true)", async () => {
-  const landed = await lostRaceDelete("RN gap removal landed", 500, (url, o, viaMock) => viaMock(url, o));
-  assert.equal(landed.out.registration_removed, false);
-  assert.equal(gh.has(PINS, landed.rpath), false, "fixture: it is gone");
-  assert.equal(landed.out.registration_recorded, false, "the file's real state");
-  const unread = await lostRaceDelete("RN gap read-back fails", 500, async (url) => {
-    const path = decodeURIComponent(new URL(url).pathname.replace(/^\/repos\/[^/]+\/[^/]+\/contents\//, ""));
-    gh.forceGetFailure(PINS, path, 1, 503);
-  });
-  assert.equal(unread.out.registration_recorded, true);
-});
-
-test("MUST-FAIL GAP (H09, H10): the read-after-write unwind's removal names why, and a removal that fails is reported with the file's state", async (t) => {
-  const run = async (scope) => {
-    const id = await openCase(scope);
-    const a = party(id, "a", AGENT_TAPE);
-    plantStamp(a.commitment_sha256);
-    const rpath = C.registrationPath(id, "a");
-    const r = await during(
-      (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
-      async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
-      () => commit(id, a),
-    );
-    return { rpath, out: r.out };
-  };
-  const x = await run("RN gap unwind message");
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment a removed \(registration_unconfirmed\); repair note removals\//); // unit R-L (L3)
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
-  t.after(() => { global.fetch = viaMock; });
-  const y = await run("RN gap unwind refused");
-  assert.deepEqual([y.out.status, y.out.body.registration_removed, y.out.body.registration_recorded], [503, false, true]);
-});
-
-test("MUST-FAIL GAP (H13, H17, H19): a refusal whose withdrawal commit cannot be read is 503 naming it; a registration file that does not read is no party's; a deployment whose document is not confirmed issues no receipt", async () => {
+test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdrawal cannot be read is 503 naming it; a registration file that is not the one that root projected is DAMAGED, and no receipt is issued; a deployment whose document is not confirmed issues no receipt", async () => {
   const c = await committedCase("RN gap refusal reads");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   S._internal.clearCommitFiles();
   gh.forceCommitsFailure(PINS, C.casePath(c.id), 1, 503);
   const u = await reveal(c, { body: ownOpening(c, "a") });
   assert.deepEqual([u.status, u.body.error_code], [503, "store_unreachable"]);
-  assert.match(u.body.error, /the withdrawal's commit could not be read/);
+  // (since unit R-L4: the commitment comes from the root the withdrawal wrote over)
+  assert.match(u.body.error, /the case root before the withdrawal could not be read/);
   // a deployment naming a commit the readers cannot confirm
   const res = makeRes();
   await H.handleCaseReveal(req("case-reveal", ownOpening(c, "a")), res, { now: REVEAL_AT, env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: "9".repeat(40) }, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [503, "document_unavailable"], JSON.stringify(parsed(res)).slice(0, 200));
   assert.equal(has(parsed(res), "refusal_receipt"), false);
-  // a registration file that does not read, written before the withdrawal
+  // a registration file changed after the root projected it (since unit R-L4: DAMAGED)
   const d = await committedCase("RN gap bad registration");
   const reg = gh.read(PINS, C.registrationPath(d.id, "a"));
   gh.seed(PINS, C.registrationPath(d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
   const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
   const r = await reveal(d, { body: ownOpening(d, "a") });
-  assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body).slice(0, 200));
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "case_damaged", "registration_file_differs"], JSON.stringify(r.body).slice(0, 200));
+  assert.equal(has(r.body, "refusal_receipt"), false);
 });
 
 test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is written", async () => {

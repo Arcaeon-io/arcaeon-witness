@@ -176,7 +176,10 @@ async function during(match, inner, outer) {
 const stampGet = (p) => (url, method) => method === "GET" && url.includes(`/repos/${STAMPS}/contents/${stamp.stampPath(p.commitment_sha256)}`);
 
 // A case one key registered both roles of: role a registers while role b's
-// request reads its stamp (both files stand, first write wins per role).
+// request reads its stamp. Since unit R-L4 (THE PROJECTION) the second
+// projection reads the first and is refused same_key_both_roles, and b's
+// file stays inert; the single-party root the readers must still refuse is
+// written here by hand over the race's files.
 async function racedSingleParty(scope) {
   const id = await openCase(scope);
   const a = party(id, "a", AGENT_TAPE);
@@ -184,7 +187,9 @@ async function racedSingleParty(scope) {
   plantStamp(a.commitment_sha256);
   const r = await during(stampGet(b), () => commit(id, a, REG.KEYS.a), () => commit(id, b, REG.KEYS.a));
   assert.equal(r.inner.status, 201);
-  assert.equal(r.out.status, 201);
+  assert.deepEqual([r.out.status, r.out.body.error_code], [409, "same_key_both_roles"]);
+  const text = gh._repoMap(PINS).get(C.registrationPath(id, "b")).content;
+  gh.seed(PINS, C.casePath(id), C.applyRegistration(gh.read(PINS, C.casePath(id)), JSON.parse(text), sha(Buffer.from(text, "utf8"))), { keepHistory: true });
   assert.equal(C.singleParty(gh.read(PINS, C.casePath(id))), true, "fixture: single party");
   return { id, a, b };
 }
@@ -262,13 +267,14 @@ test("A11, A12 (validateRegistrationRecord): a stored registration whose key_id 
   assert.equal(C.validateRegistrationRecord(otherKeyId).field, "key_id");
   const otherSig = { ...file, sig: C.signRegistration(fieldsOf(id, a), REG.KEYS.b.signer) };
   assert.equal(C.validateRegistrationRecord(otherSig).field, "sig");
-  // planted, either one makes the file unreadable to the next registration
+  // planted under the projection, either one is not the file the case root
+  // projects: the case is DAMAGED to the next registration (since unit R-L4)
   for (const bad of [otherKeyId, otherSig]) {
     gh.seed(PINS, C.registrationPath(id, "a"), bad);
     const b = party(id, "b", TOOL_TAPE);
     const res = await commit(id, b);
-    assert.equal(res.status, 503, JSON.stringify(res.body));
-    assert.equal(res.body.error_code, "registration_record_unreadable");
+    assert.equal(res.status, 409, JSON.stringify(res.body));
+    assert.deepEqual([res.body.error_code, res.body.reason], ["case_damaged", "registration_file_differs"]);
   }
 });
 
@@ -302,7 +308,7 @@ test("A16 (singleParty): a case with no registration, or one, is not single part
 // lib/_case_http.js
 // =============================================================================
 
-test("H03 (commit step 4b, new registrations only): role b's file raced in under role a's key and its case write failed; b's replay completes the projection (200), and the case reads single party", async () => {
+test("H03 (commit step 4b; since unit R-L4, THE PROJECTION): role b's file raced in under role a's key and its projection failed; b's re-send is refused same_key_both_roles, and no request makes the case single party", async () => {
   const id = await openCase("H03");
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
@@ -313,18 +319,17 @@ test("H03 (commit step 4b, new registrations only): role b's file raced in under
     return ra;
   }, () => commit(id, b, REG.KEYS.a));
   assert.equal(r.inner.status, 201);
-  assert.equal(r.out.status, 503, JSON.stringify(r.out.body));
-  assert.equal(r.out.body.error_code, "case_update_failed");
-  assert.equal(gh.read(PINS, C.casePath(id)).status, "OPEN", "fixture: b's file stands, unprojected");
+  assert.equal(r.out.status, 409, JSON.stringify(r.out.body));
+  assert.equal(r.out.body.error_code, "same_key_both_roles", "the projection reads role a's, under the same key");
+  assert.equal(gh.read(PINS, C.casePath(id)).status, "OPEN", "fixture: b's file is written, unprojected");
   const replay = await commit(id, b, REG.KEYS.a);
-  assert.equal(replay.status, 200, JSON.stringify(replay.body));
-  assert.deepEqual(replay.body.projected, ["b"]);
+  assert.deepEqual([replay.status, replay.body.error_code], [409, "same_key_both_roles"], JSON.stringify(replay.body));
   const k = gh.read(PINS, C.casePath(id));
-  assert.equal(k.status, "COMMITTED");
-  assert.equal(C.singleParty(k), true);
+  assert.equal(k.status, "OPEN");
+  assert.equal(C.singleParty(k), false);
 });
 
-test("H05 (commit, the lost race): another key's registration of the same commitment for this role lands first; this one is role_already_committed, never answered as its own", async () => {
+test("H05 (commit, the lost race): another key's registration of the same commitment for this role lands first; this one is registration_exists (since unit R-L4), never answered as its own", async () => {
   const id = await openCase("H05");
   const a = party(id, "a", AGENT_TAPE);
   const thief = checkpoint.generateKey("someone-else.example/case-registration");
@@ -332,23 +337,26 @@ test("H05 (commit, the lost race): another key's registration of the same commit
   const r = await during(stampGet(a), () => commit(id, a, thief), () => commit(id, a, REG.KEYS.a));
   assert.equal(r.inner.status, 201, "the other key landed first");
   assert.equal(r.out.status, 409, JSON.stringify(r.out.body));
-  assert.equal(r.out.body.error_code, "role_already_committed");
+  // the other key's file is at the path, and it is not this registration
+  assert.equal(r.out.body.error_code, "registration_exists");
   assert.equal(gh.read(PINS, C.registrationPath(id, "a")).key_id, REG.keyIdOf(thief));
 });
 
-test("H08 (commit step 4b, the other role's FILE): role a's registration stands unprojected (its case write failed); role b under the same key is still 409 same_key_both_roles", async () => {
+test("H08 (commit step 4b; since unit R-L4 the other role's PROJECTION, not its file): role a's file is written and unprojected; role b under the same key is projected, and a's re-send is then 409 same_key_both_roles", async () => {
   const id = await openCase("H08");
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
   gh.forceFailure(PINS, C.casePath(id), 1, 502);
   const ra = await commit(id, a, REG.KEYS.a);
   assert.equal(ra.status, 503, JSON.stringify(ra.body));
-  assert.equal(ra.body.registration_recorded, true);
+  assert.equal(ra.body.error_code, "registration_unconfirmed");
   assert.equal(gh.read(PINS, C.casePath(id)).commitments.a, null, "fixture: the case does not show role a");
   const rb = await commit(id, b, REG.KEYS.a);
-  assert.equal(rb.status, 409, JSON.stringify(rb.body));
-  assert.equal(rb.body.error_code, "same_key_both_roles");
-  assert.equal(gh.has(PINS, C.registrationPath(id, "b")), false);
+  assert.equal(rb.status, 201, JSON.stringify(rb.body));
+  const again = await commit(id, a, REG.KEYS.a);
+  assert.deepEqual([again.status, again.body.error_code], [409, "same_key_both_roles"], JSON.stringify(again.body));
+  const k = gh.read(PINS, C.casePath(id));
+  assert.deepEqual([k.commitments.a, C.singleParty(k)], [null, false]);
 });
 
 test("H07 (reference, the words for single_party): the refusal says one key registered both roles", async () => {

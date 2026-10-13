@@ -99,8 +99,11 @@ function reg(role, commitment, registeredAt = "2026-10-10T08:00:00Z") {
   });
 }
 const OPEN_CASE = C.newCase(OPENING, ID);
-const WITH_A = C.applyRegistration(OPEN_CASE, reg("a", sha("commitment a")));
-const COMMITTED = C.applyRegistration(WITH_A, reg("b", sha("commitment b")));
+// since unit R-L4 (THE PROJECTION) a projection carries its file's sha256
+const fileSha = (r) => sha(`the file of ${r.role}`);
+const project = (k, r) => C.applyRegistration(k, r, fileSha(r));
+const WITH_A = project(OPEN_CASE, reg("a", sha("commitment a")));
+const COMMITTED = project(WITH_A, reg("b", sha("commitment b")));
 const REVEALED_AT = "2026-10-10T09:00:00Z";
 const VERDICT = Object.freeze({
   ...COMMITTED,
@@ -158,9 +161,9 @@ test("C21 (validateRevealBody, onlyFields on reveals): a reveal carrying a third
 });
 
 test("C25 (applyRegistration, role_already_committed): a role that already holds an entry is refused, never overwritten", () => {
-  assert.throws(() => C.applyRegistration(WITH_A, reg("a", sha("another commitment for a"))),
+  assert.throws(() => project(WITH_A, reg("a", sha("another commitment for a"))),
     (err) => err instanceof C.CaseError && err.code === "role_already_committed" && err.field === "role");
-  assert.throws(() => C.applyRegistration({ ...COMMITTED }, reg("b", sha("another commitment for b"))), (err) => err.code === "role_already_committed");
+  assert.throws(() => project({ ...COMMITTED }, reg("b", sha("another commitment for b"))), (err) => err.code === "role_already_committed");
 });
 
 test("C28 (checkSig): a signed record that also carries a sig_reason is refused", () => {
@@ -183,13 +186,13 @@ test("C31 (checkWithdrawn): a withdrawal dated before the case was opened is ref
 });
 
 test("C32 (checkFull, registered_at): a registration received exactly at the deadline is refused; one second before reads", () => {
-  const at = C.applyRegistration(WITH_A, reg("b", sha("commitment b"), DEADLINE));
+  const at = project(WITH_A, reg("b", sha("commitment b"), DEADLINE));
   refusedWith(at, "status_inconsistent", "commitments.b.registered_at");
-  assert.deepEqual(C.validateCase(C.applyRegistration(WITH_A, reg("b", sha("commitment b"), "2026-10-10T19:59:59Z"))), { ok: true });
+  assert.deepEqual(C.validateCase(project(WITH_A, reg("b", sha("commitment b"), "2026-10-10T19:59:59Z"))), { ok: true });
 });
 
 test("C33 (checkFull): one commitment hash registered to both roles is refused duplicate_commitment", () => {
-  const dup = C.applyRegistration(WITH_A, reg("b", sha("commitment a")));
+  const dup = project(WITH_A, reg("b", sha("commitment a")));
   refusedWith(dup, "duplicate_commitment", "commitments.b");
 });
 
@@ -287,56 +290,15 @@ async function withCasePutRace(plant, fn) {
   }
 }
 
-test("H18 (judgeRegistration, the role at its path): commit_a.json whose record says role b is unreadable, 503, and nothing is registered", async () => {
-  await openCase();
-  assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
-  const file = gh.read(PINS, C.registrationPath(ID, "a"));
-  // a valid role-b record (signed as role b) at role a's path
-  const asB = { ...file, role: "b", sig: C.signRegistration({ case_id: ID, role: "b", commitment_sha256: file.commitment_sha256 }, REG.KEYS.a.signer) };
-  assert.deepEqual(C.validateRegistrationRecord(asB), { ok: true }, "fixture: a valid record");
-  gh.seed(PINS, C.registrationPath(ID, "a"), asB);
-  const res = await commit("b", commitmentFor("b", "tape b"));
-  assert.equal(res._status, 503, JSON.stringify(res._body));
-  assert.equal(res._body.error_code, "registration_record_unreadable");
-  assert.equal(res._body.reason, "registration_not_at_its_path");
-  assert.equal(res._body.role, "a");
-  assert.equal(gh.has(PINS, C.registrationPath(ID, "b")), false, "nothing registered");
-});
-
-test("H36 (readRegistrations): a registration file that is present and unreadable is a 503 registration_record_unreadable, never read as absent", async () => {
+test("H36 (since unit R-L4, the projection): a projected registration file that is present and not the file projected is DAMAGED, never read as absent", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
   gh.seed(PINS, C.registrationPath(ID, "a"), { kind: "not-a-registration" });
   const res = await commit("b", commitmentFor("b", "tape b"));
-  assert.equal(res._status, 503, JSON.stringify(res._body));
-  assert.equal(res._body.error_code, "registration_record_unreadable");
+  assert.equal(res._status, 409, JSON.stringify(res._body));
+  assert.deepEqual([res._body.error_code, res._body.reason], ["case_damaged", "registration_file_differs"]);
   assert.equal(res._body.role, "a");
   assert.equal(gh.has(PINS, C.registrationPath(ID, "b")), false, "nothing registered");
-});
-
-test("H32 (projectFiles): a case moved meanwhile to show role a's entry with no registration file is never projected over; the answer is case_update_failed", async () => {
-  await openCase();
-  const phantom = C.applyRegistration(OPEN_CASE, reg("a", sha("a commitment no file holds")));
-  const b = commitmentFor("b", "tape b");
-  const { res, planted } = await withCasePutRace(() => gh.seed(PINS, C.casePath(ID), phantom), () => commit("b", b));
-  assert.equal(planted(), true, "the race was planted");
-  assert.equal(res._status, 503, JSON.stringify(res._body));
-  assert.equal(res._body.error_code, "case_update_failed");
-  assert.equal(res._body.registration_recorded, true, "b's file stands");
-  assert.deepEqual(gh.read(PINS, C.casePath(ID)), phantom, "the moved case is not written over");
-});
-
-test("H33 (projectFiles): a case moved meanwhile to show role a's entry differing from its file is never projected over; the answer is case_update_failed", async () => {
-  await openCase();
-  assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
-  const cur = gh.read(PINS, C.casePath(ID));
-  const drifted = { ...cur, commitments: { ...cur.commitments, a: { ...cur.commitments.a, stamped_at: "2026-10-10T07:45:01.000Z" } } };
-  assert.deepEqual(C.validateCase(drifted), { ok: true }, "fixture: the drifted case is schema-valid");
-  const { res, planted } = await withCasePutRace(() => gh.seed(PINS, C.casePath(ID), drifted), () => commit("b", commitmentFor("b", "tape b")));
-  assert.equal(planted(), true, "the race was planted");
-  assert.equal(res._status, 503, JSON.stringify(res._body));
-  assert.equal(res._body.error_code, "case_update_failed");
-  assert.deepEqual(gh.read(PINS, C.casePath(ID)), drifted, "the moved case is not written over");
 });
 
 // ---- the joint reveal (an unsigned seal: no case key in this environment) ----
@@ -465,16 +427,16 @@ async function withListingFailure(dirPath, fn) {
   }
 }
 
-test("S39 (caseTreeIndex): a case holding one registration file is not a sealer candidate; since unit R-N2 (M3) its root is read once, by the withdrawn path, and nothing is written", async () => {
+test("S39 (caseTreeIndex; since unit R-L4 every case file is a candidate, by its root): a case holding one registration file is read once, as a candidate, and nothing is written", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
   const from = gh.getLog.length;
   const r = await S.anchorPending({ now: NOW });
   assert.equal(r.ok, true);
-  assert.equal(r.candidates, 0);
-  assert.equal(r.read, 0);
-  assert.equal(r.not_sealed, 0);
-  assert.equal(gh.getLog.slice(from).filter((p) => p === C.casePath(ID)).length, 1, "read once, by the withdrawn path");
+  assert.equal(r.candidates, 1);
+  assert.equal(r.read, 1);
+  assert.equal(r.not_sealed, 1);
+  assert.equal(gh.getLog.slice(from).filter((p) => p === C.casePath(ID)).length, 1, "read once, as a candidate");
   assert.deepEqual(r.withdrawn_repaired, [], "an OPEN case is left as it is");
 });
 

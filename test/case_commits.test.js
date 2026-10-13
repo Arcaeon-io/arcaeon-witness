@@ -1054,5 +1054,6 @@ test("S01, S02 (the status page's case row): the column says pinned and holds th
   const row = /<td><code>pins\/case\/<\/code>[\s\S]*?<\/tr>/.exec(page);
   assert.ok(row, "the case row");
   assert.deepEqual([...row[0].matchAll(/<td>(\d+)<\/td>/g)].map((x) => Number(x[1])), [3, 2, 1, 0]);
-  assert.match(page, /<em>Pinned<\/em> means the case has both registration files and a pin pointer, by path alone/);
+  // (since unit R-L4 no registration file is counted)
+  assert.match(page, /<em>Pinned<\/em> means the case has a pin pointer, by path alone/);
 });

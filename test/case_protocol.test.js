@@ -513,6 +513,8 @@ test("TEST 3: stamp fields come from the fetched stamp record; a caller's stampe
   assert.deepEqual(storedCase(id).commitments.a, {
     commitment_sha256: a.commitment_sha256, registered_at: "2026-10-10T08:00:00Z", stamp_commit: history[0].sha, stamped_at: STAMPED,
     key_id: REG.keyIdOf(REG.KEYS.a),
+    // since unit R-L4 (THE PROJECTION): the sha256 of the file's bytes
+    registration_sha256: sha(gh._repoMap(PINS).get(C.registrationPath(id, "a")).content),
   });
 });
 
@@ -591,7 +593,7 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
   const opened = C.validateOpening(opening({ scope_digest: sha("verdict case") })).opening;
   const vid = C.deriveCaseId(opened);
   const entry = (h, r) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: null, stamped_at: "2026-10-10T07:49:00.000Z",
-    key_id: REG.keyIdOf(REG.KEYS[r]) });
+    key_id: REG.keyIdOf(REG.KEYS[r]), registration_sha256: sha(`registration file ${r}`) });
   const reveal = { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T08:10:00Z" };
   const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1"), "a"), b: entry(sha("2"), "b") }, reveals: { a: reveal, b: reveal },
     verdict: { kind: "arcaeon-reconcile-receipt" }, status: "VERDICT" };
@@ -710,7 +712,7 @@ test("TEST 3, ITEM 1B: a body that arrives already parsed (Vercel's application/
   assert.equal(gh.putLog.length, writes, "no refusal wrote anything");
 });
 
-test("TEST 3, TWO WRITES: a registration whose case update fails is recorded and says so; the same registration completes it, a different one is refused", async () => {
+test("TEST 3, TWO WRITES (since unit R-L4, THE PROJECTION): a registration whose projection fails is written and not confirmed, and says so; the same registration projects it, a different one is refused", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   const other = party(id, "a", "another agent tape\n");
@@ -720,27 +722,27 @@ test("TEST 3, TWO WRITES: a registration whose case update fails is recorded and
 
   const broken = await commit(reg(id, a));
   assert.equal(broken._status, 503);
-  assert.equal(broken._body.error_code, "case_update_failed");
-  assert.equal(broken._body.registration_recorded, true);
+  assert.equal(broken._body.error_code, "registration_unconfirmed");
+  assert.equal(broken._body.registration_recorded, null, "the projection's write threw: whether it landed is not known");
   assert.equal(gh.read(PINS, C.registrationPath(id, "a")).commitment_sha256, a.commitment_sha256, "the registration file landed");
-  assert.equal(storedCase(id).commitments.a, null, "the case object did not");
+  assert.equal(storedCase(id).commitments.a, null, "the case root did not project it");
 
-  // the registration file is the authority: a different hash is refused before the case shows anything
+  // a different registration finds the file there: refused, by the file's sha256
   const swap = await commit(reg(id, other));
   assert.equal(swap._status, 409);
-  assert.equal(swap._body.error_code, "role_already_committed");
-  assert.equal(swap._body.registered.commitment_sha256, a.commitment_sha256);
+  assert.equal(swap._body.error_code, "registration_exists");
+  assert.equal(swap._body.existing_sha256, sha(gh._repoMap(PINS).get(C.registrationPath(id, "a")).content));
 
-  // the same registration completes it, even after the deadline: it was received before
-  const late = Date.parse(DEADLINE) + 3600000;
-  const done = await commit(reg(id, a), late);
+  // the same registration projects it, before the deadline (past it, a file
+  // the root does not project never stands: test/case_rl4.test.js)
+  const done = await commit(reg(id, a), NOW + 60000);
   assert.equal(done._status, 200, JSON.stringify(done._body));
   assert.equal(done._body.existing, true);
   assert.equal(storedCase(id).commitments.a.registered_at, "2026-10-10T08:00:00Z", "the first write's time, not the retry's");
   assert.deepEqual(C.validateCase(storedCase(id)), { ok: true });
 });
 
-test("TEST 3: both roles registered -> COMMITTED, and a registration that lands between another's read and write is merged, not overwritten", async () => {
+test("TEST 3: both roles registered -> COMMITTED, and a registration that lands between another's confirming read and its projection (its lease run out) is merged, not overwritten", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   const b = party(id, "b", "tool tape\n");
@@ -750,11 +752,12 @@ test("TEST 3: both roles registered -> COMMITTED, and a registration that lands 
   const viaMock = global.fetch;
   let bStatus = null;
   global.fetch = async (url, o) => {
-    // Role a's case update is about to be sent with the sha it read; land
-    // role b's whole registration first, so a's PUT is stale.
+    // Role a's projection is about to be sent with the sha it read; land
+    // role b's whole registration first (once a's lease has run out), so
+    // a's PUT is stale.
     if (bStatus === null && o && o.method === "PUT" && String(url).endsWith(`/contents/${cpath}`)) {
       bStatus = "running";
-      bStatus = (await commit(reg(id, b)))._status;
+      bStatus = (await commit(reg(id, b), NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000))._status;
     }
     return viaMock(url, o);
   };
@@ -774,50 +777,43 @@ test("TEST 3: both roles registered -> COMMITTED, and a registration that lands 
   assert.deepEqual(C.validateCase(k), { ok: true });
 });
 
-test("TEST 3, ITEM 1B, TWO WRITES: role b's file landed and its case update failed; role a's registration projects BOTH files and the case is COMMITTED, with no retry by b", async () => {
+test("TEST 3, ITEM 1B, TWO WRITES (since unit R-L4, THE PROJECTION): role b's file landed and its projection failed; role a's registration projects a alone, and b's file stays a claim until b sends it again", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   const b = party(id, "b", "tool tape\n");
   plantStamp(a.commitment_sha256);
   plantStamp(b.commitment_sha256);
 
-  // The plant: b's registration file write succeeds and b's case projection
+  // The plant: b's registration file write succeeds and b's projection
   // fails (the mock fails the next write to the case path, once).
   gh.forceFailure(PINS, C.casePath(id), 1, 500);
   const brokenB = await commit(reg(id, b));
   assert.equal(brokenB._status, 503, JSON.stringify(brokenB._body));
-  assert.equal(brokenB._body.error_code, "case_update_failed");
-  assert.equal(brokenB._body.registration_recorded, true);
+  assert.equal(brokenB._body.error_code, "registration_unconfirmed");
   const fileB = gh.read(PINS, C.registrationPath(id, "b"));
   assert.equal(fileB.commitment_sha256, b.commitment_sha256, "b's registration file landed");
   const before = storedCase(id);
-  assert.equal(before.commitments.b, null, "b's case projection did not");
+  assert.equal(before.commitments.b, null, "b's projection did not");
   assert.equal(before.status, "OPEN");
 
-  // Role a registers. b sends nothing more.
+  // Role a registers: a's file and a's projection, nothing of b's.
   const writes = gh.putLog.length;
   const resA = await commit(reg(id, a));
   assert.equal(resA._status, 201, JSON.stringify(resA._body));
-  assert.equal(resA._body.status, "COMMITTED");
-  const fileA = gh.read(PINS, C.registrationPath(id, "a"));
+  assert.equal(resA._body.status, "OPEN", "b's file is a claim, and no reader counts it");
   const k = storedCase(id);
-  assert.equal(k.status, "COMMITTED", "both registration files exist, so the case is COMMITTED");
-  assert.deepEqual(k.commitments.a, C.commitmentEntry(fileA), "a, projected from its file");
-  assert.deepEqual(k.commitments.b, C.commitmentEntry(fileB), "b, projected from ITS file by a's request");
+  assert.equal(k.commitments.b, null);
   assert.deepEqual(resA._body.case, k, "the answer carries the case as written");
-  assert.deepEqual(C.validateCase(k), { ok: true });
-  // No retry by b: a's request wrote a's file and the case, and nothing else
-  // in the pins repository (its case lock, red-team fix C, is in the usage
-  // repository); b's file is byte for byte what b's own request wrote.
   assert.deepEqual(gh.putLog.slice(writes).filter((w) => w.repo === PINS).map((w) => w.path), [C.registrationPath(id, "a"), C.casePath(id)]);
-  assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), fileB);
+  assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), fileB, "b's file is untouched");
 
-  // MUST-FAIL ARM: the item-one projection (the requested role only) on the
-  // same stored case leaves it OPEN with b missing. The two assertions on
-  // k.status and k.commitments.b above are what catch it.
-  const onlyA = C.applyRegistration(before, fileA);
-  assert.equal(onlyA.status, "OPEN");
-  assert.equal(onlyA.commitments.b, null);
+  // b sends the same registration again: its file is projected, and the case is COMMITTED
+  const again = await commit(reg(id, b));
+  assert.equal(again._status, 200, JSON.stringify(again._body));
+  assert.deepEqual([again._body.existing, again._body.projected, again._body.status], [true, ["b"], "COMMITTED"]);
+  const fileText = gh._repoMap(PINS).get(C.registrationPath(id, "b")).content;
+  assert.deepEqual(storedCase(id).commitments.b, { ...C.commitmentEntry(fileB), registration_sha256: sha(fileText) });
+  assert.deepEqual(C.validateCase(storedCase(id)), { ok: true });
 });
 
 // =============================================================================
@@ -1067,7 +1063,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): applyRegistration never turns a COMMITTED c
   const committedEmpty = { ...base, status: "COMMITTED" };
   assert.equal(C.validateCase(committedEmpty).ok, false, "fixture: not a valid stored case");
   const frozen = JSON.stringify(committedEmpty);
-  const next = C.applyRegistration(committedEmpty, regFor("a", sha("1")));
+  const F = sha("the registration file's bytes"); // since unit R-L4 (THE PROJECTION)
+  const next = C.applyRegistration(committedEmpty, regFor("a", sha("1")), F);
   assert.equal(next.status, "COMMITTED", "a COMMITTED case stays COMMITTED");
   assert.equal(JSON.stringify(committedEmpty), frozen, "the argument is not mutated");
 
@@ -1077,32 +1074,34 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): applyRegistration never turns a COMMITTED c
   assert.equal(itemOne(next), "OPEN", "the old computation regresses this input");
 
   // the one move, and the statuses it refuses
-  const half = C.applyRegistration(base, regFor("a", sha("1")));
+  const half = C.applyRegistration(base, regFor("a", sha("1")), F);
   assert.equal(half.status, "OPEN");
-  assert.equal(C.applyRegistration(half, regFor("b", sha("2"))).status, "COMMITTED");
+  assert.equal(C.applyRegistration(half, regFor("b", sha("2")), F).status, "COMMITTED");
+  assert.throws(() => C.applyRegistration(base, regFor("a", sha("1"))), (e) => e instanceof C.CaseError && e.field === "registration_sha256",
+    "a projection carries the file's sha256");
   for (const status of ["VERDICT", "WITHDRAWN", "EXPIRED", "SOMETHING", undefined]) {
-    assert.throws(() => C.applyRegistration({ ...base, status }, regFor("a", sha("1"))),
+    assert.throws(() => C.applyRegistration({ ...base, status }, regFor("a", sha("1")), F),
       (e) => e instanceof C.CaseError && e.code === "case_not_open", String(status));
   }
 });
 
 test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale is rebuilt on the fresh case and the rebuild WRITES: four writes, COMMITTED", async () => {
-  // b's request reads the case and both files (none yet); a's whole
-  // registration lands before b writes its own file, so a's projection
-  // cannot see b, and b's case write is stale. Only b's rebuild can add b.
-  // Since red-team fix C b's file write is under THE CASE LOCK, so a's
-  // registration lands as b's lock write goes out, before b holds it.
+  // b's projection is about to go out over the case root its confirming
+  // read returned (a not projected yet); a's whole registration lands first
+  // (once b's lease has run out: THE CASE LOCK is a courtesy, the
+  // compare-and-swap the guard), so b's case write is stale. Only b's
+  // rebuild, over the fresh root, can add b (since unit R-L4, THE
+  // PROJECTION).
   async function race(id, a, b) {
     const cpath = C.casePath(id);
-    const bLock = H._internal.caseLockPath(id);
     const viaMock = global.fetch;
     let aStatus = null;
     const casePuts = [];
     global.fetch = async (url, o) => {
       const isPut = !!o && o.method === "PUT";
-      if (aStatus === null && isPut && String(url).endsWith(`/contents/${bLock}`)) {
+      if (aStatus === null && isPut && String(url).endsWith(`/contents/${cpath}`)) {
         aStatus = "running";
-        aStatus = (await commit(reg(id, a)))._status;
+        aStatus = (await commit(reg(id, a), NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000))._status;
       }
       const r = await viaMock(url, o);
       if (isPut && String(url).endsWith(`/contents/${cpath}`)) {
@@ -1136,11 +1135,12 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale 
     { status: 200, a: true, b: true }, // b's REBUILD, on top of a's
   ], "the rebuild is what wrote b");
   assert.deepEqual(gh.putLog.slice(writes).filter((w) => w.repo === PINS).map((w) => w.path),
-    [C.registrationPath(id, "a"), C.casePath(id), C.registrationPath(id, "b"), C.casePath(id)], "four writes in the pins repository");
+    [C.registrationPath(id, "b"), C.registrationPath(id, "a"), C.casePath(id), C.casePath(id)], "four writes in the pins repository");
   const k = storedCase(id);
   assert.equal(k.status, "COMMITTED");
-  assert.deepEqual(k.commitments.a, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "a"))));
-  assert.deepEqual(k.commitments.b, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "b"))));
+  const projected = (r) => { const p = C.registrationPath(id, r); return { ...C.commitmentEntry(gh.read(PINS, p)), registration_sha256: sha(gh._repoMap(PINS).get(p).content) }; };
+  assert.deepEqual(k.commitments.a, projected("a"));
+  assert.deepEqual(k.commitments.b, projected("b"));
   assert.deepEqual(C.validateCase(k), { ok: true });
 
   // MUST-FAIL ARM: the same race with a rebuild hook that never writes. b is
@@ -1160,12 +1160,12 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a registration whose case write goes stale 
   }
   assert.equal(arm.aStatus, 201);
   assert.equal(arm.resB._status, 503, "without a writing rebuild, b's projection is lost");
-  assert.equal(arm.resB._body.error_code, "case_update_failed");
+  assert.equal(arm.resB._body.error_code, "registration_unconfirmed");
   assert.equal(storedCase(id2).commitments.b, null);
   assert.equal(storedCase(id2).status, "OPEN");
 });
 
-test("TEST 3, ITEM 2A (1B LEFTOVER): the same registration replayed is a 200 that completes or confirms, by either party; only a different hash is role_already_committed", async () => {
+test("TEST 3, ITEM 2A (1B LEFTOVER; since unit R-L4, THE PROJECTION): the same registration sent again is a 200 that projects its own file or confirms; only a different hash is role_already_committed", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   const b = party(id, "b", "tool tape\n");
@@ -1178,7 +1178,7 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): the same registration replayed is a 200 tha
   gh.forceFailure(PINS, C.casePath(id), 1, 500);
   const brokenB = await commit(reg(id, b));
   assert.equal(brokenB._status, 503);
-  assert.equal(brokenB._body.error_code, "case_update_failed");
+  assert.equal(brokenB._body.error_code, "registration_unconfirmed");
   const before = storedCase(id);
   assert.equal(before.commitments.b, null);
   assert.equal(before.status, "OPEN");
@@ -1187,17 +1187,22 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): the same registration replayed is a 200 tha
   // already holds, which is exactly this request (a's entry is present).
   assert.notEqual(before.commitments.a, null, "item one would have answered role_already_committed here");
 
-  // a's replay (not b's) repairs b's projection
+  // a's replay confirms a, and projects nothing of b's: b's file is a claim
+  const confirm = await commit(reg(id, a), Date.parse(DEADLINE) + 60000);
+  assert.equal(confirm._status, 200, JSON.stringify(confirm._body));
+  assert.deepEqual([confirm._body.existing, confirm._body.projected, confirm._body.status], [true, [], "OPEN"]);
+  // b's own registration, sent again before the deadline, projects its file
   const writes = gh.putLog.length;
-  const replay = await commit(reg(id, a), Date.parse(DEADLINE) + 60000);
+  const replay = await commit(reg(id, b), NOW + 60000);
   assert.equal(replay._status, 200, JSON.stringify(replay._body));
   assert.equal(replay._body.existing, true);
-  assert.deepEqual(replay._body.projected, ["b"], "the replay projected the other role's file");
+  assert.deepEqual(replay._body.projected, ["b"]);
   assert.equal(replay._body.status, "COMMITTED");
-  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.casePath(id)], "one write: the case");
+  assert.deepEqual(gh.putLog.slice(writes).filter((w) => w.repo === PINS).map((w) => w.path), [C.casePath(id)], "one write in the pins repository: the case");
   const k = storedCase(id);
   assert.equal(k.status, "COMMITTED");
-  assert.deepEqual(k.commitments.b, C.commitmentEntry(gh.read(PINS, C.registrationPath(id, "b"))));
+  const bPath = C.registrationPath(id, "b");
+  assert.deepEqual(k.commitments.b, { ...C.commitmentEntry(gh.read(PINS, bPath)), registration_sha256: sha(gh._repoMap(PINS).get(bPath).content) });
   assert.deepEqual(C.validateCase(k), { ok: true });
 
   // replayed again, by either party, it confirms and writes nothing
@@ -1246,7 +1251,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
   assert.equal(res._status, 409, JSON.stringify(res._body));
   assert.equal(res._body.ok, false);
   assert.equal(res._body.error_code, "case_withdrawn");
-  assert.equal(res._body.registration_recorded, true);
+  // since unit R-L4: the root's projection, which the withdrawn root does not hold
+  assert.equal(res._body.registration_recorded, false);
   assert.equal(gh.read(PINS, C.registrationPath(id, "a")).commitment_sha256, a.commitment_sha256, "the registration file stands");
   assert.deepEqual(storedCase(id), withdrawn, "the withdrawn record is not written over");
 
@@ -1263,7 +1269,7 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rec
   gh.forceFailure(PINS, C.casePath(id), 1, 500);
   const broken = await commit(reg(id, a));
   assert.equal(broken._status, 503);
-  assert.equal(broken._body.error_code, "case_update_failed");
+  assert.equal(broken._body.error_code, "registration_unconfirmed");
   assert.equal(storedCase(id).commitments.a, null);
 
   // the stamp record now says a size that is not a commitment's

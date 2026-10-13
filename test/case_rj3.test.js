@@ -1474,3 +1474,92 @@ test("R-L3 (a): a record whose branch answer is unknown, whose commits could not
     assert.deepEqual([r.status, r.body.error_code], [409, "anchor_conflict"], `${fx}: ${JSON.stringify(r.body).slice(0, 200)}`);
   }
 });
+
+// =============================================================================
+// THE REGISTRATION FILE'S STATES (unit R-L4, rule 8): what the case page
+// says of a role, from the case root and the presence of a file at the
+// role's path alone. A file is a claim, inert until the case root projects
+// it; one the root does not project says what it is, and once the case is
+// withdrawn, sealed or past its deadline, that it can never stand. A row per
+// state: the fixture that makes it, the page's time, and the words.
+// =============================================================================
+const REG_WORDS = Object.freeze({
+  projected: "registered at",
+  none: "not registered",
+  written_not_confirmed: "written, not confirmed",
+  written_never_confirmed: "written, never confirmed; this file has no standing and cannot acquire it",
+  written_under_withdrawal: "written; the case is withdrawn, so this file has no standing and cannot acquire it",
+});
+async function openOnly(scope) {
+  const o = makeRes();
+  await H.handleCaseOpen(req("case-open", opening(scope), OPEN_AUTH), o, { now: NOW });
+  assert.equal(o._status, 201, JSON.stringify(o._body));
+  return o._body.case_id;
+}
+async function commitAs(id, p, now = NOW) {
+  gh.seed(STAMPS, stamp.stampPath(p.commitment_sha256), { kind: "file-stamp", v: 1, sha256: p.commitment_sha256, size: C.COMMITMENT_BYTES_LENGTH, stamped_at: "2026-10-10T07:45:00.123Z" });
+  const r = makeRes();
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), r, { now });
+  return { status: r._status, body: parsed(r) };
+}
+// role a written, and the read of the case root after the write failed
+async function writtenNotConfirmed(scope) {
+  const id = await openOnly(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  // at the registration's write, the case root's next read is made to fail
+  const viaMock = global.fetch;
+  let fired = false;
+  global.fetch = async (url, o) => {
+    if (!fired && (o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.registrationPath(id, "a")}`)) {
+      fired = true;
+      gh.forceGetFailure(PINS, C.casePath(id), 1, 503);
+    }
+    return viaMock(url, o);
+  };
+  let r;
+  try {
+    r = await commitAs(id, a);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual([fired, r.status], [true, 503], JSON.stringify(r.body));
+  return { id, a };
+}
+const PAST_DEADLINE = Date.parse(DEADLINE) + 1000;
+const REG_FIXTURES = {
+  committed: async () => (await committedCase("RJ3 reg projected")).id,
+  open: async () => openOnly("RJ3 reg none"),
+  unconfirmed: async () => (await writtenNotConfirmed("RJ3 reg not confirmed")).id,
+  unconfirmed_late: async () => (await writtenNotConfirmed("RJ3 reg never confirmed")).id,
+  withdrawn: async () => {
+    const c = await committedCase("RJ3 reg withdrawn");
+    const res = makeRes();
+    await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "a", tape_sha256: c.a.tape_sha256, salt: c.a.salt }), res,
+      { now: NOW + 2000, env: KEYS, keyDocument: DOC });
+    assert.equal(res._status, 201, JSON.stringify(parsed(res)));
+    return c.id;
+  },
+};
+const REGISTRATION_TABLE = [
+  { state: "projected", fx: "committed", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "none", fx: "open", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "written_not_confirmed", fx: "unconfirmed", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "none", fx: "unconfirmed", role: "b", now: REVEAL_AT + 3600000 },
+  { state: "written_never_confirmed", fx: "unconfirmed_late", role: "a", now: PAST_DEADLINE },
+  { state: "written_under_withdrawal", fx: "withdrawn", role: "a", now: REVEAL_AT + 3600000 },
+  { state: "written_under_withdrawal", fx: "withdrawn", role: "b", now: REVEAL_AT + 3600000 },
+];
+function registrationRows(html) {
+  const i = html.indexOf("<h2>Registrations</h2>");
+  return i < 0 ? "" : plain(html.slice(i, html.indexOf("</section>", i)).replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ");
+}
+for (const t of REGISTRATION_TABLE) {
+  test(`R-L4 TABLE (registration file): ${t.fx}, role ${t.role} -> ${t.state}: "${REG_WORDS[t.state]}"`, async () => {
+    const id = await REG_FIXTURES[t.fx]();
+    const rows = registrationRows((await casePage(id, { now: t.now })).html);
+    assert.ok(rows.includes(`role ${t.role} ${REG_WORDS[t.state]}`), rows);
+    for (const [state, words] of Object.entries(REG_WORDS)) {
+      if (state !== t.state) assert.ok(!rows.includes(`role ${t.role} ${words}`), `${state} is not said: ${rows}`);
+    }
+  });
+}

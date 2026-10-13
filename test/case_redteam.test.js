@@ -514,10 +514,12 @@ test("FIX A: two registrations under two distinct key ids still seal, and the pa
 });
 
 // Two registrations under one key that race past the check: role b's
-// request reads both registration files (role a has none yet), and while it
-// reads its stamp, role a registers under the same key. Each file is first
-// write wins, so both stand, and the case projects both: COMMITTED, with one
-// key id in both commitments.
+// request reads the case root (role a projected nowhere yet), and while it
+// reads its stamp, role a registers under the same key. Since unit R-L4 (THE
+// PROJECTION) the second projection reads the first and is refused 409
+// same_key_both_roles; role b's file stays, inert. A root that projects one
+// key id twice is no longer made by a request, so the readers' defence is
+// held here against one written by hand over the race's files.
 async function racedSingleParty(scope) {
   const id = await openCase({ scope_digest: sha(scope), party_a: ATTACKER, party_b: HONEST });
   const a = party(id, "a", AGENT_TAPE);
@@ -532,7 +534,13 @@ async function racedSingleParty(scope) {
   );
   assert.equal(r.fired, true, "role a registered inside role b's request");
   assert.equal(r.inner._status, 201, JSON.stringify(r.inner._body));
-  assert.equal(r.out._status, 201, JSON.stringify(r.out._body));
+  assert.deepEqual([r.out._status, r.out._body.error_code], [409, "same_key_both_roles"], JSON.stringify(r.out._body));
+  const rpath = C.registrationPath(id, "b");
+  assert.equal(gh.has(PINS, rpath), true, "role b's file stays");
+  assert.equal(storedCase(id).commitments.b, null, "and is not projected");
+  // the root written by hand, projecting role b's file too
+  const text = gh._repoMap(PINS).get(rpath).content;
+  gh.seed(PINS, C.casePath(id), C.applyRegistration(storedCase(id), JSON.parse(text), sha(Buffer.from(text, "utf8"))), { keepHistory: true });
   const k = storedCase(id);
   assert.equal(k.status, "COMMITTED");
   assert.equal(k.commitments.a.key_id, k.commitments.b.key_id, "fixture: one key id in both commitments");

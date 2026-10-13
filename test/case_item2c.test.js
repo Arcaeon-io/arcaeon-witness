@@ -490,9 +490,9 @@ test("FIX 6: a case with the withdrawn marker is not considered for a pin (its c
   assert.equal(gh.putLog.length, writes, "the pass wrote nothing");
   assert.equal(r1.withdrawn_skipped, 1);
   assert.equal(r1.candidates, 0);
-  // unit R-N (C1): the sealer's withdrawn path reads the root once, and a root
-  // that does not read WITHDRAWN is not repaired
-  assert.equal(gh.getLog.slice(reads).filter((p) => p === C.casePath(w.id)).length, 1, "the case file is read once, by the withdrawn path");
+  // since unit R-L4 the withdrawn path writes only a missing marker, and a
+  // case whose marker the tree shows is not read at all
+  assert.equal(gh.getLog.slice(reads).filter((p) => p === C.casePath(w.id)).length, 0, "the case file is not read");
   assert.deepEqual(r1.withdrawn_repaired, []);
   // (b) COMMITTED, past its deadline with no reveal: read once, terminal
   const e = await committedCase({ over: { scope_digest: sha("expired") } });
@@ -512,7 +512,7 @@ test("FIX 6: a case with the withdrawn marker is not considered for a pin (its c
   assert.deepEqual(r3.terminal, [{ case_id: x.id, status: "WITHDRAWN" }]);
   // unit R-N (C1): the missing marker is written, and only that
   assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.withdrawnMarkerPath(x.id)], "the pass wrote the missing marker and nothing else");
-  assert.deepEqual(r3.withdrawn_repaired, [{ case_id: x.id, marker: "written", removed: [], kept: ["a", "b"], unknown: [] }]);
+  assert.deepEqual(r3.withdrawn_repaired, [{ case_id: x.id, marker: "written" }]);
   // MUST-FAIL ARM: before the deadline the same committed case is merely not sealed
   const before = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
   assert.ok(!before.terminal.some((t) => t.case_id === e.id));
