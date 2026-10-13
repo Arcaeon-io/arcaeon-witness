@@ -1048,3 +1048,24 @@ test("a page with a row whose commit was not read (not_read) is not kept", async
   assert.match(rowLine(second.html, 1), /not read: this case is not shown as pinned/, "fixture: the row is not_read");
   assert.ok(second.html.includes(`read at ${utc(t0 + 5000)}`), "read again");
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-J3): the mutants the pass over the lines R-J3 changed
+// left alive, each caught here
+// =============================================================================
+
+test("MUST-FAIL GAP (S04, P38, P42): the could-not-look page under a revoked key names the revoked key and its pin's state and reason", async () => {
+  const c = await withRow("RJ3 gap revoked page");
+  S._internal.clearDocumentCache();
+  gh.forceGetFailure(PINS, latestOf(c.id), 1, 503);
+  const page = await casePage(c.id, { keyDocument: REVOKED });
+  assert.equal(page.status, 503, "fixture: the could-not-look page");
+  assert.ok(page.html.includes(`<tr><th>revoked in the current key document</th><td>the case key <code>${KD.keyIdOf(CASE_KEY)}</code></td></tr>`),
+    page.html.slice(page.html.indexOf("<table"), page.html.indexOf("</table>")));
+  assert.ok(page.html.includes('<tr><th>its pin</th><td>could_not_look <span class="muted">(<code>pin_pointer_unreadable</code>)</span></td></tr>'));
+});
+
+test("MUST-FAIL GAP (P24): a row not read for a reason the page has no words for says it was not read, with that reason", () => {
+  assert.equal(plain(CP._internal.cells.row({ state: "not_read", reason: "some_other_reason" })),
+    "not read: the commit that wrote this row was not read for this page (some_other_reason); anchor state: not computed");
+});
