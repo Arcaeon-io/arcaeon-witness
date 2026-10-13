@@ -1368,3 +1368,45 @@ test("MUST-FAIL GAP (P24): a row not read for a reason the page has no words for
   assert.equal(plain(CP._internal.cells.row({ state: "not_read", reason: "some_other_reason" })),
     "not read: the commit that wrote this row was not read for this page (some_other_reason); anchor state: not computed");
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-L): the mutants the pass over the lines R-L changed
+// left alive, each caught here
+// =============================================================================
+
+test("MUST-FAIL GAP (unit R-L, S23): two daily anchor records that each miss: the answer names the first one's miss", async () => {
+  const c = await withRow("RL gap first miss");
+  const never = fresh();
+  dailyAnchor(pinDay(c.id), never);
+  const later = dailyAnchor(nextDay(pinDay(c.id)));
+  gh.forceGetFailure(PINS, later.path, 1, 503);
+  const st = await S.anchorState(c.id, storedCase(c.id));
+  assert.deepEqual([st.pin, st.anchor], ["pinned", { could_not_look: "anchor_head_not_shown", head_commit: never }]);
+});
+
+test("MUST-FAIL GAP (unit R-L, S25): a daily anchor record that could not be read is passed over: the record after it is read, and anchors the case", async () => {
+  const c = await withRow("RL gap unread record");
+  const first = dailyAnchor(pinDay(c.id));
+  const a = dailyAnchor(nextDay(pinDay(c.id)));
+  gh.forceGetFailure(PINS, first.path, 1, 503);
+  const st = await S.anchorState(c.id, storedCase(c.id));
+  assert.deepEqual([st.pin, st.anchor.path, st.anchor.head_commit], ["anchored", a.path, a.head]);
+});
+
+test("MUST-FAIL GAP (unit R-L, H36): the reference's 503 anchor_unreadable carries the anchor's reason as a field", async () => {
+  const c = await withRow("RL gap anchor reason field");
+  dailyAnchor(pinDay(c.id), fresh());
+  const r = await reference(c, "b");
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason, r.body.case_id], [503, "anchor_unreadable", "anchor_head_not_shown", c.id], JSON.stringify(r.body));
+});
+
+test("MUST-FAIL GAP (unit R-L, P14): the could-not-look page under a revoked key, for a pin whose commit history is longer than this service reads, does not say try again", async () => {
+  const c = await withRow("RL gap revoked beyond bound");
+  longHistory(seqOf(c.id));
+  S._internal.clearDocumentCache();
+  const page = await casePage(c.id, { keyDocument: REVOKED });
+  assert.equal(page.status, 503, "fixture: the could-not-look page");
+  assert.ok(page.html.includes("pin_commits_beyond_bound"));
+  assert.ok(page.html.includes("This is not a no.</p>"), page.html.slice(page.html.indexOf("This is not a no") - 200, page.html.indexOf("This is not a no") + 40));
+  assert.doesNotMatch(page.html, /This is not a no; try again/);
+});
