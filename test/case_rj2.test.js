@@ -460,7 +460,7 @@ test("n3: the general anchor sentence is printed only beside a case that reads p
   const p = await sealedCase("RJ2 n3 unrecorded", { pinFails: true });
   const html = (await casePage(p.id)).html;
   assert.ok(!html.includes("It is pinned and anchored as its own record"));
-  assert.ok(html.includes("This page read this case&#39;s pin as commit_unrecorded and claims nothing more about its pin or its anchor."), html.slice(-1500));
+  assert.ok(html.includes("This page read this case&#39;s pin as commit_unrecorded (not_pinned) and claims nothing more about its pin or its anchor."), html.slice(-1500));
 });
 
 test("n4: the preview tool says the anchor's proof is not checked by it", () => {
@@ -484,7 +484,7 @@ test("n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for 
   plantPin(id, chainOf(id), gh.commitsFor(PINS, C.casePath(id)).slice(-1)[0].sha);
   assert.ok((await casePage(id)).html.includes("the case file at that commit is not this case file in canonical form (json-c14n:v1) (case_at_commit_differs)"));
   for (const [commit, words, reason] of [
-    ["f".repeat(40), "the pins repository has no such commit", "case_commit_not_found"],
+    ["f".repeat(40), "the pins repository does not show that commit", "case_commit_not_found"], // unit R-J3 (F2)
     [early, "the pins repository holds no case file at that commit", "case_absent_at_commit"],
   ]) {
     plantPin(id, chainOf(id), commit);

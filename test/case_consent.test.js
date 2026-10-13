@@ -317,7 +317,7 @@ test("FIX D: a reference to a sealed case not pinned yet is 409 case_not_pinned 
   assert.equal(r.body.error_code, "case_not_pinned");
   assert.equal(r.body.state, "commit_unrecorded");
   assert.equal(r.body.reason, "not_pinned");
-  assert.match(r.body.error, /appended only to a case that is pinned or anchored/);
+  assert.match(r.body.error, /appended only to a case that reads pinned or anchored/);
   assert.deepEqual(referenceFiles(c.id), []);
   assert.equal(gh.has(USAGE, H._internal.referenceQuotaPath(c.id, "a")), false, "no unit of the quota spent");
   await sealerRun();
@@ -326,15 +326,15 @@ test("FIX D: a reference to a sealed case not pinned yet is 409 case_not_pinned 
   assert.deepEqual(referenceFiles(c.id), [C.referencePath(c.id, 1)]);
 });
 
-test("FIX D: every state that is not pinned or anchored is refused with that state: could_not_look, pin_commit_mismatch, conflict; since unit R-N (D1) the check reads the daily anchor records for a conflict", async () => {
+test("FIX D: every state read that is not pinned or anchored is refused with that state: pin_commit_mismatch, conflict; since unit R-J3 (F5) a pin that could not be read is 503 could_not_look, not a refusal of the row; since unit R-N (D1) the check reads the daily anchor records for a conflict", async () => {
   const c = await sealedCase("D states");
   const { latest, seq } = S.pinPaths(c.id);
   const pin = gh.read(PINS, latest);
-  // could_not_look
+  // could_not_look: 503, not a refusal of the row (unit R-J3, F5)
   gh.forceGetFailure(PINS, latest, 1, 503);
   let r = await reference(c);
-  assert.equal(r.status, 409);
-  assert.deepEqual([r.body.error_code, r.body.state, r.body.reason], ["case_not_pinned", "could_not_look", "pin_pointer_unreadable"]);
+  assert.equal(r.status, 503);
+  assert.deepEqual([r.body.error_code, r.body.state, r.body.reason], ["could_not_look", "could_not_look", "pin_pointer_unreadable"]);
   // pin_commit_mismatch: the pin names the commit that opened the case
   const opened = gh.commitsFor(PINS, C.casePath(c.id)).slice(-1)[0].sha;
   gh.seed(PINS, latest, { ...pin, case_commit: opened });

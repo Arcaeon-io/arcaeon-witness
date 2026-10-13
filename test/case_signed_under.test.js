@@ -593,8 +593,9 @@ test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and 
   const pinned = await sealedCase("page pin unreadable");
   gh.forceCommitsFailure(PINS, S.pinPaths(pinned.id).seq, 1, 500);
   const q = await pageOf(pinned.id);
-  // Design J: a pin whose commit cannot be read is could_not_look, no claim
-  assert.ok(q.html.includes("could_not_look: its pin could not be read when this page was read (pin_commit_unreadable)"));
+  // Design J: a pin whose commit cannot be read is could_not_look, no claim;
+  // since unit R-J3 the cell says the pointer was read, and which read failed
+  assert.ok(q.html.includes("could_not_look: a pin of this case's chain was read, and the commit that wrote its pin record could not be read when this page was read (pin_commit_unreadable)"));
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 

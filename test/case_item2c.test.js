@@ -1078,7 +1078,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(!String(ru._body).includes(">MATCHED<"));
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
-  assert.match((await casePage(p.id)).html, /commit_unrecorded: the second of this case&#39;s two writes/);
+  assert.match((await casePage(p.id)).html, /commit_unrecorded: the case is sealed and not yet pinned \(not_pinned\)/); // unit R-J3 (F1)
   // ALTERED: the word and the first divergence; and a reference row makes it two records, with the cross-reference shown
   const alt = await committedWith({ scope_digest: sha("page altered") }, ALT_AGENT, ALT_TOOL);
   assert.equal((await reveal(revealBody(alt.id, alt.a, alt.b))).status, 201);

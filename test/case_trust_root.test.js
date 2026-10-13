@@ -883,7 +883,7 @@ test("R-I2 M1 (the tool): the tool runs the reader's check on the marker it woul
   assert.equal(ok.ok, true, JSON.stringify(ok));
 });
 
-test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case_not_pinned (no pin, or a legacy one with no case_commit), pin_commit_mismatch, or pin_unreadable:<reason>", async () => {
+test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case_not_pinned (no pin, or a legacy one with no case_commit), pin_commit_mismatch, or pin_unreadable:<reason>; since unit R-J3 (F4) a pin that could not be read is pin_unavailable, neither a yes nor a no", async () => {
   const c = await sealedCase("R-I2 pin states");
   await revoke(CASE_KEY, CASE_REVOKED);
   const { latest, seq } = S.pinPaths(c.id);
@@ -896,7 +896,7 @@ test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case
   S._internal.clearDocumentCache();
   gh.forceGetFailure(PINS, latest, 1, 503);
   const u = await S.sealedRecordReason(c.k, CASE_REVOKED);
-  assert.deepEqual([u.code, u.reason], ["signer_revoked", "pin_unreadable:pin_pointer_unreadable"]);
+  assert.deepEqual([u.code, u.reason], ["pin_unavailable", "pin_pointer_unreadable"]);
   // a legacy pin with no case_commit
   const { case_commit: _cc, ...legacy } = pin; // eslint-disable-line no-unused-vars
   gh.seed(PINS, latest, legacy);
