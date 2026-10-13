@@ -1,5 +1,47 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-L4: nothing is ever deleted; a registration file is a claim until the case root projects it (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Taken out before release.** The removal and repair-note machinery added in units R-L, R-L2 and R-L3 (the unwind of an unconfirmed registration, the signed repair notes, the sealer's completion of recorded removals, the "condemned" file, and the one pins-repository deletion in `lib/_case_unregister.js`) was taken out before release. Four review rounds each found one more reader of a registration file that the unwind could delete after the service had answered 200 for it, and the fault was the rule, not the readers: a 503 must leave the repository where a re-send can finish, never where something must be reversed.
+- **The rule.**
+  - A registration file is a claim, inert until the case root projects it. The root's entry for a role carries `registration_sha256`, the sha256 of the file's bytes (`lib/_case.js` THE PROJECTION, `caseEntry`).
+  - The commit path projects only after a fresh read of the root (the confirming read) shows no withdrawal and no seal, before the deadline, by a compare-and-swap on the root (`projectRegistration`). The case lock stays as a courtesy that serializes writers; the compare-and-swap is the guard.
+  - If the confirming read or the projection fails, nothing more is written: 503 `registration_unconfirmed`, "the registration file is written and is not yet confirmed; send the same registration again".
+  - The same registration is the same fields a party supplies: case id, role, commitment, the registering key (verifier and key id) and its signature, compared by one helper (`partySuppliedDiffers`), never the file's bytes. Sent again, it finds the file and projects that file as it is, with its own sha256 and registered_at. The lost create-only race is the same case. A file whose party-supplied fields differ is 409 `registration_exists`, naming its sha256 and the field (`differs`). This is the architect's correction to rule 3, applied in this unit.
+  - Every reader takes registrations from the root's projection alone and checks each file against it (`lib/_case_seal.js` `projectedRegistrations`). This covers the commit path, the reveal and its refusal receipt, the withdrawal and its retry, the reference, the sealer and the case page. A projected file that is missing, is not the file projected, or does not hold the entry is DAMAGED: 409 `case_damaged`, its own page, never sealed and never pinned. The sealer's index and the status counts read no registration file.
+  - A file written after its case's withdrawal is 409 `case_withdrawn` and stays, inert. The refusal receipt and a retried withdrawal take the commitment from the root version the withdrawal wrote over (`rootBeforeWithdrawal`).
+  - The case page says of a file the root does not project "written, not confirmed". Once the case is sealed or past its deadline it says "written, never confirmed; this file has no standing and cannot acquire it". On a withdrawn case it says "written; the case is withdrawn, so this file has no standing and cannot acquire it". These rows are in `test/case_rj3.test.js`'s registration-file table.
+  - The README states the public property verbatim: "No file in the pins repository is ever deleted. ..." Files under `removals/` in a preview repository are ignored.
+- **The reveal (rule 7).** It writes nothing but the case root before its VERDICT. Its first write, the reveal attempt, is itself a compare-and-swap over the root it read. The VERDICT is a compare-and-swap over the attempt. A projection or a withdrawal that lands in between makes the next write lose, and the reveal answers from the new state. The pin comes after the VERDICT.
+- **Removed.**
+  - From `lib/_case_seal.js`: `repairNote`, `repairNotePath`, `repairNotePathV1`, `notePathOf`, `repairNoteFormReason`, `verifyRepairNote`, `noteVerdict`, `NOTE_UNREAD_REASONS`, `REPAIR_NOTE_*`, `REPAIR_REASONS`, `REPAIR_NOTES_DIR`, `CREATE_ONLY_RULE`, `sealedWithRegistration`, `registrationsStanding`, `standingOfCase`, `removeRegistration`, `caseRemovals`, `REMOVAL_WALK_READS`, `completeRemovals`, `removalsToComplete`, `withdrawalCommitOf`, `registrationAgainstWithdrawal`, `WITHDRAWN_REPAIR_READS`, and the sealer's three repair windows.
+  - From `lib/_case_http.js`: `readRegistrations`, `standingUnread`, `project`, `projectFiles`, `judgeRegistration`, `registrationOnFile`, `unwindRegistration`, `unwoundWords` and `UNCONFIRMED_NOTED`.
+  - From `lib/_case_page.js`: the Removals panel (`removalsPanel`, `noteRow`, `REMOVED_ROWS`, `NOTE_STATE_WORDS`, `removalsDefinite`).
+  - `lib/_case_unregister.js` and its test, `test/case_rl3.test.js`, and every test of the removed machinery.
+- **Tests.**
+  - New: `test/case_rl4.test.js`, 15 tests of the rule and the correction, plus 7 registration-file rows in `test/case_rj3.test.js`.
+  - On 85d90a2 the 11 rule tests fail, and so do the 4 table rows of the new states; the 3 table rows of unchanged states pass. On 0a49538, 3 of the correction's 4 tests fail. The later-clock re-send already projected the original file there.
+  - Deleted: 92 tests of the removed machinery: 30 in `case_rl3`, 23 in `case_rl`, 21 in `case_rl2`, 7 in `case_rn`, 4 in `case_consent`, 3 in `case_rn2`, 3 in `case_mutation_gaps` and 1 in `no_delete_record`.
+  - Updated by design: `case_protocol`, `case_fix_mutation_gaps`, `case_mutation_gaps`, `case_redteam`, `case_reveal`, `case_item2b`, `case_item2c`, `case_rn`, `case_rn2`, `case_rn4`, `case_commits`, `no_delete_record`. The single-party fixtures are now written by hand: the second projection under one key is refused.
+- **The must-fail pass, and the gap-test commit** (3edb973).
+  - 107 defects were planted over every line R-L4 changed in `lib/_case_http.js`, `lib/_case_seal.js`, `lib/_case_page.js`, `lib/_case.js` and `lib/_store.js` at 0a49538, and 18 more over the correction's lines at f39038e, each alone with the whole suite run. None timed out.
+  - The first batch: 63 caught, 44 survived. 15 gap tests catch 35 of them.
+  - The second batch: 11 caught, 7 survived. The gap tests catch 4 of them.
+  - Left as equivalent or unreachable through the service:
+    - H15, H16, H17: the confirming read's own-role checks. One path holds one file, and step 2 already checked the projection against it.
+    - H18, H49: the confirming read's deadline. It uses the request's clock, which step 5a already checked.
+    - H31: a root the rebuild found unprojectable reading projectable at the next read. Statuses never regress, and projections are never removed.
+    - H59: the receipt taking the other role's entry. The preimage binds the role.
+    - T01: `fileText` without its newline. Every write and every hash use the one function.
+    - X04, X05: the signature and the key id in the comparison. A valid record with the same fields and verifier has both.
+    - X18: an unparsed file read as `{}`. It is refused as a record, as `null` is.
+    - H47: a line replaced by the correction; X14 covers it.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - 0a49538 (R-L4): 1513 tests, 1510 pass, 2 skipped, 0 fail, 1 todo.
+  - f39038e (the correction): 1517 tests, 1514 pass, 2 skipped, 0 fail, 1 todo.
+  - 3edb973 (gap tests): 1532 tests, 1529 pass, 2 skipped, 0 fail, 1 todo. A bare `node --test`: 1539 and 1536.
+  - The change log commit changes no test, and the final tip prints what 3edb973 prints.
+
 ## 2026-10-13: Unit R-L3: a registration file under a verified repair note never stands, sending it again writes it fresh, and the anchor's last early returns are misses (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The blocker.** R-L2's own rule let the sealer delete a registration the service had answered 200 for. The registration was written, the read after the write failed, a repair note (`registration_unconfirmed`) was written, and the removal failed; the 503 said to send the registration again. The re-send took the file still at the path as the registration and answered 200 `existing: true`. The sealer's next run then completed the recorded removal, and the case carried a commitment whose file was gone.
