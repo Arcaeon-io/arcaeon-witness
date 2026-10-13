@@ -480,7 +480,7 @@ test("FIX 5: a squatter or unreadable latest.json under a pinned case is reporte
 // FIX 6: the sealer skips terminal root states
 // =============================================================================
 
-test("FIX 6: a case with the withdrawn marker is not considered (its case file is never read); a root read as expired or withdrawn is skipped as terminal; nothing is written", async () => {
+test("FIX 6: a case with the withdrawn marker is not considered for a pin (its case file is read only by the withdrawn path, unit R-N C1); a root read as expired or withdrawn is skipped as terminal; nothing is written but a withdrawn marker that was missing", async () => {
   // (a) the marker, by the tree alone
   const w = await committedCase({ over: { scope_digest: sha("marker") } });
   gh.seed(PINS, C.withdrawnMarkerPath(w.id), { case_id: w.id });
@@ -490,7 +490,10 @@ test("FIX 6: a case with the withdrawn marker is not considered (its case file i
   assert.equal(gh.putLog.length, writes, "the pass wrote nothing");
   assert.equal(r1.withdrawn_skipped, 1);
   assert.equal(r1.candidates, 0);
-  assert.ok(!gh.getLog.slice(reads).includes(C.casePath(w.id)), "the case file is never read");
+  // unit R-N (C1): the sealer's withdrawn path reads the root once, and a root
+  // that does not read WITHDRAWN is not repaired
+  assert.equal(gh.getLog.slice(reads).filter((p) => p === C.casePath(w.id)).length, 1, "the case file is read once, by the withdrawn path");
+  assert.deepEqual(r1.withdrawn_repaired, []);
   // (b) COMMITTED, past its deadline with no reveal: read once, terminal
   const e = await committedCase({ over: { scope_digest: sha("expired") } });
   const after = Date.parse(DEADLINE) + 60000;
@@ -507,7 +510,9 @@ test("FIX 6: a case with the withdrawn marker is not considered (its case file i
   writes = gh.putLog.length;
   const r3 = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
   assert.deepEqual(r3.terminal, [{ case_id: x.id, status: "WITHDRAWN" }]);
-  assert.equal(gh.putLog.length, writes, "the pass wrote nothing");
+  // unit R-N (C1): the missing marker is written, and only that
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.withdrawnMarkerPath(x.id)], "the pass wrote the missing marker and nothing else");
+  assert.deepEqual(r3.withdrawn_repaired, [{ case_id: x.id, marker: "written", removed: [], kept: ["a", "b"], unknown: [] }]);
   // MUST-FAIL ARM: before the deadline the same committed case is merely not sealed
   const before = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
   assert.ok(!before.terminal.some((t) => t.case_id === e.id));
@@ -598,9 +603,10 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.deepEqual(gh.read(PINS, C.registrationPath(id, "a")), regA);
   assert.deepEqual(gh.read(PINS, C.registrationPath(id, "b")), regB);
   assert.match(w.body.registrations_note, /remain in the public record/);
-  assert.match(w.body.registrations_note, /does not erase them/);
-  // the preimage is spent: no reveal, no second withdrawal
-  const r = await reveal(revealBody(id, a, b));
+  assert.match(w.body.registrations_note, /does not stand/);
+  // the preimage is spent: no reveal (unit R-N, N3: a party naming its role
+  // gets the refusal), no second withdrawal by the other role
+  const r = await reveal(revealBody(id, a, b, { role: "b" }));
   assert.equal(r.status, 409);
   assert.equal(r.body.error_code, "case_withdrawn");
   const again = await withdraw(proofOf(id, b));
@@ -691,13 +697,12 @@ test("WITHDRAWAL: a preimage that does not recompute the named role's registrati
     for (const s of [a.salt, b.salt, wrongSalt, a.tape_sha256, b.tape_sha256]) assert.ok(!text.includes(s), `${where} carry ${s.slice(0, 16)}`);
   }
   assert.ok(storedText().includes(C.saltSha256(a.salt)), "control: the scan sees what IS stored");
-  // and with the case key unpublished the record is unsigned and says why
+  // and with the case key unpublished nothing is withdrawn (unit R-N, N1:
+  // ONE SIGNATURE RULE EVERYWHERE; a withdrawal record is signed or not written)
   const u = await committedCase({ over: { scope_digest: sha("unsigned withdrawal") } });
   const uw = await withdraw(proofOf(u.id, u.b), { keyDocument: S.PUBLISHED_KEYS });
-  assert.equal(uw.status, 201);
-  assert.equal(storedCase(u.id).sig, null);
-  assert.equal(storedCase(u.id).signed_by, null);
-  assert.match(storedCase(u.id).sig_reason, /^This withdrawal record is not signed \(key_unpublished\): /);
+  assert.deepEqual([uw.status, uw.body.error_code, uw.body.reason], [503, "signer_unavailable", "key_unpublished"]);
+  assert.equal(storedCase(u.id).status, "COMMITTED");
 });
 
 // The real race: one handler's root write held until the other has run whole.
@@ -815,7 +820,7 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.equal((await S.liveRecords(storedCase(x.id), { keyDocument: KEYS_DOC })).records, 2);
 });
 
-test("ADDENDUM: an invalid row is ignored by the count; a valid unsigned row counts", async () => {
+test("ADDENDUM: an invalid row is ignored by the count; since unit R-N (N1) an unsigned row is not a record either (row_unsigned)", async () => {
   const { id } = await sealedCase({ over: { scope_digest: sha("invalid rows") } });
   const sealed = storedCase(id);
   const signer = S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC });
@@ -841,11 +846,14 @@ test("ADDENDUM: an invalid row is ignored by the count; a valid unsigned row cou
     if (name !== "reference_bad_seq") assert.equal(live.invalid[0].reason, name, `${name}: ${live.invalid[0].reason}`);
     else assert.equal(live.invalid[0].reason, "reference_not_at_its_path");
   }
-  // a valid unsigned row is a record, unsigned
+  // an unsigned row, otherwise valid, is not a record (unit R-N, N1)
   const unsigned = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "role:b" }, { ok: false, code: "key_unpublished", reason: "no key in this test" });
   assert.equal(unsigned.sig, null);
-  assert.match(unsigned.sig_reason, /^This reference row is not signed \(key_unpublished\)/);
   gh.seed(PINS, C.referencePath(id, 1), unsigned);
+  const u = await S.liveRecords(sealed, { keyDocument: KEYS_DOC });
+  assert.deepEqual([u.records, u.invalid], [1, [{ seq: 1, reason: "row_unsigned" }]]);
+  // control: the same row signed is a record
+  gh.seed(PINS, C.referencePath(id, 1), good(1));
   assert.equal((await S.liveRecords(sealed, { keyDocument: KEYS_DOC })).records, 2);
   // MUST-FAIL ARM: a count of files, not of valid rows, would have said 2 for every plant
   assert.equal(referenceFiles(id).length, 1);

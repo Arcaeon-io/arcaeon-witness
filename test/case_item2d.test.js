@@ -428,8 +428,12 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   t.mock.method(S, "sealedRecordReason", (rec) => realCheck(rec, KEYS_DOC));
   const res = makeRes();
   await verifyHandler(req("case-reference", { case_id: un.id, cross_reference: XREF }, { authorization: `Bearer ${OPERATOR_KEY}` }), res);
-  assert.equal(res._status, 201, JSON.stringify(parsed(res)));
-  assert.equal(parsed(res).appended_by, "operator");
+  // the operator's bearer is accepted (not 401): the request reaches the
+  // signer, and since unit R-N (N1: an unsigned row is not a record) this
+  // environment, which carries no case key the committed document lists,
+  // writes no row
+  assert.deepEqual([res._status, parsed(res).error_code, parsed(res).reason], [503, "signer_unavailable", "case_key_unset"], JSON.stringify(parsed(res)));
+  assert.equal(gh.has(PINS, C.referencePath(un.id, 1)), false);
   // the code reads no WITNESS_ADMIN_KEY: no property access and no string of it
   const fs = require("node:fs");
   const path = require("node:path");

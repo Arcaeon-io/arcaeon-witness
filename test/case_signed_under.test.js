@@ -420,10 +420,19 @@ test("SIGNER SINCE REVOKED (since unit R-I, by commit order): valid under the na
   const pinned = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: caseRevoked });
   assert.equal(pinned.ok, true, JSON.stringify(pinned));
   assert.equal(pinned.pin, "pinned");
-  const res = makeRes();
-  await H.handleCaseReference(req("case-reference", { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt,
-    cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
-  { now: REVEAL_AT + 3600000, env: KEYS, keyDocument: caseRevoked });
+  const referenceUnder = async (keyDocument) => {
+    const res = makeRes();
+    await H.handleCaseReference(req("case-reference", { case_id: id, role: "a", tape_sha256: a.tape_sha256, salt: a.salt,
+      cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
+    { now: REVEAL_AT + 3600000, env: KEYS, keyDocument });
+    return res;
+  };
+  // unit R-N (N1): a row is signed with the case key or not written, and a
+  // revoked case key signs nothing; under the document that revokes only the
+  // reconcile key, the row is written
+  const noKey = await referenceUnder(caseRevoked);
+  assert.deepEqual([noKey._status, parsed(noKey).error_code], [503, "signer_unavailable"], JSON.stringify(parsed(noKey)));
+  const res = await referenceUnder(receiptRevoked);
   assert.equal(res._status, 201, JSON.stringify(parsed(res)));
 });
 

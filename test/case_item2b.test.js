@@ -231,9 +231,18 @@ const asRead = (json) => ({ json, sha: "0".repeat(40) });
 // FIX 1: anchorCase runs the full sealed-receipt check before it pins
 // =============================================================================
 
+// A sealed case without its reveal_attempts (a VERDICT may lack them).
+function withoutAttempts(k) {
+  const { reveal_attempts: _attempts, ...rest } = k; // eslint-disable-line no-unused-vars
+  return rest;
+}
+
 test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bind its reveals (verdict_unbound) and writes no pin", async () => {
   const { id } = await sealedCase({ pinFails: true });
   const good = storedCase(id);
+  // unit R-N (E1): with the attempt that sealed it kept, swapped reveals are not even a valid record
+  const swapped = { ...good, reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } };
+  assert.deepEqual([C.validateCase(swapped).code, C.validateCase(swapped).field], ["status_inconsistent", "reveal_attempts.0.input_sha256"]);
   assert.deepEqual(pinFilesOf(id), [], "fixture: sealed, no pin yet");
   const R = good.verdict;
   const plants = {
@@ -242,7 +251,9 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
     // the receipt's received-tape digest for tape_a is not role a's committed tape
     tape_a_digest: { ...good, verdict: { ...R, tapes: { ...R.tapes, tape_a: { ...R.tapes.tape_a, digest: `sha256:raw-bytes:v1:${"0".repeat(64)}` } } } },
     // the reveals name the other role's tape: the receipt no longer binds them
-    reveals_swapped: { ...good, reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } },
+    // (with no reveal_attempts: since unit R-N, E1, the attempt that sealed
+    // the case binds the reveals too, and the schema refuses the swap first)
+    reveals_swapped: { ...withoutAttempts(good), reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } },
     // a signed receipt altered after signing (a count): bound, but its signature breaks
     receipt_altered: { ...good, verdict: { ...R, verdict: { ...R.verdict, findings: R.verdict.findings + 1 } } },
   };

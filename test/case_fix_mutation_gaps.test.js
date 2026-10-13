@@ -456,7 +456,12 @@ test("H13 (reference, the words for receipt_unsigned); since Design I its enviro
   const good = await sealedWith("H11");
   // red-team fix D: a row goes only to a pinned case; the sealer's pass pins it
   assert.equal((await S.anchorCase(good.id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC })).pin, "pinned");
-  const ok = await at(good.id, good.a, {});
+  // with no environment the case still holds: the request passes the sealed
+  // check and stops only at the signer (unit R-N, N1: an unsigned row is not
+  // a record, so none is written); with the case key it is written
+  const noEnv = await at(good.id, good.a, {});
+  assert.deepEqual([noEnv._status, noEnv._body.error_code], [503, "signer_unavailable"], JSON.stringify(noEnv._body));
+  const ok = await at(good.id, good.a, SIGNED);
   assert.equal(ok._status, 201, JSON.stringify(ok._body));
 });
 

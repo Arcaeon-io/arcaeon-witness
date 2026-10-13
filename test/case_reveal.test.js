@@ -395,7 +395,9 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     assert.equal(first.status, 201);
     return revealBody(id, a, b);
   });
-  plant("withdrawn", 409, "case_withdrawn", async () => {
+  // unit R-N (N3): a reveal of a withdrawn case that names no role is not a
+  // party's refusal request: 404 not_a_party, before any tape is read
+  plant("withdrawn", 404, "not_a_party", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("withdrawn") } });
     gh.seed(PINS, C.casePath(id), { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
       withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("the withdrawing salt") }, limits: C.LIMITS.slice(), signed_by: null, sig: null,
@@ -667,7 +669,7 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
   // red-team fix E: the attempt, before the comparison, and its failure; nothing sealed, nothing pinned
   assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.casePath(id), C.casePath(id)]);
   assert.equal(storedCase(id).status, "COMMITTED");
-  assert.equal(storedCase(id).reveal_failure.reason, "receipt_check_failed");
+  assert.equal(storedCase(id).reveal_attempts.at(-1).reason, "receipt_check_failed");
   // control: the real builder seals
   assert.equal((await reveal(revealBody(id, a, b))).status, 201);
 });
@@ -730,7 +732,8 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT", "the case file stands");
   assert.deepEqual(C.validateCase(k), { ok: true });
-  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under"].sort(), "no anchor or pin field in the case (and no reveal attempt: a sealed case is the seal)");
+  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under", "reveal_attempts"].sort(),
+    "no anchor or pin field in the case (its reveal attempts are part of the sealed base: unit R-N, E1)");
   assert.equal(gh.has(PINS, paths.seq), false);
   assert.equal(gh.has(PINS, paths.latest), false);
   assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "commit_unrecorded", reason: "not_pinned" }, "computed from the pin's absence");
@@ -908,7 +911,12 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
     // a relabelled party moves the case id, so the schema refuses it first
     case_id_mismatch: [{ ...k, party_b: { ...k.party_b, label: "tool-operator@example.net" } }],
     receipt_time_mismatch: [{ ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T09:00:01Z" } }],
-    receipt_tape_a_mismatch: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
+    // (the attempt that sealed it dropped: since unit R-N, E1, it binds the reveals too, and the schema refuses the change first)
+    receipt_tape_a_mismatch: [(() => {
+      const { reveal_attempts: _attempts, ...rest } = k; // eslint-disable-line no-unused-vars
+      return { ...rest, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } };
+    })()],
+    status_inconsistent: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
   };
   for (const [reason, recs] of Object.entries(plants)) {
     for (const rec of recs) assert.equal(await verdictOf(rec), reason);

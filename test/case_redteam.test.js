@@ -362,8 +362,8 @@ test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comp
   assert.equal(compare.mock.callCount(), 1, "the comparison ran");
   assert.notDeepEqual(storedCase(id), before, "a comparison that ran leaves a trace in the case record");
   assert.equal(storedCase(id).status, "COMMITTED");
-  assert.ok(storedCase(id).reveal_attempt, "FIX E: the attempt");
-  assert.equal(storedCase(id).reveal_failure.reason, "case_seal_failed", "and its failure");
+  assert.equal(storedCase(id).reveal_attempts[0].event, "attempt", "FIX E: the attempt");
+  assert.equal(storedCase(id).reveal_attempts[1].reason, "case_seal_failed", "and its failure (unit R-N, E1: appended after it)");
 });
 
 test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"', async () => {
@@ -652,14 +652,18 @@ test("FIX A: a registration under another key for a role already registered is r
   assert.equal(same._body.existing, true);
 });
 
-test('GPT-5.6 §2B: "Before either submits the joint reveal, B sends case-withdraw ... A\'s reveal returns 409 case_withdrawn"',
-  { todo: "CONFIRMED: after B's withdrawal, A's joint reveal (with both reveals, exchanged out of band) is 409 case_withdrawn (the assertion 'A's reveal still seals' fails)" }, async () => {
-    const { id, a, b } = await committedCase({ scope_digest: sha("2B") });
-    const w = await withdraw(proofOf(id, b));
-    assert.equal(w.status, 201, JSON.stringify(w.body));
-    const r = await reveal(revealBody(id, a, b), { now: REVEAL_AT + 1000 });
-    assert.equal(r.status, 201, `A's reveal still seals: ${JSON.stringify(r.body).slice(0, 200)}`);
-  });
+// unit R-N (T1): the decision is closed, so this is a plain assertion. A's
+// reveal, naming A's role and carrying A's own opening (N3), is 409
+// case_withdrawn with a refusal receipt for role a; nothing is sealed.
+test('GPT-5.6 §2B: "Before either submits the joint reveal, B sends case-withdraw ... A\'s reveal returns 409 case_withdrawn"', async () => {
+  const { id, a, b } = await committedCase({ scope_digest: sha("2B") });
+  const w = await withdraw(proofOf(id, b));
+  assert.equal(w.status, 201, JSON.stringify(w.body));
+  const r = await reveal({ ...revealBody(id, a, b), role: "a" }, { now: REVEAL_AT + 1000 });
+  assert.deepEqual([r.status, r.body.error_code], [409, "case_withdrawn"], JSON.stringify(r.body).slice(0, 200));
+  assert.equal(r.body.refusal_receipt.role, "a");
+  assert.equal(storedCase(id).status, "WITHDRAWN");
+});
 
 test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which side prevented the comparison": it names the withdrawing role (by_role), and the page says so', async () => {
   const { id, b } = await committedCase({ scope_digest: sha("2B side") });
@@ -669,14 +673,16 @@ test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which
   assert.match(page.html, /by role b, at /);
 });
 
-test('GPT-5.6 §2B: "It does not identify the parties, commitments"',
-  { todo: "CONFIRMED: the redacted root carries no label and no commitment (design: WITHDRAWN_FIELDS); the assertion 'the redacted root identifies the parties and their commitments' fails" }, async () => {
-    const { id, a, b } = await committedCase({ scope_digest: sha("2B parties") });
-    assert.equal((await withdraw(proofOf(id, b))).status, 201);
-    const text = JSON.stringify(storedCase(id));
-    assert.ok(text.includes("agent-operator@example.com") && text.includes(a.commitment_sha256) && text.includes(b.commitment_sha256),
-      "the redacted root identifies the parties and their commitments");
-  });
+// unit R-N (T1): the redacted root carries no label and no commitment
+// (design: WITHDRAWN_FIELDS), asserted as it is.
+test('GPT-5.6 §2B: "It does not identify the parties, commitments"', async () => {
+  const { id, a, b } = await committedCase({ scope_digest: sha("2B parties") });
+  assert.equal((await withdraw(proofOf(id, b))).status, 201);
+  const text = JSON.stringify(storedCase(id));
+  for (const s of ["agent-operator@example.com", "tool-operator@example.com", a.commitment_sha256, b.commitment_sha256]) {
+    assert.ok(!text.includes(s), `the redacted root does not carry ${s.slice(0, 24)}`);
+  }
+});
 
 test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, or lifetime addendum quota"', async () => {
   const { id, a } = await sealedCase({ scope_digest: sha("2C") });

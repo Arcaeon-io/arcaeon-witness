@@ -1,5 +1,44 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-N: one signature rule everywhere, the refusal receipt made real, the reconcile bypass closed, and the withdrawal lease made honest (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **N1, the BLOCKER: one signature rule everywhere** (`lib/_case_seal.js`, `lib/_case_http.js`). Seals, reference rows, withdrawal records and refusal receipts are each signed or not written.
+  - A refusal receipt is signed by the reconcile key, or it is not issued. With no reconcile signer the answer is 503 `signer_unavailable`, with no receipt and no 409 claiming one.
+  - A withdrawal or a reference row without a case key is 503 `signer_unavailable`, and nothing is written.
+  - No answer names an environment variable: the server log has the reason.
+  - An unsigned row is not a record. `judgeReferenceRow` reads `sig: null` as `row_unsigned`, `liveRecords` does not count it, and the page does not say "two records" for it.
+  - `publishedSignatureReason` filters by key role: a reconcile key never verifies a row, and a case key never verifies a receipt.
+- **N2, the reconcile bypass closed** (`lib/_reconcile_http.js`).
+  - The withdrawal records the withdrawer's tape digest at `withdrawn_commitments/<sha256 of the digest's 32 bytes>.json` in the pins repository, holding only `{withdrawn_at}`.
+  - `?op=reconcile` reads that path for each tape, one read per tape. Either tape listed is 409 `consent_withdrawn`, naming no case and issuing no receipt. A read that fails is 503 `consent_unreadable`.
+- **N3, the refusal reads one opening.**
+  - The reveal body takes an optional `role`. On a withdrawn case only `reveals[role]` is read: the other role's entry is never read and never hashed.
+  - The opening must recompute that role's registration, written before the withdrawal.
+  - The receipt names the role, the commitment and `signed_under`. `verifyRefusalReceipt` is now async and checks the receipt under the named document the way a seal is checked.
+  - Anything else is 404 `not_a_party`, with no receipt.
+- **N4, the lease race in true words.**
+  - When the attempt's CAS loses to a withdrawal, the answer says "refused; the tapes were read before the withdrawal landed and the hashes are discarded". No hash is written and no receipt is issued.
+  - The commit's lost race writes no case log event: the removal's commit message names the reason. The case log stays as a format, unused.
+- **C1, a registration never stands after a withdrawal.**
+  - Every reader treats one under a WITHDRAWN case as not standing.
+  - `registration_recorded` reports the file's real state.
+  - The sealer has a withdrawn path (`repairWithdrawn`, `withdrawn_repaired` in its report). It rewrites a withdrawn marker that failed. It removes a registration file whose creating commit comes after the withdrawal's commit, decided by one compare read in the pins repository. Registrations from before the withdrawal stay.
+- **C2.** A failed read of the case after the registration's write unwinds the registration: 503 `registration_unconfirmed`.
+- **C3, the lease clock.**
+  - The clock is read at each lock attempt, and a lease expires 30 s after its own acquisition. `opts.clock` lets tests drive the clock.
+  - A retried withdrawal (the same role and preimage) is 200 with `existing: true`, and writes again a marker or withdrawn commitment that failed.
+- **E1, `reveal_attempts`** (`lib/_case.js`). An append-only list of `{event: "attempt", commitments, input_sha256, at}` and `{event: "failure", reason, at}` entries replaces `reveal_attempt` and `reveal_failure`, which were never deployed.
+  - It is part of the sealed base: a VERDICT keeps it inside its signed bytes.
+  - A VERDICT's last entry is the attempt that sealed it, and its input hash is the sealed reveals'.
+  - The page says how many attempts there were.
+- **D1.** A reference reads the daily anchor records. A head holding another chain for the pin is 409 `anchor_conflict`. An anchor lookup that could not look is 503 `anchor_unreadable`.
+- **T1.** The two §2B todos are plain assertions: A's reveal, naming its role, is 409 `case_withdrawn`, and the redacted root identifies neither party nor commitment. The §4 cost todo stays.
+- **Tests.**
+  - New: `test/case_rn.test.js`, 20 tests, each failing before the change.
+  - Updated by design in the consent, item 2b/2c/2d, reveal, signed-under, red-team, fix-gap and reconcile-endpoint suites. The reconcile endpoint's suite now runs on the mock store, since `?op=reconcile` reads it.
+  - Removed: the two case-log gap tests (L30/L31, L35-L38), whose code is gone.
+- Suite 1209 -> 1227 tests, 0 fail, 1 todo. Here: 1224 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-N, commit 1: the follow-ups from the second reader's pass over R-I2 (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **n1, a 404 is not proof** (`lib/_case_seal.js` `revocationMarkerOf`). A candidate skipped on a 404 might be the real R, read before the host had it. That covers nothing on the raw host at that commit, and a revoking commit that the branch's compare does not show (`commitOnBranch` now marks that answer `not_found`). When a marker is found after any such skip, each skipped candidate is read once more. Unless every one skips again, the answer is `revocation_marker_unreadable`, and a marker found after such a skip is never kept.
