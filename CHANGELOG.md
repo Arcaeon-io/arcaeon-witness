@@ -1,5 +1,72 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-J3: every pin, anchor, case-commit and row cell, and every refusal about a pin, anchor, commit or row, says only what was read, by state and reason (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The rule.** Every cell on the case page, and every refusal about a pin, anchor, commit or row, says only what was read, by state and reason. No cell states the absence of something read as present, and no reason names a cause the code did not establish.
+- **The (state, reason) table** (`test/case_rj3.test.js`, `TABLE`). It lists every pair that `anchorState`, `dailyAnchorOf`, `servedAtCommit` and the row reader (`referenceCommitStates`, with the walk down the pins) can return: 62 rows. Each row gives the sentence for the pin cell, the anchor cell, the case-commit cell, the note under them, the row's commit cell and the reference's answer.
+  - Each row is a test, run against a fixture that makes the pair.
+  - Every test first asserts the pair as its reader returns it, then every cell and the answer, word for word.
+  - Two pairs come only from `anchorState` given a chain (`tools/preview_dry_run.js`), and one only from the revocation order's lookup with no anchor read. Their cells are asserted from the page's own cell functions. The reference never meets them.
+- **BL1, the pin cell** (`pinnedHtml`). It says "no pin of this case's chain" only where the pointer was read and holds no pin of this chain (`pointer_holds_another_chain`).
+  - Where the pointer was read and holds the chain, the cell says "a pin of this case's chain was read; the case is not shown as pinned or anchored (reason)". This covers `no_case_commit`, every conflict at the pin's commit or a daily anchor head, every mismatch, and every `could_not_look` past the pointer.
+  - No pin pointer present: "not pinned yet: no pin pointer is present under this case's namespace (not_pinned)".
+  - A pointer that is not a case seal record: "a record is present at this case's pin pointer and cannot be read as a case seal record (reason)".
+  - A pointer that could not be read: "not known when this page was read: the pin pointer could not be read (pin_pointer_unreadable)".
+- **BL2, another chain or not a pin** (`notHeldAtCommit`, which replaces `heldAtCommit`).
+  - `*_holds_another_chain` is said only when the record passes the seal judge at the seal's seq and its chain differs.
+  - A record that fails the judge or has another seq is `pin_at_its_commit_not_a_pin` or `anchored_head_not_a_pin`: "the record at this case's pin path, ... is not a pin record for this case". That holds even when the record carries this case's chain.
+  - `pointer_holds_another_chain` is unchanged.
+- **F1.** No later pin is stated as fact. Not pinned: "the case is sealed and not yet pinned (not_pinned) ... A later sealer run may pin it." No case commit: "A later sealer run may record that commit in a next pin of the case." The cause "it was pinned before every write named its own commit" is gone. So is the stale comment in `lib/_case_http.js`.
+- **F2.** `*_commit_not_found` says "the pins repository does not show that commit". Every mismatch ends "so the case is not shown as pinned or anchored", and "Never pinned, never anchored" is gone. Behaviour is unchanged.
+- **F3.** A raw 404 for the pin at a daily anchor record's head counts as "a head from before the pin" only once the commits API shows the repository has that head.
+  - If the repository does not show the head, the anchor is `could_not_look` (`anchor_head_not_shown`).
+  - If that read fails, it is `could_not_look` (`anchor_head_exists_<reason>`).
+- **F4.** Under a key the current document lists as revoked, a pin that could not be read is `pin_unavailable`: neither `signer_revoked` nor `signer_since_revoked`. It gives:
+  - on the page, the could-not-look page (503), naming the revoked key and the pin's state, never "SEALED RECORD DOES NOT VERIFY";
+  - at the reference, 503 `could_not_look`;
+  - for the sealer, `could_not_look`.
+  - A pointer read that is not a case seal record stays `signer_revoked` (`pin_unreadable:<reason>`).
+- **F5.** A pin that could not be read answers a reference 503 `could_not_look`: "could not look; this is not a refusal of the row. Try again." It no longer answers 409 `case_not_pinned`.
+  - The 409 `case_not_pinned` text now says "a reference row is appended only to a case that reads pinned or anchored", with no "once the operator's sealer run has pinned the case".
+  - The 503 `anchor_unreadable` says which: "whether a daily anchor record conflicts with its pin could not be read", or "the head a daily anchor record names is not shown by the repository yet". It no longer says "its daily anchor records could not be read" for a read that did not fail.
+- **F6.** For the `*_commit_not_shown` reasons the anchor and row cells say "the commit it names is not shown by the repository yet". Every other `could_not_look` names the read that failed: the pin record's commit, the pin record at its commit, the file at the commit, whether the commit exists, or whether it is on the published branch. The head a daily anchor record names, when not shown, is said as that.
+- **F8.** A page kept again moves to the newest place in the cache's eviction order (`keepPage`).
+- **F9.** The case-commit cell says "not known when this page was read (reason)" only when a read failed. Otherwise it says what was read:
+  - no pointer to name it;
+  - a pin that names none;
+  - the commit its pin names and the mismatch;
+  - a pointer holding another chain;
+  - a conflict at the pin's commit, where the case file was not read;
+  - a daily anchor head's conflict, where the case file read at the commit its pin names is this case;
+  - a pointer that is not a case seal record.
+- **The row cell, by the same rule.**
+  - A row of a case not shown pinned is `not_read`, with the case's state and reason. The old `could_not_look (pin_not_held)` named a cause that was not established.
+  - A walk that stops on a record it read is `not_read`: `pin_below_absent`, `pin_below_not_a_pin` (it was `pin_unreadable`), or `pins_not_read` ("the pointer and 20 below it").
+  - `could_not_look` is said of a row only when a read failed.
+  - A `not_read` row keeps its page out of the cache. A case with rows whose pin names no case commit is therefore no longer cached.
+- **The note** under the cells names the state and its reason.
+- **Tests.**
+  - New: `test/case_rj3.test.js`, 68 tests: the 62 table rows plus BL1, BL2, F1/F2, F4, F8 and the uncached `not_read` page. On 8a88212 59 fail; the 9 that pass are the unchanged pinned, anchored, recorded and mismatched-row sentences and the table's own BL1 check.
+  - Updated by design:
+    - the page phrases in `test/case_commits.test.js`, `case_item2c`, `case_rj`, `case_rj2` and `case_signed_under`;
+    - C01's seq-2 record, now `pin_at_its_commit_not_a_pin`;
+    - the walk's reasons;
+    - the reference's could-not-look answer in `case_consent`;
+    - R-I2 m2's revoked-key pin read in `case_trust_root`, now `pin_unavailable`.
+  - One fixture changed: in `case_commits`, a daily anchor record naming a head the mock dropped when it re-seeded a path is removed before the control. A real repository keeps its commits, and since F3 a head it does not show is `could_not_look`.
+- **The must-fail pass, and the gap-test commit** (cd4feb3).
+  - 86 defects were planted, one at a time, over every line R-J3 changed in `lib/_case_seal.js`, `lib/_case_page.js` and `lib/_case_http.js`, with the whole suite run against each. The unit's own tests caught 82, and none timed out.
+  - The 4 that survived:
+    - S04: the revoked-key answer without its revoked keys;
+    - P38: the could-not-look page without the revoked key;
+    - P42: the could-not-look page without its pin row;
+    - P24: a `not_read` row whose reason the page has no words for, printed as "undefined".
+  - Two gap tests in `test/case_rj3.test.js` catch all four. None is left as equivalent.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - 13536f0 (R-J3): 1403 tests, 1399 pass, 2 skipped, 0 fail, 2 todo.
+  - cd4feb3 (gap tests): 1405 tests, 1401 pass, 2 skipped, 0 fail, 2 todo. A bare `node --test`: 1412 and 1408.
+  - The change log commit changes no test, and the final tip prints what cd4feb3 prints.
+
 ## 2026-10-13: Unit R-J2: the row sentence claims no future pin, conflicts and mismatches worded by reason, a commit not shown yet is could_not_look, and the page cache keeps only definite pages (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **B2, the blocker: the signed row sentence, version 3** (an architect decision; `lib/_case.js`, `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js`, README).
