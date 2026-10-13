@@ -869,6 +869,12 @@ the form written before this (`v: 1`, kept at `removals/<case_id>/<sha256
 of removed_path>.json`, with no `created_in_commit`) is read and labelled
 as the old form, and nothing acts on it.
 
+A registration file under a verified repair note never stands: no reader or
+handler counts it, and a case is not COMMITTED and cannot reveal while
+either role's only file is such a file. Sending that registration again
+removes the file under its note and writes a fresh one, which past the
+deadline is refused late_commitment.
+
 The case page lists a case's repair notes, each said as a removal of a file
 recorded for its reason, with what the page read at its path (the file
 still there and the removal not made, nothing there, or another file there)

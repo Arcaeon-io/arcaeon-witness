@@ -529,7 +529,8 @@ test("R-L2 M2: a withdrawal whose root write kept losing while the case read fin
   gh.forceConflict(PINS, C.casePath(c.id), 4);
   const w = await withdraw(c.id, c.b);
   assert.deepEqual([w.status, w.body.error_code, w.body.reason, w.body.error, w.body.case_id],
-    [503, "store_error", "case_kept_changing", "the case kept changing while this request tried to write; nothing was written. Send it again.", c.id],
+    // (since unit R-L3, d: the lock record was written, so the sentence names what was not)
+    [503, "store_error", "case_kept_changing", "the case kept changing while this request tried to write; nothing was written to the case record. Send it again.", c.id],
     JSON.stringify(w.body));
   assert.equal(storedCase(c.id).status, "COMMITTED");
   const d = await committedCase("RL2 M2 read fails");
@@ -862,10 +863,9 @@ test("MUST-FAIL GAP (H04, H05, H06, H07): the commit path's refusals in full: no
     "note is written for it (a removal of this file was recorded for registration_after_withdrawal), and the removal has not been made, so the file is still " +
     "there, standing for no reader, and the operator's sealer run completes the recorded removal");
   const u = await unconfirmed("RL2 gap words unconfirmed", { deleteFails: true });
-  assert.equal(u.out.error, "the case record could not be read after the registration's write, so this service cannot show the case was not withdrawn " +
-    "meanwhile, and a registration never stands on an assumption: a signed repair note is written for it (a removal of this file was recorded for " +
-    "registration_unconfirmed), and the removal has not been made, so the file may be there until the operator's sealer run completes the recorded " +
-    "removal, which it does not do once the case has sealed with that registration. Send the same registration again");
+  // (since unit R-L3, rule 3: the one sentence for a write that could not be confirmed, the removal made or not)
+  assert.equal(u.out.error, "The registration was written and could not be confirmed, so a removal of it was recorded. Send the same registration " +
+    "again; it will be written fresh.");
 });
 
 test("MUST-FAIL GAP (P05, P13): a note that could not be read is listed as such; a page with a note whose check could not look is not kept, though the file it names is still there", async () => {

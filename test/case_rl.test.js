@@ -945,10 +945,10 @@ test("MUST-FAIL GAP (H13, H14): a registration the case could not confirm, remov
     () => commit(id, a),
   );
   assert.deepEqual([r.out.status, r.out.body.repair_note], [503, asWritten(rpath, id).notePath], JSON.stringify(r.out.body));
-  // (since unit R-L2, B1: a note records a removal decided)
-  assert.equal(r.out.body.error, "the case record could not be read after the registration's write, so this service cannot show the case was not " +
-    "withdrawn meanwhile, and a registration never stands on an assumption: it was removed after a signed repair note was written for it (a " +
-    "removal of this file was recorded for registration_unconfirmed); nothing is registered. Send the same registration again");
+  // (since unit R-L2, B1: a note records a removal decided; since unit R-L3, rule 3: the one sentence for a write that could not be confirmed)
+  assert.equal(r.out.body.error, "The registration was written and could not be confirmed, so a removal of it was recorded. Send the same " +
+    "registration again; it will be written fresh.");
+  assert.equal(gh.has(PINS, rpath), false);
 });
 
 test("MUST-FAIL GAP (S90, S83): a case whose registration files were never removed shows no removals: a role not yet registered is not a removal, and a file under removals/ that is not at a note's name is not a note", async () => {

@@ -1453,3 +1453,24 @@ test("R-L2 M4 (b): a reference row is refused only on a proven anchor conflict: 
   assert.deepEqual([r.status, r.body.error_code], [409, "anchor_conflict"], JSON.stringify(r.body).slice(0, 300));
   assert.doesNotMatch(HTTP_SRC(), /anchor_unreadable|anchorUnreadWords|refusal of the row; try again/);
 });
+
+// =============================================================================
+// UNIT R-L3 (a): the last anchor returns
+// =============================================================================
+
+test("R-L3 (a): a record whose branch answer is unknown, whose commits could not be read, or which could not be read at its commit is passed over: a later record's proven conflict is still found, and still refuses a row", async () => {
+  for (const fx of ["head_branch_unreadable", "record_commit_cnl", "record_at_commit_503"]) {
+    const f = await FIXTURES[fx]();
+    const side = gh.seedSideCommit(PINS, fresh());
+    gh.seedRaw(PINS, side, seqOf(f.c.id), gh._repoMap(PINS).get(seqOf(f.c.id)).content);
+    const later = dailyAnchor(nextDay(pinDay(f.c.id)), side);
+    S._internal.clearCommitFiles();
+    f.arm();
+    const st = await S.anchorState(f.c.id, storedCase(f.c.id));
+    assert.deepEqual([st.pin, st.reason, st.anchor && st.anchor.path], ["conflict", "anchored_head_off_branch", later.path], fx);
+    S._internal.clearCommitFiles();
+    f.arm();
+    const r = await reference(f.c, "b");
+    assert.deepEqual([r.status, r.body.error_code], [409, "anchor_conflict"], `${fx}: ${JSON.stringify(r.body).slice(0, 200)}`);
+  }
+});
