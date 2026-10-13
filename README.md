@@ -819,19 +819,22 @@ and exits 3. Only the full online check prints `ok: true` and exits 0.
 A withdrawal request lists the withdrawer's tape digest, at
 `withdrawn_commitments/<sha256 of the digest's 32 bytes>.json` in the pins
 repository, before it writes the withdrawal record. While a listing stands,
-`?op=reconcile` and the joint reveal refuse that tape: 409
+`?op=reconcile` and the joint reveal refuse that tape, usually as 409
 `consent_withdrawn`, "A party that committed to this tape digest in a case
-has withdrawn that case, or asked to."
+has withdrawn that case, or asked to." An earlier check can refuse first (a
+sealed case's reveal is `not_committed`), and a listing that cannot be read
+is 503 `consent_unreadable`.
 A listing can stand without a withdrawn case whenever a withdrawal request
 gets as far as the listing and then does not finish: for example, the
 record write fails, the case seals first, a reveal attempt or the deadline
 lands first, or the case moves. Sending the same withdrawal again finishes
 it only if the case can still be withdrawn. A WITHDRAWN case whose listing
 is missing is repaired only by the withdrawer sending the withdrawal again,
-and until then the tape is not refused. A listing holds only `listed_at`,
-the time it was first written, which can differ from the withdrawal's own
-time. A listing only ever refuses. It names no case and no one, and it
-stops this service comparing that tape, nothing more.
+and until then the tape is not refused on account of this case (another
+case's withdrawal may have listed the same digest). A listing holds only
+`listed_at`, the time it was first written, which can differ from the
+withdrawal's own time. A listing only ever refuses. It names no case and no
+one, and it stops this service comparing that tape, nothing more.
 
 ### The sealer's window
 

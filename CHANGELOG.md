@@ -4,7 +4,7 @@
 
 - **R1, the blocker: the words** (`lib/_case_http.js`).
   - No answer from the withdrawal handler says "nothing was withdrawn", or claims the state of the listing, unless this request confirmed it.
-  - Every refusal that wrote nothing ends with "This request wrote nothing. A tape digest listed by an earlier withdrawal request stays listed." That covers the case read, the standing (sealed, withdrawn, attempted, expired, on a first request and on a second), the registration files, the proof, the signer, the record and the lock.
+  - The refusals that end with "This request wrote nothing. A tape digest listed by an earlier withdrawal request stays listed." are those of the case read, the standing (sealed, withdrawn, attempted, expired, on a first request and on a second), the registration files, the proof, the signer, the record, and the lock when busy or unreadable. The plain 400, 404 and 405, the listing's own refusal, the refusals after a confirmed listing, and the retry whose listing is unconfirmed do not carry it. (Corrected after R-N4, f5. Since f1, the lock that could not be read or written ends "This request wrote nothing to the case record. Try again shortly.")
   - The shared readers and `lockRefusal` put that tail after a full stop (`withTail`). Every other handler's words are unchanged.
   - A listing that cannot be confirmed (its write failed, or only its read-back) says "The tape listing could not be confirmed, so this request went no further. Send the same withdrawal again."
   - No listing read is added before the role is proven.

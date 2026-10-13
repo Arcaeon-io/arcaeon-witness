@@ -301,6 +301,9 @@ const MAY_NOT_BE_WRITTEN = "The withdrawal record may not have been written. You
 const LOST_TO_ANOTHER = "The withdrawal record was not written by this request: the case was withdrawn by another request while it ran. " +
   "Your tape digest is listed, so this service will not compare that tape.";
 const NOTHING = /nothing was withdrawn/;
+// follow-up f1: a lock write that failed may have landed, so the lock's own
+// refusal claims only the case record
+const LOCK_TAIL = "This request wrote nothing to the case record. Try again shortly.";
 
 test("R-N4 R1 (b): the listing lands, a reveal seals first, the same withdrawal is sent again: the second body ends with the tail and never says 'nothing was withdrawn'", async () => {
   const { c, w } = await sealedFirst("RN4 sealed first, again");
@@ -412,7 +415,7 @@ test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request a
   await drive("lock junk", "tail", 503, "case_lock_unreadable", () => withdraw(l2.id, l2.b));
   const l3 = await committedCase("RN4 sweep lock read");
   gh.forceGetFailure(USAGE, lockPath(l3.id), 1, 503);
-  await drive("lock read", "tail", 503, "case_lock_unreachable", () => withdraw(l3.id, l3.b));
+  await drive("lock read", "lock", 503, "case_lock_unreachable", () => withdraw(l3.id, l3.b));
 
   // 5a. the listing
   const n1 = await committedCase("RN4 sweep listing");
@@ -460,6 +463,7 @@ test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request a
     }
     if (kind === "tail") assert.ok(r.body.error.endsWith(`. ${TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "listing") assert.equal(r.body.error, LISTING_UNCONFIRMED, label);
+    if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);
   }
   assert.ok(out.length >= 30, `driven: ${out.length}`);
 });
@@ -523,4 +527,68 @@ test("MUST-FAIL GAP (W14): the listing's own refusal names its case", async () =
   gh.forceFailure(PINS, withdrawnCommitmentPath(c.b.tape_sha256), 1, 502);
   const w = await withdraw(c.id, c.b);
   assert.deepEqual([w.status, w.body.error_code, w.body.error, w.body.case_id], [503, "withdrawn_commitment_unconfirmed", LISTING_UNCONFIRMED, c.id]);
+});
+
+// =============================================================================
+// THE FOLLOW-UPS FROM THE LAST READ OF R-N4 (f1-f7)
+// =============================================================================
+
+test("f1: a withdrawal whose lock could not be read or written (a write that may have landed) ends 'This request wrote nothing to the case record. Try again shortly.'", async () => {
+  const w1 = await committedCase("f1 lock write");
+  gh.forceFailure(USAGE, H._internal.caseLockPath(w1.id), 1, 502);
+  const a = await withdraw(w1.id, w1.b);
+  assert.deepEqual([a.status, a.body.error_code], [503, "case_lock_unreachable"], JSON.stringify(a.body));
+  assert.equal(a.body.error, `this case's lock could not be read or written; this is not a 'no'. ${LOCK_TAIL}`);
+  const w2 = await committedCase("f1 lock read");
+  gh.forceGetFailure(USAGE, H._internal.caseLockPath(w2.id), 1, 503);
+  const b = await withdraw(w2.id, w2.b);
+  assert.equal(b.body.error, `this case's lock could not be read or written; this is not a 'no'. ${LOCK_TAIL}`);
+  assert.doesNotMatch(a.body.error + b.body.error, /A tape digest listed by an earlier/);
+});
+
+test("f2, f3: the README says the tape is refused usually as 409 consent_withdrawn, that an earlier check can refuse first and an unreadable listing is 503 consent_unreadable, and that a missing listing leaves the tape unrefused on account of this case", () => {
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8").replace(/\s+/g, " ");
+  for (const s of ["refuse that tape, usually as 409 `consent_withdrawn`",
+    "An earlier check can refuse first (a sealed case's reveal is `not_committed`)",
+    "a listing that cannot be read is 503 `consent_unreadable`",
+    "and until then the tape is not refused on account of this case (another case's withdrawal may have listed the same digest)"]) {
+    assert.ok(readme.includes(s), s);
+  }
+});
+
+test("f4: the withdrawer's retry on a WITHDRAWN case whose registration cannot be read (a read failure, not an absence) is 503 'The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.'", async () => {
+  const c = await committedCase("f4 retry read fails");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  gh.forceGetFailure(PINS, C.registrationPath(c.id, "b"), 1, 503);
+  const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
+  assert.deepEqual([r.status, r.body.error_code, r.body.error, r.body.case_id],
+    [503, "store_unreachable", "The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.", c.id], JSON.stringify(r.body));
+  // sent again once the read works: 200, the record as it stands
+  assert.equal((await withdraw(c.id, c.b, { now: NOW + 6000 })).status, 200);
+});
+
+test("f6: a reveal_attempts list holding no attempt event does not throw: the case is still refused as reveal_attempted, with no attempt time", () => {
+  const ws = H._internal.withdrawStanding;
+  const kase = { status: "COMMITTED", deadline: DEADLINE, reveal_attempts: [{ event: "failure", reason: "seal_write_failed", at: C.utcSeconds(NOW) }] };
+  const r = ws(kase, NOW, "c".repeat(64));
+  assert.deepEqual([r.status, r.code, r.extra.reveal_attempt_at], [409, "reveal_attempted", null]);
+  assert.deepEqual([ws({ ...kase, reveal_attempts: [] }, NOW, "c".repeat(64)).code], ["reveal_attempted"]);
+});
+
+test("f7: a WITHDRAWN case whose listing is missing: ?op=reconcile compares the tape (not refused on account of this case) until the withdrawer sends the withdrawal again, which writes the listing; then it is refused", async () => {
+  const c = await committedCase("f7 listing missing");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
+  gh.repos.get(PINS).delete(listing);
+  const before = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
+  assert.equal(before.status, 200, JSON.stringify(before.body).slice(0, 300));
+  // someone else sending the withdrawal does not repair it
+  const other = await withdraw(c.id, c.a, { now: NOW + 4000 });
+  assert.deepEqual([other.status, other.body.error_code], [409, "case_withdrawn"]);
+  assert.equal(gh.has(PINS, listing), false);
+  const retry = await withdraw(c.id, c.b, { now: NOW + 5000 });
+  assert.deepEqual([retry.status, retry.body.withdrawn_commitment], [200, "written"], JSON.stringify(retry.body));
+  assert.deepEqual(gh.read(PINS, listing), { listed_at: C.utcSeconds(NOW + 5000) });
+  const after = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
+  assert.deepEqual([after.status, after.body.error_code], [409, "consent_withdrawn"]);
 });
