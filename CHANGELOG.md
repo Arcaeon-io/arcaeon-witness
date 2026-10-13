@@ -1,5 +1,52 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-N4: the withdrawal says only what this request did, and the listing's README holds in every state (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **R1, the blocker: the words** (`lib/_case_http.js`).
+  - No answer from the withdrawal handler says "nothing was withdrawn", or claims the state of the listing, unless this request confirmed it.
+  - Every refusal that wrote nothing ends with "This request wrote nothing. A tape digest listed by an earlier withdrawal request stays listed." That covers the case read, the standing (sealed, withdrawn, attempted, expired, on a first request and on a second), the registration files, the proof, the signer, the record and the lock.
+  - The shared readers and `lockRefusal` put that tail after a full stop (`withTail`). Every other handler's words are unchanged.
+  - A listing that cannot be confirmed (its write failed, or only its read-back) says "The tape listing could not be confirmed, so this request went no further. Send the same withdrawal again."
+  - No listing read is added before the role is proven.
+- **R2.** The README's "A withdrawn tape's listing" is rewritten so every sentence holds in every state:
+  - when a listing stands without a withdrawn case, with examples;
+  - that sending the same withdrawal again finishes it only if the case can still be withdrawn;
+  - that a WITHDRAWN case whose listing is missing is repaired only by the withdrawer sending the withdrawal again, and until then the tape is not refused;
+  - that a listing only ever refuses.
+- **R3.** A root write that throws: "The withdrawal record may not have been written. Your tape digest is already listed, so this service will not compare that tape. Send the same withdrawal again to finish or to confirm."
+- **R4** (`tools/check_refusal_receipt.js`).
+  - The exported `offline()` answers `{signature_ok, reason}`, never a key named `ok`.
+  - The CLI prints `signature_reason`, and `"unreadable"` for an input it cannot read.
+  - The assertions on `bad_signature` and `document_sha256_mismatch` are restored on the new shape.
+- **R5, the counts.**
+  - `npm test` runs `node --test "test/*.test.js"`. A bare `node --test` also finds the 7 files in `test/helpers/`: `case_registration.js`, `check_fixtures.js`, `http_mocks.js`, `key_document.js`, `mock_store.js`, `stripe_sign.js` and `vercel_preview.js`. It reports each as one passing test, so it prints 7 more tests and 7 more passes, and nothing else differs.
+  - That is the second reader's 1293 at 5e24fec, where `npm test` prints 1286. It is also their 1278 at 18ae018, where `npm test` prints 1271.
+  - One line per commit, as `npm test` prints it (a bare `node --test` adds 7 to tests and to passes; measured at 5e24fec and a250335):
+    - 92f17ad (R-N3): 1280 tests, 1276 pass, 2 skipped, 0 fail, 2 todo.
+    - 2a547be (R-N3 gap tests): 1286 tests, 1282 pass, 2 skipped, 0 fail, 2 todo.
+    - 5e24fec (R-N3 change log): 1286 tests, 1282 pass, 2 skipped, 0 fail, 2 todo. A bare `node --test`: 1293 and 1289.
+    - f314c84 (R-N4): 1290 tests, 1286 pass, 2 skipped, 0 fail, 2 todo.
+    - a250335 (R-N4 gap tests): 1292 tests, 1288 pass, 2 skipped, 0 fail, 2 todo. A bare `node --test`: 1299 and 1295.
+    - The R-N4 change log commit changes no test, and the final tip prints what a250335 prints.
+- **R6.** The window comment and a new README section, "The sealer's window", state the counts: with 30 entries, 5 a run, an hourly run reads every entry within 12 runs and a daily run within 28, from any start time. No change in behaviour.
+  - The numbers are the first count of runs that leaves no gap longer than 5/30 of a turn, worked out exactly.
+  - The test finds a start that needs all 12, and one that needs all 28, and checks 3,000 sampled starts.
+- **R7.** "withdrawn by another request".
+- **Tests.**
+  - New: `test/case_rn4.test.js`, 4 tests, each failing before the change:
+    - R1 (b): the listing lands, a reveal seals first, and the same withdrawal is sent again;
+    - R1 (a): the listing lands, the root write fails, the deadline passes, and the same withdrawal is sent again;
+    - the sweep: 31 refusals, first request and second, none saying "nothing was withdrawn", and none that confirmed no listing claiming one;
+    - R6.
+  - Updated by design: the tool assertions in `test/case_rn2.test.js` and `test/case_rn3.test.js`, and the R3 and R7 words in `test/case_rn3.test.js`.
+- **The must-fail pass, and the gap-test commit** (a250335).
+  - 36 defects were planted, one at a time, over every line R-N4 changed, with the whole suite run against each. The unit's own tests caught 30.
+  - The 6 that survived:
+    - W03 to W07: the full stop applied to every handler's tail, or another handler's joiner changed;
+    - W14: the listing's refusal without its `case_id`.
+  - Two gap tests in `test/case_rn4.test.js` catch all 6. None is left as equivalent.
+  - The comment-only change in `lib/_case_seal.js` and the README were not mutated.
+
 ## 2026-10-13: Unit R-N3: plain words once the tape is listed, a partial offline receipt check, listed_at, and a window no fixed period holds still (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **N1, the BLOCKER: the words after the listing** (`lib/_case_http.js`, `lib/_reconcile_http.js`, `lib/_case_page.js`, README).
@@ -88,7 +135,7 @@
   - The gap tests in 18ae018 (9 tests) caught 18 of the 21 that survived: B01, B03, B05, C03, C11, L07, L08, M08, R02, R04, R10, R11, R13, R15, T01, T03, T05 and T07.
   - B08 and B09 survived 18ae018: a retry whose listing fails, ignored or answered 200. Unit R-N3 rewrote that line (N2). Its N2 test and gap tests catch both on the new code (H23, H24 in the R-N3 entry).
   - M09 survives: the walk of one-registration cases also taking pinned ones. The service writes a pin only for a sealed case, which holds both registration files, so the two differ only for a pin planted by someone with write access to the pins repository. Such a case is then walked by the mutant and not by the code. No test pins that down, and R-N3 does not change the line.
-  - At 18ae018 the suite prints, here, 1271 tests: 1267 pass, the 2 environment skips, 0 fail, 2 todo. The second reader's run at 18ae018 printed 1278 and 1274, which this checkout does not reproduce.
+  - At 18ae018 `npm test` prints 1271 tests: 1267 pass, the 2 environment skips, 0 fail, 2 todo. The second reader's 1278 and 1274 are a bare `node --test`, which also counts the 7 files in `test/helpers/` as passing tests (corrected in unit R-N4, R5).
 
 ## 2026-10-13: Unit R-N: one signature rule everywhere, the refusal receipt made real, the reconcile bypass closed, and the withdrawal lease made honest (branch `case-protocol-2026-10-10`, NOT deployed)
 
