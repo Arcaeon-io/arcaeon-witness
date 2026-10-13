@@ -1,5 +1,67 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-J: the row sentence, what "anchored" claims, a wrong commit is a mismatch, and the case checked by bytes; and seven follow-ups to R-N4 (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The follow-ups to R-N4** (17c7cf9, the unit's first commit).
+  - **f1.** A withdrawal whose case lock could not be read or written answers `case_lock_unreachable` with "This request wrote nothing to the case record. Try again shortly." A lock write that failed may have landed. Other handlers' words are unchanged.
+  - **f2, f3** (README):
+    - the tape is refused "usually as 409 `consent_withdrawn`"; an earlier check can refuse first (a sealed case's reveal is `not_committed`), and a listing that cannot be read is 503 `consent_unreadable`;
+    - a WITHDRAWN case whose listing is missing leaves the tape "not refused on account of this case".
+  - **f4.** The withdrawer's retry whose registration read fails is 503 `store_unreachable`: "The case is withdrawn. This request could not finish checking it. Send the same withdrawal again." It is no longer the final-sounding 409.
+  - **f5.** The R-N4 entry names which refusals carry the tail.
+  - **f6.** A `reveal_attempts` list with no attempt event cannot throw: `reveal_attempted`, with `reveal_attempt_at: null`.
+  - **f7.** A test drives a WITHDRAWN case whose listing is missing:
+    - `?op=reconcile` compares the tape;
+    - the other role's request does not repair the listing;
+    - the withdrawer's retry writes it, and the tape is then refused.
+- **J1, the blocker: the row's sentence, version 2** (`lib/_case.js`, `lib/_case_seal.js`).
+  - `REFERENCE_ANCHOR_NOTE` is "This row has no pin of its own. It is recorded by the pins-repository commit that writes it and listed by the case's next pin; it is anchored only when that pin is."
+  - Rows carry `note_version: 2`. The judge accepts only version 2; a row without `note_version` is `row_note_v1`.
+  - The 201 body's `anchor_note` and `row_commit_note` agree.
+- **J2.** "anchored" claims what is checked. The anchor state carries `proof: "unchecked"`. The page says "a daily anchor record in this repository names a head that holds this pin; this page does not check the OpenTimestamps proof." `ANCHOR_NOTE`, the seal module's header and the README say the same.
+- **J3, J4, J6: one standard for the case and its rows** (`servedAtCommit`).
+  - The record served must be the file at the commit a pin names, byte for byte in json-c14n:v1, signature included (`sameRecord`), on the pins repository's branch (`commitOnBranch`).
+  - Each of these is `pin_commit_mismatch`:
+    - other bytes, or no JSON;
+    - a file absent at the commit;
+    - a commit the repository does not have (its existence read once from the commits API, `store.commitExists`; only GitHub's 422 reads as "no such commit");
+    - a commit off the branch.
+  - Only a read that failed is `could_not_look`.
+  - `anchorState` takes the case served; given a chain, it reads the case from the branch and serves it only when it has that chain.
+  - The page's "the case file" link names `case_commit` once the case reads pinned or anchored.
+  - An anchor head off the branch is an anchor conflict.
+- **J5.** Non-JSON at a pin's oldest commit, or at the head a daily anchor record names, is `conflict`. A reference refuses every anchor conflict as 409 `anchor_conflict`.
+- **J7.** A 200 case page is kept per case for sixty seconds per instance, by the page's clock and for the same key document; at most 500 cases. The per-IP limiter runs first.
+- **J8.** `case_not_anchored` is `case_not_pinned`.
+- **Tests.**
+  - New: `test/case_rj.test.js`, 9 tests, each failing before the change, and five tests in `test/case_rn4.test.js` for the follow-ups (f7 pins behaviour that already held).
+  - The mock store answers `GET /repos/<repo>/commits/<sha>`.
+  - Updated by design:
+    - THE VERIFIER test, inverted: a commit that does not exist is a mismatch;
+    - the anchor words, `proof: "unchecked"`, and the reason `case_at_commit_differs`;
+    - the row note words;
+    - `case_not_pinned`;
+    - I1's forced compare failure, which now names the order compare;
+    - every test page view clears the page cache first.
+- **The must-fail pass, and the gap-test commit** (8dd6ff9).
+  - 63 defects were planted, one at a time, over every line the unit's two commits changed (the follow-ups and R-J), with the whole suite run against each. The unit's own tests caught 45.
+  - The 18 that survived:
+    - A03: a `note_version` other than 2;
+    - B06, B07: the commit-existence cache;
+    - B18: a row's failed read shown as a mismatch;
+    - B23: a head whose branch read fails;
+    - B25, B26: the branch's case served whatever its chain, and its failed read;
+    - B29, C04, D07: a reader handing anchorState a chain instead of the case it holds (one more read of the case file);
+    - C01: an anchor conflict refused only when it is another chain;
+    - D04 to D06: the case commit row's words and the case file link;
+    - D09 to D12: the cache's key document, clock, status and bound.
+  - Ten gap tests in `test/case_rj.test.js` catch all 18. None is left as equivalent.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - 17c7cf9 (follow-ups): 1297 tests, 1293 pass, 2 skipped, 0 fail, 2 todo.
+  - fbaa2f0 (R-J): 1306 tests, 1302 pass, 2 skipped, 0 fail, 2 todo.
+  - 8dd6ff9 (gap tests): 1316 tests, 1312 pass, 2 skipped, 0 fail, 2 todo. A bare `node --test`: 1323 and 1319.
+  - The change log commit changes no test, and the final tip prints what 8dd6ff9 prints.
+
 ## 2026-10-13: Unit R-N4: the withdrawal says only what this request did, and the listing's README holds in every state (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **R1, the blocker: the words** (`lib/_case_http.js`).
