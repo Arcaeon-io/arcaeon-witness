@@ -841,10 +841,15 @@ release (see the change log). Files under withdrawn_commitments/ that a pins
 repository may hold from before this release are ignored: no code reads or
 writes them.
 
-No file in the pins repository is ever deleted. Registration files,
-reference rows, pins, withdrawal records and seals are written once and
-never changed. The case root is the one file that is updated, and only by a
+No file that belongs to a case is ever deleted. A case's registration
+files, reference rows, withdrawal record and seal are written once and never
+changed. The case root is the one case file that is updated, and only by a
 compare-and-swap that every reader can follow in the repository's history.
+Outside any case's own files, the pins repository updates two kinds of file
+in place: the daily anchor proofs (`anchors/<date>-head.txt.ots`, which the
+anchoring job upgrades once the Bitcoin attestation arrives) and the pin
+pointers (`pins/<namespace>/latest.json`, and a case's
+`pins/case/<case_id>/latest.json`, which each new pin of that case moves).
 
 A registration file is a claim, and it stands only once the case root
 projects it: the root's entry for the role carries the sha256 of the file's

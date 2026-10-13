@@ -288,9 +288,10 @@ const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration f
 const WRITTEN_NOT_CONFIRMED = "written, not confirmed";
 const WRITTEN_NEVER_CONFIRMED = "written, never confirmed; this file has no standing and cannot acquire it";
 const WRITTEN_UNDER_WITHDRAWAL = "written; the case is withdrawn, so this file has no standing and cannot acquire it";
-const PROPERTY = "No file in the pins repository is ever deleted. Registration files, reference rows, pins, withdrawal records and seals " +
-  "are written once and never changed. The case root is the one file that is updated, and only by a compare-and-swap that every reader " +
-  "can follow in the repository's history.";
+// since unit R-L4c (c3), scoped to a case's own files
+const PROPERTY = "No file that belongs to a case is ever deleted. A case's registration files, reference rows, withdrawal record and seal " +
+  "are written once and never changed. The case root is the one case file that is updated, and only by a compare-and-swap that every " +
+  "reader can follow in the repository's history.";
 const PREVIEW_REMOVALS = "Files under removals/ that a preview pins repository may hold are ignored: no code reads or writes them.";
 
 // =============================================================================
@@ -607,7 +608,7 @@ test("MUST-FAIL GAP (H11, H20, H38): the refusals after a write carry the time i
     [409, "same_key_both_roles", false, C.utcSeconds(NOW)], JSON.stringify(r.out.body));
 });
 
-test("MUST-FAIL GAP (H14): a case sealed between the re-send's read and its confirming read takes no projection: 409 case_not_open", async () => {
+test("MUST-FAIL GAP (H14; since unit R-L4c, c1): a case sealed between the re-send's read and its confirming read, after another re-send projected the file: the projection is looked at first, 200 existing:true with the projected values", async () => {
   const u = await unconfirmedA("RL4 gap sealed meanwhile");
   const b = party(u.id, "b", TOOL_TAPE);
   await register(u.id, b);
@@ -618,7 +619,8 @@ test("MUST-FAIL GAP (H14): a case sealed between the re-send's read and its conf
     () => commit(u.id, u.a, NOW + 1500),
   );
   assert.deepEqual(r.inner, [200, 201], "another re-send projected it, and the case sealed");
-  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.status], [409, "case_not_open", "VERDICT"], JSON.stringify(r.out.body).slice(0, 300));
+  assert.deepEqual([r.out.status, r.out.body.existing, r.out.body.status], [200, true, "VERDICT"], JSON.stringify(r.out.body).slice(0, 300));
+  assert.deepEqual(r.out.body.case.commitments.a, projectionOf(u.rpath));
 });
 
 test("MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root re-read that fails after the projection lost, are 503 with the projection not known", async () => {
