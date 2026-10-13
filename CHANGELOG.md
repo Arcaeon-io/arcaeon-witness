@@ -1,11 +1,43 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-N2: fixes from the second reader's pass over R-N (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **B1, the withdrawn-tape listing fails closed** (`lib/_case_http.js`, `lib/_case_seal.js`).
+  - The withdrawal writes the listing FIRST, under the case lock, before the root write. If the listing cannot be confirmed, the answer is 503 `withdrawn_commitment_unconfirmed` and nothing else is written. A listing left by a withdrawal that then does not land only refuses, and the retry is idempotent.
+  - The marker and the listing are create-only writes that read the path back (`createOnly`). Four 409s of branch-ref contention on an absent path are a failure, never "existing".
+  - The note that `?op=reconcile` refuses the tape is printed only with a confirmed listing.
+  - A retried withdrawal also confirms the listing, or answers 503.
+- **B2, every body carries a code.** The reveal's and `?op=reconcile`'s `signer_unavailable`, the reveal's `document_unavailable`, `operator_key_not_configured`, `key_required` and the could-not-look page no longer name a variable.
+  - The loaders carry codes: `reconcile_key_unset`, `reconcile_key_unparseable`, `reconcile_key_unpublished`, `carried_document_unreadable`, `deploy_commit_unknown` and `deploy_commit_malformed`. The reasons go to the server log.
+  - One test, `test/response_bodies.test.js`, re-runs the case and reconcile suites with a body audit (`test/helpers/http_mocks.js`, `ARCAEON_BODY_AUDIT`) and reads every refusal body they drive for an environment-style name.
+- **M1, the joint reveal is gated by the listing.** Once each tape's digest is known, before the attempt, both digests are read. Either one listed is 409 `consent_withdrawn`, with nothing written; a read that fails is 503 `consent_unreadable`.
+- **M2, the words.** The listing's 409 says exactly "A party that committed to this tape digest in a case has withdrawn that case. This service does not compare a tape so listed.", at `?op=reconcile` and at the reveal. A red-team todo names the open question: a digest already published in a sealed case can still be listed by a stranger.
+- **M3.** The sealer also walks cases with one registration file, no marker and no pin, in a bounded window, and writes the marker of one whose root reads WITHDRAWN.
+- **The minor findings, m1 to m10.**
+  - **m1.** A marker candidate still skipped on a 404 after its second read makes the answer `revocation_marker_unreadable`, and so does a walk that ends with such a skip and no valid marker. A commit that removed the marker file therefore leaves the path unreadable.
+  - **m2.** `commitOnBranch` keeps only an "on" answer; off is read again.
+  - **m3.** The commit walk goes on after a full page whether or not the host names a next page. This applies to the reader and to the marker tool, and the README bound now reads "5,000 commits or more".
+  - **m4.** The lease race answers "Refused. A withdrawal landed while this reveal was in progress. Nothing computed from the tapes is kept."
+  - **m5.** The copy says the tapes are never decoded or hashed.
+  - **m6.**
+    - `verifyRefusalReceipt` reads the named document with the seal's reader (`namedDocumentOf`). A commit definitely off the published branch is `document_not_on_branch`.
+    - The README has a "Checking a refusal receipt" section.
+    - `tools/check_refusal_receipt.js` (61 lines) checks a receipt, offline with `--document`.
+  - **m7.** The page labels an unsigned withdrawal record "withdrawal record, unsigned: not a record" and never prints its `sig_reason`. The case reads WITHDRAWN and the refusal does not depend on the signature.
+  - **m8.** The WITHDRAWN page sentence.
+  - **m9.** This change log's counts, the gap-test commits, and the attempt count on COMMITTED cases only.
+  - **m10.** `registration_recorded` is the file's real state on the projection path and on the abandoned branch: null when it could not be read.
+- **Tests.**
+  - New: `test/case_rn2.test.js` (12 tests) and `test/response_bodies.test.js` (1 test), each failing before the change, and the M2 todo.
+  - Updated by design: the trust-root n1/M03/n4 assertions (m1, m2), the race words (m4), the off-branch reason (m6), the B2 body assertions (`test/case_redteam.test.js`, `test/case_item2b.test.js`, `test/case_item2d.test.js`), and the tests that withdraw one case and then reveal another with the same fixture tapes, which now forget the listing first.
+- Suite 1248 -> 1262 tests, 0 fail, 2 todo. Here: 1258 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-N: one signature rule everywhere, the refusal receipt made real, the reconcile bypass closed, and the withdrawal lease made honest (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **N1, the BLOCKER: one signature rule everywhere** (`lib/_case_seal.js`, `lib/_case_http.js`). Seals, reference rows, withdrawal records and refusal receipts are each signed or not written.
   - A refusal receipt is signed by the reconcile key, or it is not issued. With no reconcile signer the answer is 503 `signer_unavailable`, with no receipt and no 409 claiming one.
   - A withdrawal or a reference row without a case key is 503 `signer_unavailable`, and nothing is written.
-  - No answer names an environment variable: the server log has the reason.
+  - The new refusals (receipt, withdrawal, row) name no environment variable: the server log has the reason. (Corrected in unit R-N2: four older bodies still did, the reveal's and `?op=reconcile`'s `signer_unavailable`, the reveal's `document_unavailable` and `operator_key_not_configured`; R-N2 B2 made every body carry a code.)
   - An unsigned row is not a record. `judgeReferenceRow` reads `sig: null` as `row_unsigned`, `liveRecords` does not count it, and the page does not say "two records" for it.
   - `publishedSignatureReason` filters by key role: a reconcile key never verifies a row, and a case key never verifies a receipt.
 - **N2, the reconcile bypass closed** (`lib/_reconcile_http.js`).
@@ -30,14 +62,15 @@
 - **E1, `reveal_attempts`** (`lib/_case.js`). An append-only list of `{event: "attempt", commitments, input_sha256, at}` and `{event: "failure", reason, at}` entries replaces `reveal_attempt` and `reveal_failure`, which were never deployed.
   - It is part of the sealed base: a VERDICT keeps it inside its signed bytes.
   - A VERDICT's last entry is the attempt that sealed it, and its input hash is the sealed reveals'.
-  - The page says how many attempts there were.
+  - The page says how many attempts there were, on a COMMITTED case only: a sealed case's page does not show them. (Corrected in unit R-N2, m9.)
 - **D1.** A reference reads the daily anchor records. A head holding another chain for the pin is 409 `anchor_conflict`. An anchor lookup that could not look is 503 `anchor_unreadable`.
 - **T1.** The two §2B todos are plain assertions: A's reveal, naming its role, is 409 `case_withdrawn`, and the redacted root identifies neither party nor commitment. The §4 cost todo stays.
 - **Tests.**
   - New: `test/case_rn.test.js`, 20 tests, each failing before the change.
   - Updated by design in the consent, item 2b/2c/2d, reveal, signed-under, red-team, fix-gap and reconcile-endpoint suites. The reconcile endpoint's suite now runs on the mock store, since `?op=reconcile` reads it.
   - Removed: the two case-log gap tests (L30/L31, L35-L38), whose code is gone.
-- Suite 1209 -> 1227 tests, 0 fail, 1 todo. Here: 1224 pass and the 2 environment skips.
+- Suite 1209 -> 1227 tests at 2675ea0, 0 fail, 1 todo. Here: 1224 pass and the 2 environment skips.
+- **The must-fail pass, and the gap-test commits** (bc99662, b7ae479; corrected in unit R-N2, m9). 132 defects were planted, one at a time, over every line R-N changed, with the whole suite run against each. The unit's own tests caught 96. Twenty-one gap tests in `test/case_rn.test.js` caught 35 of the 36 that survived. The one left, C05, is equivalent: an opening that is not hex never recomputes the registered commitment, so the answer is 404 `not_a_party` either way. With the gap tests: 1248 tests, 1245 pass and the 2 environment skips, 0 fail, 1 todo.
 
 ## 2026-10-13: Unit R-N, commit 1: the follow-ups from the second reader's pass over R-I2 (branch `case-protocol-2026-10-10`, NOT deployed)
 

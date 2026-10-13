@@ -374,8 +374,8 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
     const r = await reference(body, { env: adminOnly, headers: { authorization: `Bearer ${bearer}` } });
     assert.equal(r.status, 503, `${bearer}: ${JSON.stringify(r.body)}`);
     assert.equal(r.body.error_code, "operator_key_not_configured", bearer);
-    assert.match(r.body.error, /WITNESS_CASE_OPERATOR_KEY/);
-    assert.ok(!r.body.error.includes("WITNESS_ADMIN_KEY"), "the refusal names the operator's own variable");
+    // unit R-N2 (B2): the body carries the code only, never a variable's name
+    assert.doesNotMatch(JSON.stringify(r.body), /WITNESS_|_KEY\b/, "no environment variable named");
   }
   // and with nothing set at all, the same two answers
   assert.equal((await reference(body, { env: SIGNED })).status, 401);

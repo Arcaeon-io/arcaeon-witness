@@ -35,6 +35,17 @@ function makeRawReq({ method = "POST", headers = {}, rawBody = Buffer.alloc(0) }
   return stream;
 }
 
+// THE BODY AUDIT (unit R-N2, B2): with ARCAEON_BODY_AUDIT naming a file,
+// every response sent with a status of 400 or more is appended to it, one
+// JSON line {file, status, body}, for test/response_bodies.test.js to read.
+// Off unless that variable is set.
+function audit(res, body) {
+  const file = process.env.ARCAEON_BODY_AUDIT;
+  if (!file || !(res._status >= 400)) return;
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  require("fs").appendFileSync(file, `${JSON.stringify({ file: require("path").basename(process.argv[1] || ""), status: res._status, body: text })}\n`);
+}
+
 // res.status(code).json(body) — captures what was sent so a test can assert
 // on it without a real HTTP round trip.
 function makeRes() {
@@ -55,6 +66,7 @@ function makeRes() {
     json(body) {
       res._body = body;
       res._sent = true;
+      audit(res, body);
       return res;
     },
     // Real http.ServerResponse#end(): sends a bodyless response. Used by
@@ -64,6 +76,7 @@ function makeRes() {
     send(body) {
       res._body = body;
       res._sent = true;
+      audit(res, body);
       return res;
     },
     end() {

@@ -314,7 +314,7 @@ test("R-N N1, N3: a refusal on a withdrawn case with the requester's own valid o
   }
   // under the NAMED document: a commit off the published branch is not a document, and a sha256 that is not the commit's is not it
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC)).reason, "document_unavailable");
+  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC)).reason, "document_not_on_branch");
   assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_sha256: "e".repeat(64) } }, DOC)).reason, "document_sha256_mismatch");
   // a key the CURRENT document does not list in its role, or lists revoked, does not hold
   assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY)))).reason, "signer_unlisted");
@@ -476,8 +476,8 @@ test("R-N N4: a withdrawal that lands after the reveal hashed its tapes, before 
   );
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
   assert.deepEqual([r.out.status, r.out.body.error_code], [409, "case_withdrawn"], JSON.stringify(r.out.body).slice(0, 300));
-  assert.match(r.out.body.error, /refused; the tapes were read before the withdrawal landed and the hashes are discarded/);
-  assert.doesNotMatch(r.out.body.error, /before its tapes are read/);
+  // unit R-N2 (m4): the words
+  assert.equal(r.out.body.error, "Refused. A withdrawal landed while this reveal was in progress. Nothing computed from the tapes is kept.");
   assert.equal(has(r.out.body, "refusal_receipt"), false);
   assert.equal(compare.mock.callCount(), 0, "nothing compared");
   const input = C.revealInputSha256({ case_id: c.id, policy_version: C.SUPPORTED_POLICY_VERSION, tape_sha256: { a: c.a.tape_sha256, b: c.b.tape_sha256 } });
@@ -574,20 +574,19 @@ test("R-N C3: the lease clock is read at acquisition and on each wait: a lease t
   assert.equal(r.body.registration.registered_at, C.utcSeconds(T), "the registration keeps the request's time");
 });
 
-test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 200 and rewrites a marker or a withdrawn-commitment record that failed; another role or another salt is still 409", async () => {
+test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 200 and rewrites a marker that failed (since unit R-N2, B1, a listing that fails is 503 before the record, test/case_rn2.test.js); another role or another salt is still 409", async () => {
   const c = await committedCase("RN retry");
   const mpath = C.withdrawnMarkerPath(c.id);
   const lpath = withdrawnCommitmentPath(c.b.tape_sha256);
   gh.forceFailure(PINS, mpath, 1, 502);
-  gh.forceFailure(PINS, lpath, 1, 502);
   const w = await withdraw(c.id, c.b);
   assert.equal(w.status, 201, JSON.stringify(w.body));
-  assert.deepEqual([w.body.marker, w.body.withdrawn_commitment], ["failed", "failed"]);
+  assert.deepEqual([w.body.marker, w.body.withdrawn_commitment], ["failed", "written"]);
   const record = storedCase(c.id);
   const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.equal(again.status, 200, JSON.stringify(again.body));
   assert.equal(again.body.existing, true);
-  assert.deepEqual([again.body.marker, again.body.withdrawn_commitment], ["written", "written"]);
+  assert.deepEqual([again.body.marker, again.body.withdrawn_commitment], ["written", "existing"]);
   assert.deepEqual(gh.read(PINS, lpath), { withdrawn_at: record.withdrawal.at }, "the withdrawal's own time");
   assert.deepEqual(storedCase(c.id), record, "the withdrawal record is not written again");
   const third = await withdraw(c.id, c.b, { now: NOW + 6000 });
@@ -694,11 +693,12 @@ test("R-N D1: a reference row runs the anchor-conflict check before it takes a r
 // T1: the §2B todos are plain assertions now
 // =============================================================================
 
-test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays", () => {
+test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-N2 beside the M2 open question)", () => {
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(todos.length, 1, JSON.stringify(todos));
-  assert.match(todos[0], /reads 20 rows/);
+  assert.equal(todos.length, 2, JSON.stringify(todos));
+  assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
+  assert.ok(todos.some((t) => /a digest already published in a sealed case can still be listed by a stranger/.test(t)), "the M2 open question");
 });
 
 // =============================================================================

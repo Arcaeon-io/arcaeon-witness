@@ -60,7 +60,8 @@ const S = require("../lib/_case_seal.js");
 
 // The commits touching the key document on `branch`, oldest first (every
 // page, following the Link header's next page; unit R-N, n2: a short page
-// is not the last). Throws when a page cannot be read.
+// is not the last; unit R-N2, m3: nor is a full one with no next page
+// named). Throws when a page cannot be read.
 async function documentCommitsOldestFirst(branch) {
   const target = { repo: S.KEY_DOCUMENT_REPO, branch, tokenEnv: store.PINS_TARGET.tokenEnv };
   const all = [];
@@ -68,8 +69,8 @@ async function documentCommitsOldestFirst(branch) {
   for (let n = 0; n < 50; n += 1) {
     const got = await store.listCommitsPage(S.CASE_KEYS_FILE, { perPage: 100, page }, target);
     all.push(...got.list);
-    if (got.next === null) return all.reverse();
-    page = got.next;
+    if (got.next === null && got.list.length < 100) return all.reverse();
+    page = got.next === null ? page + 1 : got.next;
   }
   throw new Error("the key document has more commits than this command walks");
 }

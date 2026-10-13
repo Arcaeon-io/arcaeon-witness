@@ -313,6 +313,9 @@ test("FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS
   const refused = await reveal(revealBody(c.id, c.a, c.b), { env });
   assert.equal(refused.status, 503, JSON.stringify(refused.body).slice(0, 200));
   assert.equal(refused.body.error_code, "signer_unavailable");
+  // unit R-N2 (B2): the body carries a code, never the loader's words
+  assert.equal(refused.body.reason, "reconcile_key_unset");
+  assert.doesNotMatch(JSON.stringify(refused.body), /WITNESS_|VERCEL_|GITHUB_|is not set/);
   assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed, so never signed with the receipt key");
   // Where separation cannot be shown beside a reconcile signer (the log key
   // unset), the case is never signed: since the one signature rule the

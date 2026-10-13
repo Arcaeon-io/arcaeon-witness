@@ -783,9 +783,31 @@ The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
 steps (e) and (f), and `tools/record_key_revocation.js` holds the marker to
 it. The readers walk at most 5,000 commits of a key's marker path (50 pages
-of 100), so a marker path someone with write access to the pins repository
-forces past 5,000 commits reads `revocation_marker_unreadable` for good, and
+of 100, and a full 50th page means there may be more), so a marker path
+that someone with write access to the pins repository forces to
+5,000 commits or more reads `revocation_marker_unreadable` for good, and
 every case under that key reads `signer_revoked`; this bound is accepted.
+
+### Checking a refusal receipt
+
+A joint reveal of a withdrawn case is refused 409 `case_withdrawn`, and a
+party that names its role and carries its own opening gets a refusal
+receipt: `{kind: "comparison_refused", v: 1, case_id, at, reason:
+"consent_not_jointly_held", role, commitment_sha256, signed_under,
+signed_by, sig, sig_reason: null}`, signed with the service's reconcile
+key under the key document `signed_under` names. It is checked the way a
+sealed case is (`lib/_case_seal.js` `verifyRefusalReceipt`): the named
+document's commit on the published branch, the document there the one
+named, `signed_by` an active reconcile key in it whose signature verifies,
+and that key still listed, not revoked, in the current document.
+`tools/check_refusal_receipt.js` does the same from the command line:
+
+    node tools/check_refusal_receipt.js receipt.json
+    node tools/check_refusal_receipt.js receipt.json --document case-signing-keys.json
+
+With `--document` (the key document at `signed_under.document_commit`, as a
+file) it runs offline, and says which two checks need the network and were
+not made.
 
 ## Testing
 

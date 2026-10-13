@@ -1024,14 +1024,17 @@ test("R-I2 GAP (M03): a commit that removed the marker file reads as nothing the
   gh.seed(PINS, mp, goodMarker(CASE_KEY, KD.commitOf(DOC))); // a stray first write
   gh.repos.get(PINS).delete(mp);
   gh._recordCommit(PINS, mp, "mock: removed", null); // a commit that removed it
-  const R = writeMarker(CASE_KEY, W);
+  writeMarker(CASE_KEY, W);
   const a = await (async () => {
     S._internal.clearDocumentCache();
     S._internal.clearCommitFiles();
     return S.sealedRecordReason(c.k, CASE_REVOKED);
   })();
-  assert.equal(a.code, "signer_since_revoked", JSON.stringify(a));
-  assert.equal(a.revoked[0].revoking_commit, R);
+  // unit R-N2 (m1): a commit that removed the file is nothing there on every
+  // read, so it stays a soft skip older than the valid marker, and R is not
+  // shown: unreadable (the raw host cannot tell a removal from a 404 it has
+  // not caught up on)
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], JSON.stringify(a));
 });
 
 test("R-I2 GAP (K02): a pin pointer whose numbered record has no commit at all is a pin commit that could not be read, never a crash", async () => {
@@ -1077,13 +1080,14 @@ test("R-N n1: a raw-host 404 at the real R, with a later rewrite that is valid, 
   gh.forceRawFailure(1, 404, `${PINS}@${R}:${mp}`);
   const a = await S.sealedRecordReason(late.k, CASE_REVOKED);
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], "R read again holds a marker: the rewrite is not R");
-  // the 404 holds on the second read: it skips again, the rewrite is taken, and it is not kept
+  // unit R-N2 (m1): the 404 holds on the second read: still skipped, so R is
+  // not shown, and the answer is unreadable, never the rewrite
   S._internal.clearDocumentCache();
   S._internal.clearCommitFiles();
   gh.forceRawFailure(2, 404, `${PINS}@${R}:${mp}`);
   const b = await S.sealedRecordReason(c.k, CASE_REVOKED);
-  assert.equal(b.code, "signer_since_revoked", JSON.stringify(b));
-  assert.equal(b.revoked[0].revoking_commit, R2);
+  assert.deepEqual([b.code, b.reason], ["signer_revoked", "revocation_marker_unreadable"], JSON.stringify(b));
+  assert.notEqual(R2, R);
   assert.equal(gh.rawLog.filter((k) => k === `${PINS}@${R}:${mp}`).length >= 2, true, "read twice");
   const n = commitsReads(mp);
   const again = await S.sealedRecordReason(c.k, CASE_REVOKED);
@@ -1108,12 +1112,13 @@ test("R-N n1: a compare 404 on the revoking commit of the real R (the branch kno
   const a = await S.sealedRecordReason(late.k, CASE_REVOKED);
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
   assert.ok(gh.compareLog.filter((k) => k === branchCompare).length >= 2, "the skipped candidate's order read again");
-  // a second 404 on the re-read skips again: the later one is taken, not kept
+  // unit R-N2 (m1): a second 404 on the re-read is still a soft skip: unreadable, and nothing kept
   S._internal.clearDocumentCache();
   S._internal.clearCommitFiles();
   gh.forceCompareFailure(2, 404, branchCompare);
   const b = await S.sealedRecordReason(late.k, CASE_REVOKED);
-  assert.notEqual(b.revoked[0].revoking_commit, R);
+  assert.deepEqual([b.code, b.reason], ["signer_revoked", "revocation_marker_unreadable"]);
+  assert.equal(b.revoked[0].revoking_commit, undefined, "no R");
   const n = commitsReads(mp);
   await S.sealedRecordReason(late.k, CASE_REVOKED);
   assert.equal(commitsReads(mp), n + 1, "not kept");
@@ -1178,7 +1183,8 @@ test("R-N n4: a negative compare is kept for the instance (off the branch; not b
   assert.deepEqual(await S.commitOnBranch(side), { on: false });
   let n = gh.compareLog.length;
   assert.deepEqual(await S.commitOnBranch(side), { on: false });
-  assert.equal(gh.compareLog.length, n, "an answer that is off is kept");
+  // unit R-N2 (m2): off can change (the branch moves), so it is read again
+  assert.equal(gh.compareLog.length, n + 1, "an answer that is off is read again");
   const ghost = "7".repeat(40);
   await S.commitOnBranch(ghost);
   n = gh.compareLog.length;
@@ -1259,5 +1265,5 @@ test("R-N: tools/preview_dry_run.js prints KEY_DOCUMENT_BRANCH in its usage (--h
 
 test("R-N n3: the README says a marker path forced past the walk's bound reads unreadable for good, accepted", () => {
   const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
-  assert.match(readme, /past 5,000 commits[^.]*revocation_marker_unreadable[^.]*for good/);
+  assert.match(readme, /5,000 commits or more[^.]*revocation_marker_unreadable[^.]*for good/);
 });

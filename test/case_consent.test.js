@@ -607,7 +607,7 @@ test("DESIGN N (3), since unit R-N (N4): a withdrawal that lands while the revea
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
   assert.equal(r.out.status, 409, JSON.stringify(r.out.body).slice(0, 300));
   assert.equal(r.out.body.error_code, "case_withdrawn");
-  assert.match(r.out.body.error, /^refused; the tapes were read before the withdrawal landed and the hashes are discarded/);
+  assert.equal(r.out.body.error, "Refused. A withdrawal landed while this reveal was in progress. Nothing computed from the tapes is kept.");
   assert.equal(Object.prototype.hasOwnProperty.call(r.out.body, "refusal_receipt"), false);
   assert.equal(compare.mock.callCount(), 0, "nothing compared");
   assert.equal(storedCase(c.id).status, "WITHDRAWN");

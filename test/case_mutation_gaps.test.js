@@ -464,7 +464,7 @@ async function withListingFailure(dirPath, fn) {
   }
 }
 
-test("S39 (caseTreeIndex): a case holding one registration file is not a sealer candidate, and its case file is never read", async () => {
+test("S39 (caseTreeIndex): a case holding one registration file is not a sealer candidate; since unit R-N2 (M3) its root is read once, by the withdrawn path, and nothing is written", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
   const from = gh.getLog.length;
@@ -473,7 +473,8 @@ test("S39 (caseTreeIndex): a case holding one registration file is not a sealer 
   assert.equal(r.candidates, 0);
   assert.equal(r.read, 0);
   assert.equal(r.not_sealed, 0);
-  assert.ok(!gh.getLog.slice(from).includes(C.casePath(ID)), "the case file is never read");
+  assert.equal(gh.getLog.slice(from).filter((p) => p === C.casePath(ID)).length, 1, "read once, by the withdrawn path");
+  assert.deepEqual(r.withdrawn_repaired, [], "an OPEN case is left as it is");
 });
 
 test("S55 (referenceSeqs): a references listing that cannot be read is never read as no rows: liveRecords is references_unreadable, a reference is 503 and writes nothing", async () => {
