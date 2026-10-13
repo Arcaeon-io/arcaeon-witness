@@ -844,19 +844,39 @@ writes them.
 This repository is create-only except for removals that carry a signed
 repair note. A registration file written after its case's withdrawal (the
 registration's lease ran out and the withdrawal took it over), or one whose
-case could not be read after its write, is removed only after a repair note,
-`removals/<case_id>/<sha256 of the removed path>.json`, is written
-create-only and read back: `{kind: "case-repair-note", v: 1, case_id,
-removed_path, removed_blob_sha, removed_file_sha256, reason,
-withdrawal_commit, at, signed_under, signed_by, sig, sig_reason: null}`,
-signed with a case key under the one signature rule, `reason` either
+case could not be read after its write, is removed only after a repair note
+for that file is written create-only and read back. A note records that a
+removal was decided, never that it was made: a removal of this file was
+recorded for its reason. A file is its path, its blob and the commit that
+created it, so a note is kept at `removals/<case_id>/<sha256 of removed_path,
+removed_blob_sha and created_in_commit, a newline between each>.json`:
+`{kind: "case-repair-note", v: 2, case_id, removed_path, removed_blob_sha,
+created_in_commit, removed_file_sha256, reason, withdrawal_commit, at,
+signed_under, signed_by, sig, sig_reason: null}`, signed with a case key
+under the one signature rule, `reason` either
 `registration_after_withdrawal` or `registration_unconfirmed` (then
-`withdrawal_commit` is null). A note that cannot be written and read back
-means nothing is removed. A removal that fails after its note leaves the
-note, and the sealer's next run completes the removal without a second note.
-The case page lists a case's repair notes, each verified under the key
-document it names, and says when a registration file of the case reads
-removed with no valid note.
+`withdrawal_commit` is null). A file created later at the same path,
+byte-identical or not, is another file and needs a note of its own. A note
+that cannot be written and read back means nothing is removed, and the
+removal itself checks the note's signature and that the file at the path is
+the one the note names. A removal that fails after its note leaves the note.
+The sealer's runs complete a recorded removal whose file is still at its
+path, for every reason, without a second note, unless the case has sealed
+with that registration: then nothing is removed, and the case page says a
+repair note was written and the removal was not made; the registration
+stood and the case sealed. Nothing is removed under a sealed case. A note in
+the form written before this (`v: 1`, kept at `removals/<case_id>/<sha256
+of removed_path>.json`, with no `created_in_commit`) is read and labelled
+as the old form, and nothing acts on it.
+
+The case page lists a case's repair notes, each said as a removal of a file
+recorded for its reason, with what the page read at its path (the file
+still there and the removal not made, nothing there, or another file there)
+and its check under the key document it names. For each file of the case
+the page reads as removed, it says when there is no note at all (a removal
+without a record), when its note could not be verified when the page was
+read (not a finding; the page is not kept), and when its note does not
+verify, with the reason.
 
 ### A reference row's sentence
 
@@ -867,7 +887,12 @@ commit that writes it. A later pin of the case may list that commit. This
 row is anchored only if a pin that lists it is, and no anchoring is
 asserted here." Version 2 of this sentence was never issued. A row carrying
 `note_version` 2 reads `row_note_v2`, and a row with no `note_version` reads
-`row_note_v1`; neither is counted. The case page says a row is recorded by
+`row_note_v1`; neither is counted. A case holds at most 500 reference rows; the 501st
+is refused 409 `row_limit`. A row is refused on a proven anchor conflict
+(409 `anchor_conflict`); an anchor that could not be looked up, a head the
+repository does not show and a changed daily anchor record refuse no row,
+since the row asserts no anchoring, and the case page says the anchor state
+as read. The case page says a row is recorded by
 its commit and listed by a pin only when it read that pin, shows the row's
 anchor state as not computed, and never calls a row anchored.
 

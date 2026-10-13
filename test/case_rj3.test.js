@@ -170,6 +170,14 @@ function dailyAnchor(day, head = gh.headOf(PINS)) {
   const commit = gh.seedText(PINS, path, `${head} ${claimedAt}\n`);
   return { path, head, claimedAt, commit };
 }
+// A daily anchor record whose listing serves a head, and whose newest
+// commit names none (unit R-L2).
+function noHead(c) {
+  const a = dailyAnchor(pinDay(c.id));
+  gh.seedText(PINS, a.path, "no head here\n");
+  gh._repoMap(PINS).get(a.path).content = `${a.head} ${a.claimedAt}\n`;
+  return a;
+}
 const commitLink = (sha) => `href="${PINS_URL}/commit/${sha}"`;
 // The commit that wrote the sealed case file: the newest touching it.
 const sealCommit = (id) => gh.commitsFor(PINS, C.casePath(id))[0].sha;
@@ -338,6 +346,9 @@ const T = {
   // unit R-L (g1, g7): what was read of the record
   RECORD_CHANGED: "pinned (could_not_look: anchor_record_changed); a daily anchor record for this case was read and named a different head " +
     "at its newest commit, so no anchor is claimed.",
+  // unit R-L2 (a minor): a record whose newest commit names no head
+  RECORD_NO_HEAD: "pinned (could_not_look: anchor_record_names_no_head); a daily anchor record for this case was read at its newest commit " +
+    "and no longer names a head, so no anchor is claimed.",
   RECORD_COMMIT_CNL: "pinned; the commit that wrote a daily anchor record could not be read when this page was read (could_not_look: " +
     "{reason}), so no anchor is claimed.",
   RECORD_AT_COMMIT_CNL: "pinned; a daily anchor record could not be read at its own commit when this page was read (could_not_look: " +
@@ -393,20 +404,6 @@ const T = {
     "or anchored, so no row was written",
   RESP_CNL: "could not look; this is not a refusal of the row. Try again. The case's pin reads could_not_look on this request ({reason}), " +
     "and no row was written",
-  RESP_ANCHOR_CNL: "the case is pinned, and whether a daily anchor record conflicts with its pin could not be read on this request " +
-    "({reason}), so the anchor-conflict check could not be made; this is not a 'no', and no row was written",
-  RESP_HEAD_NOT_SHOWN: "the case is pinned, and a daily anchor record names the head {head_full}, which is not shown by the repository " +
-    "yet (anchor_head_not_shown), so the anchor-conflict check could not be made; this is not a 'no', and no row was written",
-  RESP_RECORD_CHANGED: "the case is pinned, and a daily anchor record for this case was read and named a different head at its newest " +
-    "commit, so no anchor is claimed (anchor_record_changed); this is not a refusal of the row; try again, and no row was written",
-  RESP_RECORD_COMMIT: "the case is pinned, and the commit that wrote a daily anchor record could not be read on this request ({reason}), so " +
-    "the daily anchor records after it were not read; this is not a 'no', and no row was written",
-  RESP_RECORD_AT_COMMIT: "the case is pinned, and a daily anchor record could not be read at its own commit on this request ({reason}), so " +
-    "the daily anchor records after it were not read; this is not a 'no', and no row was written",
-  RESP_RECORD_COMMITS_BEYOND: "the case is pinned, and a daily anchor record's commit history is longer than this service reads " +
-    "(anchor_record_commits_beyond_bound), so the daily anchor records after it were not read; this is not a 'no', and no row was written",
-  RESP_RECORD_COMMITS_NONE: "the case is pinned, and the repository lists no commit for a daily anchor record (anchor_record_commits_none), " +
-    "so the daily anchor records after it were not read; this is not a 'no', and no row was written",
   // unit R-L (g5): a history longer than this service reads does not shorten; no "Try again"
   RESP_CNL_BEYOND: "could not look; this is not a refusal of the row. The case's pin reads could_not_look on this request " +
     "(pin_commits_beyond_bound): the pin's commit history is longer than this service reads, and no row was written",
@@ -416,9 +413,10 @@ const T = {
 const R201 = [201];
 const NOT_PINNED_409 = [409, "case_not_pinned", T.RESP_NOT_PINNED];
 const CNL_503 = [503, "could_not_look", T.RESP_CNL];
-const ANCHOR_503 = [503, "anchor_unreadable", T.RESP_ANCHOR_CNL];
-const HEAD_503 = [503, "anchor_unreadable", T.RESP_HEAD_NOT_SHOWN];
-const RECORD_503 = (r) => [503, "anchor_unreadable", r];
+// unit R-L2 (M4): an anchor that could not be looked up, a head not shown
+// and a changed record refuse no row: the row's signed sentence asserts no
+// anchoring, so the reference answers 201 for each
+const ANCHOR_TAKES_ROW = R201;
 const CONFLICT_409 = [409, "anchor_conflict", T.RESP_ANCHOR_CONFLICT];
 // The reference reads the case it serves (never a chain), with its anchor
 // looked up: it never meets these answers.
@@ -426,7 +424,7 @@ const NOT_REACHED = null;
 
 const PINNED = { pin: T.PIN_PINNED, anchor: T.NOT_YET, caseCommit: T.CC_PINNED, note: T.NOTE_PINNED, row: T.ROW_UNLISTED, response: R201 };
 const HELD = (anchor, caseCommit, response, words) => ({ pin: T.PIN_HELD, anchor, caseCommit, note: T.NOTE_READ, row: T.ROW_CASE, response, words });
-const ANCHOR_CNL = { ...PINNED, anchor: T.ANCHOR_CNL, response: ANCHOR_503 };
+const ANCHOR_CNL = { ...PINNED, anchor: T.ANCHOR_CNL, response: ANCHOR_TAKES_ROW };
 const HEAD_CONFLICT = (reason) => ({ ...HELD(T.A_CONFLICT, T.CC_HEAD_CONFLICT, CONFLICT_409, CONFLICT_WORDS[reason]), state: "conflict", reason });
 const PIN_CONFLICT = (reason) => ({ ...HELD(T.A_CONFLICT, T.CC_PIN_CONFLICT, NOT_PINNED_409, CONFLICT_WORDS[reason]), state: "conflict", reason });
 
@@ -547,26 +545,29 @@ const TABLE = [
   { from: "dailyAnchorOf", pair: "anchor", fx: "pin_at_head_503", state: "pinned", reason: "pin_at_head_http_503", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_compare_503", state: "pinned", reason: "anchor_head_compare_http_503", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_not_shown", state: "pinned", reason: "anchor_head_not_shown", ...PINNED,
-    anchor: T.HEAD_NOT_SHOWN, response: HEAD_503 },
+    anchor: T.HEAD_NOT_SHOWN, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_absent_not_shown", state: "pinned", reason: "anchor_head_not_shown", ...PINNED,
-    anchor: T.HEAD_NOT_SHOWN, response: HEAD_503 },
+    anchor: T.HEAD_NOT_SHOWN, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_exists_503", state: "pinned", reason: "anchor_head_exists_http_503", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_before_pin", state: "pinned", reason: null, ...PINNED },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_commit_cnl", state: "pinned", reason: "anchor_record_commit_unreadable", ...PINNED,
-    anchor: T.RECORD_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_COMMIT) },
+    anchor: T.RECORD_COMMIT_CNL, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_503", state: "pinned", reason: "anchor_record_at_commit_http_503", ...PINNED,
-    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+    anchor: T.RECORD_AT_COMMIT_CNL, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_changed", state: "pinned", reason: "anchor_record_changed", ...PINNED,
-    anchor: T.RECORD_CHANGED, response: RECORD_503(T.RESP_RECORD_CHANGED) },
+    anchor: T.RECORD_CHANGED, response: ANCHOR_TAKES_ROW },
+  // unit R-L2: a record whose newest commit names no head
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_no_head", state: "pinned", reason: "anchor_record_names_no_head", ...PINNED,
+    anchor: T.RECORD_NO_HEAD, response: ANCHOR_TAKES_ROW },
   // unit R-L (g2, g5, g7, g8): the reasons the R-J3 table did not assert
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_failed", state: "pinned", reason: "anchor_record_at_commit_fetch_failed", ...PINNED,
-    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+    anchor: T.RECORD_AT_COMMIT_CNL, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_404", state: "pinned", reason: "anchor_record_at_commit_http_404", ...PINNED,
-    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+    anchor: T.RECORD_AT_COMMIT_CNL, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_commits_beyond", state: "pinned", reason: "anchor_record_commits_beyond_bound", ...PINNED,
-    anchor: T.RECORD_COMMITS_BEYOND, response: RECORD_503(T.RESP_RECORD_COMMITS_BEYOND) },
+    anchor: T.RECORD_COMMITS_BEYOND, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "record_commits_none", state: "pinned", reason: "anchor_record_commits_none", ...PINNED,
-    anchor: T.RECORD_COMMITS_NONE, response: RECORD_503(T.RESP_RECORD_COMMITS_NONE) },
+    anchor: T.RECORD_COMMITS_NONE, response: ANCHOR_TAKES_ROW },
   { from: "dailyAnchorOf", pair: "anchor", fx: "pin_at_head_failed", state: "pinned", reason: "pin_at_head_fetch_failed", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "pin_at_head_500", state: "pinned", reason: "pin_at_head_http_500", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_compare_failed", state: "pinned", reason: "anchor_head_compare_failed", ...ANCHOR_CNL },
@@ -574,7 +575,7 @@ const TABLE = [
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_exists_failed", state: "pinned", reason: "anchor_head_exists_read_failed", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_not_shown_then_anchored", state: "anchored", reason: null, ...PINNED, anchor: T.ANCHORED },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_not_shown_then_none", state: "pinned", reason: "anchor_head_not_shown", ...PINNED,
-    anchor: T.HEAD_NOT_SHOWN, response: HEAD_503 },
+    anchor: T.HEAD_NOT_SHOWN, response: ANCHOR_TAKES_ROW },
   // the row reader, and servedAtCommit for the row at the commit a pin lists
   { from: "row reader", pair: "row", fx: "row_recorded", state: "recorded", reason: null, ...PINNED, row: T.ROW_RECORDED },
   { from: "row reader", pair: "row", fx: "pinned", state: "commit_unrecorded", reason: null, ...PINNED },
@@ -1029,6 +1030,11 @@ const FIXTURES = {
     const a = dailyAnchor(pinDay(c.id));
     return { c, arm: () => gh.forceRawFailure(1, 503, `:${a.path}`) };
   },
+  record_no_head: async () => {
+    const c = await withRow("RJ3 record no head");
+    noHead(c);
+    return { c };
+  },
   record_changed: async () => {
     const c = await withRow("RJ3 record changed");
     const a = dailyAnchor(pinDay(c.id));
@@ -1393,13 +1399,6 @@ test("MUST-FAIL GAP (unit R-L, S25): a daily anchor record that could not be rea
   assert.deepEqual([st.pin, st.anchor.path, st.anchor.head_commit], ["anchored", a.path, a.head]);
 });
 
-test("MUST-FAIL GAP (unit R-L, H36): the reference's 503 anchor_unreadable carries the anchor's reason as a field", async () => {
-  const c = await withRow("RL gap anchor reason field");
-  dailyAnchor(pinDay(c.id), fresh());
-  const r = await reference(c, "b");
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason, r.body.case_id], [503, "anchor_unreadable", "anchor_head_not_shown", c.id], JSON.stringify(r.body));
-});
-
 test("MUST-FAIL GAP (unit R-L, P14): the could-not-look page under a revoked key, for a pin whose commit history is longer than this service reads, does not say try again", async () => {
   const c = await withRow("RL gap revoked beyond bound");
   longHistory(seqOf(c.id));
@@ -1409,4 +1408,48 @@ test("MUST-FAIL GAP (unit R-L, P14): the could-not-look page under a revoked key
   assert.ok(page.html.includes("pin_commits_beyond_bound"));
   assert.ok(page.html.includes("This is not a no.</p>"), page.html.slice(page.html.indexOf("This is not a no") - 200, page.html.indexOf("This is not a no") + 40));
   assert.doesNotMatch(page.html, /This is not a no; try again/);
+});
+
+// =============================================================================
+// UNIT R-L2, M4: an anchor miss is passed over, and a row is refused only on
+// a proven anchor conflict
+// =============================================================================
+
+test("R-L2 M4 (a): a daily anchor record whose head the host does not show (its compare not_found), one whose newest commit names another head, and one whose newest commit names no head are each passed over: the record after it is read, and anchors the case", async () => {
+  for (const [scope, plant, reason] of [
+    ["RL2 M4 compare not found", (c) => {
+      const f = fresh();
+      gh.seedRaw(PINS, f, seqOf(c.id), gh._repoMap(PINS).get(seqOf(c.id)).content);
+      dailyAnchor(pinDay(c.id), f);
+    }, "anchor_head_not_shown"],
+    ["RL2 M4 record changed", (c) => {
+      const a = dailyAnchor(pinDay(c.id));
+      const later = gh.seedText(PINS, `notes/later-${fresh()}.txt`, "y\n");
+      gh._repoMap(PINS).get(a.path).content = `${later} ${a.claimedAt}\n`;
+    }, "anchor_record_changed"],
+    ["RL2 M4 record no head", (c) => noHead(c), "anchor_record_names_no_head"],
+  ]) {
+    const c = await withRow(scope);
+    plant(c);
+    const alone = await S.anchorState(c.id, storedCase(c.id));
+    assert.deepEqual([alone.pin, alone.anchor && alone.anchor.could_not_look], ["pinned", reason], `${scope}: alone, a miss`);
+    const a = dailyAnchor(nextDay(pinDay(c.id)));
+    S._internal.clearCommitFiles();
+    const st = await S.anchorState(c.id, storedCase(c.id));
+    assert.deepEqual([st.pin, st.anchor && st.anchor.path], ["anchored", a.path], scope);
+  }
+});
+
+test("R-L2 M4 (b): a reference row is refused only on a proven anchor conflict: an anchor that could not be looked up, a head not shown and a changed record each take the row, and a record off the branch is 409 anchor_conflict", async () => {
+  const lookup = await FIXTURES.anchors_cnl();
+  lookup.arm();
+  assert.equal((await reference(lookup.c, "b")).status, 201, "the anchors could not be listed");
+  const head = await FIXTURES.head_absent_not_shown();
+  assert.equal((await reference(head.c, "b")).status, 201, "a head not shown");
+  const changed = await FIXTURES.record_changed();
+  assert.equal((await reference(changed.c, "b")).status, 201, "a changed record");
+  const off = await FIXTURES.head_off_branch();
+  const r = await reference(off.c, "b");
+  assert.deepEqual([r.status, r.body.error_code], [409, "anchor_conflict"], JSON.stringify(r.body).slice(0, 300));
+  assert.doesNotMatch(HTTP_SRC(), /anchor_unreadable|anchorUnreadWords|refusal of the row; try again/);
 });

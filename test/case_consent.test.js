@@ -206,7 +206,10 @@ test("FIX C: the race lost after the write (the commit's lock lease ran out and 
   const history = gh.commitsFor(PINS, rpath);
   assert.equal(history.length, 2, "written, then removed: both are commits of the public history");
   assert.match(history[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//, "the removal's commit names its note");
-  assert.equal(gh.read(PINS, S.repairNotePath(id, rpath)).removed_path, rpath, "the note, the record of the removal");
+  // (since unit R-L2, M1: the note kept for the file, its blob and the commit that created it)
+  const created = history[1];
+  const note = gh.read(PINS, S.repairNotePath(id, rpath, gh.putLog.filter((w) => w.path === rpath).at(-1).sha, created.sha));
+  assert.deepEqual([note.removed_path, note.created_in_commit], [rpath, created.sha], "the note, the record of the removal decided");
   assert.deepEqual(logFiles(id), [], "no public entry on the withdrawn case (unit R-N, N4)");
   assert.equal(Object.prototype.hasOwnProperty.call(r.out.body, "log_event"), false);
   assert.equal(r.out.body.received_at, C.utcSeconds(NOW + 1000));
@@ -356,12 +359,13 @@ test("FIX D: every state read that is not pinned or anchored is refused with tha
   r = await reference(c);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.ok(gh.getLog.slice(g0).some((p) => p === "anchors"), "the daily anchor records are listed");
-  // a listing of them that fails is not a 'no': 503 anchor_unreadable, no row
+  // a listing of them that fails refuses no row (unit R-L2, M4: a row is
+  // refused only on a proven anchor conflict, and asserts no anchoring)
   const rows = referenceFiles(c.id).length;
   gh.forceGetFailure(PINS, "anchors", 1, 503);
   r = await reference(c, "a", "anchors unread");
-  assert.deepEqual([r.status, r.body.error_code], [503, "anchor_unreadable"], JSON.stringify(r.body));
-  assert.equal(referenceFiles(c.id).length, rows);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(referenceFiles(c.id).length, rows + 1);
 });
 
 // =============================================================================
@@ -742,10 +746,16 @@ test("MUST-FAIL GAP (U06, U07, U09): the removal names the store's configured br
   const rpath = C.registrationPath(id, "a");
   gh.seed(PINS, rpath, { a: 1 });
   const blob = gh.repos.get(PINS).get(rpath).sha;
-  // unit R-L (L3): a removal is asked only with a repair note naming the file and blob
-  const note = (sha) => gh.seed(PINS, S.repairNotePath(id, rpath), { case_id: id, removed_path: rpath, removed_blob_sha: sha });
+  // unit R-L (L3): a removal is asked only with a repair note naming the
+  // file; since unit R-L2, the note kept for that file, signed
+  const created = gh.commitsFor(PINS, rpath)[0].sha;
+  const at = C.utcSeconds(NOW);
+  const note = (sha) => gh.seed(PINS, S.repairNotePath(id, rpath, sha, created), S.repairNote({ caseId: id, removedPath: rpath, removedBlobSha: sha,
+    createdInCommit: created, removedFileSha256: "2".repeat(64), reason: "registration_unconfirmed", withdrawalCommit: null, at,
+    signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC })));
+  const opts = { createdInCommit: created, keyDocument: DOC };
   note("0".repeat(40));
-  await assert.rejects(U.removeRegistrationAfterWithdrawal(rpath, "0".repeat(40), "m"), /github remove .* -> 409/);
+  await assert.rejects(U.removeRegistrationAfterWithdrawal(rpath, "0".repeat(40), "m", opts), /github remove .* -> 409/);
   note(blob);
   assert.equal(gh.has(PINS, rpath), true, "a refused removal removes nothing");
   // the request names the store's configured branch, whatever it is (U09)
@@ -753,7 +763,7 @@ test("MUST-FAIL GAP (U06, U07, U09): the removal names the store's configured br
   store.BRANCH = "pins-test-branch";
   let out;
   try {
-    out = await U.removeRegistrationAfterWithdrawal(rpath, blob, "m");
+    out = await U.removeRegistrationAfterWithdrawal(rpath, blob, "m", opts);
   } finally {
     store.BRANCH = branch;
   }

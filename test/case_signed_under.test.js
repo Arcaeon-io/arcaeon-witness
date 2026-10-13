@@ -783,7 +783,8 @@ test("P13 (the page's reads): a case not pinned yet reads no pin commit history"
   const before = gh.commitsLog.length;
   const p = await pageOf(id);
   assert.ok(p.html.includes("not pinned yet"));
-  assert.deepEqual(gh.commitsLog.slice(before), [], "no commits listing");
+  // (since unit R-L2, B2: the page reads the registration paths' histories for removals, and no pin's)
+  assert.deepEqual(gh.commitsLog.slice(before).filter((k) => !/cases\/[0-9a-f]{64}\/commit_[ab]\.json/.test(String(k))), [], "no pin's commits listing");
 });
 
 test("L01 (lib/_sealer.js anchorCases): the current document it is handed is the one the pass reads; an unreadable one is could_not_look, not a pin", async () => {

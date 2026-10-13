@@ -410,7 +410,9 @@ test("R-N2 m8 (since unit R-L, L3: after a signed repair note): the WITHDRAWN pa
   const c = await committedCase("RN2 note");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   assert.ok((await casePage(c.id)).html.includes(
-    "A registration shown to be written after the withdrawal is removed, after a signed repair note that records the removal is written. One whose order cannot be shown stays and does not stand."));
+    // (since unit R-L2, B1: a note records a removal decided)
+    "A registration shown to be written after the withdrawal is removed only once a signed repair note says of it: a removal of this file was " +
+    "recorded for registration_after_withdrawal. One whose order cannot be shown stays and does not stand."));
 });
 
 test("R-N2 m10: registration_recorded reports the file's real state on the projection path and on the abandoned branch", async () => {

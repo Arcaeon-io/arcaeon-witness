@@ -234,8 +234,11 @@ function jsFiles(dir) {
 const withdrawalCommit = (id) => gh.commitsFor(PINS, C.casePath(id))[0].sha;
 // The race lost after the write (the commit's lease ran out and the
 // withdrawal took it over). `deleteFails`: the removal refused; `noteFails`:
-// the repair note's path refuses writes; `commitEnv`: the commit path's
-// environment.
+// every write under the case's removals/ refused while the race runs (since
+// unit R-L2, M1, a note's path names the file's blob and creating commit, so
+// it is not known before the write); `commitEnv`: the commit path's
+// environment. -> the case, the registration as written (its blob, the
+// commit that created it, its bytes) and the note path for that file.
 async function lostRace(scope, { deleteFails = false, noteFails = false, commitEnv } = {}) {
   const id = await openCase(scope);
   const a = party(id, "a", AGENT_TAPE);
@@ -243,12 +246,16 @@ async function lostRace(scope, { deleteFails = false, noteFails = false, commitE
   await register(id, a);
   plantStamp(b.commitment_sha256);
   const rpath = C.registrationPath(id, "b");
-  if (noteFails) gh.forceFailure(PINS, S.repairNotePath(id, rpath), 8, 502);
   const late = NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
   const viaMock = global.fetch;
-  if (deleteFails) {
-    global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
-  }
+  global.fetch = async (url, o) => {
+    const method = (o && o.method) || "GET";
+    if (deleteFails && method === "DELETE") return { ok: false, status: 500, json: async () => ({}), text: async () => "" };
+    if (noteFails && method === "PUT" && String(url).includes(`/contents/removals/${id}/`)) {
+      return { ok: false, status: 502, json: async () => ({ message: "mock: refused" }), text: async () => "mock: refused" };
+    }
+    return viaMock(url, o);
+  };
   let r;
   try {
     r = await during(
@@ -261,9 +268,19 @@ async function lostRace(scope, { deleteFails = false, noteFails = false, commitE
   }
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
   assert.equal(r.out.body.error_code, "case_withdrawn", JSON.stringify(r.out.body));
-  // the registration as written: its blob, and its bytes at the commit that wrote it
-  const wrote = gh.commitsFor(PINS, rpath).slice(-1)[0];
-  return { id, a, b, rpath, out: r.out.body, text: wrote.content, notePath: S.repairNotePath(id, rpath) };
+  return { id, a, b, rpath, out: r.out.body, ...asWritten(rpath, id) };
+}
+// The registration at `rpath` as its write left it: its blob (the mock's
+// PUT log), the commit that created it and its bytes (the oldest commit
+// touching the path since the newest removal), and the note path for that file.
+function asWritten(rpath, id) {
+  const list = gh.commitsFor(PINS, rpath).slice().reverse(); // oldest first
+  let created = null;
+  list.forEach((cm, k) => {
+    if (cm.content !== null && (k === 0 || list[k - 1].content === null)) created = cm;
+  });
+  const blob = gh.putLog.filter((p) => p.path === rpath).at(-1).sha;
+  return { blob, created: created.sha, text: created.content, notePath: S.repairNotePath(id, rpath, blob, created.sha) };
 }
 // The blob a removal named (the mock's DELETE log).
 const removedBlob = (p) => (gh.deleteLog.find((d) => d.path === p) || {}).sha;
@@ -277,7 +294,8 @@ const CREATE_ONLY = "This repository is create-only except for removals that car
 const REVOCATION = "A key once shown revoked by a valid marker stays revoked. If the marker file is later removed, the answer is that the " +
   "marker cannot be read, never that the key is trusted again.";
 const DATES = "Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document.";
-const NOTE_FIELDS = ["kind", "v", "case_id", "removed_path", "removed_blob_sha", "removed_file_sha256", "reason", "withdrawal_commit", "at",
+// (since unit R-L2, M1: v 2, keyed on the file, with created_in_commit)
+const NOTE_FIELDS = ["kind", "v", "case_id", "removed_path", "removed_blob_sha", "created_in_commit", "removed_file_sha256", "reason", "withdrawal_commit", "at",
   "signed_under", "signed_by", "sig", "sig_reason"];
 
 // =============================================================================
@@ -361,17 +379,23 @@ test("R-L L2: no page, response or document says this service stops a tape being
   for (const f of files) assert.doesNotMatch(read(f), more, f);
 });
 
-test("R-L L2: a verdict names only the key ids that signed in its own case: two cases over the same tapes, registered by other keys, each name their own", async () => {
+test("R-L L2 (since unit R-L2, the verdict and the receipt inspected): every key id a sealed case, its receipt and its reveal's answer name, past the service's own keys, is one of the two that registered in that case, and no key id of another case in the same store appears", async () => {
   const other = { a: checkpoint.generateKey("party-a2.example/rl"), b: checkpoint.generateKey("party-b2.example/rl") };
   const one = await sealedCase("RL L2 keys one");
   const two = await sealedCase("RL L2 keys two", other);
   const idsOne = [REG.keyIdOf(REG.KEYS.a), REG.keyIdOf(REG.KEYS.b)];
   const idsTwo = [REG.keyIdOf(other.a), REG.keyIdOf(other.b)];
+  // the service's own keys, by key id and by the name and key number their verifier strings carry
+  const service = [CASE_KEY, RECEIPT_KEY, LOG_KEY].flatMap((key) => [KD.keyIdOf(key), key.verifier.split("+").slice(0, 2).join("+")]);
+  const KEY_ID = /[A-Za-z0-9._\-/:]+\+[0-9a-f]{8}/g;
   for (const [c, own, theirs] of [[one, idsOne, idsTwo], [two, idsTwo, idsOne]]) {
     const k = storedCase(c.id);
+    assert.equal(k.verdict.signer.verifier, RECEIPT_KEY.verifier, "the receipt, signed by the reconcile key");
     assert.deepEqual([k.commitments.a.key_id, k.commitments.b.key_id], own);
-    const text = JSON.stringify(k) + JSON.stringify(c.r.body) + (await casePage(c.id)).html;
-    for (const id of theirs) assert.ok(!text.includes(id), `case ${c.id.slice(0, 8)} names no key of the other case`);
+    const named = new Set([...JSON.stringify([k, k.verdict, c.r.body]).matchAll(KEY_ID)].map((m) => m[0]));
+    assert.deepEqual([...named].filter((id) => !service.includes(id)).sort(), [...own].sort(), `case ${c.id.slice(0, 8)}: the parties' key ids`);
+    const page = (await casePage(c.id)).html;
+    for (const id of theirs) assert.ok(!named.has(id) && !page.includes(id), `case ${c.id.slice(0, 8)} names no key of the other case`);
   }
 });
 
@@ -381,10 +405,12 @@ test("R-L L2: a verdict names only the key ids that signed in its own case: two 
 
 test("R-L L3 (a): the lease race: the commit path writes a signed repair note, create-only, then removes the registration", async () => {
   const x = await lostRace("RL L3 note");
-  assert.equal(x.notePath, `removals/${x.id}/${sha(x.rpath)}.json`);
+  // (since unit R-L2, M1: keyed on the file, its path, blob and creating commit)
+  assert.equal(x.notePath, `removals/${x.id}/${sha(`${x.rpath}\n${x.blob}\n${x.created}`)}.json`);
   const note = gh.read(PINS, x.notePath);
   assert.deepEqual(Object.keys(note).sort(), [...NOTE_FIELDS].sort());
-  assert.deepEqual([note.kind, note.v, note.case_id, note.removed_path, note.reason], ["case-repair-note", 1, x.id, x.rpath, "registration_after_withdrawal"]);
+  assert.deepEqual([note.kind, note.v, note.case_id, note.removed_path, note.reason], ["case-repair-note", 2, x.id, x.rpath, "registration_after_withdrawal"]);
+  assert.equal(note.created_in_commit, x.created);
   assert.equal(note.removed_blob_sha, removedBlob(x.rpath));
   assert.equal(note.removed_file_sha256, sha(x.text));
   assert.equal(note.withdrawal_commit, withdrawalCommit(x.id));
@@ -397,7 +423,8 @@ test("R-L L3 (a): the lease race: the commit path writes a signed repair note, c
   assert.ok(order.indexOf(x.notePath) >= 0 && order.indexOf(x.notePath) < order.lastIndexOf(x.rpath), "the note, then the removal");
   assert.equal(gh.has(PINS, x.rpath), false);
   assert.deepEqual([x.out.registration_removed, x.out.registration_recorded, x.out.repair_note], [true, false, x.notePath]);
-  assert.match(x.out.error, /a signed repair note records the removal/);
+  // (since unit R-L2, B1: a note records a removal decided)
+  assert.match(x.out.error, /it was removed after a signed repair note was written for it \(a removal of this file was recorded for registration_after_withdrawal\)/);
 });
 
 test("R-L L3 (a): a repair note that cannot be written and confirmed removes nothing; no case signer, no note, nothing removed", async () => {
@@ -418,7 +445,7 @@ test("R-L L3 (a): a removal that fails leaves the note standing, and the sealer'
   assert.equal(gh.has(PINS, x.notePath), true, "the note stands");
   assert.equal(gh.has(PINS, x.rpath), true);
   assert.deepEqual([x.out.registration_removed, x.out.repair_note], [false, x.notePath]);
-  assert.match(x.out.error, /the repair note is written, and the removal failed/);
+  assert.match(x.out.error, /a signed repair note is written for it \(a removal of this file was recorded for registration_after_withdrawal\), and the removal has not been made/);
   const run = await sealerRun();
   assert.equal(gh.has(PINS, x.rpath), false, "removed by the repair");
   assert.equal(gh.commitsFor(PINS, x.notePath).length, 1, "one note, written once");
@@ -457,7 +484,7 @@ test("R-L L3 (a): a registration the case could not confirm after its write is r
     () => commit(id, a),
   );
   assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.registration_removed], [503, "registration_unconfirmed", true], JSON.stringify(r.out.body));
-  const note = gh.read(PINS, S.repairNotePath(id, rpath));
+  const note = gh.read(PINS, asWritten(rpath, id).notePath);
   assert.deepEqual([note.reason, note.withdrawal_commit, note.removed_path], ["registration_unconfirmed", null, rpath]);
   assert.deepEqual(await S.verifyRepairNote(note, DOC), { ok: true });
   assert.equal(gh.has(PINS, rpath), false);
@@ -467,7 +494,8 @@ test("R-L L3: the one removal refuses a file no repair note names", async () => 
   const c = await committedCase("RL L3 unregister guard");
   const rpath = C.registrationPath(c.id, "a");
   const blob = gh._repoMap(PINS).get(rpath).sha;
-  await assert.rejects(UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "no note"), /repair note/);
+  const created = gh.commitsFor(PINS, rpath)[0].sha;
+  await assert.rejects(UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "no note", { createdInCommit: created, keyDocument: DOC }), /repair note/);
   assert.equal(gh.deleteLog.length, 0);
   assert.equal(gh.has(PINS, rpath), true);
 });
@@ -479,11 +507,12 @@ test("R-L L3 (b), (c): the page lists the case's repair notes with links, each v
   assert.ok(page.includes(x.rpath) && page.includes("registration_after_withdrawal"));
   assert.ok(page.includes("verified under the key document it names"), page.slice(page.indexOf("Removals"), page.indexOf("Removals") + 900));
   assert.doesNotMatch(page, /removed without a record/);
-  // a note whose bytes changed does not verify, and the removal it records is then a finding
+  // a note whose bytes changed does not verify, and the removal it records says so (since unit R-L2, B2: not "without a record")
   gh.seed(PINS, x.notePath, { ...gh.read(PINS, x.notePath), reason: "registration_unconfirmed" }, { keepHistory: true });
   const changed = (await casePage(x.id)).html;
   assert.match(changed, /does not verify/);
-  assert.ok(changed.includes(`a file under this case was removed without a record: ${x.rpath}`));
+  assert.ok(changed.includes(esc(`${x.rpath} was removed; its repair note does not verify (malformed_field)`)), changed.slice(changed.indexOf("Removals"), changed.indexOf("Removals") + 900));
+  assert.doesNotMatch(changed, /removed without a record/);
   // a registration removed by hand, with no note at all
   const c = await committedCase("RL L3 by hand");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
@@ -513,7 +542,7 @@ test("R-L L4: a withdrawal that takes effect in the lease race leaves its signed
   const removals = gh._commitsOf(PINS).filter((cm) => cm.content === null && cm.path.startsWith(`cases/${x.id}`));
   assert.ok(removals.length >= 1, "fixture: a removal");
   for (const cm of removals) {
-    const note = gh.read(PINS, S.repairNotePath(x.id, cm.path));
+    const note = gh.read(PINS, x.notePath);
     assert.deepEqual(await S.verifyRepairNote(note, DOC), { ok: true }, cm.path);
   }
 });
@@ -789,7 +818,7 @@ test("MUST-FAIL GAP (S37, S39): the sealer's other two withdrawn paths (a withdr
 test("MUST-FAIL GAP (S42, S43): the page's removals panel states the create-only rule word for word; a note path is made only for a case id", async () => {
   const x = await lostRace("RL gap rule on page");
   assert.ok((await casePage(x.id)).html.includes(esc(CREATE_ONLY)));
-  assert.throws(() => S.repairNotePath("not-a-case-id", x.rpath));
+  assert.throws(() => S.repairNotePath("not-a-case-id", x.rpath, x.blob, x.created));
 });
 
 test("MUST-FAIL GAP (S47-S59): a repair note's form is checked field by field, before its signature", async () => {
@@ -819,8 +848,8 @@ test("MUST-FAIL GAP (S47-S59): a repair note's form is checked field by field, b
 test("MUST-FAIL GAP (S60-S67): a repair note verifies only under the document it names, on the published branch, by an active case key whose signature holds, still listed and not revoked in the current document", async () => {
   const x = await lostRace("RL gap note verify");
   const note = gh.read(PINS, x.notePath);
-  const fields = { caseId: x.id, removedPath: x.rpath, removedBlobSha: note.removed_blob_sha, removedFileSha256: note.removed_file_sha256,
-    reason: note.reason, withdrawalCommit: note.withdrawal_commit, at: note.at };
+  const fields = { caseId: x.id, removedPath: x.rpath, removedBlobSha: note.removed_blob_sha, createdInCommit: note.created_in_commit,
+    removedFileSha256: note.removed_file_sha256, reason: note.reason, withdrawalCommit: note.withdrawal_commit, at: note.at };
   const reasonOf = async (rec, doc = DOC) => (await S.verifyRepairNote(rec, doc)).reason;
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
   assert.equal(await reasonOf({ ...note, signed_under: { ...note.signed_under, document_commit: off } }), "document_not_on_branch");
@@ -844,7 +873,7 @@ async function standing(scope) {
   gh.forceFailure(PINS, x.notePath, 0, 502);
   assert.equal(gh.has(PINS, x.rpath), true, "fixture: the file stands");
   const blob = gh._repoMap(PINS).get(x.rpath).sha;
-  const remove = (over = {}) => S.removeRegistration({ caseId: x.id, role: "b", blobSha: blob, reason: "registration_after_withdrawal",
+  const remove = (over = {}) => S.removeRegistration({ caseId: x.id, role: "b", blobSha: blob, createdInCommit: x.created, reason: "registration_after_withdrawal",
     at: C.utcSeconds(NOW + 9000), env: deployedEnv(), keyDocument: DOC, ...over });
   return { ...x, blob, remove };
 }
@@ -859,12 +888,12 @@ test("MUST-FAIL GAP (S69-S74): no note is written, and nothing removed, without 
   results.push([await x.remove({ env: noCommit }), sealing.code]);
   gh.forceGetFailure(PINS, x.rpath, 1, 503);
   results.push([await x.remove(), "registration_unreadable"]);
-  results.push([await x.remove({ blobSha: "0".repeat(40) }), "registration_changed"]);
+  results.push([await x.remove({ blobSha: "0".repeat(40) }), "registration_changed", S.repairNotePath(x.id, x.rpath, "0".repeat(40), x.created)]);
   gh.forceCommitsFailure(PINS, C.casePath(x.id), 1, 503);
   results.push([await x.remove(), "commits_unreadable"]);
-  for (const [r, why] of results) {
-    assert.deepEqual(r, { removed: false, note: "not_written", note_path: x.notePath, reason: why });
-    assert.equal(gh.has(PINS, x.notePath), false, why);
+  for (const [r, why, notePath = x.notePath] of results) {
+    assert.deepEqual(r, { removed: false, note: "not_written", note_path: notePath, reason: why });
+    assert.equal(gh.has(PINS, notePath), false, why);
   }
   gh._repoMap(PINS).delete(x.rpath);
   assert.deepEqual(await x.remove(), { removed: false, note: "not_written", note_path: x.notePath, reason: "registration_absent" });
@@ -876,16 +905,17 @@ test("MUST-FAIL GAP (S76-S79): a note that could not be written, one already the
   gh.forceFailure(PINS, x.notePath, 8, 502);
   assert.deepEqual(await x.remove(), { removed: false, note: "failed", note_path: x.notePath, reason: "note_unconfirmed" });
   gh.forceFailure(PINS, x.notePath, 0, 502);
-  // a note already there, signed and valid, for another blob of the same path
+  // a note at this file's path, signed and valid, naming another blob (since unit R-L2, M1, only a note
+  // placed there by hand can: a note for another blob is kept at another path)
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const at = C.utcSeconds(NOW + 9000);
-  const other = S.repairNote({ caseId: x.id, removedPath: x.rpath, removedBlobSha: "1".repeat(40), removedFileSha256: "2".repeat(64),
+  const other = S.repairNote({ caseId: x.id, removedPath: x.rpath, removedBlobSha: "1".repeat(40), createdInCommit: x.created, removedFileSha256: "2".repeat(64),
     reason: "registration_after_withdrawal", withdrawalCommit: withdrawalCommit(x.id), at, signedUnder: KD.signedUnder(gh, DOC, at) }, signer);
   gh.seed(PINS, x.notePath, other);
   assert.deepEqual(await x.remove(), { removed: false, note: "existing", note_path: x.notePath, reason: "note_names_another_file" });
   assert.equal(gh.has(PINS, x.rpath), true);
   // a note there for this blob that does not verify
-  const mine = S.repairNote({ caseId: x.id, removedPath: x.rpath, removedBlobSha: x.blob, removedFileSha256: sha(x.text),
+  const mine = S.repairNote({ caseId: x.id, removedPath: x.rpath, removedBlobSha: x.blob, createdInCommit: x.created, removedFileSha256: sha(x.text),
     reason: "registration_after_withdrawal", withdrawalCommit: withdrawalCommit(x.id), at, signedUnder: KD.signedUnder(gh, DOC, at) }, signer);
   gh.seed(PINS, x.notePath, { ...mine, at: C.utcSeconds(NOW) });
   assert.deepEqual(await x.remove(), { removed: false, note: "existing", note_path: x.notePath, reason: "note_bad_signature" });
@@ -914,10 +944,11 @@ test("MUST-FAIL GAP (H13, H14): a registration the case could not confirm, remov
     async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
     () => commit(id, a),
   );
-  assert.deepEqual([r.out.status, r.out.body.repair_note], [503, S.repairNotePath(id, rpath)], JSON.stringify(r.out.body));
+  assert.deepEqual([r.out.status, r.out.body.repair_note], [503, asWritten(rpath, id).notePath], JSON.stringify(r.out.body));
+  // (since unit R-L2, B1: a note records a removal decided)
   assert.equal(r.out.body.error, "the case record could not be read after the registration's write, so this service cannot show the case was not " +
-    "withdrawn meanwhile, and a registration never stands on an assumption: it was removed, and a signed repair note records the removal; " +
-    "nothing is registered. Send the same registration again");
+    "withdrawn meanwhile, and a registration never stands on an assumption: it was removed after a signed repair note was written for it (a " +
+    "removal of this file was recorded for registration_unconfirmed); nothing is registered. Send the same registration again");
 });
 
 test("MUST-FAIL GAP (S90, S83): a case whose registration files were never removed shows no removals: a role not yet registered is not a removal, and a file under removals/ that is not at a note's name is not a note", async () => {
@@ -928,11 +959,11 @@ test("MUST-FAIL GAP (S90, S83): a case whose registration files were never remov
   assert.doesNotMatch(html, /Removals|removed without a record/);
 });
 
-test("MUST-FAIL GAP (S84, S89, S91b): the page says the removals could not be read when a note, a registration file, or a removed file's history could not be read", async () => {
+test("MUST-FAIL GAP (S84, S89, S91b): the page says the removals could not be read when a registration file or a removed file's history could not be read; a note that could not be read leaves its removal not verified (since unit R-L2, B2)", async () => {
   const x = await lostRace("RL gap removals unread");
   const said = (r) => `Whether a file under this case was removed could not be read when this page was read (${r}).`;
   gh.forceGetFailure(PINS, x.notePath, 1, 503);
-  assert.ok((await casePage(x.id)).html.includes(said("repair_note_unreadable")));
+  assert.ok((await casePage(x.id)).html.includes(esc(`${x.rpath} was removed; its repair note could not be verified when this page was read (repair_note_unreadable)`)));
   gh.forceGetFailure(PINS, C.registrationPath(x.id, "a"), 1, 503);
   assert.ok((await casePage(x.id)).html.includes(said("registration_unreadable")));
   gh.forceCommitsFailure(PINS, x.rpath, 1, 503);
@@ -943,11 +974,12 @@ test("MUST-FAIL GAP (S85, S86, S87): a note not at its own name, or of another c
   const x = await lostRace("RL gap note placement", { deleteFails: true });
   const note = gh.read(PINS, x.notePath);
   const html = (await casePage(x.id)).html;
-  assert.ok(html.includes("; a file is at that path when this page was read"), html.slice(html.indexOf("Removals"), html.indexOf("Removals") + 900));
+  // (since unit R-L2, B1: what was read at the note's path)
+  assert.ok(html.includes("; a repair note is written; the removal has not been made; signed by"), html.slice(html.indexOf("Removals"), html.indexOf("Removals") + 900));
   gh.seed(PINS, `removals/${x.id}/${"f".repeat(64)}.json`, note);
   assert.ok((await casePage(x.id)).html.includes("does not verify (note_not_at_its_path)"));
   const y = await committedCase("RL gap other case");
-  gh.seed(PINS, `removals/${y.id}/${sha(x.rpath)}.json`, note);
+  gh.seed(PINS, S.repairNotePath(y.id, x.rpath, note.removed_blob_sha, note.created_in_commit), note);
   assert.ok((await casePage(y.id)).html.includes("does not verify (note_of_another_case)"));
 });
 
@@ -973,7 +1005,7 @@ async function unconfirmedRemoval(scope) {
     () => commit(id, a),
   );
   assert.equal(r.out.body.registration_removed, true, "fixture: removed after its note");
-  return { id, rpath, notePath: S.repairNotePath(id, rpath) };
+  return { id, rpath, notePath: asWritten(rpath, id).notePath };
 }
 const render = (id, nowMs) => CP._internal.renderCase(storedCase(id), nowMs, DOC);
 
@@ -1006,7 +1038,10 @@ test("MUST-FAIL GAP (P22, P30): a sealed page whose removals could not be read i
   const note = gh.read(PINS, x.notePath);
   gh.seed(PINS, x.notePath, { ...note, signed_under: { ...note.signed_under, document_commit: "5".repeat(40) } });
   const r = await render(x.id, NOW + 5000);
-  assert.ok(r.html.includes("does not verify (document_unavailable)"), r.html.slice(r.html.indexOf("Removals"), r.html.indexOf("Removals") + 700));
+  // (since unit R-L2, B2: a check that could not look is not "does not verify")
+  assert.ok(r.html.includes(esc("it could not be verified when this page was read (document_unavailable)")),
+    r.html.slice(r.html.indexOf("Removals"), r.html.indexOf("Removals") + 700));
+  assert.doesNotMatch(r.html, /does not verify \(document_unavailable\)|removed without a record/);
   assert.equal(r.definite, false);
 });
 
@@ -1029,22 +1064,26 @@ test("MUST-FAIL GAP (V07, V08): an index entry's seq is within the seal's bound,
   assert.equal(judge({ ...at3, listed_by: [{ seq: 2, pin_seq: 3 }, { seq: 100000000, pin_seq: 2 }] }).reason, "case_seal_listed_by_unreadable", "seq bound");
 });
 
-test("MUST-FAIL GAP (U02-U05): the one removal refuses when the note at the path names another case, another file or another blob, and says so when the note could not be read", async () => {
+test("MUST-FAIL GAP (U02-U05; since unit R-L2, the note kept for the file, its signature checked): the one removal refuses when the note at the file's path names another case, another file or another blob, and says so when the note could not be read", async () => {
   const c = await committedCase("RL gap unregister fields");
   const rpath = C.registrationPath(c.id, "a");
   const blob = gh._repoMap(PINS).get(rpath).sha;
-  const notePath = S.repairNotePath(c.id, rpath);
-  const named = { case_id: c.id, removed_path: rpath, removed_blob_sha: blob };
-  for (const [what, n] of [["another case", { ...named, case_id: "e".repeat(64) }], ["another file", { ...named, removed_path: C.registrationPath(c.id, "b") }],
-    ["another blob", { ...named, removed_blob_sha: "1".repeat(40) }]]) {
+  const created = gh.commitsFor(PINS, rpath)[0].sha;
+  const notePath = S.repairNotePath(c.id, rpath, blob, created);
+  const at = C.utcSeconds(NOW + 9000);
+  const signed = (over) => S.repairNote({ caseId: c.id, removedPath: rpath, removedBlobSha: blob, createdInCommit: created, removedFileSha256: "2".repeat(64),
+    reason: "registration_unconfirmed", withdrawalCommit: null, at, signedUnder: KD.signedUnder(gh, DOC, at), ...over }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  const remove = () => UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "x", { createdInCommit: created, keyDocument: DOC });
+  for (const [what, n] of [["another case", signed({ caseId: "e".repeat(64) })], ["another file", signed({ removedPath: C.registrationPath(c.id, "b") })],
+    ["another blob", signed({ removedBlobSha: "1".repeat(40) })], ["another creating commit", signed({ createdInCommit: "3".repeat(40) })]]) {
     gh.seed(PINS, notePath, n);
-    await assert.rejects(UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "x"), /no repair note names/, what);
+    await assert.rejects(remove(), /no repair note names/, what);
   }
-  gh.seed(PINS, notePath, named);
+  gh.seed(PINS, notePath, signed({}));
   gh.forceGetFailure(PINS, notePath, 1, 503);
-  await assert.rejects(UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "x"), /the repair note for .* could not be read, so nothing was removed/);
+  await assert.rejects(remove(), /the repair note for .* could not be read, so nothing was removed/);
   assert.equal(gh.deleteLog.length, 0);
-  // control: the note naming this case, file and blob lets the removal through (the signature is the caller's to check)
-  await UNREG.removeRegistrationAfterWithdrawal(rpath, blob, "x");
+  // control: the note kept for this file, signed, lets the removal through
+  await remove();
   assert.equal(gh.has(PINS, rpath), false);
 });

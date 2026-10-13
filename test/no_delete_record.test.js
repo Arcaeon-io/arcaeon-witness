@@ -31,7 +31,7 @@ const ALLOWED_DELETE = {
   // case lock, and a case log event (commit_after_withdrawal) is appended so
   // the attempt stays visible. The removal is itself a commit, so the file
   // stays in the repository's history. The module refuses any other path.
-  "lib/_case_unregister.js": "the pin repo, but only a registration file written after its case's withdrawal (red-team fix C), and only one a signed repair note names (unit R-L); the module refuses every other path",
+  "lib/_case_unregister.js": "the pin repo, but only a registration file written after its case's withdrawal (red-team fix C), and only one the signed repair note kept for that file names, its signature checked here (unit R-L, unit R-L2); the module refuses every other path",
   "tools/ceiling_probe.js": "deletes only the throwaway probe repository it created itself",
 };
 
@@ -275,9 +275,14 @@ test("the one pin-repository deletion (red-team fix C) refuses every path but a 
       await assert.rejects(U.removeRegistrationAfterWithdrawal(p, "b".repeat(40), "m"), /only a case's registration file/, p);
     }
     await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_a.json`, "not-a-sha", "m"), /blob sha/);
+    // unit R-L2: the commit that created the file is required too
+    await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_a.json`, "b".repeat(40), "m"), /the commit that created the file is required/);
     assert.equal(asked, 0, "nothing was asked of the store");
-    await U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_b.json`, "b".repeat(40), "m");
-    assert.equal(asked, 2, "control: a registration file a repair note names is removed (the note read, then the removal)");
+    // control: a registration file's path reaches the store (the note is read), and a note that is not the one kept
+    // for that file, signed (lib/_case_seal.js THE REPAIR NOTE), removes nothing
+    await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_b.json`, "b".repeat(40), "m", { createdInCommit: "c".repeat(40) }),
+      /no repair note names/);
+    assert.equal(asked, 1, "control: the note read, and no removal asked");
   } finally {
     global.fetch = original;
   }
