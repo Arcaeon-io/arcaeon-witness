@@ -434,14 +434,15 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     [body.tape_a_b64, body.tape_b_b64] = [body.tape_b_b64, body.tape_a_b64];
     return body;
   });
-  // since unit R-L4 (THE PROJECTION): a projection its file does not hold, or a projected file gone, is DAMAGED
-  plant("a projection that disagrees with its registration file", 409, "case_damaged", async () => {
+  // since unit R-L4 (THE PROJECTION): a projection its file does not hold, or a projected file gone, is never
+  // sealed (unit R-L4b: 503 case_record_inconsistent)
+  plant("a projection that disagrees with its registration file", 503, "case_record_inconsistent", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("inconsistent") } });
     const k = storedCase(id);
     gh.seed(PINS, C.casePath(id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
     return revealBody(id, a, b);
   });
-  plant("a registration file gone", 409, "case_damaged", async () => {
+  plant("a registration file gone", 503, "case_record_inconsistent", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("file gone") } });
     gh.repos.get(PINS).delete(REG.pathOf(gh, id, "b"));
     return revealBody(id, a, b);

@@ -268,13 +268,14 @@ test("A11, A12 (validateRegistrationRecord): a stored registration whose key_id 
   const otherSig = { ...file, sig: C.signRegistration(fieldsOf(id, a), REG.KEYS.b.signer) };
   assert.equal(C.validateRegistrationRecord(otherSig).field, "sig");
   // planted under the projection, either one is not the file the case root
-  // projects: the case is DAMAGED to the next registration (since unit R-L4)
+  // projects: the case record is inconsistent to the next registration
+  // (since unit R-L4; unit R-L4b: 503 case_record_inconsistent)
   for (const bad of [otherKeyId, otherSig]) {
     gh.seed(PINS, REG.pathOf(gh, id, "a"), bad);
     const b = party(id, "b", TOOL_TAPE);
     const res = await commit(id, b);
-    assert.equal(res.status, 409, JSON.stringify(res.body));
-    assert.deepEqual([res.body.error_code, res.body.reason], ["case_damaged", "registration_file_differs"]);
+    assert.equal(res.status, 503, JSON.stringify(res.body));
+    assert.deepEqual([res.body.error_code, res.body.reason], ["case_record_inconsistent", "registration_file_differs"]);
   }
 });
 

@@ -12,7 +12,8 @@
 // nothing more and answers 503; the same registration sent again finds the
 // file and projects it. Every reader takes registrations from the
 // projection alone and checks the file at the path against the sha256 it
-// carries: a mismatch or a missing file is DAMAGED. The setup below is
+// carries: a mismatch or a missing file is never sealed (since unit R-L4b,
+// 503 case_record_inconsistent). The setup below is
 // test/case_rl3.test.js's.
 "use strict";
 
@@ -383,23 +384,24 @@ test("R-L4: a registration written after its case's withdrawal is 409 case_withd
   assert.equal(rows, "", "a WITHDRAWN page shows no registration rows");
 });
 
-test("R-L4: a projected sha256 that the file at the path does not match, or a file missing under a projection, is DAMAGED: never sealed, never pinned, shown plainly", async () => {
-  const c = await committedCase("RL4 damaged");
+test("R-L4: a projected sha256 that the file at the path does not match, or a file missing under a projection, is never sealed and never pinned (since unit R-L4b: 503 case_record_inconsistent, the could-not-look page)", async () => {
+  const c = await committedCase("RL4 inconsistent");
   const rpath = REG.pathOf(gh, c.id, "a");
   gh._repoMap(PINS).get(rpath).content += " "; // the same JSON, other bytes
   const r = await reveal(c);
-  assert.deepEqual([r.status, r.body.error_code, r.body.role, r.body.reason], [409, "case_damaged", "a", "registration_file_differs"],
+  assert.deepEqual([r.status, r.body.error_code, r.body.role, r.body.reason], [503, "case_record_inconsistent", "a", "registration_file_differs"],
     JSON.stringify(r.body).slice(0, 300));
   assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed");
-  const html = (await casePage(c.id)).html;
-  assert.match(html, /Case: DAMAGED/);
-  assert.ok(html.includes(esc(`role a's registration file, ${rpath}, is not the file the case root projects (registration_file_differs)`)), html.slice(0, 2000));
+  const page = await casePage(c.id);
+  assert.equal(page.status, 503);
+  assert.match(page.html, /Case: COULD NOT LOOK/);
+  assert.ok(page.html.includes("<code>case_record_inconsistent</code>"), page.html.slice(0, 2000));
   const run = await sealerRun();
-  assert.deepEqual(run.damaged, [{ case_id: c.id, role: "a", reason: "registration_file_differs" }]);
-  const d = await committedCase("RL4 damaged missing");
+  assert.deepEqual(run.refused, [{ case_id: c.id, code: "case_record_inconsistent", role: "a", reason: "registration_file_differs" }]);
+  const d = await committedCase("RL4 inconsistent missing");
   gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
   const m = await reveal(d);
-  assert.deepEqual([m.status, m.body.error_code, m.body.role, m.body.reason], [409, "case_damaged", "b", "registration_file_missing"]);
+  assert.deepEqual([m.status, m.body.error_code, m.body.role, m.body.reason], [503, "case_record_inconsistent", "b", "registration_file_missing"]);
   assert.equal(storedCase(d.id).status, "COMMITTED");
 });
 
@@ -536,25 +538,21 @@ async function singlePartyByHand(scope) {
   return { id, a, b };
 }
 
-test("MUST-FAIL GAP (H03, S19, S18, S20): DAMAGED says what was read, by its reason: a file not the one projected, a file missing, a root entry its file does not hold", async () => {
-  const c = await committedCase("RL4 gap damaged words");
-  const apath = REG.pathOf(gh, c.id, "a");
-  gh._repoMap(PINS).get(apath).content += " ";
+test("MUST-FAIL GAP (H03, S19, S18, S20; since unit R-L4b, case_record_inconsistent): the refusal says which role and why: a file not the one projected, a file missing, a root entry its file does not hold", async () => {
+  const c = await committedCase("RL4 gap inconsistent words");
+  gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "a")).content += " ";
   const r = await reveal(c);
-  assert.ok(r.body.error.startsWith(`the case is DAMAGED: role a's registration file, ${apath}, is not the file the case root projects ` +
-    "(registration_file_differs). A damaged case is never sealed, and nothing here resolves it"), r.body.error);
-  const d = await committedCase("RL4 gap damaged missing words");
-  const bpath = REG.pathOf(gh, d.id, "b");
-  gh._repoMap(PINS).delete(bpath);
+  assert.ok(r.body.error.startsWith("role a's registration file does not match the hash this case records for it (registration_file_differs), " +
+    "and nothing is answered from this case until it does"), r.body.error);
+  const d = await committedCase("RL4 gap inconsistent missing words");
+  gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
   const m = await reveal(d);
-  assert.ok(m.body.error.includes(`role b's registration file, ${bpath}, is missing, and the case root projects it (registration_file_missing)`), m.body.error);
-  const e = await committedCase("RL4 gap damaged entry");
+  assert.deepEqual([m.body.role, m.body.reason], ["b", "registration_file_missing"]);
+  const e = await committedCase("RL4 gap inconsistent entry");
   const k = storedCase(e.id);
   gh.seed(PINS, C.casePath(e.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
   const x = await reveal(e);
-  assert.deepEqual([x.status, x.body.error_code, x.body.reason], [409, "case_damaged", "projection_differs_from_file"]);
-  assert.ok(x.body.error.includes(`the case root's entry for role b is not the registration its file, ${REG.pathOf(gh, e.id, "b")}, holds ` +
-    "(projection_differs_from_file)"), x.body.error);
+  assert.deepEqual([x.status, x.body.error_code, x.body.role, x.body.reason], [503, "case_record_inconsistent", "b", "projection_differs_from_file"]);
 });
 
 test("MUST-FAIL GAP (H09, H10): a replay of a projected registration is not refused by the other role's key; another registration for a projected role names the registered entry without the file's sha256", async () => {
@@ -694,12 +692,12 @@ test("MUST-FAIL GAP (H36, H45): the file at the path that could not be read writ
   assert.deepEqual([lost.status, lost.body.error_code, lost.body.registration_recorded], [503, "store_error", false], JSON.stringify(lost.body));
 });
 
-test("MUST-FAIL GAP (H55): a retried withdrawal whose root before the withdrawal projects a file no longer at its path is DAMAGED", async () => {
+test("MUST-FAIL GAP (H55): a retried withdrawal whose root before the withdrawal projects a file no longer at its path is 503 case_record_inconsistent (since unit R-L4b)", async () => {
   const c = await committedCase("RL4 gap retry damaged");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "b")).content += " ";
   const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([again.status, again.body.error_code], [409, "case_damaged"], JSON.stringify(again.body).slice(0, 200));
+  assert.deepEqual([again.status, again.body.error_code], [503, "case_record_inconsistent"], JSON.stringify(again.body).slice(0, 200));
 });
 
 test("MUST-FAIL GAP (S06, S07, S09): the root before the withdrawal is read within its bound, a read that fails says so, and a version that is not a case is not taken", async () => {
@@ -731,7 +729,7 @@ test("MUST-FAIL GAP (S21, S22, S24): the marker repair says a case it could not 
   assert.deepEqual(run.could_not_look, [{ case_id: c.id, reason: "registration_unreadable" }]);
 });
 
-test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file): the page reads each projected file once, says a file it could not read and is then not kept, shows an EXPIRED case no registrations, and keeps no DAMAGED page", async () => {
+test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file): the page reads each projected file once, says a file it could not read and is then not kept, shows an EXPIRED case no registrations, and keeps no page of an inconsistent record", async () => {
   const c = await committedCase("RL4 gap page reads");
   const apath = REG.pathOf(gh, c.id, "a");
   const from = gh.getLog.length;
@@ -747,9 +745,10 @@ test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c
   assert.equal((await render(u.id)).html.includes(u.rpath), false);
   // EXPIRED, every role projected: no registrations panel
   assert.doesNotMatch((await render(c.id, Date.parse(DEADLINE) + 1000)).html, /<h2>Registrations<\/h2>/);
-  // DAMAGED is never kept
+  // an inconsistent record's page is never kept (unit R-L4b: 503)
   gh._repoMap(PINS).get(apath).content += " ";
-  assert.equal((await render(c.id)).definite, false);
+  const inconsistent = await render(c.id);
+  assert.deepEqual([inconsistent.status, inconsistent.definite], [503, undefined]);
 });
 
 test("MUST-FAIL GAP (C02): a case root whose projection's sha256 is not 64 hex is not a valid case record", async () => {

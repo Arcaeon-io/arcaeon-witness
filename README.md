@@ -875,8 +875,13 @@ project has no standing, and the case page neither lists nor links it: for
 a role the root does not project, the page says only that no registration
 is confirmed for that role. Every reader takes a case's registrations from
 the root's projection and checks the file at each projected path against
-the sha256 projected; a file missing or not the one projected makes the
-case DAMAGED, which is shown as that, never sealed and never pinned.
+the sha256 projected. A projected entry whose file is missing or does not
+hash to the projected sha256 is answered 503 `case_record_inconsistent` by
+every handler, and the case page shows the could-not-look page with that
+reason and the sentence: "A registration file does not match the hash this
+case records for it; this page shows nothing from this case until it does."
+The case cannot seal and is never pinned; nothing is written, nothing is
+deleted.
 
 Files under removals/ that a preview pins repository may hold are ignored:
 no code reads or writes them.

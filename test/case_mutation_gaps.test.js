@@ -290,13 +290,13 @@ async function withCasePutRace(plant, fn) {
   }
 }
 
-test("H36 (since unit R-L4, the projection): a projected registration file that is present and not the file projected is DAMAGED, never read as absent", async () => {
+test("H36 (since unit R-L4, the projection; unit R-L4b): a projected registration file that is present and not the file projected is 503 case_record_inconsistent, never read as absent", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
   gh.seed(PINS, REG.pathOf(gh, ID, "a"), { kind: "not-a-registration" });
   const res = await commit("b", commitmentFor("b", "tape b"));
-  assert.equal(res._status, 409, JSON.stringify(res._body));
-  assert.deepEqual([res._body.error_code, res._body.reason], ["case_damaged", "registration_file_differs"]);
+  assert.equal(res._status, 503, JSON.stringify(res._body));
+  assert.deepEqual([res._body.error_code, res._body.reason], ["case_record_inconsistent", "registration_file_differs"]);
   assert.equal(res._body.role, "a");
   assert.equal(gh.has(PINS, REG.pathOf(gh, ID, "b")), false, "nothing registered");
 });

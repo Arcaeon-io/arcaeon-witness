@@ -354,17 +354,18 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
 
   // 2. the registrations (since unit R-L4 the case root's projection, its
   // files checked against it: a file not read is could_not_look; one not
-  // the file projected, or missing, is DAMAGED), 3. the proof, 4. the
+  // the file projected, or missing, is 503 case_record_inconsistent since
+  // unit R-L4b), 3. the proof, 4. the
   // signer and the record
   const r1 = await committedCase("RN4 sweep reg read");
   gh.forceGetFailure(PINS, REG.pathOf(gh, r1.id, "a"), 1, 503);
   await drive("registration read", "tail", 503, "could_not_look", () => withdraw(r1.id, r1.b));
   const r2 = await committedCase("RN4 sweep reg junk");
   gh.seed(PINS, REG.pathOf(gh, r2.id, "b"), { not: "a registration" });
-  await drive("registration junk", "tail", 409, "case_damaged", () => withdraw(r2.id, r2.b));
+  await drive("registration junk", "tail", 503, "case_record_inconsistent", () => withdraw(r2.id, r2.b));
   const r3 = await committedCase("RN4 sweep reg missing");
   gh.repos.get(PINS).delete(REG.pathOf(gh, r3.id, "a"));
-  await drive("registration missing", "tail", 409, "case_damaged", () => withdraw(r3.id, r3.b));
+  await drive("registration missing", "tail", 503, "case_record_inconsistent", () => withdraw(r3.id, r3.b));
   const p1 = await committedCase("RN4 sweep proof");
   await drive("proof", "tail", 403, "withdraw_unauthorized", () => withdraw(p1.id, p1.b, { salt: C.newSalt() }));
   const s1 = await committedCase("RN4 sweep signer");

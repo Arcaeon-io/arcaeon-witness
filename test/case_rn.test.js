@@ -782,7 +782,7 @@ test("MUST-FAIL GAP (H04): the lease is released at the lease clock's time", asy
 });
 
 
-test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdrawal cannot be read is 503 naming it; a registration file that is not the one that root projected is DAMAGED, and no receipt is issued; a deployment whose document is not confirmed issues no receipt", async () => {
+test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdrawal cannot be read is 503 naming it; a registration file that is not the one that root projected is 503 case_record_inconsistent (since unit R-L4b), and no receipt is issued; a deployment whose document is not confirmed issues no receipt", async () => {
   const c = await committedCase("RN gap refusal reads");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   S._internal.clearCommitFiles();
@@ -796,14 +796,14 @@ test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdr
   await H.handleCaseReveal(req("case-reveal", ownOpening(c, "a")), res, { now: REVEAL_AT, env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: "9".repeat(40) }, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [503, "document_unavailable"], JSON.stringify(parsed(res)).slice(0, 200));
   assert.equal(has(parsed(res), "refusal_receipt"), false);
-  // a registration file changed after the root projected it (since unit R-L4: DAMAGED)
+  // a registration file changed after the root projected it (since unit R-L4b: 503 case_record_inconsistent)
   const d = await committedCase("RN gap bad registration");
   const reg = gh.read(PINS, REG.pathOf(gh, d.id, "a"));
   gh.seed(PINS, REG.pathOf(gh, d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
   const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
   const r = await reveal(d, { body: ownOpening(d, "a") });
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "case_damaged", "registration_file_differs"], JSON.stringify(r.body).slice(0, 200));
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "case_record_inconsistent", "registration_file_differs"], JSON.stringify(r.body).slice(0, 200));
   assert.equal(has(r.body, "refusal_receipt"), false);
 });
 
