@@ -1,5 +1,42 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-L3: a registration file under a verified repair note never stands, sending it again writes it fresh, and the anchor's last early returns are misses (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The blocker.** R-L2's own rule let the sealer delete a registration the service had answered 200 for. The registration was written, the read after the write failed, a repair note (`registration_unconfirmed`) was written, and the removal failed; the 503 said to send the registration again. The re-send took the file still at the path as the registration and answered 200 `existing: true`. The sealer's next run then completed the recorded removal, and the case carried a commitment whose file was gone.
+- **THE CONDEMNED FILE.** A registration file for which a current-form repair note stands and verifies, naming that exact file (its path, its blob and the commit that created it), never stands as a registration, for any reader or any handler.
+  - One helper decides it, `registrationsStanding` in `lib/_case_seal.js` (`standingOfCase` reads the files first). Every reader calls it: `readRegistrations` in `lib/_case_http.js` (the commit path and its projection, the reveal, the withdrawal and the reference), the sealer's sealable index and the case page.
+  - A note that definitely does not verify condemns nothing. A note that could not be listed, read or checked now, or a file whose creating commit could not be read, is could-not-look: 503 `could_not_look`, naming the role and the reason, and nothing changes.
+- **Rule 1, the replay.** A registration sent again while a condemned file is at its role's path completes the recorded removal under the case lock (the note stands, so no second note is written), after reading the case again under the lock. It then registers afresh as a new write, with a new creating commit and every check, the deadline included. The answer is 200 with `existing: false` and `earlier_removed: true`.
+  - A removal that cannot be completed is 503 `removal_incomplete`, and nothing changes.
+  - Past the deadline the fresh registration is 409 `late_commitment`: "the earlier registration was removed under a repair note and the deadline has passed; no commitment can be registered to it now".
+- **Rule 2, every reader.** A condemned file reads as absent. A case is not COMMITTED and cannot reveal while either role's only file is condemned. The reveal answers 409 `not_committed`, naming the role and the note. The other role's registration does not project the file. The case page shows a case its object calls COMMITTED as OPEN and says why in the role's row. The sealer counts the case in `not_standing`, not among its candidates, and a case whose notes could not be checked is in `pending` with its reason.
+- **Rule 3.** The 503 after a failed read-after-write, once a note is written, says: "The registration was written and could not be confirmed, so a removal of it was recorded. Send the same registration again; it will be written fresh."
+- **Rule 4, completion under the lock.** `completeRemovals` takes the case lock for each case it acts on, reads the case and the files again under it, and removes nothing if the case reads sealed or the file is no longer the noted one. A busy lock is reported as `case_busy`. The sealer passes its run's clock as the lock's lease clock.
+  - The reveal does not take the case lock. The race is closed by rule 2: the reveal treats a condemned file as absent, so it cannot seal with the file being removed.
+- **Rule 5.** The README's removals section states the rule in two sentences.
+- **Follow-ups.**
+  - (a) In `dailyAnchorOf`, the three remaining early returns are misses: a branch answer that is unknown, the record's commits unreadable, and the record at its commit unreadable. The records after them are read, so a proven conflict in a later record is still found and still refuses a row.
+  - (b) In the removals history walk, a 404 at a commit the path's own commit list names is a removal only right after a commit where the file was read. Any other such 404, or a walk that ends contradicting what is at the path now, is a history the host has not shown yet. The page says the history of that path could not be read, each note naming it says what is at its path could not be read, and the page is not kept.
+  - (c) An old-form note names its file by its bytes. It marks as recorded only the oldest removal of a file with those bytes, not every removal on its path.
+  - (d) A withdrawal whose write kept losing says "nothing was written to the case record", since the lock record was written.
+- **Tests.**
+  - New: `test/case_rl3.test.js`, 14 tests, plus one in `test/case_rj3.test.js` for (a). On b22b763 all 15 fail.
+  - Updated by design: `case_rl` (H13: the rule 3 words, and the file removed) and `case_rl2` (M2: the kept-changing words; H04-H07: the rule 3 words).
+- **The must-fail pass, and the gap-test commit** (89eaa37).
+  - 109 defects were planted, one at a time, over every line R-L3 changed in `lib/_case_seal.js`, `lib/_case_http.js` and `lib/_case_page.js`, with the whole suite run against each. The unit's own tests caught 61, and none timed out.
+  - The 48 that survived, by place:
+    - the sealer's index: could-not-look, a noted case with no condemned file, the counts, role b, the run's clock and the candidates (S02, S04-S06, S08, S09, S31);
+    - the helper: role b, its listing, the creating commit and its reason, the note's read, each field check, a note that does not verify, its `standing` answer, its reasons, and the reads it skips (S10, S11, S13-S15, S17-S22, S24, S25, S27, S29, S32, S33);
+    - the old-form match (C02, C03) and completion's default clock (L10);
+    - the handlers: role b, the could-not-look words, the projection's rebuild, the replay's lock and re-read, `earlier_removed`, the reveal's code and note, the withdrawal's and the reference's reads, and the no-note words (H04, H06, H07, H12, H13, H21, H22, H24, H27, H28, H30, H33);
+    - the page: its could-not-look rows, the note's link, the panel shown with only an unread history, the kept page, the not-sealed words, the title and role b (P01-P03, P05, P07, P14-P17).
+  - 16 gap tests in `test/case_rl3.test.js` catch 46 of them.
+  - Two are left as equivalent. S18 drops the note's version check and S19 its case check. A note at a file's note path in another version, or of another case, already fails the note's own form check, so it never verifies.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - f85663a (R-L3): 1571 tests, 1568 pass, 2 skipped, 0 fail, 1 todo.
+  - 89eaa37 (gap tests): 1587 tests, 1584 pass, 2 skipped, 0 fail, 1 todo. A bare `node --test`: 1594 and 1591.
+  - The change log commit changes no test, and the final tip prints what 89eaa37 prints.
+
 ## 2026-10-13: Unit R-L2: a repair note records a removal decided, the page says what it read, notes keyed on the file, and a row refused only on a proven anchor conflict (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **B1, a note records a removal decided.** A repair note is described everywhere as "a removal of this file was recorded for <reason>", never as a removal made.
