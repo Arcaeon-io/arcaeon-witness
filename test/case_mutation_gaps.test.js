@@ -440,7 +440,9 @@ async function sealedCase({ pinFails = false } = {}) {
   assert.equal(r.body.pin, pinFails ? "commit_unrecorded" : "pinned");
   return p;
 }
-async function page(id = ID, keyDocument = S.PUBLISHED_KEYS) {
+// unit R-I: the reader's current document lists both keys of the seal (a
+// key it does not list is signer_unlisted), as RECEIPT_DOC does
+async function page(id = ID, keyDocument = RECEIPT_DOC) {
   const res = makeRes();
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.93.0.1" } }), res, { now: REVEAL_AT + 3600000, keyDocument });
   return { status: res._status, html: String(res._body) };
@@ -482,7 +484,7 @@ test("S55 (referenceSeqs): a references listing that cannot be read is never rea
   const writes = gh.putLog.length;
   const res = makeRes();
   await withListingFailure(C.referencesDir(ID), () => H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV }));
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV, keyDocument: RECEIPT_DOC }));
   assert.equal(res._status, 503, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "store_unreachable");
   assert.equal(gh.putLog.length, writes, "nothing written");
@@ -525,7 +527,7 @@ test("P10 (crossRows): a reference row's operator is escaped on the page", async
   const p = await sealedCase();
   const res = makeRes();
   await H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV });
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV, keyDocument: RECEIPT_DOC });
   assert.equal(res._status, 201, JSON.stringify(res._body));
   const pg = await page();
   assert.ok(pg.html.includes("&lt;i&gt;op&lt;/i&gt;"), "escaped");
@@ -550,7 +552,7 @@ test("E01 (anchorCases): a case pass that throws is reported case_pass_threw, ne
 test("E03 (sealOnce): a batch pass that refuses does not stop the case pass: a pending case is pinned on the same run", async () => {
   await sealedCase({ pinFails: true });
   gh.seed(USAGE, pending.PENDING_PATH, { open: { batch_id: 1 } }); // no leaf array: the batch refuses
-  const r = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000) });
+  const r = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000), keyDocument: RECEIPT_DOC });
   assert.equal(r.refused, true);
   assert.equal(r.reason, "pending_document_corrupt");
   assert.ok(r.cases && r.cases.ok, JSON.stringify(r.cases));

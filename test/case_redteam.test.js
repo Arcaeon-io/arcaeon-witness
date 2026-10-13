@@ -377,6 +377,12 @@ test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or
   assert.equal((await S.sealedRecordReason(rec, docWith(entry(CASE_KEY, "retired"), KD.reconcileEntry(RECEIPT_KEY)))).code, "valid_under_document",
     "control: a retired key's seals stay trusted");
   const revoked = docWith(entry(CASE_KEY, "revoked"), KD.reconcileEntry(RECEIPT_KEY));
+  // unit R-I (I1): a revocation is ordered against the case's pin by commit:
+  // the document's revocation published on the branch, then the key's marker
+  // recorded in the pins repository, after this case was pinned
+  KD.serve(gh, revoked);
+  const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
+  assert.equal(marked.ok, true, JSON.stringify(marked));
   const page = await casePage(id, { keyDocument: revoked });
   const answer = await S.sealedRecordReason(rec, revoked);
   assert.deepEqual({ holds: S.sealHolds(answer), doesNotVerify: page.html.includes("SEALED RECORD DOES NOT VERIFY") },
@@ -384,7 +390,8 @@ test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or
     "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key");
   assert.equal(answer.code, "signer_since_revoked");
   assert.match(page.html, /<h2>The verdict<\/h2>/);
-  assert.match(page.html, /Revoked since this case was sealed/);
+  assert.match(page.html, /A key was revoked after this case was pinned/);
+  assert.ok(page.html.includes(`revoked in commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R, the marker's commit");
 });
 
 test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid"', async () => {
@@ -795,10 +802,17 @@ test("FIX B: a receipt signed by another key than the service's reconcile signer
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "receipt_unsigned");
   assert.deepEqual(referenceFiles(id), []);
-  // control (Design I): it is the document the case NAMES that decides. The
-  // same receipt in a seal naming a document that publishes that key holds.
+  // INVERTED (unit R-I, I3): a document the sealer named does not make a
+  // stranger's reconcile key valid. The same receipt in a seal naming a
+  // document that publishes that key is signer_unlisted: the CURRENT document
+  // must list it under role reconcile, and as a case key it does not count.
   const named = await wronglySignedCase("B wrong key, named", docWith(entry(CASE_KEY), KD.reconcileEntry(WRONG_RECEIPT_KEY)));
-  assert.equal((await S.sealedRecordReason(named.sealed, KEYS_DOC)).code, "valid_under_document");
+  assert.deepEqual(await S.sealedRecordReason(named.sealed, KEYS_DOC),
+    { code: "signer_unlisted", reason: "reconcile_key_not_listed", key_id: keyIdOf(WRONG_RECEIPT_KEY) });
+  assert.equal((await S.sealedRecordReason(named.sealed, docWith(entry(CASE_KEY), entry(WRONG_RECEIPT_KEY)))).code, "signer_unlisted",
+    "listed, but not under role reconcile");
+  // control: the current document lists it under role reconcile
+  assert.equal((await S.sealedRecordReason(named.sealed, docWith(entry(CASE_KEY), KD.reconcileEntry(WRONG_RECEIPT_KEY)))).code, "valid_under_document");
 });
 
 test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the case's named document publishes, never to its own environment; WITNESS_RECONCILE_VERIFIER is only the private-side pointer to which published entry is ours", async () => {

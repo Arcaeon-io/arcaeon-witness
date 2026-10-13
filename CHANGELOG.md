@@ -1,5 +1,49 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-I: the key document's trust root, revocation by commit order, and the sealer reading what it names (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Why.** A second-model review of Design I at 7041aa8 found:
+  - **B1:** revocation was decided on service-written dates, so a signer revoked before sealing could read as holding;
+  - **B2:** the reveal never read the document it names;
+  - **M1:** a key absent from the current document read valid, and any commit the raw host serves could be named;
+  - **minors:** the cache took any parseable document (m1); the could-not-look page always blamed the named document (m2); the "revoking commit" shown was the reader's own deployment (m3).
+- **I1, revocation by commit order** (`lib/_case_seal.js` THE TRUST ROOT).
+  - **Dates are display only.** `retrieved_at`, `since` and `revoked_since` are never compared; a key is active in the named document by its status.
+  - **Why a marker.** A pin is a pins-repository commit and the key document is a witness-repository file, and git orders commits only within one repository. So a key the current document lists as revoked is ordered by a **revocation marker** in the pins repository: `revocations/<fingerprint>.json`, `{kind: "key-revocation", v: 1, key_id, key_fingerprint, revoked_in_commit}`.
+  - **The marker is read as it names.** At its own commit R, with the key id and fingerprint held to the key, and the document at `revoked_in_commit` (on the published branch) listing the key revoked.
+  - **The answer.**
+    - The case's pin commit P strictly before R (`compare/<R>...<P>` behind) is `signer_since_revoked`: it holds, and the page banner says "revoked in commit R, after this case was pinned in commit P", both linked.
+    - Anything else is `signer_revoked`: P at or after R, no pin, no marker, a marker or an order that cannot be read. It does not hold: no verdict, no pin, 409 on reference.
+  - **A marker alone never revokes.** One whose key the current document does not list as revoked is ignored, and the sealer's run reports it as `marker_without_revocation`.
+- **The marker tool** (`tools/record_key_revocation.js`, new). It writes the marker create-only. It finds `revoked_in_commit` by walking the key document's commits on the branch, oldest first. It refuses an existing marker (`marker_exists`) and a key not listed as revoked (`not_revoked`), and with no `--write` it is a dry run.
+- **I2, the sealer reads what it names** (`lib/_case_http.js` step 5b2, `confirmSealingDocument`). Before anything is written, the reveal reads the document at its own commit and compares it with the bundle. A commit off the published branch, an unreadable document, or a different one is 503 `document_unavailable`, and no attempt is written.
+- **I3, the current document lists both keys.** A signer absent from the current document, in its role and with the same verifier, is `signer_unlisted`: no verdict, no pin, 409 on reference.
+- **Ancestry** (`commitOnBranch(commit, {repo, branch})`, exported for Design J's commits). A named document commit must be on `KEY_DOCUMENT_BRANCH` (default `main`): one compare read, identical or behind, kept once on. Anything else is `document_unavailable`.
+- **I5.**
+  - A fetched document is cached only after its hash matches.
+  - `document_unavailable` names `document: "named" | "current"`, and the page heading and the dry-run line say which.
+  - `current_commit` is gone: the revoking commit shown is R.
+- **I4.**
+  - The key document's notes now state the rules (revoked: cases pinned before the revoking commit keep their verdict under a banner, cases pinned at or after it do not verify; the reconcile key is listed here with role reconcile; the marker; the "never provisioned" sentence deleted). Its shape is unchanged.
+  - `checkKeyDocument` refuses one public key listed twice across roles (`duplicate_public_key`).
+  - `loadCaseSigner` refuses a case key the document lists as a reconcile key (`case_key_is_other_key`).
+- **Smaller changes.**
+  - `lib/_store.js`: `compareCommits`, and `listCommits` paging.
+  - The preview dry run reads 503 `document_unavailable` (bundled_document_differs, commit_not_on_branch) as BROKEN.
+- **Tests.**
+  - **New:** `test/case_trust_root.test.js`, 18 tests, each run first against the unchanged code and failing there.
+  - **Inverted, as the brief asked:** `case_signed_under` "the current document does not decide", and the red-team FIX B control (a document the sealer named does not make a stranger's reconcile key valid).
+  - **Rewritten to commit order:**
+    - the since-revoked tests (answer, page, verdict word, S32);
+    - the date-based named-document test, now by status;
+    - red-team §1.4, now with a marker;
+    - `case_commits` every-commit-is-a-link.
+  - **Fixtures adapted:**
+    - readers that read under a document without the test keys now hand it one that lists them (`case_mutation_gaps`, `case_item2c`, `case_item2d`);
+    - four tests that read after the reveal's cached read now clear the cache first;
+    - the dry run's unreadable-document case now refuses at the reveal.
+- Suite 1151 -> 1169 tests, 0 fail, 3 todo. Here: 1164 pass and the 2 environment skips.
+
 ## 2026-10-12: The must-fail pass over this unit (fixes C, D, E, Design N, the one signature rule), the tests that close its gaps, and two defects it found (branch `case-protocol-2026-10-10`, local only, NOT deployed, nothing published)
 
 - **The pass.** 148 defects were planted one at a time in the code this unit added or changed: `lib/_case_http.js`, `lib/_case.js`, `lib/_case_seal.js`, `lib/_case_page.js`, `lib/_case_unregister.js` and `tools/preview_dry_run.js`. The whole suite ran against each one. The unit's own tests caught 99. 21 new tests in `test/case_consent.test.js` close the 49 that survived, except E15, which is equivalent: the receipt check reads only the case's `policy_version`, which the case with and without its attempt share.

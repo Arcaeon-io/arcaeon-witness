@@ -732,18 +732,25 @@ test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded
   };
   // the row shows under the document that lists its key active; the banner under one that revokes it since
   const page = await render(DOC, {});
+  // unit R-I: a revocation counts by commit order: the document's
+  // revocation on the branch (W), then the key's marker in the pins
+  // repository (R), after this case was pinned
   const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
+  const W = KD.serve(gh, revoked);
+  const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
+  assert.equal(marked.ok, true, JSON.stringify(marked));
   const banner = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: current });
   assert.match(page, /anchored: a daily anchor record holds its pin/, "fixture: anchored");
   assert.match(rowLine(page, 1), /written at commit/, "fixture: the row, recorded");
-  assert.match(banner, /Revoked since this case was sealed/, "fixture: the banner");
+  assert.match(banner, /A key was revoked after this case was pinned/, "fixture: the banner");
   const one = commitsOnPage(page);
   const two = commitsOnPage(banner);
   assert.deepEqual([...one.bare, ...two.bare], [], "no commit is bare text");
   const linked = [...one.linked, ...two.linked];
   const want = [
     [S.KEY_DOCUMENT_REPO, k.signed_under.document_commit, "the key document the case names"],
-    [S.KEY_DOCUMENT_REPO, current, "the revoking document"],
+    [S.KEY_DOCUMENT_REPO, W, "the document's commit that lists the key revoked"],
+    [PINS, marked.commit, "the revoking commit, the marker's"],
     [STAMPS, k.commitments.a.stamp_commit, "role a's stamp"],
     [STAMPS, k.commitments.b.stamp_commit, "role b's stamp"],
     [PINS, sealCommit(c.id), "the case file"],

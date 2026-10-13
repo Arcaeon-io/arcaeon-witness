@@ -601,6 +601,8 @@ async function sealedAnswer(ctx, id, json) {
   if (rs !== ctx.receiptVerifier) return broken(`its receipt is signed by ${rs || "no key"}, not the reconcile key ${receipts.VERIFIER_ENV} names`);
   const answer = await S.sealedRecordReason(k, ctx.keyDocument);
   if (answer.code === "document_unavailable") {
+    // unit R-I (I5): which document could not be read
+    if (answer.document === "current") return couldNotLook(`the current key document this checkout carries could not be read (${answer.reason})`);
     return couldNotLook(`the key document it names (commit ${answer.document_commit}) could not be read from the public repository (${answer.reason})`);
   }
   if (answer.code !== "valid_under_document") {
@@ -652,6 +654,15 @@ async function checkChunkedReveal(ctx) {
   // The one signature rule (lib/_case_seal.js): a preview without a case key
   // its document lists seals nothing and says so. That is the deployment's
   // configuration, not an answer it could not give: BROKEN.
+  // Unit R-I (I2): a preview whose bundled key document is not the one at
+  // the commit it names, or whose commit is not on its published branch
+  // (KEY_DOCUMENT_BRANCH), seals nothing and says so. Its configuration, not
+  // a read that failed: BROKEN. A document it could not read stays COULD NOT LOOK.
+  if (ans.status === 503 && json && json.error_code === "document_unavailable" &&
+    (json.reason === "bundled_document_differs" || json.reason === "commit_not_on_branch")) {
+    return broken(`case-reveal with ${sent} answered HTTP 503 document_unavailable (${json.reason}): the preview's key document is not the ` +
+      "one at the commit it names on its published branch, so the preview seals nothing");
+  }
   if (ans.status === 503 && json && json.error_code === "case_signer_unavailable") {
     return broken(`case-reveal with ${sent} answered HTTP 503 case_signer_unavailable (${json.reason}): the published case signer is not ` +
       "installed, so the preview seals nothing");

@@ -244,9 +244,13 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   // current document (anchorCase's keyDocument) only adds a revocation
   // since, and one that does not read cannot say: could not look.
   gh.seed(PINS, C.casePath(id), good);
+  // Since unit R-I the current document must list both keys in their roles
+  // (else signer_unlisted), and a key it marks revoked holds only for a case
+  // pinned before the revocation's marker (this case has no pin: signer_revoked).
   for (const [name, doc, code] of [
-    ["the committed document (no test key), current", undefined, "valid_under_document"],
-    ["revoked since, current", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_since_revoked"],
+    ["the committed document (no test key), current", undefined, "signer_unlisted"],
+    ["the test keys listed, current", KEYS_DOC, "valid_under_document"],
+    ["revoked, current, the case not pinned", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_revoked"],
     ["unreadable, current", { ...KEYS_DOC, extra: true }, "document_unavailable"],
   ]) {
     assert.equal((await S.sealedRecordReason(good, doc)).code, code, name);
@@ -258,8 +262,9 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   // forged case, so only the signature check stood between it and a pin.
   assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null);
   // control: the case as sealed anchors, under a retired key too (a
-  // retired key's cases stay trusted: the document's status_meaning)
-  const retired = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] } });
+  // retired key's cases stay trusted: the document's status_meaning; since
+  // unit R-I the current document lists the reconcile key too)
+  const retired = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }, RECONCILE_ENTRY] } });
   assert.equal(retired.ok, true, JSON.stringify(retired));
   assert.equal(retired.pin, "pinned");
   assert.equal(retired.chain, S.caseChain(good));
@@ -301,9 +306,11 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   // With no keyDocument at all, the default is the committed document, which
   // lists the production case key and not this test's, and (Design I) no
   // reconcile key yet: a deployment carrying it seals nothing. With no
-  // commit it cannot name its document (document_unavailable); with one, its
-  // reconcile key is unpublished (signer_unavailable). Nothing is compared.
+  // commit it cannot name its document (document_unavailable); with one that
+  // serves it on the published branch (unit R-I: the reveal reads it there),
+  // its reconcile key is unpublished (signer_unavailable). Nothing is compared.
   const plain = await committedCase({ over: { scope_digest: sha("default document") } });
+  KD.serve(gh, S.PUBLISHED_KEYS, "c".repeat(40));
   for (const [env, code] of [[SIGNED, "document_unavailable"], [{ ...SIGNED, [S.DEPLOY_COMMIT_ENV]: "c".repeat(40) }, "signer_unavailable"]]) {
     const res = makeRes();
     await H.handleCaseReveal(req("case-reveal", revealBody(plain.id, plain.a, plain.b)), res, { now: REVEAL_AT, env });
@@ -1021,18 +1028,17 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pv, /the signature verified under the key document this case names/);
   // the same case through the real dispatch (the committed key document as
   // the CURRENT one, which does not list the test key, and the service
-  // clock): since Design I the case is held to the document it NAMES, read
-  // at its commit, so the current document does not decide, and the page
-  // shows its verdict (until 2d to Design I it showed DOES NOT VERIFY here)
+  // clock): since unit R-I (I3) a key the current document does not list in
+  // its role is signer_unlisted, so the page shows no verdict (Design I to
+  // unit R-I showed its verdict here: the current document did not decide)
   const res = makeRes();
   await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: s.id }, headers: { "x-forwarded-for": freshIp() } }), res);
   assert.equal(res._status, 200);
   const pd = String(res._body);
-  assert.match(pd, /<h1>Case: VERDICT<\/h1>/);
-  assert.match(pd, /<span class="word pass">MATCHED<\/span>/);
-  assert.ok(!pd.includes("SEALED RECORD DOES NOT VERIFY"));
+  assert.match(pd, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(pd.includes("<code>signer_unlisted</code>"));
+  assert.ok(!/<span class="word pass">MATCHED<\/span>/.test(pd));
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
-  assert.ok(pd.includes(`/blob/${named.document_commit}/${S.CASE_KEYS_FILE}"`), "the key document it names, cited");
   // an unsigned seal, through the real dispatch: since the one signature rule
   // it does not verify, and no verdict is shown
   const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") } });

@@ -420,8 +420,12 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   process.env[H.OPERATOR_KEY_ENV] = OPERATOR_KEY;
   // a signed seal, held to the document it names (the dispatch carries the
   // committed document as the current one; since the one signature rule an
-  // unsigned seal would not verify)
+  // unsigned seal would not verify). Since unit R-I the current document must
+  // list both keys (else signer_unlisted), and the committed one lists no
+  // test key: the check is handed this test's document as the current one.
   const un = await sealedCase({ over: { scope_digest: sha("fix 3 dispatch") } });
+  const realCheck = S.sealedRecordReason;
+  t.mock.method(S, "sealedRecordReason", (rec) => realCheck(rec, KEYS_DOC));
   const res = makeRes();
   await verifyHandler(req("case-reference", { case_id: un.id, cross_reference: XREF }, { authorization: `Bearer ${OPERATOR_KEY}` }), res);
   assert.equal(res._status, 201, JSON.stringify(parsed(res)));

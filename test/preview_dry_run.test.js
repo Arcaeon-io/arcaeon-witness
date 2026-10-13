@@ -513,12 +513,14 @@ test("(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to th
   const right = await dryRun(t, { receiptVerifier: RECONCILE_KEY.verifier, pinToken: PIN_TOKEN });
   assert.equal(word(right, "e"), "VERIFIED", right.show);
   assert.equal(word(right, "f"), "VERIFIED", right.show);
-  // The named document cannot be read from the public repository: (e) could not look.
+  // The named document cannot be read from the public repository: since
+  // unit R-I (I2) the preview's own reveal reads it before it seals, so the
+  // reveal answers 503 document_unavailable and (e) could not look.
   gh.raw.clear();
   S._internal.clearDocumentCache();
   const unread = await dryRun(t, { pinToken: PIN_TOKEN });
   assert.equal(word(unread, "e"), "COULD NOT LOOK", unread.show);
-  assert.match(unread.by.e.line, /the key document it names \(commit [0-9a-f]{40}\) could not be read from the public repository \(http_404\)/);
+  assert.match(unread.by.e.line, /HTTP 503 document_unavailable: the preview could not answer this request/);
 });
 
 test("T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it", async (t) => {
