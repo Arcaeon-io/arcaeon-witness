@@ -502,3 +502,170 @@ test("R-N2 m10: registration_recorded reports the file's real state on the proje
   assert.equal(r2.out.body.error_code, "role_already_committed");
   assert.equal(r2.out.body.registration_recorded, false, "this registration is not the one on file");
 });
+
+// =============================================================================
+// UNIT R-N2: the must-fail pass's gaps
+// =============================================================================
+
+test("MUST-FAIL GAP (B03, B05): a create-only write that errors is failed, even when it may have landed; a conflict whose read-back fails is failed, never existing", async () => {
+  const id = "c".repeat(64);
+  const mpath = C.withdrawnMarkerPath(id);
+  gh.forceConflict(PINS, mpath, 4);
+  gh.forceGetFailure(PINS, mpath, 5, 503);
+  assert.equal(await S.writeWithdrawnMarker(id, "2026-10-10T08:00:02Z"), "failed");
+  // a write that errors (not a conflict) after it landed, on another path
+  const id2 = "d".repeat(64);
+  const mpath2 = C.withdrawnMarkerPath(id2);
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if ((o && o.method) === "PUT" && String(url).includes(`/contents/${mpath2}`)) {
+      await viaMock(url, o);
+      return { ok: false, status: 502, json: async () => ({}), text: async () => "" };
+    }
+    return viaMock(url, o);
+  };
+  let landed;
+  try {
+    landed = await S.writeWithdrawnMarker(id2, "2026-10-10T08:00:02Z");
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(gh.has(PINS, mpath2), true, "fixture: it landed");
+  assert.equal(landed, "failed", "an error is a failure");
+});
+
+test("MUST-FAIL GAP (C03, C11): the loaders' codes: a reconcile key the document does not list, and a carried document that does not read", async () => {
+  assert.equal(S.loadReconcileSigner(KEYS, { keyDocument: KD.docWith(KD.entry(CASE_KEY)) }).code, "reconcile_key_unpublished");
+  assert.equal(S.sealingDocument({ [S.DEPLOY_COMMIT_ENV]: "a".repeat(40) }, { keyDocument: { not: "a key document" } }).code, "carried_document_unreadable");
+  assert.equal(S.sealingDocument({}, { keyDocument: DOC }).code, "deploy_commit_unknown");
+  assert.equal(S.sealingDocument({ [S.DEPLOY_COMMIT_ENV]: "x" }, { keyDocument: DOC }).code, "deploy_commit_malformed");
+  const c = await committedCase("RN2 gap unpublished reconcile");
+  const r = await reveal(c, { keyDocument: KD.docWith(KD.entry(CASE_KEY)) });
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "signer_unavailable", "reconcile_key_unpublished"]);
+});
+
+test("MUST-FAIL GAP (M08): a withdrawn case with one registration file and its marker is reported once by a run, marker present", async () => {
+  const id = await openCase("RN2 gap one registration, marked");
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  assert.equal((await withdraw(id, a)).status, 201);
+  const run = await sealerRun();
+  const entries = run.withdrawn_repaired.filter((e) => e.case_id === id);
+  assert.equal(entries.length, 1, JSON.stringify(entries));
+  assert.equal(entries[0].marker, "present");
+});
+
+test("MUST-FAIL GAP (L07, L08): the marker tool's walk goes on after a full page with no next page named, to the page after it", async (t) => {
+  const revokedAt = (note) => KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11", note }), KD.reconcileEntry(RECEIPT_KEY));
+  const first = KD.serve(gh, revokedAt("revoked, 0"));
+  for (let i = 1; i <= 100; i += 1) KD.serve(gh, revokedAt(`revoked, ${i}`));
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const r = await viaMock(url, o);
+    return String(url).includes("/commits?") ? { ...r, headers: { get: () => null } } : r;
+  };
+  t.after(() => { global.fetch = viaMock; });
+  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revokedAt("revoked, 100") });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(out.marker.revoked_in_commit, first);
+});
+
+test("MUST-FAIL GAP (R02, R04): a receipt whose commit the repository does not show, or whose document cannot be fetched, is could-not-look, never definitely off the branch", async () => {
+  const c = await committedCase("RN2 gap could not look");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const rr = (await reveal(c, { body: ownOpening(c, "a") })).body.refusal_receipt;
+  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: "6".repeat(40) } }, DOC)).reason, "document_unavailable");
+  S._internal.clearDocumentCache();
+  gh.forceRawFailure(1, 503, rr.signed_under.document_commit);
+  assert.equal((await S.verifyRefusalReceipt(rr, DOC)).reason, "document_unavailable");
+});
+
+test("MUST-FAIL GAP (R10, R11, R13, R15): the offline checker holds the receipt to its form, an ACTIVE RECONCILE key, and says what it did not check", async () => {
+  const offline = require("../tools/check_refusal_receipt.js").offline;
+  const at = C.utcSeconds(REVEAL_AT);
+  const fields = { caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64) };
+  const good = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(offline(good, DOC), { ok: true, not_checked: ["the document's commit is on the published branch", "the key is still listed, not revoked, in the current key document"] });
+  assert.deepEqual(offline({ ...good, v: 2 }, DOC), { ok: false, reason: "malformed_field" });
+  const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(offline(byCase, DOC), { ok: false, reason: "signer_unpublished" });
+  const retired = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }));
+  const underRetired = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, retired, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(offline(underRetired, retired), { ok: false, reason: "signer_not_active" });
+});
+
+// The commit's projection, with `then` run as its first case-file PUT goes out.
+async function projectionWith(scope, then) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  plantStamp(b.commitment_sha256);
+  const rpath = C.registrationPath(id, "b");
+  let puts = 0;
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(id)}`) && ++puts === 1,
+    () => then({ id, a, b, rpath }),
+    () => commit(id, b, NOW + 1000),
+  );
+  return r.out;
+}
+
+test("MUST-FAIL GAP (T01, T03, T07): registration_recorded on the projection path: another key's file is not this registration, a read-back that fails is null, and a projection that fails reads the file too", async () => {
+  const other = await projectionWith("RN2 gap other key", async ({ id, a, b, rpath }) => {
+    await withdraw(id, a, { now: NOW + 1500 });
+    const body = C.validateRegistrationBody(REG.signedBody({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256 }, REG.KEYS.a));
+    gh.seed(PINS, rpath, { ...gh.read(PINS, rpath), key_id: body.key_id, verifier: body.verifier, sig: body.sig });
+  });
+  assert.deepEqual([other.body.error_code, other.body.registration_recorded], ["case_withdrawn", false]);
+  const unread = await projectionWith("RN2 gap read-back fails", async ({ id, a, rpath }) => {
+    await withdraw(id, a, { now: NOW + 1500 });
+    gh.forceGetFailure(PINS, rpath, 1, 503);
+  });
+  assert.deepEqual([unread.body.error_code, unread.body.registration_recorded], ["case_withdrawn", null]);
+  const failed = await projectionWith("RN2 gap projection fails", async ({ id, rpath }) => {
+    gh.repos.get(PINS).delete(rpath);
+    gh.forceFailure(PINS, C.casePath(id), 1, 502);
+  });
+  assert.deepEqual([failed.status, failed.body.error_code, failed.body.registration_recorded], [503, "case_update_failed", false]);
+});
+
+test("MUST-FAIL GAP (T05): on the abandoned branch, a read-back that fails leaves registration_recorded unknown (null)", async () => {
+  const id = await openCase("RN2 gap abandoned unread");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const rpath = C.registrationPath(id, "a");
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+    async () => {
+      gh.forceConflict(PINS, rpath, 1);
+      gh.forceGetFailure(PINS, rpath, 2, 503);
+    },
+    () => commit(id, a),
+  );
+  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.registration_recorded], [503, "store_error", null], JSON.stringify(r.out.body));
+});
+
+test("MUST-FAIL GAP (B01): a create-only write abandoned because another writer created the path meanwhile reads that file back: existing, never written", async () => {
+  const id = "e".repeat(64);
+  const mpath = C.withdrawnMarkerPath(id);
+  const viaMock = global.fetch;
+  let fired = false;
+  global.fetch = async (url, o) => {
+    if (!fired && (o && o.method) === "PUT" && String(url).includes(`/contents/${mpath}`)) {
+      fired = true;
+      gh.seed(PINS, mpath, { kind: "case-withdrawn-marker", v: 1, case_id: id, withdrawn_at: "2026-10-10T08:00:01Z" });
+      gh.forceConflict(PINS, mpath, 1);
+    }
+    return viaMock(url, o);
+  };
+  let got;
+  try {
+    got = await S.writeWithdrawnMarker(id, "2026-10-10T08:00:02Z");
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(fired, true);
+  assert.equal(got, "existing");
+  assert.equal(gh.read(PINS, mpath).withdrawn_at, "2026-10-10T08:00:01Z", "theirs, never written over");
+});
