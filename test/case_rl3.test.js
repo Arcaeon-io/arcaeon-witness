@@ -300,11 +300,13 @@ const NOTE_FIELDS = ["kind", "v", "case_id", "removed_path", "removed_blob_sha",
 
 // A case whose registration of role a could not be confirmed after its
 // write (the case read failed): the commit path records a removal of that
-// file (registration_unconfirmed). `deleteFails`: the removal itself refused.
-async function unconfirmed(scope, { deleteFails = false, id = null, a = null, now = NOW } = {}) {
+// file (registration_unconfirmed). `deleteFails`: the removal itself refused;
+// `stamp: false`: the stamp planted before is read again (a stamp planted
+// again is another commit, and the registration names its commit).
+async function unconfirmed(scope, { deleteFails = false, id = null, a = null, now = NOW, stamp = true } = {}) {
   id = id || (await openCase(scope));
   a = a || party(id, "a", AGENT_TAPE);
-  plantStamp(a.commitment_sha256);
+  if (stamp) plantStamp(a.commitment_sha256);
   const rpath = C.registrationPath(id, "a");
   const viaMock = global.fetch;
   if (deleteFails) {
@@ -358,12 +360,14 @@ async function condemnedA(scope) {
   await register(u.id, b);
   return { ...u, b };
 }
-// The race THE RULE closes: a case object that projected role a's file
-// before its note stood (another role's projection read it first).
+// The race THE RULE closes: a case object that projected the condemned
+// file (role a's, or `c.role`'s) before its note stood (another role's
+// projection read it first).
 function projectedAnyway(c) {
   const k = storedCase(c.id);
   const reg = gh.read(PINS, c.rpath);
-  gh.seed(PINS, C.casePath(c.id), { ...k, status: "COMMITTED", commitments: { ...k.commitments, a: C.commitmentEntry(reg) } }, { keepHistory: true });
+  gh.seed(PINS, C.casePath(c.id), { ...k, status: "COMMITTED", commitments: { ...k.commitments, [c.role || "a"]: C.commitmentEntry(reg) } },
+    { keepHistory: true });
   assert.equal(C.validateCase(storedCase(c.id)).ok, true, "fixture: a valid COMMITTED case");
 }
 const revealOf = (c, now = REVEAL_AT) => reveal({ id: c.id, a: c.a, b: c.b }, { now });
@@ -571,4 +575,324 @@ test("R-L3 (d): a withdrawal whose write kept losing says nothing was written to
   const w = await withdraw(c.id, c.b);
   assert.deepEqual([w.status, w.body.reason, w.body.error], [503, "case_kept_changing",
     "the case kept changing while this request tried to write; nothing was written to the case record. Send it again."], JSON.stringify(w.body));
+});
+
+// =============================================================================
+// MUST-FAIL GAP TESTS: what the must-fail pass over the lines R-L3 changed
+// found no test for
+// =============================================================================
+
+// Role b's registration could not be confirmed after its write, with role a
+// registered before it, and the removal refused: role b's file is condemned.
+async function unconfirmedB(scope) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(b.commitment_sha256);
+  const rpath = C.registrationPath(id, "b");
+  let r;
+  await withoutDeletes(async () => {
+    r = await during(
+      (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+      async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
+      () => commit(id, b, NOW),
+    );
+  });
+  assert.equal(r.out.body.error_code, "registration_unconfirmed", JSON.stringify(r.out.body));
+  return { id, a, b, rpath, role: "b", ...asWritten(rpath, id) };
+}
+// `fn` run with every removal refused (500).
+async function withoutDeletes(fn) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
+  try {
+    return await fn();
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+// The note at `notePath` made to fail its check for now: it names a key
+// document commit the repository does not show. -> the note as it was.
+function unverifiable(notePath) {
+  const note = gh.read(PINS, notePath);
+  gh.seed(PINS, notePath, { ...note, signed_under: { ...note.signed_under, document_commit: "5".repeat(40) } });
+  return note;
+}
+// THE RULE's could-not-look words at the commit path.
+const unreadWords = (role, reason) => `whether role ${role}'s registration file is under a repair note could not be read now (${reason}); this is ` +
+  "not a 'no', and nothing was registered";
+
+test("MUST-FAIL GAP (S02, S05, S06, S29, S31): the sealer's index: a case whose role a file is condemned is neither a candidate nor counted withdrawn; one whose note could not be checked, or whose file could not be read, is pending with its reason", async () => {
+  const c = await condemnedA("RL3 gap index");
+  projectedAnyway(c);
+  await withoutDeletes(async () => {
+    const run = await sealerRun();
+    assert.deepEqual([run.candidates, run.withdrawn_skipped, run.not_standing], [0, 0, [{ case_id: c.id, roles: ["a"] }]], JSON.stringify(run).slice(0, 400));
+    const note = unverifiable(c.notePath);
+    const unsure = await sealerRun(120000);
+    assert.deepEqual(unsure.pending.filter((p) => p.case_id === c.id), [{ case_id: c.id, reason: "document_unavailable" }], JSON.stringify(unsure.pending));
+    assert.deepEqual([unsure.candidates, unsure.not_standing], [0, []]);
+    gh.seed(PINS, c.notePath, note);
+    gh.forceGetFailure(PINS, c.rpath, 1, 503);
+    const unread = await sealerRun(180000);
+    assert.deepEqual(unread.pending.filter((p) => p.case_id === c.id), [{ case_id: c.id, reason: "registration_unreadable" }], JSON.stringify(unread.pending));
+    assert.deepEqual([unread.candidates, unread.not_standing], [0, []]);
+  });
+});
+
+test("MUST-FAIL GAP (S04): a case holding a note whose file was removed and registered afresh is a sealer candidate", async () => {
+  const u = await unconfirmed("RL3 gap fresh candidate", { deleteFails: true });
+  assert.equal((await commit(u.id, u.a, NOW + 1500)).status, 200);
+  await register(u.id, party(u.id, "b", TOOL_TAPE));
+  assert.equal(storedCase(u.id).status, "COMMITTED");
+  const run = await sealerRun();
+  assert.deepEqual([run.candidates, run.not_standing], [1, []], JSON.stringify(run).slice(0, 400));
+});
+
+test("MUST-FAIL GAP (S09, S10, H04, P17): a condemned file of role b is absent to the sealer's index, the reveal and the page", async () => {
+  const c = await unconfirmedB("RL3 gap role b");
+  projectedAnyway(c);
+  const run = await withoutDeletes(() => sealerRun());
+  assert.deepEqual(run.not_standing, [{ case_id: c.id, roles: ["b"] }]);
+  const r = await revealOf(c);
+  assert.deepEqual([r.status, r.body.error_code, r.body.role], [409, "not_committed", "b"], JSON.stringify(r.body).slice(0, 300));
+  const html = (await render(c.id, NOW + 5000)).html;
+  assert.ok(html.includes(`<title>Case ${c.id.slice(0, 12)}: OPEN</title>`), html.slice(0, 600));
+});
+
+test("MUST-FAIL GAP (S08, L10): completion's lease clock is the sealer run's own, and the real clock for a caller that names none", async () => {
+  const c = await condemnedA("RL3 gap clock");
+  const runAt = REVEAL_AT + 3600000 + 60000;
+  const heldUntil = (expires) => gh.seed(USAGE, H._internal.caseLockPath(c.id), { kind: "case-lock", v: 1, case_id: c.id, holder: "someone-else",
+    op: "commit", acquired_at: new Date(expires - 600000).toISOString(), expires_at: new Date(expires).toISOString(), state: "held" });
+  // held at the run's clock, long expired at the real one
+  heldUntil(runAt + 600000);
+  const run = await sealerRun();
+  assert.deepEqual(run.removals_completed.find((d) => d.case_id === c.id).unknown, [{ path: C.casePath(c.id), reason: "case_busy" }]);
+  assert.equal(gh.has(PINS, c.rpath), true);
+  // a caller naming no clock: a lock expired at the real clock is taken
+  heldUntil(Date.now() - 1000);
+  assert.deepEqual((await S.completeRemovals(c.id, { keyDocument: DOC })).completed, [c.rpath]);
+});
+
+test("MUST-FAIL GAP (S11, S13, S14, S17, S27, H06): a replay whose notes, note or file history could not be read, or whose note could not be checked, is 503 could_not_look naming the role and the reason, and changes nothing", async () => {
+  const u = await unconfirmed("RL3 gap replay unread", { deleteFails: true });
+  const replay = async () => {
+    const r = await commit(u.id, u.a, NOW + 1500);
+    return [r.status, r.body.error_code, r.body.reason, r.body.error];
+  };
+  gh.forceGetFailure(PINS, `removals/${u.id}`, 1, 503);
+  assert.deepEqual(await replay(), [503, "could_not_look", "repair_notes_unreadable", unreadWords("a or b", "repair_notes_unreadable")]);
+  gh.forceGetFailure(PINS, u.notePath, 1, 503);
+  assert.deepEqual(await replay(), [503, "could_not_look", "repair_note_unreadable", unreadWords("a", "repair_note_unreadable")]);
+  const note = unverifiable(u.notePath);
+  assert.deepEqual(await replay(), [503, "could_not_look", "document_unavailable", unreadWords("a", "document_unavailable")]);
+  gh.seed(PINS, u.notePath, note);
+  const list = gh._commitsOf(PINS);
+  for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === u.rpath) list.splice(i, 1);
+  assert.deepEqual(await replay(), [503, "could_not_look", "registration_commits_none", unreadWords("a", "registration_commits_none")]);
+  assert.equal(gh._repoMap(PINS).get(u.rpath).sha, u.blob, "nothing changed");
+  assert.equal(gh.deleteLog.length, 0);
+});
+
+test("MUST-FAIL GAP (S20, S21, S22, S24, S25): a note at the file's note path that names another path, blob or creating commit, or does not verify, condemns nothing: the file stands, and sending it again is the replay of a registration on file", async () => {
+  const u = await unconfirmed("RL3 gap other notes", { deleteFails: true });
+  const note = gh.read(PINS, u.notePath);
+  const at = C.utcSeconds(NOW + 9000);
+  const build = (over) => S.repairNote({ caseId: u.id, removedPath: u.rpath, removedBlobSha: u.blob, createdInCommit: u.created,
+    removedFileSha256: sha(u.text), reason: "registration_unconfirmed", withdrawalCommit: null, at, signedUnder: KD.signedUnder(gh, DOC, at), ...over },
+  S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  const file = await store.getRawFile(u.rpath);
+  const standing = () => S.registrationsStanding(u.id, { a: file, b: null }, { keyDocument: DOC });
+  const stands = { ok: true, standing: { a: file, b: null }, condemned: { a: null, b: null } };
+  // the control: the note as written condemns the file
+  assert.deepEqual(await standing(), { ok: true, standing: { a: null, b: null }, condemned: { a: { note_path: u.notePath, note, created: u.created }, b: null } });
+  for (const [what, over] of [["another path", { removedPath: C.registrationPath(u.id, "b") }], ["another blob", { removedBlobSha: "1".repeat(40) }],
+    ["another creating commit", { createdInCommit: "3".repeat(40) }]]) {
+    gh.seed(PINS, u.notePath, build(over));
+    assert.deepEqual(await standing(), stands, what);
+  }
+  gh.seed(PINS, u.notePath, { ...note, at: C.utcSeconds(NOW + 99000) }); // its signature no longer covers it
+  assert.deepEqual(await standing(), stands, "a note that does not verify");
+  const again = await commit(u.id, u.a, NOW + 1500);
+  assert.deepEqual([again.status, again.body.existing], [200, true], JSON.stringify(again.body).slice(0, 300));
+  assert.equal(gh._repoMap(PINS).get(u.rpath).sha, u.blob);
+});
+
+test("MUST-FAIL GAP (S15): a fresh file byte-identical to the removed one is another file: its creating commit is the newest at its path, so the removed file's note does not condemn it", async () => {
+  const u = await unconfirmed("RL3 gap same bytes", { deleteFails: true });
+  const again = await commit(u.id, u.a, NOW); // the same instant: the same bytes
+  assert.equal(again.status, 200, JSON.stringify(again.body).slice(0, 300));
+  const fresh = gh._repoMap(PINS).get(u.rpath);
+  assert.equal(fresh.content, u.text, "fixture: the same bytes");
+  fresh.sha = u.blob; // git names a blob by its bytes; the mock does not
+  await register(u.id, party(u.id, "b", TOOL_TAPE));
+  assert.deepEqual([storedCase(u.id).status, storedCase(u.id).commitments.a], ["COMMITTED", C.commitmentEntry(gh.read(PINS, u.rpath))]);
+});
+
+test("MUST-FAIL GAP (C02, C03): an old-form note names its file by its bytes: of two removals with the same bytes it marks the oldest, and it marks the removal whose bytes it names, not the first", async () => {
+  const oldForm = (u, text) => {
+    const at = C.utcSeconds(NOW + 3000);
+    gh.seed(PINS, S.repairNotePathV1(u.id, u.rpath), S.signRecord({ kind: "case-repair-note", v: 1, case_id: u.id, removed_path: u.rpath,
+      removed_blob_sha: u.blob, removed_file_sha256: sha(text), reason: "registration_unconfirmed", withdrawal_commit: null, at,
+      signed_under: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }), "This repair note is not signed"));
+  };
+  const u = await unconfirmed("RL3 gap old form same bytes");
+  const v = await unconfirmed(null, { id: u.id, a: u.a, stamp: false }); // the same instant and stamp: the same bytes
+  assert.equal(v.text, u.text, "fixture: the same bytes");
+  for (const p of [u.notePath, v.notePath]) gh._repoMap(PINS).delete(p);
+  oldForm(u, u.text);
+  const r = await S.caseRemovals(u.id, DOC, storedCase(u.id));
+  assert.deepEqual(r.removed.map((f) => [f.created_in_commit, f.outcome]), [[u.created, "recorded"], [v.created, "unrecorded"]]);
+  const x = await unconfirmed("RL3 gap old form second");
+  const y = await unconfirmed(null, { id: x.id, a: x.a, now: NOW + 1000 });
+  for (const p of [x.notePath, y.notePath]) gh._repoMap(PINS).delete(p);
+  oldForm(x, y.text);
+  const q = await S.caseRemovals(x.id, DOC, storedCase(x.id));
+  assert.deepEqual(q.removed.map((f) => [f.created_in_commit, f.outcome]), [[x.created, "unrecorded"], [y.created, "recorded"]]);
+});
+
+test("MUST-FAIL GAP (H07, H22): a projection that loses its write reads the files again under the same key document: a condemned file is still absent", async () => {
+  const u = await unconfirmed("RL3 gap rebuild", { deleteFails: true });
+  const b = party(u.id, "b", TOOL_TAPE);
+  plantStamp(b.commitment_sha256);
+  // the case file moves (another writer, the same bytes) after the read the
+  // projection builds on: its write loses, and it reads the files again
+  let lockPuts = 0;
+  const { out: r, fired } = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(u.id)}`) && (lockPuts += 1) === 2,
+    async () => gh.seed(PINS, C.casePath(u.id), storedCase(u.id), { keepHistory: true }),
+    () => commit(u.id, b),
+  );
+  assert.equal(fired, true);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual([storedCase(u.id).status, storedCase(u.id).commitments.a], ["OPEN", null]);
+});
+
+test("MUST-FAIL GAP (H12, H13, H21): the replay removes the condemned file holding the case lock, after reading the case again under it, and its answer says the earlier file was removed", async () => {
+  const u = await unconfirmed("RL3 gap replay lock", { deleteFails: true });
+  const r = await during(
+    (url, method) => method === "DELETE" && url.includes(`/repos/${PINS}/contents/${u.rpath}`),
+    async () => lockOf(u.id),
+    () => commit(u.id, u.a, NOW + 1500),
+  );
+  assert.equal(r.fired, true);
+  assert.deepEqual([r.inner && r.inner.state, r.inner && r.inner.op], ["held", "commit"], JSON.stringify(r.inner));
+  assert.deepEqual([r.out.status, r.out.body.earlier_removed], [200, true]);
+  // the case sealed between the first read and the lock: nothing is removed
+  const v = await unconfirmed("RL3 gap replay recheck", { deleteFails: true });
+  const k = storedCase(v.id);
+  const s = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(v.id)}`),
+    async () => gh.seed(PINS, C.casePath(v.id), { ...k, status: "VERDICT" }, { keepHistory: true }),
+    () => commit(v.id, v.a, NOW + 1500),
+  );
+  assert.equal(s.fired, true);
+  assert.deepEqual([s.out.status, s.out.body.error_code], [409, "case_not_open"], JSON.stringify(s.out.body).slice(0, 300));
+  assert.equal(gh._repoMap(PINS).get(v.rpath).sha, v.blob);
+});
+
+test("MUST-FAIL GAP (H24, H27, H28): the reveal names the note of a condemned file; a reveal or a withdrawal whose note could not be checked is 503 could_not_look", async () => {
+  const c = await condemnedA("RL3 gap reveal words");
+  projectedAnyway(c);
+  const r = await revealOf(c);
+  assert.deepEqual([r.status, r.body.role, r.body.repair_note], [409, "a", c.notePath], JSON.stringify(r.body).slice(0, 300));
+  unverifiable(c.notePath);
+  const u = await revealOf(c);
+  assert.deepEqual([u.status, u.body.error_code, u.body.reason], [503, "could_not_look", "document_unavailable"], JSON.stringify(u.body).slice(0, 300));
+  const w = await withdraw(c.id, c.b);
+  assert.deepEqual([w.status, w.body.error_code, w.body.reason], [503, "could_not_look", "document_unavailable"], JSON.stringify(w.body).slice(0, 300));
+});
+
+test("MUST-FAIL GAP (H30): a reference reads the files under the same key document: a sealed case whose role a file came under a verified note is not as its object shows, for either role", async () => {
+  const c = await sealedCase("RL3 gap reference");
+  const { note, notePath } = noteFor(c.id, C.registrationPath(c.id, "a"));
+  gh.seed(PINS, notePath, note);
+  for (const role of ["a", "b"]) {
+    const r = await reference(c, { role });
+    assert.deepEqual([r.status, r.body.error_code, r.body.role], [503, "case_record_inconsistent", "a"], JSON.stringify(r.body).slice(0, 300));
+  }
+});
+
+test("MUST-FAIL GAP (H33): a write that could not be confirmed and whose note could not be written says nothing was removed", async () => {
+  const id = await openCase("RL3 gap no note");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const rpath = C.registrationPath(id, "a");
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((o && o.method) === "PUT" && String(url).includes(`/contents/removals/${id}/`)
+    ? { ok: false, status: 502, json: async () => ({ message: "mock: refused" }), text: async () => "mock: refused" } : viaMock(url, o));
+  let r;
+  try {
+    r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+      async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503), () => commit(id, a));
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual([r.out.body.error_code, r.out.body.registration_removed, r.out.body.error], ["registration_unconfirmed", false,
+    "the case record could not be read after the registration's write, so this service cannot show the case was not withdrawn meanwhile, and a " +
+    "registration never stands on an assumption: no repair note could be written and confirmed, so nothing was removed: the file may be there, and " +
+    "it stands only once a read of the case confirms it. Send the same registration again"], JSON.stringify(r.out.body));
+  assert.equal(gh.has(PINS, rpath), true);
+});
+
+test("MUST-FAIL GAP (P01, P02, P03, P05, P14, P15, P16): the page: a condemned file's row links its note; a case its object shows COMMITTED is open in its title and its words; a check that could not look is said per role, and the page is not kept", async () => {
+  const c = await condemnedA("RL3 gap page");
+  projectedAnyway(c);
+  const r = await render(c.id, NOW + 5000);
+  assert.ok(r.html.includes(`<title>Case ${c.id.slice(0, 12)}: OPEN</title>`), r.html.slice(0, 600));
+  assert.ok(r.html.includes("Each role registers a stamped commitment before the deadline"));
+  assert.match(r.html, new RegExp(`href="[^"]*/${c.notePath.replace(/[.]/g, "\\.")}"[^>]*>the repair note</a>`));
+  assert.equal(r.definite, true, "fixture: a page that is kept");
+  // the case's notes listed by the removals read, and not by the second listing
+  const viaMock = global.fetch;
+  let listings = 0;
+  global.fetch = async (url, o) => {
+    const u = String(url);
+    if (((o && o.method) || "GET") === "GET" && u.includes(`/contents/removals/${c.id}?`)) {
+      listings += 1;
+      if (listings === 2) return { ok: false, status: 503, json: async () => ({}), text: async () => "" };
+    }
+    return viaMock(url, o);
+  };
+  let unlisted;
+  try {
+    unlisted = await render(c.id, NOW + 5000);
+  } finally {
+    global.fetch = viaMock;
+  }
+  for (const role of ["a", "b"]) {
+    assert.ok(unlisted.html.includes(esc(`whether its registration file is under a repair note could not be read when this page was read (repair_notes_unreadable)`)),
+      role);
+  }
+  assert.equal(unlisted.html.split("whether its registration file is under a repair note could not be read").length - 1, 2);
+  assert.equal(unlisted.definite, false);
+  unverifiable(c.notePath);
+  const unsure = await render(c.id, NOW + 5000);
+  assert.equal(unsure.html.split(esc("whether its registration file is under a repair note could not be read when this page was read (document_unavailable)")).length - 1, 1);
+});
+
+test("MUST-FAIL GAP (P07): a case with no note and no removal whose path's history could not be read shows the Removals panel saying so", async () => {
+  const c = await committedCase("RL3 gap only unread");
+  const rpath = C.registrationPath(c.id, "a");
+  gh.addCommit(PINS, rpath, "mock: touched");
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(1, 404, `@${gh.commitsFor(PINS, rpath)[0].sha}:${rpath}`);
+  const p = panelOf((await render(c.id, NOW + 5000)).html);
+  assert.ok(p.includes(`the history of ${rpath} could not be read when this page was read (registration_at_commit_not_shown)`), p);
+});
+
+test("MUST-FAIL GAP (S32, S33): a case with no registration file, or no note, reads nothing further: its notes are not listed, and no file's history is read", async () => {
+  const id = await openCase("RL3 gap no reads");
+  const notesKey = `${PINS}::removals/${id}`;
+  gh.forceGetFailure(PINS, `removals/${id}`, 1, 503);
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  assert.equal(gh._forcedGetFailure.get(notesKey).remaining, 1, "the notes were not listed for a case with no file");
+  gh._forcedGetFailure.delete(notesKey);
+  const rpath = C.registrationPath(id, "a");
+  gh.forceCommitsFailure(PINS, rpath, 1, 503);
+  await register(id, party(id, "b", TOOL_TAPE));
+  assert.equal(gh._forcedCommitsFailure.get(`${PINS}::${rpath}`).remaining, 1, "no file's history was read for a case with no note");
 });
