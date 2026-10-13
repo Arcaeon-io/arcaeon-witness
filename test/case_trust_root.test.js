@@ -540,3 +540,240 @@ test("I4: loadCaseSigner holds the case key apart from the document's reconcile 
   assert.match(loaded.reason, /reconcile key the key document lists/);
   assert.equal(S.loadCaseSigner(KEYS, { keyDocument: DOC }).ok, true, "control");
 });
+
+// =============================================================================
+// THE MUST-FAIL PASS: tests for the planted defects the tests above let through
+// =============================================================================
+
+const markerPath = (k) => S.revocationMarkerPath(k.verifier);
+const goodMarker = (k, W) => ({ kind: "key-revocation", v: 1, key_id: KD.keyIdOf(k), key_fingerprint: S.keyFingerprint(k.verifier), revoked_in_commit: W });
+async function reasonOf(k, current) {
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(k, current);
+  return [a.code, a.reason];
+}
+
+test("MUST-FAIL GAP (ST03, B03, A09, A04, A05, A06, A07): commitOnBranch reads one compare per question: an answer with no known status is unknown, a branch name it cannot use is unknown without a read, a non-commit is off without a read; it keeps on per repository and branch; it sends the pin token; another repository's default is its own branch", async () => {
+  const c = KD.serve(gh, KD.docWith(KD.entry(CASE_KEY)));
+  // an answer that names no known status
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => (String(url).includes("/compare/")
+    ? { ok: true, status: 200, json: async () => ({ status: "weird" }), text: async () => "{}" } : viaMock(url, o));
+  try {
+    assert.deepEqual(await S.commitOnBranch(c), { unknown: "compare_http_200" });
+  } finally {
+    global.fetch = viaMock;
+  }
+  const n = gh.compareLog.length;
+  assert.deepEqual(await S.commitOnBranch(c, { branch: "a..b" }), { unknown: "branch_name_invalid" });
+  assert.deepEqual(await S.commitOnBranch("not-a-commit"), { on: false });
+  assert.equal(gh.compareLog.length, n, "neither is asked");
+  // on main, and kept for main only
+  assert.deepEqual(await S.commitOnBranch(c), { on: true });
+  assert.equal((await S.commitOnBranch(c, { branch: "other-branch" })).on, false, "another branch is asked, not taken from main's answer");
+  // the read carries the pin token (rate limits)
+  const heard = [];
+  global.fetch = async (url, o) => {
+    if (String(url).includes("/compare/")) heard.push((o && o.headers) || {});
+    return viaMock(url, o);
+  };
+  try {
+    await S.commitOnBranch(KD.serve(gh, KD.docWith(KD.entry(LOG_KEY))));
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(heard[0].authorization, "Bearer test-token");
+  // the pins repository's default branch is the pins branch, whatever KEY_DOCUMENT_BRANCH says
+  process.env.KEY_DOCUMENT_BRANCH = "release";
+  const pinsHead = gh.seed(PINS, "x.json", {});
+  assert.deepEqual(await S.commitOnBranch(pinsHead, { repo: store.REPO }), { on: true });
+});
+
+test("MUST-FAIL GAP (C02, C06): the reveal refuses a branch read that fails by its reason, and reads the document at its commit once per instance, after a match", async () => {
+  const c = await committedCase("gap confirm");
+  gh.forceCompareFailure(1, 502, S.KEY_DOCUMENT_REPO);
+  const r = await reveal(revealBody(c.id, c.a, c.b));
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "document_unavailable", "compare_http_502"]);
+  const commit = KD.commitOf(DOC);
+  const ok = await reveal(revealBody(c.id, c.a, c.b));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body).slice(0, 200));
+  const reads = gh.rawLog.filter((x) => x.includes(commit)).length;
+  const d = await committedCase("gap confirm, again");
+  assert.equal((await reveal(revealBody(d.id, d.a, d.b))).status, 201);
+  assert.equal(gh.rawLog.filter((x) => x.includes(commit)).length, reads, "the second reveal reads the kept document");
+});
+
+test("MUST-FAIL GAP (S08, R08, P02): a case key the current document lists only as a reconcile key is unlisted; a signer_revoked answer names the case's pin commit; the order read is kept", async () => {
+  const c = await sealedCase("gap roles");
+  assert.deepEqual(await S.sealedRecordReason(c.k, KD.docWith(KD.reconcileEntry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY))),
+    { code: "signer_unlisted", reason: "case_key_not_listed", key_id: KD.keyIdOf(CASE_KEY) });
+  await revoke(CASE_KEY, CASE_REVOKED);
+  const late = await sealedCase("gap roles, after");
+  const a = await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.case_commit], ["signer_revoked", late.P]);
+  // the order of c (before) is read once
+  assert.equal((await S.sealedRecordReason(c.k, CASE_REVOKED)).code, "signer_since_revoked");
+  const n = gh.compareLog.filter((x) => x.startsWith(`${PINS}:`)).length;
+  assert.equal((await S.sealedRecordReason(c.k, CASE_REVOKED)).code, "signer_since_revoked");
+  assert.equal(gh.compareLog.filter((x) => x.startsWith(`${PINS}:`)).length, n, "kept");
+});
+
+test("MUST-FAIL GAP (P01): a case whose pin records the revoking commit itself (P equal to R) is pinned AT the revocation: signer_revoked", async () => {
+  const c = await sealedCase("gap P equals R");
+  const { R } = await revoke(CASE_KEY, CASE_REVOKED);
+  const { seq, latest } = S.pinPaths(c.id);
+  const pin = gh.read(PINS, seq);
+  gh.seed(PINS, seq, { ...pin, case_commit: R });
+  gh.seed(PINS, latest, { ...pin, case_commit: R });
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const st = await S.anchorState(c.id, S.caseChain(c.k), { anchor: false });
+  assert.deepEqual([st.pin, st.case_commit], ["pinned", R], "fixture: the pin records R, and the case file at R is this case");
+  const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "pinned_at_or_after_revocation"]);
+});
+
+test("MUST-FAIL GAP (K01, K02, K10): R is the commit that wrote the marker, whatever touched its path since; a marker list that cannot be read is unreadable; a marker read is kept per key", async () => {
+  const c = await sealedCase("gap marker commits");
+  const { R, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  gh.addCommit(PINS, mp);
+  S._internal.clearDocumentCache();
+  assert.equal((await S.sealedRecordReason(c.k, CASE_REVOKED)).revoked[0].revoking_commit, R, "the oldest commit, the one that wrote it");
+  const n = gh.commitsLog.filter((p) => p === mp).length;
+  await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(gh.commitsLog.filter((p) => p === mp).length, n, "kept for the instance");
+  S._internal.clearDocumentCache();
+  gh.forceCommitsFailure(PINS, mp, 1, 503);
+  assert.deepEqual((await S.sealedRecordReason(c.k, CASE_REVOKED)).reason, "revocation_marker_unreadable");
+});
+
+test("MUST-FAIL GAP (K03, K05, K06, K07, K09, K11, K12): a marker that does not read as it names does not count: another version, another fingerprint, a revoking commit off the branch or whose document lists the key revoked only in another role, or a marker that is not JSON, is invalid; a revoking document or branch that cannot be read is unreadable", async () => {
+  const c = await sealedCase("gap marker forms");
+  const W = KD.serve(gh, CASE_REVOKED);
+  const mp = markerPath(CASE_KEY);
+  const plant = (m) => gh.seed(PINS, mp, m);
+  plant({ ...goodMarker(CASE_KEY, W), v: 2 });
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "another version");
+  plant({ ...goodMarker(CASE_KEY, W), key_fingerprint: "a".repeat(64) });
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "another fingerprint");
+  const side = KD.serveOffBranch(gh, CASE_REVOKED, "9".repeat(40));
+  plant(goodMarker(CASE_KEY, side));
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "off the branch");
+  const otherRole = KD.serve(gh, KD.docWith(KD.reconcileEntry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
+  plant(goodMarker(CASE_KEY, otherRole));
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "revoked there in another role");
+  gh.seedCommit(S.KEY_DOCUMENT_REPO, "8".repeat(40), S.CASE_KEYS_FILE);
+  plant(goodMarker(CASE_KEY, "8".repeat(40)));
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_unreadable"], "the revoking document cannot be read");
+  plant(goodMarker(CASE_KEY, W));
+  S._internal.clearDocumentCache();
+  gh.forceCompareFailure(1, 503, `...${W}`);
+  const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], "its branch cannot be read");
+  // a marker path whose only commit wrote text that is not JSON
+  const list = gh.commits.get(PINS);
+  for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === mp) list.splice(i, 1);
+  gh.seedText(PINS, mp, "not json");
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "revocation_marker_invalid"], "not JSON");
+});
+
+test("MUST-FAIL GAP (M07, M08, M09): validateRevocationMarker names a missing field, refuses an empty key id, and refuses what is not an object", () => {
+  const good = goodMarker(CASE_KEY, "1".repeat(40));
+  const { key_id: _k, ...noKey } = good; // eslint-disable-line no-unused-vars
+  assert.deepEqual(S.validateRevocationMarker(noKey), { ok: false, reason: "missing_field:key_id" });
+  assert.equal(S.validateRevocationMarker({ ...good, key_id: "" }).ok, false);
+  assert.deepEqual(S.validateRevocationMarker(null), { ok: false, reason: "not_an_object" });
+});
+
+test("MUST-FAIL GAP (W02, W03, W04, W05): the sealer's run reports a marker at a path that is not its key's, and an invalid one, with no key id; a marker it cannot read leaves markers_unread said", async () => {
+  await sealedCase("gap run markers");
+  const wrongPath = `revocations/${"b".repeat(64)}.json`;
+  gh.seed(PINS, wrongPath, goodMarker(CASE_KEY, KD.commitOf(DOC)));
+  const invalid = markerPath(RECEIPT_KEY);
+  gh.seed(PINS, invalid, { ...goodMarker(RECEIPT_KEY, KD.commitOf(DOC)), v: 2 });
+  const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: CASE_REVOKED });
+  assert.deepEqual(run.marker_without_revocation.sort((x, y) => x.path.localeCompare(y.path)),
+    [{ path: invalid, key_id: null }, { path: wrongPath, key_id: null }].sort((x, y) => x.path.localeCompare(y.path)));
+  assert.equal(run.markers_unread, null);
+  gh.forceGetFailure(PINS, wrongPath, 1, 503);
+  const unread = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: CASE_REVOKED });
+  assert.equal(unread.markers_unread, "revocations_unreadable");
+});
+
+test("MUST-FAIL GAP (H03, H04, G04, G05): the reference and the page say signer_unlisted and signer_revoked in words", async () => {
+  const c = await sealedCase("gap words");
+  const noCase = KD.docWith(KD.reconcileEntry(RECEIPT_KEY));
+  const u = await referenceAs(c.id, c.a, noCase);
+  assert.match(u.body.error, /a key that signed it is not listed in its role in the current key document/);
+  assert.ok((await pageOf(c.id, noCase)).html.includes("the current key document: a key that signed it is not listed there in its role"));
+  KD.serve(gh, CASE_REVOKED); // no marker: signer_revoked
+  const r = await referenceAs(c.id, c.a, CASE_REVOKED);
+  assert.match(r.body.error, /a key that signed it is revoked in the current key document, and the case is not shown pinned before the revoking commit/);
+  assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes("a key that signed it is revoked in the current key document, and this case is not shown pinned before the revoking commit"));
+});
+
+test("MUST-FAIL GAP (T02, T04, T10, T11, T12, T13, T14, T15): the tool refuses an existing marker even in a dry run, never writes over a marker another writer created mid-write, says a store error, an unlisted key, and each read it could not make", async () => {
+  KD.serve(gh, CASE_REVOKED);
+  const keyId = KD.keyIdOf(CASE_KEY);
+  const mp = markerPath(CASE_KEY);
+  assert.deepEqual((await TOOL.recordRevocation({ keyId: "nobody+00000000", currentDocument: CASE_REVOKED })).code, "not_listed");
+  // a store error writing it
+  gh.forceFailure(PINS, mp, 1, 502);
+  assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED, write: true })).code, "store_error");
+  // another writer creates it mid-write (a 409, the path found taken)
+  const theirs = { ...goodMarker(CASE_KEY, KD.commitOf(CASE_REVOKED)) };
+  const viaMock = global.fetch;
+  let fired = false;
+  global.fetch = async (url, o) => {
+    if (!fired && (o && o.method) === "PUT" && String(url).includes(`/contents/${mp}`)) {
+      fired = true;
+      gh.seed(PINS, mp, theirs);
+      gh.forceConflict(PINS, mp, 1);
+    }
+    return viaMock(url, o);
+  };
+  let raced;
+  try {
+    raced = await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED, write: true });
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(fired, true);
+  assert.equal(raced.code, "marker_exists");
+  assert.equal(gh.commitsFor(PINS, mp).length, 1, "theirs, never written over");
+  // and a dry run is refused once it exists
+  assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "marker_exists");
+  // the reads it could not make
+  gh.repos.get(PINS).delete(mp);
+  gh.forceGetFailure(PINS, mp, 1, 503);
+  assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "the marker path");
+  gh.forceCommitsFailure(S.KEY_DOCUMENT_REPO, S.CASE_KEYS_FILE, 1, 503);
+  assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "the document's commits");
+  gh.forceRawFailure(1, 503, S.KEY_DOCUMENT_REPO);
+  assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "a document on the way");
+});
+
+test("MUST-FAIL GAP (T06, ST01, T07): the tool walks every page of the document's history, oldest first, and counts a revocation only in the key's own role", async () => {
+  // the key listed revoked as a reconcile key first, then as itself
+  const asReconcile = KD.docWith(KD.reconcileEntry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
+  KD.serve(gh, asReconcile);
+  const first = KD.serve(gh, KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11", note: "revoked, 0" }), KD.reconcileEntry(RECEIPT_KEY)));
+  for (let i = 1; i <= 100; i += 1) {
+    KD.serve(gh, KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11", note: `revoked, ${i}` }), KD.reconcileEntry(RECEIPT_KEY)));
+  }
+  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(out.marker.revoked_in_commit, first, "the oldest commit, past the first page, in its own role");
+});
+
+test("MUST-FAIL GAP (B01): KEY_DOCUMENT_BRANCH names the branch: a deployment of another branch seals when it names that branch, and is refused when it does not", async () => {
+  gh.setBranch(S.KEY_DOCUMENT_REPO, "preview-branch");
+  const doc = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY, { status: "retired" }));
+  const commit = KD.serve(gh, doc);
+  const c = await committedCase("gap branch env");
+  const unnamed = await reveal(revealBody(c.id, c.a, c.b), { env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: commit }, keyDocument: doc });
+  assert.deepEqual([unnamed.status, unnamed.body.reason], [503, "commit_not_on_branch"], "main is not this repository's branch here");
+  const named = await reveal(revealBody(c.id, c.a, c.b), { env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: commit, [S.KEY_DOCUMENT_BRANCH_ENV]: "preview-branch" }, keyDocument: doc });
+  assert.equal(named.status, 201, JSON.stringify(named.body).slice(0, 200));
+});

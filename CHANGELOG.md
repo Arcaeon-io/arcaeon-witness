@@ -1,5 +1,29 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-I, the must-fail pass over the lines it changed, and the tests that close its gaps (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The pass.** One pass over the lines unit R-I changed: `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js`, `lib/_store.js`, `tools/record_key_revocation.js`, `tools/preview_dry_run.js` and the key document's notes. 114 defects were planted one at a time, with the whole suite run against each.
+- **The result.** The unit's own tests caught 62. Of the 52 that survived, 48 are caught by the 13 tests added here: 12 in `test/case_trust_root.test.js` and 1 in `test/preview_dry_run.test.js`.
+- **The 4 left are equivalent:**
+  - **S07, K13 and T08** match an entry by key id while dropping the verifier comparison. `checkKeyDocument` already requires a key id to be its verifier's name and 32-bit hash, so another verifier under the same key id needs a hash collision.
+  - **PD02** is the dry run's "current document could not be read" line. By the time (e) runs the sealed check, the current document is the one the case names (an earlier check requires its sha256), so that branch cannot be reached there.
+- **What the new tests pin:**
+  - `commitOnBranch`: an answer with no known status, an unusable branch name and a non-commit (no read), a kept answer per repository and branch, the pin token on the read, the pins repository's own default branch;
+  - the reveal refusing a failed branch read by its reason, and reading its document once per instance;
+  - `KEY_DOCUMENT_BRANCH` naming the branch;
+  - a case key listed only as a reconcile key;
+  - the pin commit in a `signer_revoked` answer;
+  - the order kept;
+  - P equal to R (signer_revoked);
+  - R as the commit that wrote the marker;
+  - each marker form refused (version, fingerprint, off-branch or other-role revoking commit, unreadable revoking document or branch, not JSON);
+  - the marker schema's reasons;
+  - the sealer run's marker report (wrong path, invalid, unreadable);
+  - the words for signer_unlisted and signer_revoked;
+  - the tool's refusals (existing marker in a dry run, a racing writer, store error, unlisted key, each failed read) and its walk over every page, in the key's own role;
+  - the dry run reading a mismatched or off-branch bundle as BROKEN.
+- Suite 1169 -> 1182 tests, 0 fail, 3 todo. Here: 1177 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-I: the key document's trust root, revocation by commit order, and the sealer reading what it names (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Why.** A second-model review of Design I at 7041aa8 found:

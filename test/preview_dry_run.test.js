@@ -832,3 +832,12 @@ test("T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, namin
   assert.equal(word(r, "f"), "COULD NOT LOOK", r.show);
   assert.match(r.by.f.line, /; the pin of case [0-9a-f]{64} could not be read \(pin_commit_unreadable\)$/);
 });
+
+test("MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROKEN in (e), saying so; a document it could not read stays COULD NOT LOOK", async (t) => {
+  const other = { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => ({ ...e, note: `${e.note} (another copy)` })) };
+  for (const [commit, reason] of [[KD.serve(gh, other), "bundled_document_differs"], [KD.serveOffBranch(gh, TEST_DOC, "4".repeat(40)), "commit_not_on_branch"]]) {
+    const r = await dryRun(t, { preview: { signer: { env: { ...SIGNER.env, [S.DEPLOY_COMMIT_ENV]: commit }, keyDocument: TEST_DOC } } });
+    assert.equal(word(r, "e"), "BROKEN", r.show);
+    assert.match(r.by.e.line, new RegExp(`answered HTTP 503 document_unavailable \\(${reason}\\): the preview's key document is not the one at the commit it names on its published branch, so the preview seals nothing$`));
+  }
+});
