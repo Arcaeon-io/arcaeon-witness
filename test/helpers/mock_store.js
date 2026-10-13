@@ -54,6 +54,24 @@
 //        else answers on this host. rawLog records every read, and
 //        forceRawFailure() makes reads fail.
 //
+//   GET  /repos/<repo>/compare/<base>...<head>
+//        -> 200 {status, ahead_by, behind_by} | 404
+//        how `head` stands to `base` in the repository's one branch
+//        (2026-10-13, unit R-I: lib/_case_seal.js commitOnBranch, and the
+//        order of a case's pin commit and a key's revocation marker). Each
+//        repository here has one linear branch, its commits in the order
+//        they were made: `identical` (the same commit), `behind` (head is
+//        an ancestor of base), `ahead`. A ref that is the branch's name
+//        (setBranch(repo, name); "main" unless set) is its newest commit.
+//        A commit planted with seedSideCommit() is on no branch: `diverged`
+//        against any commit of the branch. Anything else is 404. compareLog
+//        records every read, and forceCompareFailure() makes reads fail.
+//        seedCommit() plants a commit with a given sha on the branch (a key
+//        document's commit, as test/helpers/key_document.js serves it).
+//
+//   GET  /repos/<repo>/commits?...&page=<n> pages the list per_page at a time
+//        (1-based), as GitHub does.
+//
 //   Commit shas are unique across every store in one process (a reader may
 //   cache a file at a commit, which never changes on GitHub, so one test's
 //   commit must never be another test's). seedText() plants a text file
@@ -121,11 +139,45 @@ class MockGitHubStore {
     this.raw = new Map();
     this.rawLog = []; // ["repo@ref:path"] — every raw read, hit or miss, in order
     this._forcedRawFailure = null; // {remaining, status, match} for the raw paths it matches
+    // Compare reads (see the header).
+    this.compareLog = []; // ["repo:base...head"] — every compare read, in order
+    this._forcedCompareFailure = null; // {remaining, status, match}
+    this.sideCommits = new Map(); // repo -> Set of shas on no branch
+    this.branches = new Map(); // repo -> its branch's name ("main" unless set)
   }
 
   // A public file's text at one commit, served on the raw host.
   seedRaw(repo, ref, path, text) {
     this.raw.set(`${repo}@${ref}:${path}`, String(text));
+  }
+
+  // A commit with the given sha on `repo`'s branch, writing `text` at
+  // `path` (once: planting a sha already there does nothing). -> the sha.
+  seedCommit(repo, sha, path, text = null) {
+    const list = this._commitsOf(repo);
+    if (!list.some((c) => c.sha === sha)) {
+      list.push({ sha, path, message: "mock: seeded commit", date: new Date().toISOString(), content: text === null ? null : String(text) });
+    }
+    return sha;
+  }
+
+  // A commit on no branch of `repo` (a side branch's, or a fork's the raw
+  // host still serves): compare reads answer `diverged`.
+  seedSideCommit(repo, sha) {
+    if (!this.sideCommits.has(repo)) this.sideCommits.set(repo, new Set());
+    this.sideCommits.get(repo).add(sha);
+    return sha;
+  }
+
+  // The name of `repo`'s one branch (see the header).
+  setBranch(repo, name) {
+    this.branches.set(repo, name);
+  }
+
+  // Force the next `n` compare reads (only those whose "repo:base...head"
+  // includes `match`, when given) to fail with `status` (0: network error).
+  forceCompareFailure(n = 1, status = 500, match = null) {
+    this._forcedCompareFailure = { remaining: n, status, match };
   }
 
   // Force the next `n` raw reads to fail with `status` (0: a network error);
@@ -289,6 +341,34 @@ class MockGitHubStore {
       return fakeResponse(200, { sha: "mock-tree", tree, truncated: this.treeTruncated === true });
     }
 
+    // Compare read (lib/_store.js compareCommits): see the header.
+    const cmp = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/compare\/(.+)$/);
+    if (cmp && ((opts && opts.method) || "GET") === "GET") {
+      const repo = cmp[1];
+      const spec = decodeURIComponent(cmp[2]);
+      const key = `${repo}:${spec}`;
+      this.compareLog.push(key);
+      const forced = this._forcedCompareFailure;
+      if (forced && forced.remaining > 0 && (!forced.match || key.includes(forced.match))) {
+        forced.remaining -= 1;
+        if (forced.status === 0) throw new TypeError("mock: fetch failed (forced network error)");
+        return fakeResponse(forced.status, { message: "mock: forced compare read failure" });
+      }
+      const parts = spec.split("...");
+      if (parts.length !== 2) return fakeResponse(404, { message: "Not Found" });
+      const list = this._commitsOf(repo);
+      const side = this.sideCommits.get(repo) || new Set();
+      const branch = this.branches.get(repo) || "main";
+      const at = (ref) => (ref === branch ? list.length - 1 : list.findIndex((c) => c.sha === ref));
+      const [base, head] = parts;
+      const bi = at(base);
+      const hi = at(head);
+      if ((side.has(head) && bi >= 0) || (side.has(base) && hi >= 0)) return fakeResponse(200, { status: "diverged", ahead_by: 1, behind_by: 1 });
+      if (bi < 0 || hi < 0) return fakeResponse(404, { message: "Not Found" });
+      const status = hi < bi ? "behind" : hi === bi ? "identical" : "ahead";
+      return fakeResponse(200, { status, ahead_by: Math.max(0, hi - bi), behind_by: Math.max(0, bi - hi) });
+    }
+
     // Commits-for-path read (_store.js listCommits): see the header.
     const cm = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/commits$/);
     if (cm && ((opts && opts.method) || "GET") === "GET") {
@@ -300,7 +380,8 @@ class MockGitHubStore {
         return fakeResponse(forced.status, { message: "mock: forced commits read failure" });
       }
       const perPage = Math.max(1, Math.min(100, Number(u.searchParams.get("per_page")) || 30));
-      const list = this._commitsOf(cm[1]).filter((c) => p === null || c.path === p).slice().reverse().slice(0, perPage);
+      const page = Math.max(1, Number(u.searchParams.get("page")) || 1);
+      const list = this._commitsOf(cm[1]).filter((c) => p === null || c.path === p).slice().reverse().slice((page - 1) * perPage, page * perPage);
       return fakeResponse(200, list.map((c) => ({
         sha: c.sha,
         commit: { message: c.message, author: { date: c.date }, committer: { date: c.date } },

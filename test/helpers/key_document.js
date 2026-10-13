@@ -36,9 +36,24 @@ const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 const commitOf = (doc) => crypto.createHash("sha1").update(canonicalBytes(doc)).digest("hex");
 
 // `doc` served from the public repository at `commit` (commitOf(doc) by
-// default) on the mock store `gh`. -> the commit.
+// default) on the mock store `gh`, that commit on the repository's published
+// branch (unit R-I: a reader holds a named commit to the branch,
+// lib/_case_seal.js commitOnBranch), after every commit served before it.
+// -> the commit.
 function serve(gh, doc, commit = commitOf(doc)) {
+  const text = `${JSON.stringify(doc, null, 2)}\n`;
+  gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, text);
+  // the commit carries no text of its own: the raw host serves only what
+  // seedRaw planted, so a test can still take the file away
+  gh.seedCommit(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE);
+  return commit;
+}
+
+// `doc` served at `commit` by the raw host but on no branch of the
+// repository (a side branch's commit, or a fork's). -> the commit.
+function serveOffBranch(gh, doc, commit = commitOf(doc)) {
   gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, `${JSON.stringify(doc, null, 2)}\n`);
+  gh.seedSideCommit(S.KEY_DOCUMENT_REPO, commit);
   return commit;
 }
 
@@ -56,4 +71,4 @@ function signedUnder(gh, doc, retrievedAt) {
   return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc), retrieved_at: retrievedAt };
 }
 
-module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, deployed, signedUnder, sha256 };
+module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, serveOffBranch, deployed, signedUnder, sha256 };
