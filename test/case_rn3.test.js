@@ -482,3 +482,121 @@ test("R-N3 N8: a retried withdrawal's 200 never carries a stored sig_reason", as
   assert.doesNotMatch(JSON.stringify(r.body), /WITNESS_|is not set/);
   assert.equal(has(r.body.case, "sig_reason"), false);
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-N3): the mutants the first pass over the lines R-N3
+// changed left alive, each caught here
+// =============================================================================
+
+// A withdrawal whose root write loses, after its listing is confirmed, to
+// the case `seedWith` writes while the listing goes out.
+async function lostAfterListing(scope, seedWith) {
+  const c = await committedCase(scope);
+  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${listing}`),
+    async () => gh.seed(PINS, C.casePath(c.id), seedWith(c, storedCase(c.id)), { keepHistory: true }),
+    () => withdraw(c.id, c.b),
+  );
+  assert.equal(r.fired, true);
+  assert.equal(gh.has(PINS, listing), true, "the listing stands");
+  return { c, w: r.out };
+}
+
+test("MUST-FAIL GAP (H11-H15): a root write lost after the listing, to another withdrawal, a reveal attempt or a deadline, says the record was not written and the tape is listed, keeps the case's standing, and never says 'nothing was withdrawn'", async () => {
+  const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
+  const byA = await lostAfterListing("RN3 gap lost to a withdrawal",
+    (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
+  assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id, byA.w.body.tape_listed],
+    [409, "case_withdrawn", "WITHDRAWN", byA.c.id, true], JSON.stringify(byA.w.body));
+  assert.equal(byA.w.body.error, "The withdrawal record was not written by this request: the case was withdrawn by another while it ran. " +
+    "Your tape digest is listed, so this service will not compare that tape.");
+  const tried = await lostAfterListing("RN3 gap lost to an attempt", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
+    commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] }));
+  assert.deepEqual([tried.w.status, tried.w.body.error_code, tried.w.body.status, tried.w.body.tape_listed], [409, "reveal_attempted", "COMMITTED", true],
+    JSON.stringify(tried.w.body));
+  assert.equal(tried.w.body.error, "The withdrawal record was not written: a joint reveal of this case was attempted while this withdrawal ran, and a " +
+    "case whose comparison was attempted is not withdrawn by one role. Your tape digest is listed, so this service will not compare that tape.");
+  // a root rewritten with an earlier deadline (only a write outside this
+  // service moves a deadline) reads EXPIRED by the withdrawal's clock
+  const late = await lostAfterListing("RN3 gap lost to a deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
+  assert.deepEqual([late.w.status, late.w.body.error_code, late.w.body.status, late.w.body.tape_listed], [409, "expired", "EXPIRED", true],
+    JSON.stringify(late.w.body));
+  assert.equal(late.w.body.error, "The withdrawal record was not written: the case reads EXPIRED by this service's clock. " +
+    "Your tape digest is listed, so this service will not compare that tape.");
+  for (const b of [byA.w.body, tried.w.body, late.w.body]) assert.doesNotMatch(JSON.stringify(b), /nothing was withdrawn/);
+});
+
+test("MUST-FAIL GAP (H06-H08): a root that moved to something unreadable after the listing is 503 store_error, reason case_moved, in the same plain words, with tape_listed", async () => {
+  const lost = await lostAfterListing("RN3 gap case moved", () => ({ not: "a case" }));
+  assert.deepEqual([lost.w.status, lost.w.body.error_code, lost.w.body.reason, lost.w.body.tape_listed, lost.w.body.error],
+    [503, "store_error", "case_moved", true, NOT_WRITTEN], JSON.stringify(lost.w.body));
+});
+
+test("MUST-FAIL GAP (H21): the retry's 503 names its case; and a signed record's 200 shows the case exactly as stored", async () => {
+  const c = await committedCase("RN3 gap retry body");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const again = await withdraw(c.id, c.b, { now: NOW + 4000 });
+  assert.equal(again.status, 200);
+  assert.deepEqual(again.body.case, storedCase(c.id), "signed: shown whole, sig_reason: null included");
+  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
+  gh.forceConflict(PINS, listing, 1);
+  gh.forceGetFailure(PINS, listing, 2, 503);
+  const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
+  assert.deepEqual([r.status, r.body.case_id], [503, c.id], JSON.stringify(r.body));
+});
+
+test("MUST-FAIL GAP (S02, S03, S04, S07): the window's start: G is odd, so a period of 2^63 ms moves it; a clock that is not finite or not whole never throws; every millisecond counts", () => {
+  const W = S._internal.rotatingWindow;
+  assert.deepEqual([W(["a", "b"], 1, 0), W(["a", "b"], 1, 2 ** 63)], [["a"], ["b"]], "x = 2^63 * G mod 2^64 is 2^63 for an odd G");
+  assert.deepEqual(W(["a", "b", "c"], 1, NaN), ["a"]);
+  assert.deepEqual(W(["a", "b", "c"], 1, 60000.5), W(["a", "b", "c"], 1, 60000));
+  const ten = Array.from({ length: 10 }, (_, i) => `id-${i}`);
+  const t0 = Date.parse("2026-10-13T00:00:00Z");
+  assert.notDeepEqual(W(ten, 1, t0), W(ten, 1, t0 + 30000), "half a minute turns the start by 0.309 of the list");
+});
+
+test("MUST-FAIL GAP (P02): the page of an attempt with no recorded completion says the same reveal seals it unless a tape in it has since been listed as withdrawn", async () => {
+  const c = await committedCase("RN3 gap page attempt");
+  const k = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), { ...k, reveal_attempts: [{ event: "attempt",
+    commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] },
+    { keepHistory: true });
+  const html = (await casePage(c.id)).html;
+  assert.ok(html.includes("does not record that it completed"), html.slice(0, 400));
+  assert.ok(html.includes("unless a tape in it has since been listed as withdrawn"));
+});
+
+test("MUST-FAIL GAP (T05, T06, T09): the online check exits 0 only for ok: true itself; --document before the receipt is still the partial offline check; an unreadable receipt offline is signature_ok false", async (t) => {
+  const T = require("../tools/check_refusal_receipt.js");
+  const dir = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "rn3gap-"));
+  fs.writeFileSync(path.join(dir, "receipt.json"), JSON.stringify({ kind: "comparison_refused" }));
+  fs.writeFileSync(path.join(dir, "doc.json"), JSON.stringify(DOC));
+  fs.writeFileSync(path.join(dir, "garbled.json"), "{ not json");
+  const lines = [];
+  const write = process.stdout.write;
+  process.stdout.write = (s) => { lines.push(String(s)); return true; };
+  let online;
+  let first;
+  let firstOut;
+  let garbled;
+  let garbledOut;
+  try {
+    t.mock.method(S, "verifyRefusalReceipt", async () => ({ ok: "yes" }));
+    online = await T.main([path.join(dir, "receipt.json")]);
+    S.verifyRefusalReceipt.mock.restore();
+    lines.length = 0;
+    first = await T.main(["--document", path.join(dir, "doc.json"), path.join(dir, "receipt.json")]);
+    firstOut = JSON.parse(lines.join(""));
+    lines.length = 0;
+    garbled = await T.main([path.join(dir, "garbled.json"), "--document", path.join(dir, "doc.json")]);
+    garbledOut = JSON.parse(lines.join(""));
+  } finally {
+    process.stdout.write = write;
+  }
+  assert.equal(online, 1, "ok must be true itself");
+  assert.equal(first, 3);
+  assert.equal(firstOut.reason, "offline_partial");
+  assert.equal(garbled, 3);
+  assert.deepEqual([garbledOut.ok, garbledOut.reason, garbledOut.signature_ok], [false, "offline_partial", false]);
+});
