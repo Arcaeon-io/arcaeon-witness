@@ -732,7 +732,9 @@ async function checkSealerPass(ctx) {
     const held = st.pin === "pinned" || st.pin === "anchored";
     const pinned = st.record && typeof st.record.chain === "string" ? st.record.chain : null;
     if (held && pinned === want) {
-      const anchored = st.pin === "anchored" ? `; anchored by ${st.anchor.path}, written at commit ${st.anchor.record_commit.sha}` : "; not anchored yet";
+      const anchored = st.pin === "anchored"
+        ? `; anchored by ${st.anchor.path}, written at commit ${st.anchor.record_commit.sha} (the anchor's proof is not checked by this tool)`
+        : "; not anchored yet";
       return verified(`${summary}; case ${ctx.sealed.caseId} is pinned at commit ${st.pin_commit.sha}, chain ${want} (${by})${anchored}`);
     }
     if (held) {

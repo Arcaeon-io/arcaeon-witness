@@ -300,7 +300,7 @@ test("FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecor
   // the page says so in words, and never states one record as the live count
   const p = await casePage(id);
   const cell = recordsCell(p.html);
-  assert.match(cell, /^the live count could not be established on this request/);
+  assert.match(cell, /^the live count could not be established when this page was read/);
   assert.ok(!/^one record/.test(cell) && !/^two records/.test(cell), cell);
   assert.match(cell, /at seal time: one record/, "the count at seal time is still stated, as that");
   assert.match(cell, /20 reference row\(s\) are not valid/);

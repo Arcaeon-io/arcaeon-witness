@@ -975,7 +975,7 @@ test("R-I2 M2, m5: no reader, tool or note says more than is proven ('pinned bef
 test("R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off the branch is not on it, and a current document that does not read is named as the current one", async () => {
   const c = await sealedCase("R-I2 gap headings");
   const current = await pageOf(c.id, null);
-  assert.ok(current.html.includes("The current one could not be read on this request"));
+  assert.ok(current.html.includes("The current one could not be read when this page was read"));
   const d = await committedCase("R-I2 gap headings, off branch");
   const compared = RECONCILE.compare(d.a.tape, d.b.tape, { env: KEYS, now: REVEAL_AT, keyDocument: DOC });
   const named = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY, { status: "retired" }));

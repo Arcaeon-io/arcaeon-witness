@@ -520,7 +520,8 @@ test("P08 (anchorHtml): a pin pointer holding another chain reads as a conflict 
   gh.seed(PINS, latest, { ...gh.read(PINS, latest), chain: "f".repeat(64) });
   const pg = await page();
   assert.equal(pg.status, 200);
-  assert.match(pg.html, /a pin under this case&#39;s namespace holds another chain|a pin under this case's namespace holds another chain/);
+  // unit R-J2 (B1): worded by the reason
+  assert.match(pg.html, /conflict: the pin pointer under this case&#39;s namespace holds another chain \(pointer_holds_another_chain\)/);
   assert.ok(!pg.html.includes("anchored: a daily anchor record"), "not anchored");
   assert.ok(!pg.html.includes("pinned at commit"), "not pinned");
 });

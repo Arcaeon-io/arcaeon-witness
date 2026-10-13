@@ -841,6 +841,19 @@ case's withdrawal may have listed the same digest). A listing holds only
 withdrawal's own time. A listing only ever refuses. It names no case and no
 one, and it stops this service comparing that tape, nothing more.
 
+### A reference row's sentence
+
+A second operator's reference row is signed and create-only, and carries a
+fixed sentence about its anchoring, `anchor_note`, with `note_version: 3`:
+"This row has no pin of its own. It is recorded by the pins-repository
+commit that writes it. A later pin of the case may list that commit. This
+row is anchored only if a pin that lists it is, and no anchoring is
+asserted here." Version 2 of this sentence was never issued. A row carrying
+`note_version` 2 reads `row_note_v2`, and a row with no `note_version` reads
+`row_note_v1`; neither is counted. The case page says a row is recorded by
+its commit and listed by a pin only when it read that pin, shows the row's
+anchor state as not computed, and never calls a row anchored.
+
 ### The sealer's window
 
 Each sealer run reads at most a fixed number of cases, a window of the

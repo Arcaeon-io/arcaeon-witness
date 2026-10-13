@@ -594,7 +594,7 @@ test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and 
   gh.forceCommitsFailure(PINS, S.pinPaths(pinned.id).seq, 1, 500);
   const q = await pageOf(pinned.id);
   // Design J: a pin whose commit cannot be read is could_not_look, no claim
-  assert.ok(q.html.includes("could_not_look: its pin could not be read on this request (pin_commit_unreadable)"));
+  assert.ok(q.html.includes("could_not_look: its pin could not be read when this page was read (pin_commit_unreadable)"));
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 

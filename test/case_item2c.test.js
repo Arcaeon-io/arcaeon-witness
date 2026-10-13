@@ -815,9 +815,9 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.equal(row.signed_by, CASE_KEY_ID);
   assert.equal(S.publishedSignatureReason(row, KEYS_DOC), null, "signed with the case key");
   assert.match(row.anchor_note, /no pin of its own/);
-  // unit R-J (J1): the row's sentence, version 2
-  assert.match(row.anchor_note, /recorded by the pins-repository commit that writes it and listed by the case's next pin; it is anchored only when that pin is/);
-  assert.equal(row.note_version, 2);
+  // unit R-J2 (B2): the row's sentence, version 3
+  assert.match(row.anchor_note, /recorded by the pins-repository commit that writes it\. A later pin of the case may list that commit\. This row is anchored only if a pin that lists it is, and no anchoring is asserted here\./);
+  assert.equal(row.note_version, 3);
   // the sealed case is untouched, and records in it is still the count at seal time
   assert.deepEqual(storedCase(id), sealed);
   assert.equal((await S.liveRecords(storedCase(id), { keyDocument: KEYS_DOC })).records, 2, "the live count, from the row");
@@ -1045,7 +1045,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pv, /<span class="word pass">MATCHED<\/span>/);
   assert.match(pv, /none: every call matched \(5 matched\)/);
   assert.match(pv, /one record: this service&#39;s/);
-  assert.match(pv, /pinned, not anchored yet: no daily anchor record read on this request holds its pin/);
+  assert.match(pv, /pinned, not anchored yet: no daily anchor record held its pin when this page was read/);
   assert.ok(pv.includes(S.ANCHOR_NOTE.replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;")), "the anchor sentence");
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
   // since Design I: the key document the case names, at its commit, cited

@@ -232,16 +232,17 @@ const reads = () => gh.getLog.length + gh.commitsLog.length + gh.rawLog.length +
 const V1_NOTE = "This row has no pin of its own. It is anchored by the pins-repository commit that writes it and by the daily anchor " +
   "of the repository head. It never changes the sealed case: the case's records field is the count at seal time, and a " +
   "reader counts this row as a second record only if the row is valid.";
-const V2_NOTE = "This row has no pin of its own. It is recorded by the pins-repository commit that writes it and listed by the case's next " +
-  "pin; it is anchored only when that pin is.";
+// since unit R-J2 (B2) the sentence is version 3; version 2 was never issued
+const V2_NOTE = "This row has no pin of its own. It is recorded by the pins-repository commit that writes it. A later pin of the case may list " +
+  "that commit. This row is anchored only if a pin that lists it is, and no anchoring is asserted here.";
 
-test("J1: REFERENCE_ANCHOR_NOTE is version 2 and rows carry note_version: 2; the judge accepts a v2 row and rejects a v1 row with reason row_note_v1", async () => {
+test("J1 (version 3 since unit R-J2, B2): REFERENCE_ANCHOR_NOTE is the current version and rows carry its note_version; the judge accepts it and rejects a v1 row with reason row_note_v1", async () => {
   assert.equal(C.REFERENCE_ANCHOR_NOTE, V2_NOTE);
   assert.ok(C.REFERENCE_FIELDS.includes("note_version"));
   const { id } = await sealedCase("RJ J1 judge");
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
-  assert.deepEqual([good.note_version, good.anchor_note], [2, V2_NOTE]);
+  assert.deepEqual([good.note_version, good.anchor_note], [3, V2_NOTE]);
   assert.equal(C.validateReferenceRow(good).ok, true);
   const { note_version: _v, ...v1 } = { ...good, anchor_note: V1_NOTE };
   assert.equal(C.validateReferenceRow(v1).code, "row_note_v1");
@@ -256,8 +257,8 @@ test("J1: a row's 201 body: the row and the answer carry the v2 note, and the ro
   const c = await sealedCase("RJ J1 body");
   const r = await reference(c);
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.deepEqual([r.body.anchor_note, r.body.row.anchor_note, r.body.row.note_version], [V2_NOTE, V2_NOTE, 2]);
-  assert.match(r.body.row_commit_note, /the case's next pin/);
+  assert.deepEqual([r.body.anchor_note, r.body.row.anchor_note, r.body.row.note_version], [V2_NOTE, V2_NOTE, 3]);
+  assert.match(r.body.row_commit_note, /A later pin of the case may list that commit/);
   for (const note of [r.body.anchor_note, r.body.row_commit_note]) {
     assert.doesNotMatch(note, /anchored by|daily anchor of the repository head/);
   }
@@ -395,7 +396,7 @@ test("J7: a second view of a case page within sixty seconds reads nothing; after
   assert.equal(first.status, 200);
   const r1 = reads();
   const second = await casePage(id, { now: t0 + 59000, cached: true });
-  assert.equal(reads(), r1, "no read within sixty seconds");
+  assert.equal(reads(), r1 + 1, "within sixty seconds, only the root is read (since unit R-J2, M2)");
   assert.equal(second.html, first.html);
   await casePage(id, { now: t0 + 60000, cached: true });
   assert.ok(reads() > r1, "read again at sixty seconds");
@@ -429,7 +430,7 @@ test("MUST-FAIL GAP (A03): a row whose note_version is not 2 is refused by name"
   const { id } = await sealedCase("RJ gap note version");
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
-  for (const v of [1, 3, "2"]) assert.equal(C.validateReferenceRow({ ...good, note_version: v }).code, "unknown_version", String(v));
+  for (const v of [1, 4, "3"]) assert.equal(C.validateReferenceRow({ ...good, note_version: v }).code, "unknown_version", String(v));
 });
 
 test("MUST-FAIL GAP (B06, B07): a commit's existence is read once and kept", async () => {
@@ -452,7 +453,7 @@ test("MUST-FAIL GAP (B25, B26): given a chain, the case read from the branch is 
   const { id } = await sealedCase("RJ gap chain mode");
   const other = sha("a chain that is not this case's");
   plantPin(id, other, sealCommit(id));
-  assert.deepEqual(await S.anchorState(id, other).then((s) => [s.pin, s.reason]), ["pin_commit_mismatch", "case_at_commit_differs"]);
+  assert.deepEqual(await S.anchorState(id, other).then((s) => [s.pin, s.reason]), ["pin_commit_mismatch", "case_served_differs"]); // unit R-J2 (n5)
   plantPin(id, chainOf(id), sealCommit(id));
   gh.forceGetFailure(PINS, C.casePath(id), 1, 503);
   assert.deepEqual(await S.anchorState(id, chainOf(id)), { pin: "could_not_look", reason: "case_unreadable" });
@@ -481,7 +482,7 @@ test("MUST-FAIL GAP (D04, D05, D06): the case commit row says the commit does no
   const { id: id2 } = await sealedCase("RJ gap mismatch page");
   plantPin(id2, chainOf(id2), early);
   const mismatch = (await casePage(id2)).html;
-  assert.ok(mismatch.includes("does not hold this case file byte for byte</td>"), "the case commit row");
+  assert.ok(mismatch.includes("the pins repository holds no case file at that commit</td>"), "the case commit row (unit R-J2, n6 and n7)");
   assert.ok(mismatch.includes(`href="${PINS_URL}/blob/${store.BRANCH}/${C.casePath(id2)}"`), "the branch's file");
   assert.ok(!mismatch.includes(`/blob/${early}/`));
 });
@@ -495,7 +496,7 @@ test("MUST-FAIL GAP (D09, D10, D11): the cache answers only the same key documen
     const res = makeRes();
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.252.0.${(ipSeq += 1) & 255}` } }), res,
       { now, keyDocument, env: {} });
-    return { status: res._status, read: reads() > r0 };
+    return { status: res._status, read: reads() - r0 > 1 }; // more than the root (unit R-J2, M2)
   };
   assert.deepEqual(await view(t0 + 1000, DOC), { status: 200, read: false }, "control: cached");
   assert.equal((await view(t0 + 2000, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)))).read, true, "another key document");
@@ -560,7 +561,7 @@ test("MUST-FAIL GAP (D12): the page cache holds at most PAGE_CACHE_MAX (500) cas
   for (const id of ids) assert.equal((await casePage(id, { now: t0, cached: true })).status, 200);
   const r0 = reads();
   await casePage(ids[500], { now: t0 + 1000, cached: true });
-  assert.equal(reads(), r0, "the newest is kept");
+  assert.equal(reads(), r0 + 1, "the newest is kept: only its root is read");
   await casePage(ids[0], { now: t0 + 1000, cached: true });
   assert.ok(reads() > r0, "the oldest was dropped");
 });
