@@ -384,7 +384,7 @@ test("R-N N2: the withdrawal records the withdrawer's tape digest at withdrawn_c
   const w = await withdraw(c.id, c.b);
   assert.equal(w.status, 201, JSON.stringify(w.body));
   const listed = withdrawnCommitmentPath(c.b.tape_sha256);
-  assert.deepEqual(gh.read(PINS, listed), { withdrawn_at: storedCase(c.id).withdrawal.at });
+  assert.deepEqual(gh.read(PINS, listed), { listed_at: storedCase(c.id).withdrawal.at }, "unit R-N3 (N4): listed_at");
   assert.equal(w.body.withdrawn_commitment, "written");
   assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.a.tape_sha256)), false, "only the withdrawer's digest is known");
   for (const [x, y] of [[AGENT_TAPE, TOOL_TAPE], [TOOL_TAPE, AGENT_TAPE]]) {
@@ -587,7 +587,7 @@ test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 20
   assert.equal(again.status, 200, JSON.stringify(again.body));
   assert.equal(again.body.existing, true);
   assert.deepEqual([again.body.marker, again.body.withdrawn_commitment], ["written", "existing"]);
-  assert.deepEqual(gh.read(PINS, lpath), { withdrawn_at: record.withdrawal.at }, "the withdrawal's own time");
+  assert.deepEqual(gh.read(PINS, lpath), { listed_at: record.withdrawal.at }, "first written with the withdrawal (unit R-N3, N4)");
   assert.deepEqual(storedCase(c.id), record, "the withdrawal record is not written again");
   const third = await withdraw(c.id, c.b, { now: NOW + 6000 });
   assert.deepEqual([third.status, third.body.marker, third.body.withdrawn_commitment], [200, "existing", "existing"]);

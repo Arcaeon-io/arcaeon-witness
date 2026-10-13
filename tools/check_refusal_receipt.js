@@ -4,17 +4,22 @@
 //
 //   node tools/check_refusal_receipt.js <receipt.json> [--document <file>]
 //
-// With --document, the key document at the receipt's
-// signed_under.document_commit, saved as a file: offline. The receipt's form,
-// the document's json-c14n:v1 sha256 against signed_under.document_sha256,
-// signed_by an active reconcile key there, and the signature under it. Two
-// things need the network and are NOT checked offline, and the output says
-// so: that the commit is on the published branch, and that the key is still
-// listed, not revoked, in the current document.
+// With --document <file>: offline, and partial (unit R-N3, N3). It checks
+// the receipt's form, the file's json-c14n:v1 sha256 against
+// signed_under.document_sha256, signed_by an active reconcile key in that
+// file, and the signature under it. That proves the signature against the
+// document you supplied and nothing about whether that document is the
+// published one: the trust root, that signed_under.document_commit is on
+// the published branch, needs the network, and so does whether the key is
+// still listed, not revoked, in the current document. So the offline check
+// never prints ok: true. It prints {ok: false, reason: "offline_partial",
+// signature_ok, not_checked} and exits 3, whatever it found (an input it
+// cannot read is signature_ok: false).
 // Without --document: the readers' own check (verifyRefusalReceipt), which
-// reads the named document from GitHub's raw host and holds the key to the
-// current document this checkout carries.
-// Prints one JSON object; exits 0 when the receipt verifies, 1 otherwise.
+// reads the named document from GitHub's raw host, checks its commit is on
+// the published branch, and holds the key to the current document this
+// checkout carries. Only this check prints ok: true and exits 0; it exits 1
+// otherwise, and on a usage error.
 "use strict";
 
 const fs = require("fs");
@@ -35,7 +40,7 @@ function offline(rec, doc) {
   if (!e) return no("signer_unpublished");
   if (e.status !== "active") return no("signer_not_active");
   const sr = S.signatureReason(rec, e.verifier);
-  return sr ? no(sr.reason) : { ok: true, not_checked: NOT_CHECKED_OFFLINE };
+  return sr ? no(sr.reason) : { ok: true };
 }
 
 async function main(argv) {
@@ -45,17 +50,26 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify({ ok: false, reason: "usage", usage: "node tools/check_refusal_receipt.js <receipt.json> [--document <file>]" })}\n`);
     return 1;
   }
+  if (at >= 0) {
+    let signatureOk = false;
+    try {
+      signatureOk = offline(JSON.parse(fs.readFileSync(file, "utf8")), JSON.parse(fs.readFileSync(argv[at + 1], "utf8"))).ok;
+    } catch {
+      signatureOk = false;
+    }
+    process.stdout.write(`${JSON.stringify({ ok: false, reason: "offline_partial", signature_ok: signatureOk, not_checked: NOT_CHECKED_OFFLINE }, null, 2)}\n`);
+    return 3;
+  }
   let out;
   try {
-    const rec = JSON.parse(fs.readFileSync(file, "utf8"));
-    out = at >= 0 ? offline(rec, JSON.parse(fs.readFileSync(argv[at + 1], "utf8"))) : await S.verifyRefusalReceipt(rec);
+    out = await S.verifyRefusalReceipt(JSON.parse(fs.readFileSync(file, "utf8")));
   } catch (e) {
     out = { ok: false, reason: "unreadable", detail: e && e.message };
   }
   process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
-  return out.ok ? 0 : 1;
+  return out.ok === true ? 0 : 1;
 }
 
 if (require.main === module) main(process.argv.slice(2)).then((code) => process.exit(code));
 
-module.exports = { offline };
+module.exports = { offline, main };

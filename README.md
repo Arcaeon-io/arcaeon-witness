@@ -806,8 +806,30 @@ and that key still listed, not revoked, in the current document.
     node tools/check_refusal_receipt.js receipt.json --document case-signing-keys.json
 
 With `--document` (the key document at `signed_under.document_commit`, as a
-file) it runs offline, and says which two checks need the network and were
-not made.
+file) it runs offline, and the offline check is partial: it proves the
+signature against the document you supplied and nothing about whether that
+document is the published one (the commit on the published branch is the
+trust root, and it needs the network). So it never prints `ok: true`: it
+prints `{ok: false, reason: "offline_partial", signature_ok, not_checked}`
+and exits 3. Only the full online check prints `ok: true` and exits 0.
+
+### A withdrawn tape's listing
+
+A withdrawal lists the withdrawer's tape digest, at
+`withdrawn_commitments/<sha256 of the digest's 32 bytes>.json` in the pins
+repository, and from then on `?op=reconcile` and the joint reveal refuse
+that tape: 409 `consent_withdrawn`, "A party that committed to this tape
+digest in a case has withdrawn that case, or asked to." The listing is
+written and confirmed before the withdrawal record.
+A listing can stand without a withdrawn case: when the withdrawal record's
+write fails after the listing landed (503, "The withdrawal record was not
+written", and the same withdrawal sent again finishes it), or when a joint
+reveal seals the case first (409 `case_sealed`, and the case stays a public
+verdict). Such a listing only ever refuses: it names no case and no one, and
+it stops this service comparing that tape, nothing more. It holds only
+`listed_at`, the time the listing was first written, and that time can differ
+from the withdrawal's own (a retried withdrawal that writes a missing listing
+writes the retry's time).
 
 ## Testing
 

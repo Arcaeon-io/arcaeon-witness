@@ -285,7 +285,8 @@ const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buf
 // =============================================================================
 
 // M2: the one sentence the listing's refusal says, at ?op=reconcile and at the reveal.
-const LISTED = "A party that committed to this tape digest in a case has withdrawn that case. This service does not compare a tape so listed.";
+// (since unit R-N3, N1: "or asked to", since a listing can stand with no withdrawn case)
+const LISTED = "A party that committed to this tape digest in a case has withdrawn that case, or asked to. This service does not compare a tape so listed.";
 
 test("R-N2 B1: the withdrawn-tape listing is written first and confirmed: four 409s on its path (no file there) are 503 with nothing else written and no note; a retry then lands the listing, the record and the marker", async () => {
   const c = await committedCase("RN2 listing first");
@@ -303,7 +304,7 @@ test("R-N2 B1: the withdrawn-tape listing is written first and confirmed: four 4
   assert.equal(again.body.withdrawn_commitment, "written");
   assert.match(again.body.withdrawn_commitment_note, /consent_withdrawn/);
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
-  assert.deepEqual(gh.read(PINS, listing), { withdrawn_at: storedCase(c.id).withdrawal.at });
+  assert.deepEqual(gh.read(PINS, listing), { listed_at: storedCase(c.id).withdrawal.at }, "unit R-N3 (N4): listed_at");
   assert.equal(again.body.marker, "written");
 });
 
@@ -430,15 +431,16 @@ test("R-N2 m6: the README has a section on checking a refusal receipt, and tools
   fs.writeFileSync(path.join(dir, "receipt.json"), JSON.stringify(rr));
   fs.writeFileSync(path.join(dir, "doc.json"), JSON.stringify(DOC));
   const run = (file, doc) => spawnSync(process.execPath, [path.join(__dirname, "..", "tools", "check_refusal_receipt.js"), file, "--document", doc], { encoding: "utf8" });
+  // since unit R-N3 (N3) offline is partial: ok false, exit 3, and whether the signature holds
   const good = run(path.join(dir, "receipt.json"), path.join(dir, "doc.json"));
-  assert.equal(good.status, 0, good.stdout + good.stderr);
-  assert.equal(JSON.parse(good.stdout).ok, true);
+  assert.equal(good.status, 3, good.stdout + good.stderr);
+  assert.deepEqual([JSON.parse(good.stdout).reason, JSON.parse(good.stdout).signature_ok], ["offline_partial", true]);
   fs.writeFileSync(path.join(dir, "forged.json"), JSON.stringify({ ...rr, role: "b" }));
   const bad = run(path.join(dir, "forged.json"), path.join(dir, "doc.json"));
-  assert.equal(bad.status, 1);
-  assert.equal(JSON.parse(bad.stdout).reason, "bad_signature");
+  assert.equal(bad.status, 3);
+  assert.equal(JSON.parse(bad.stdout).signature_ok, false);
   fs.writeFileSync(path.join(dir, "other.json"), JSON.stringify(KD.docWith(KD.entry(CASE_KEY))));
-  assert.equal(JSON.parse(run(path.join(dir, "receipt.json"), path.join(dir, "other.json")).stdout).reason, "document_sha256_mismatch");
+  assert.equal(JSON.parse(run(path.join(dir, "receipt.json"), path.join(dir, "other.json")).stdout).signature_ok, false, "another document");
 });
 
 test("R-N2 m7: an unsigned withdrawal record is labelled 'withdrawal record, unsigned: not a record' and its sig_reason is never printed; the case still reads WITHDRAWN and the refusal does not depend on the signature", async () => {
@@ -585,7 +587,7 @@ test("MUST-FAIL GAP (R10, R11, R13, R15): the offline checker holds the receipt 
   const at = C.utcSeconds(REVEAL_AT);
   const fields = { caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64) };
   const good = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(good, DOC), { ok: true, not_checked: ["the document's commit is on the published branch", "the key is still listed, not revoked, in the current key document"] });
+  assert.deepEqual(offline(good, DOC), { ok: true }, "the signature holds against the document supplied (unit R-N3, N3: the tool prints it as partial)");
   assert.deepEqual(offline({ ...good, v: 2 }, DOC), { ok: false, reason: "malformed_field" });
   const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.deepEqual(offline(byCase, DOC), { ok: false, reason: "signer_unpublished" });

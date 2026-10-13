@@ -756,12 +756,16 @@ test("SEALER: with more pending cases than one run reads, the window moves on ea
   const ids = [];
   for (let i = 0; i < 3; i += 1) ids.push((await sealedCase({ over: { scope_digest: sha(`window ${i}`) }, pinFails: true })).id);
   const pinnedNow = new Set();
-  for (let minute = 0; minute < 3; minute += 1) {
+  // unit R-N3, N6: the start is derived from the run's full timestamp (THE
+  // WINDOW'S START), which trades the exact ceil(n / max) runs a minute apart
+  // for a start no fixed period can hold still; a minute apart, 3 cases one
+  // a run, it reaches all three within 2 * ceil(3 / 1) runs
+  for (let minute = 0; minute < 6; minute += 1) {
     const out = await S.anchorPending({ now: REVEAL_AT + 60000 * (minute + 1), maxReads: 1, keyDocument: KEYS_DOC });
     assert.equal(out.read, 1);
     for (const id of out.newly_pinned) pinnedNow.add(id);
   }
-  assert.deepEqual([...pinnedNow].sort(), ids.slice().sort(), "each pinned within ceil(3 / 1) runs");
+  assert.deepEqual([...pinnedNow].sort(), ids.slice().sort(), "each pinned within 2 * ceil(3 / 1) runs");
   // the window itself
   const W = S._internal.rotatingWindow;
   const five = ["a", "b", "c", "d", "e"];
