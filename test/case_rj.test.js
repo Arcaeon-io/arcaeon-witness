@@ -299,10 +299,10 @@ test("J3: a pin naming a commit that does not exist, or one at which the case fi
   plantPin(id, chain, sealCommit(id));
   S._internal.clearCommitFiles();
   gh.forceRawFailure(1, 503, `:${C.casePath(id)}`);
-  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_at_commit_http_503" });
+  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_at_commit_http_503", case_commit: sealCommit(id) }); // unit R-L (g3)
   plantPin(id, chain, early2);
   gh.forceCommitFailure(1, 503);
-  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_commit_exists_http_503" });
+  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_commit_exists_http_503", case_commit: early2 });
 });
 
 test("J4: the case is compared at case_commit byte for byte, sig included: a served case whose sig differs from the bytes at case_commit is pin_commit_mismatch; the case file link names case_commit", async () => {
@@ -358,7 +358,7 @@ test("J6: case_commit, anchor heads and row commits go through commitOnBranch: o
   // the branch read fails: no claim
   const { id: id2 } = await sealedCase("RJ J6 unknown");
   gh.forceCompareFailure(1, 503, sealCommit(id2));
-  assert.deepEqual(await S.anchorState(id2, storedCase(id2)), { pin: "could_not_look", reason: "case_commit_compare_http_503" });
+  assert.deepEqual(await S.anchorState(id2, storedCase(id2)), { pin: "could_not_look", reason: "case_commit_compare_http_503", case_commit: sealCommit(id2) }); // unit R-L (g3)
   assert.equal((await S.anchorState(id2, storedCase(id2))).pin, "pinned", "control: read again");
   // an anchor head off the branch that holds the pin
   const { id: id3 } = await sealedCase("RJ J6 head");

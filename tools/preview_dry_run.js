@@ -579,6 +579,23 @@ const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
 const NO_RECONCILE_VERIFIER = `no reconcile verifier is known here (set ${receipts.VERIFIER_ENV} to the public verifier of the preview's ` +
   `${receipts.SIGNER_ENV}), so the receipt's signer cannot be checked`;
 
+// What (e) says of lib/_case_seal.js sealedRecordReason's answer: null when
+// it is valid_under_document; could-not-look for a document, or (unit R-L,
+// g6) a pin under a revoked key, that could not be read; broken otherwise.
+function holdsVerdict(answer) {
+  if (answer.code === "valid_under_document") return null;
+  if (answer.code === "document_unavailable") {
+    // unit R-I (I5): which document could not be read
+    if (answer.document === "current") return couldNotLook(`the current key document this checkout carries could not be read (${answer.reason})`);
+    return couldNotLook(`the key document it names (commit ${answer.document_commit}) could not be read from the public repository (${answer.reason})`);
+  }
+  if (answer.code === "pin_unavailable") {
+    return couldNotLook("a key that signed it is revoked in the current key document, and whether its pin shows its case file written before " +
+      `the revocation was recorded could not be read (${answer.reason})`);
+  }
+  return broken(`its sealed record does not hold under the key document it names (${answer.code}${answer.reason ? `: ${answer.reason}` : ""})`);
+}
+
 // (e)'s judgement of a 201 VERDICT answer: the sealed case it carries is
 // signed, sealed under this checkout's key document, its receipt signed by
 // the preview's own reconcile key, valid under the document it names (read
@@ -606,15 +623,8 @@ async function sealedAnswer(ctx, id, json) {
   if (!ctx.receiptVerifier) return couldNotLook(NO_RECONCILE_VERIFIER);
   const rs = isObject(k.verdict) && isObject(k.verdict.signer) ? k.verdict.signer.verifier : null;
   if (rs !== ctx.receiptVerifier) return broken(`its receipt is signed by ${rs || "no key"}, not the reconcile key ${receipts.VERIFIER_ENV} names`);
-  const answer = await S.sealedRecordReason(k, ctx.keyDocument);
-  if (answer.code === "document_unavailable") {
-    // unit R-I (I5): which document could not be read
-    if (answer.document === "current") return couldNotLook(`the current key document this checkout carries could not be read (${answer.reason})`);
-    return couldNotLook(`the key document it names (commit ${answer.document_commit}) could not be read from the public repository (${answer.reason})`);
-  }
-  if (answer.code !== "valid_under_document") {
-    return broken(`its sealed record does not hold under the key document it names (${answer.code}${answer.reason ? `: ${answer.reason}` : ""})`);
-  }
+  const held = holdsVerdict(await S.sealedRecordReason(k, ctx.keyDocument));
+  if (held) return held;
   if (typeof json.chain !== "string" || !HEX64.test(json.chain)) return broken(`its chain ${JSON.stringify(json.chain)} is not 64 hex`);
   const own = S.caseChain(k);
   if (json.chain !== own) return broken(`its chain ${json.chain} is not the sealed case's own (${own})`);
@@ -977,4 +987,4 @@ if (require.main === module) {
     process.exit(3);
   });
 }
-module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, vercelSso, CHECKS, QUOTA_PER_DAY, BYPASS_ENV, _internal: { request } };
+module.exports = { main, run, exitCodeOf, sourceRegex, exposurePaths, vercelSso, CHECKS, QUOTA_PER_DAY, BYPASS_ENV, _internal: { request, holdsVerdict } };

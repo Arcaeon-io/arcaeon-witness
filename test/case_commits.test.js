@@ -458,7 +458,7 @@ test("THE VERIFIER NEVER TRUSTS case_commit AS AN ID: a pin naming a commit at w
   assert.deepEqual([forged.pin, forged.reason, forged.case_commit], ["pin_commit_mismatch", "case_commit_not_found", "f".repeat(40)]);
   gh.forceRawFailure(1, 503, `:${C.casePath(id)}`);
   plantPin(id, chain, sealCommit(id));
-  assert.deepEqual(await S.anchorState(id, chain), { pin: "could_not_look", reason: "case_at_commit_http_503" });
+  assert.deepEqual(await S.anchorState(id, chain), { pin: "could_not_look", reason: "case_at_commit_http_503", case_commit: sealCommit(id) }); // unit R-L (g3): the commit it names
   dailyAnchor(dayOf(Date.now() + 2 * DAY)); // a head holding the pin as now planted (re-seeding drops a path's history in the mock)
   // the first record names a head the mock dropped with that history (a real
   // repository keeps its commits): since unit R-J3 (F3) a head the

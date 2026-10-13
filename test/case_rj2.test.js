@@ -390,14 +390,14 @@ test("M1: a case_commit or an anchor head the host does not show yet (a compare 
   const fresh = crypto.createHash("sha1").update("rj2 not shown case").digest("hex");
   gh.seedRaw(PINS, fresh, C.casePath(id), caseText(id));
   plantPin(id, chainOf(id), fresh);
-  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_commit_not_shown" });
+  assert.deepEqual(await S.anchorState(id, storedCase(id)), { pin: "could_not_look", reason: "case_commit_not_shown", case_commit: fresh }); // unit R-L (g3)
   const { id: id2 } = await sealedCase("RJ2 M1 head");
   const p = S.pinPaths(id2).seq;
   const freshHead = crypto.createHash("sha1").update("rj2 not shown head").digest("hex");
   gh.seedRaw(PINS, freshHead, p, gh._repoMap(PINS).get(p).content);
   dailyAnchor(pinDay(id2), freshHead);
   const st = await S.anchorState(id2, storedCase(id2));
-  assert.deepEqual([st.pin, st.anchor], ["pinned", { could_not_look: "anchor_head_not_shown" }]);
+  assert.deepEqual([st.pin, st.anchor], ["pinned", { could_not_look: "anchor_head_not_shown", head_commit: freshHead }]); // unit R-L (g2): it names the head
 });
 
 // =============================================================================
@@ -484,7 +484,7 @@ test("n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for 
   plantPin(id, chainOf(id), gh.commitsFor(PINS, C.casePath(id)).slice(-1)[0].sha);
   assert.ok((await casePage(id)).html.includes("the case file at that commit is not this case file in canonical form (json-c14n:v1) (case_at_commit_differs)"));
   for (const [commit, words, reason] of [
-    ["f".repeat(40), "the pins repository does not show that commit", "case_commit_not_found"], // unit R-J3 (F2)
+    ["f".repeat(40), "that commit is not shown by the repository", "case_commit_not_found"], // unit R-J3 (F2); unit R-L (g4)
     [early, "the pins repository holds no case file at that commit", "case_absent_at_commit"],
   ]) {
     plantPin(id, chainOf(id), commit);

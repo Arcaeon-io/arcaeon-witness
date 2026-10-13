@@ -1041,14 +1041,14 @@ test("R-I2 GAP (M03): a commit that removed the marker file reads as nothing the
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], JSON.stringify(a));
 });
 
-test("R-I2 GAP (K02): a pin pointer whose numbered record has no commit at all is a pin commit that could not be read, never a crash", async () => {
+test("R-I2 GAP (K02): a pin pointer whose numbered record has no commit at all is could_not_look, never a crash; since unit R-L (g5) it says the repository lists no commit for it (pin_commits_none), not that a read failed", async () => {
   const c = await sealedCase("R-I2 gap no record commits", { pinFails: true });
   const chain = S.caseChain(c.k);
   const caseCommit = gh.commitsFor(PINS, C.casePath(c.id))[0].sha;
   gh.seed(PINS, S.pinPaths(c.id).latest, S._internal.pinRecord(c.id, chain, REVEAL_AT, caseCommit));
   assert.equal(gh.commitsFor(PINS, S.pinPaths(c.id).seq).length, 0, "fixture: the numbered record was never written");
   const st = await S.anchorState(c.id, chain, { anchor: false });
-  assert.deepEqual([st.pin, st.reason], ["could_not_look", "pin_commit_unreadable"]);
+  assert.deepEqual([st.pin, st.reason], ["could_not_look", "pin_commits_none"]);
 });
 
 test("R-I2 GAP (T02, J04, J05): the tool's printed usage names KEY_DOCUMENT_BRANCH; the notes say what 'pinned before it' means and that no later write moves the revoking commit", () => {

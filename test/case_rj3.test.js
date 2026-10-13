@@ -285,13 +285,16 @@ function fill(t, x) {
 const MISMATCH = {
   differs: (f) => `the ${f} at that commit is not this ${f} in canonical form (json-c14n:v1)`,
   absent: (f) => `the pins repository holds no ${f} at that commit`,
-  not_found: "the pins repository does not show that commit",
+  not_found: "that commit is not shown by the repository", // unit R-L (g4): one wording, and "yet" only for could_not_look
   off_branch: "that commit is not on the published branch of the pins repository",
   other: (f) => `the ${f} there is not shown to be this ${f} in canonical form (json-c14n:v1)`,
 };
 // What a could_not_look reason says, of the pin, the case file or a row.
 const CNL = {
   pin_commit: "the commit that wrote its pin record could not be read when this page was read",
+  // unit R-L (g5): no read failed
+  pin_commits_beyond_bound: "the pin's commit history is longer than this service reads",
+  pin_commits_none: "the repository lists no commit for the pin",
   pin_at_commit: "its pin record could not be read at the commit that wrote it when this page was read",
   not_shown: "the commit it names is not shown by the repository yet",
   at_commit: (f) => `the ${f} at the commit it names could not be read when this page was read`,
@@ -329,7 +332,19 @@ const T = {
   NOT_LOOKED_UP: "pinned; no daily anchor record was read for this answer, so no anchor is claimed.",
   ANCHOR_CNL: "pinned; whether a daily anchor record holds its pin could not be read when this page was read (could_not_look: {reason}), so no " +
     "anchor is claimed.",
-  HEAD_NOT_SHOWN: "pinned; the head a daily anchor record names is not shown by the repository yet (could_not_look: anchor_head_not_shown), so " +
+  // unit R-L (g2): it names the head
+  HEAD_NOT_SHOWN: "pinned; a daily anchor record names the head {head_full}, which is not shown by the repository yet (could_not_look: " +
+    "anchor_head_not_shown), so no anchor is claimed.",
+  // unit R-L (g1, g7): what was read of the record
+  RECORD_CHANGED: "pinned (could_not_look: anchor_record_changed); a daily anchor record for this case was read and named a different head " +
+    "at its newest commit, so no anchor is claimed.",
+  RECORD_COMMIT_CNL: "pinned; the commit that wrote a daily anchor record could not be read when this page was read (could_not_look: " +
+    "{reason}), so no anchor is claimed.",
+  RECORD_AT_COMMIT_CNL: "pinned; a daily anchor record could not be read at its own commit when this page was read (could_not_look: " +
+    "{reason}), so no anchor is claimed.",
+  RECORD_COMMITS_BEYOND: "pinned; a daily anchor record's commit history is longer than this service reads (could_not_look: " +
+    "anchor_record_commits_beyond_bound), so no anchor is claimed.",
+  RECORD_COMMITS_NONE: "pinned; the repository lists no commit for a daily anchor record (could_not_look: anchor_record_commits_none), so " +
     "no anchor is claimed.",
   A_NOT_PINNED: "commit_unrecorded: the case is sealed and not yet pinned (not_pinned), so it is not shown as pinned or anchored. A later " +
     "sealer run may pin it.",
@@ -348,6 +363,9 @@ const T = {
   CC_NO_CASE_COMMIT: "commit_unrecorded: its pin names none (no_case_commit)",
   CC_MISMATCH: "not shown: its pin names {case_commit}, and {words} ({reason})",
   CC_CNL: "not known when this page was read ({reason})",
+  // unit R-L (g3): what was read
+  CC_NOT_SHOWN: "its pin names {case_commit}, and the case file read at that commit is this case; whether that commit is on the published " +
+    "branch is not shown by the repository yet (case_commit_not_shown)",
   CC_OTHER: "not shown: the pin pointer under this case's namespace holds another chain (pointer_holds_another_chain)",
   CC_PIN_CONFLICT: "not shown: its pin names {case_commit}, and the case file there was not read: {words} ({reason})",
   CC_HEAD_CONFLICT: "the case file read at commit {case_commit}, which its pin names, is this case; the case is not shown as pinned or " +
@@ -377,8 +395,21 @@ const T = {
     "and no row was written",
   RESP_ANCHOR_CNL: "the case is pinned, and whether a daily anchor record conflicts with its pin could not be read on this request " +
     "({reason}), so the anchor-conflict check could not be made; this is not a 'no', and no row was written",
-  RESP_HEAD_NOT_SHOWN: "the case is pinned, and the head a daily anchor record names is not shown by the repository yet " +
-    "(anchor_head_not_shown), so the anchor-conflict check could not be made; this is not a 'no', and no row was written",
+  RESP_HEAD_NOT_SHOWN: "the case is pinned, and a daily anchor record names the head {head_full}, which is not shown by the repository " +
+    "yet (anchor_head_not_shown), so the anchor-conflict check could not be made; this is not a 'no', and no row was written",
+  RESP_RECORD_CHANGED: "the case is pinned, and a daily anchor record for this case was read and named a different head at its newest " +
+    "commit, so no anchor is claimed (anchor_record_changed); this is not a refusal of the row; try again, and no row was written",
+  RESP_RECORD_COMMIT: "the case is pinned, and the commit that wrote a daily anchor record could not be read on this request ({reason}), so " +
+    "the daily anchor records after it were not read; this is not a 'no', and no row was written",
+  RESP_RECORD_AT_COMMIT: "the case is pinned, and a daily anchor record could not be read at its own commit on this request ({reason}), so " +
+    "the daily anchor records after it were not read; this is not a 'no', and no row was written",
+  RESP_RECORD_COMMITS_BEYOND: "the case is pinned, and a daily anchor record's commit history is longer than this service reads " +
+    "(anchor_record_commits_beyond_bound), so the daily anchor records after it were not read; this is not a 'no', and no row was written",
+  RESP_RECORD_COMMITS_NONE: "the case is pinned, and the repository lists no commit for a daily anchor record (anchor_record_commits_none), " +
+    "so the daily anchor records after it were not read; this is not a 'no', and no row was written",
+  // unit R-L (g5): a history longer than this service reads does not shorten; no "Try again"
+  RESP_CNL_BEYOND: "could not look; this is not a refusal of the row. The case's pin reads could_not_look on this request " +
+    "(pin_commits_beyond_bound): the pin's commit history is longer than this service reads, and no row was written",
   RESP_ANCHOR_CONFLICT: "the case's pin holds its chain, and {words} ({record}); a row is not appended to a case whose anchor conflicts; no " +
     "row was written",
 };
@@ -387,6 +418,7 @@ const NOT_PINNED_409 = [409, "case_not_pinned", T.RESP_NOT_PINNED];
 const CNL_503 = [503, "could_not_look", T.RESP_CNL];
 const ANCHOR_503 = [503, "anchor_unreadable", T.RESP_ANCHOR_CNL];
 const HEAD_503 = [503, "anchor_unreadable", T.RESP_HEAD_NOT_SHOWN];
+const RECORD_503 = (r) => [503, "anchor_unreadable", r];
 const CONFLICT_409 = [409, "anchor_conflict", T.RESP_ANCHOR_CONFLICT];
 // The reference reads the case it serves (never a chain), with its anchor
 // looked up: it never meets these answers.
@@ -397,6 +429,27 @@ const HELD = (anchor, caseCommit, response, words) => ({ pin: T.PIN_HELD, anchor
 const ANCHOR_CNL = { ...PINNED, anchor: T.ANCHOR_CNL, response: ANCHOR_503 };
 const HEAD_CONFLICT = (reason) => ({ ...HELD(T.A_CONFLICT, T.CC_HEAD_CONFLICT, CONFLICT_409, CONFLICT_WORDS[reason]), state: "conflict", reason });
 const PIN_CONFLICT = (reason) => ({ ...HELD(T.A_CONFLICT, T.CC_PIN_CONFLICT, NOT_PINNED_409, CONFLICT_WORDS[reason]), state: "conflict", reason });
+
+// unit R-L (g8): each reason the seal judge (lib/_verdict.js judgeCaseSeal)
+// gives a pin pointer, with a pointer that makes it (the stored pointer,
+// changed), below
+const JUDGE_POINTERS = {
+  not_a_json_object: () => [1, 2],
+  case_seal_unknown_field: (p) => ({ ...p, extra: 1 }),
+  case_seal_missing_field: (p) => { const { auth_note: _a, ...q } = p; return q; }, // eslint-disable-line no-unused-vars
+  case_seal_wrong_record_kind: (p) => ({ ...p, record_kind: "pin" }),
+  case_seal_wrong_auth_level: (p) => ({ ...p, auth_level: "bearer" }),
+  case_seal_namespace_unreadable: (p) => ({ ...p, namespace: "not/a/case" }),
+  namespace_mismatch: (p) => ({ ...p, namespace: `case/${"0".repeat(64)}` }),
+  case_seal_wrong_rows: (p) => ({ ...p, rows: 7 }),
+  case_seal_wrong_seq: (p) => ({ ...p, seq: 0 }),
+  chain_unreadable: (p) => ({ ...p, chain: "not hex" }),
+  case_seal_pinned_at_unreadable: (p) => ({ ...p, pinned_at: "yesterday" }),
+  case_seal_auth_note_unreadable: (p) => ({ ...p, auth_note: " " }),
+  case_seal_case_commit_unreadable: (p) => ({ ...p, case_commit: "C".repeat(40) }),
+  case_seal_reference_commits_unreadable: (p) => ({ ...p, reference_commits: [] }),
+};
+const JUDGE_REASONS = Object.keys(JUDGE_POINTERS).filter((r) => r !== "case_seal_unknown_field"); // the R-J3 row has it
 
 // pair: whose (state, reason) the row names: "case" (anchorState's pin and
 // reason), "anchor" (anchorState's pin and its anchor's could_not_look), or
@@ -428,6 +481,17 @@ const TABLE = [
   { from: "anchorState", pair: "case", fx: "pin_raw_failed", state: "could_not_look", reason: "pin_at_commit_fetch_failed",
     ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.pin_at_commit) },
   { from: "anchorState", pair: "case", fx: "pin_other_chain", ...PIN_CONFLICT("pin_at_its_commit_holds_another_chain") },
+  // unit R-L (g5): the pin's commit list read, and no read failed
+  { from: "anchorState", pair: "case", fx: "pin_commits_beyond", state: "could_not_look", reason: "pin_commits_beyond_bound",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, [503, "could_not_look", T.RESP_CNL_BEYOND], CNL.pin_commits_beyond_bound) },
+  { from: "anchorState", pair: "case", fx: "pin_commits_none", state: "could_not_look", reason: "pin_commits_none",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.pin_commits_none) },
+  // unit R-L (g8): other http codes
+  { from: "anchorState", pair: "case", fx: "pin_raw_500", state: "could_not_look", reason: "pin_at_commit_http_500",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.pin_at_commit) },
+  // unit R-L (g8): every reason the seal judge gives a pin pointer
+  ...JUDGE_REASONS.map((reason) => ({ from: "anchorState", pair: "case", fx: `unreadable_${reason}`, state: "unreadable", reason, pin: T.PIN_UNREADABLE,
+    anchor: T.A_UNREADABLE, caseCommit: T.CC_UNREADABLE, note: T.NOTE_READ, row: T.ROW_CASE, response: NOT_PINNED_409 })),
   { from: "anchorState", pair: "case", fx: "pin_judge_fails", ...PIN_CONFLICT("pin_at_its_commit_not_a_pin") },
   { from: "anchorState", pair: "case", fx: "pin_other_seq", ...PIN_CONFLICT("pin_at_its_commit_not_a_pin") },
   // servedAtCommit, for the case file at the commit its pin names
@@ -440,7 +504,7 @@ const TABLE = [
   { from: "servedAtCommit (case)", pair: "case", fx: "case_off_branch", state: "pin_commit_mismatch", reason: "case_commit_off_branch",
     ...HELD(T.A_MISMATCH, T.CC_MISMATCH, NOT_PINNED_409, MISMATCH.off_branch) },
   { from: "servedAtCommit (case)", pair: "case", fx: "case_not_shown", state: "could_not_look", reason: "case_commit_not_shown",
-    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.not_shown) },
+    ...HELD(T.A_HELD_CNL, T.CC_NOT_SHOWN, CNL_503, CNL.not_shown) },
   { from: "servedAtCommit (case)", pair: "case", fx: "case_raw_503", state: "could_not_look", reason: "case_at_commit_http_503",
     ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.at_commit("case file")) },
   { from: "servedAtCommit (case)", pair: "case", fx: "case_raw_failed", state: "could_not_look", reason: "case_at_commit_fetch_failed",
@@ -454,6 +518,15 @@ const TABLE = [
   { from: "servedAtCommit (case)", pair: "case", fx: "case_compare_failed", state: "could_not_look", reason: "case_commit_compare_failed",
     ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.on_branch) },
   { from: "servedAtCommit (case)", pair: "case", fx: "case_branch", state: "could_not_look", reason: "case_commit_branch_unreadable",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.on_branch) },
+  // unit R-L (g8): another branch answer and other http codes
+  { from: "servedAtCommit (case)", pair: "case", fx: "case_branch_name", state: "could_not_look", reason: "case_commit_branch_name_invalid",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.on_branch) },
+  { from: "servedAtCommit (case)", pair: "case", fx: "case_raw_429", state: "could_not_look", reason: "case_at_commit_http_429",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.at_commit("case file")) },
+  { from: "servedAtCommit (case)", pair: "case", fx: "case_exists_500", state: "could_not_look", reason: "case_commit_exists_http_500",
+    ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.exists) },
+  { from: "servedAtCommit (case)", pair: "case", fx: "case_compare_500", state: "could_not_look", reason: "case_commit_compare_http_500",
     ...HELD(T.A_HELD_CNL, T.CC_CNL, CNL_503, CNL.on_branch) },
   // anchorState given a chain (tools/preview_dry_run.js), and with no anchor
   // lookup (the revocation order): never the page's or the reference's
@@ -479,9 +552,29 @@ const TABLE = [
     anchor: T.HEAD_NOT_SHOWN, response: HEAD_503 },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_exists_503", state: "pinned", reason: "anchor_head_exists_http_503", ...ANCHOR_CNL },
   { from: "dailyAnchorOf", pair: "anchor", fx: "head_before_pin", state: "pinned", reason: null, ...PINNED },
-  { from: "dailyAnchorOf", pair: "anchor", fx: "record_commit_cnl", state: "pinned", reason: "anchor_record_commit_unreadable", ...ANCHOR_CNL },
-  { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_503", state: "pinned", reason: "anchor_record_at_commit_http_503", ...ANCHOR_CNL },
-  { from: "dailyAnchorOf", pair: "anchor", fx: "record_changed", state: "pinned", reason: "anchor_record_changed", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_commit_cnl", state: "pinned", reason: "anchor_record_commit_unreadable", ...PINNED,
+    anchor: T.RECORD_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_COMMIT) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_503", state: "pinned", reason: "anchor_record_at_commit_http_503", ...PINNED,
+    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_changed", state: "pinned", reason: "anchor_record_changed", ...PINNED,
+    anchor: T.RECORD_CHANGED, response: RECORD_503(T.RESP_RECORD_CHANGED) },
+  // unit R-L (g2, g5, g7, g8): the reasons the R-J3 table did not assert
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_failed", state: "pinned", reason: "anchor_record_at_commit_fetch_failed", ...PINNED,
+    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_at_commit_404", state: "pinned", reason: "anchor_record_at_commit_http_404", ...PINNED,
+    anchor: T.RECORD_AT_COMMIT_CNL, response: RECORD_503(T.RESP_RECORD_AT_COMMIT) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_commits_beyond", state: "pinned", reason: "anchor_record_commits_beyond_bound", ...PINNED,
+    anchor: T.RECORD_COMMITS_BEYOND, response: RECORD_503(T.RESP_RECORD_COMMITS_BEYOND) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "record_commits_none", state: "pinned", reason: "anchor_record_commits_none", ...PINNED,
+    anchor: T.RECORD_COMMITS_NONE, response: RECORD_503(T.RESP_RECORD_COMMITS_NONE) },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "pin_at_head_failed", state: "pinned", reason: "pin_at_head_fetch_failed", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "pin_at_head_500", state: "pinned", reason: "pin_at_head_http_500", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "head_compare_failed", state: "pinned", reason: "anchor_head_compare_failed", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "head_branch_unreadable", state: "pinned", reason: "anchor_head_branch_unreadable", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "head_exists_failed", state: "pinned", reason: "anchor_head_exists_read_failed", ...ANCHOR_CNL },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "head_not_shown_then_anchored", state: "anchored", reason: null, ...PINNED, anchor: T.ANCHORED },
+  { from: "dailyAnchorOf", pair: "anchor", fx: "head_not_shown_then_none", state: "pinned", reason: "anchor_head_not_shown", ...PINNED,
+    anchor: T.HEAD_NOT_SHOWN, response: HEAD_503 },
   // the row reader, and servedAtCommit for the row at the commit a pin lists
   { from: "row reader", pair: "row", fx: "row_recorded", state: "recorded", reason: null, ...PINNED, row: T.ROW_RECORDED },
   { from: "row reader", pair: "row", fx: "pinned", state: "commit_unrecorded", reason: null, ...PINNED },
@@ -509,7 +602,22 @@ const TABLE = [
     row: T.ROW_CNL, words: CNL.exists },
   { from: "servedAtCommit (row)", pair: "row", fx: "row_compare_503", state: "could_not_look", reason: "reference_commit_compare_http_503", ...PINNED,
     row: T.ROW_CNL, words: CNL.on_branch },
+  // unit R-L (g8): the other reference_* could_not_look reasons
+  { from: "servedAtCommit (row)", pair: "row", fx: "row_raw_failed", state: "could_not_look", reason: "reference_at_commit_fetch_failed", ...PINNED,
+    row: T.ROW_CNL, words: CNL.at_commit("row") },
+  { from: "servedAtCommit (row)", pair: "row", fx: "row_exists_failed", state: "could_not_look", reason: "reference_commit_exists_read_failed", ...PINNED,
+    row: T.ROW_CNL, words: CNL.exists },
+  { from: "servedAtCommit (row)", pair: "row", fx: "row_compare_failed", state: "could_not_look", reason: "reference_commit_compare_failed", ...PINNED,
+    row: T.ROW_CNL, words: CNL.on_branch },
+  { from: "servedAtCommit (row)", pair: "row", fx: "row_branch_unreadable", state: "could_not_look", reason: "reference_commit_branch_unreadable", ...PINNED,
+    row: T.ROW_CNL, words: CNL.on_branch },
+  { from: "servedAtCommit (row)", pair: "row", fx: "row_raw_500", state: "could_not_look", reason: "reference_at_commit_http_500", ...PINNED,
+    row: T.ROW_CNL, words: CNL.at_commit("row") },
 ];
+// unit R-L (g8): the row reader's pair under every case state that is not
+// shown pinned: not_read, with the case's own reason
+TABLE.push(...TABLE.filter((t) => t.pair === "case" && t.row === T.ROW_CASE && t.state !== "commit_unrecorded")
+  .map((t) => ({ ...t, from: "row reader", pair: "row", state: "not_read", reason: t.reason, case: [t.state, t.reason] })));
 
 // A sealed case with reference row 1, appended while it read pinned.
 async function withRow(scope) {
@@ -552,6 +660,19 @@ function plantPins(id, top) {
   gh.seed(PINS, latestOf(id), rec);
 }
 const rowText = (id) => gh._repoMap(PINS).get(rowPath(id, 1)).content;
+// The day after a YYYY-MM-DD day.
+const nextDay = (d) => new Date(Date.parse(`${d}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
+// A path's history made longer than lib/_case_seal.js reads (fifty pages):
+// a page of one commit each, and more commits than pages (unit R-L, g5).
+function longHistory(path) {
+  gh.commitsPageCap = 1;
+  for (let i = 0; i < S._internal.COMMIT_LIST_PAGES + 5; i += 1) gh.addCommit(PINS, path, "mock: one more commit");
+}
+// A path the repository lists no commit for (unit R-L, g5).
+function noHistory(path) {
+  const list = gh._commitsOf(PINS);
+  for (let i = list.length - 1; i >= 0; i -= 1) if (list[i].path === path) list.splice(i, 1);
+}
 const anchored = (a) => ({ head: s12(a.head), record: a.path, record_commit: s12(a.commit) });
 const cnlCompare = (sha, status) => () => {
   S._internal.clearDocumentCache();
@@ -751,13 +872,140 @@ const FIXTURES = {
     const f = fresh();
     gh.seedRaw(PINS, f, seqOf(c.id), gh._repoMap(PINS).get(seqOf(c.id)).content);
     dailyAnchor(pinDay(c.id), f);
-    return { c };
+    return { c, x: { head_full: f } };
   },
   // F3: no pin at the head, and the head is not a commit the repository shows
   head_absent_not_shown: async () => {
     const c = await withRow("RJ3 head absent not shown");
+    const f = fresh();
+    dailyAnchor(pinDay(c.id), f);
+    return { c, x: { head_full: f } };
+  },
+  // unit R-L (g2): a record naming a head the repository does not show is a
+  // miss, and the records after it are read
+  head_not_shown_then_anchored: async () => {
+    const c = await withRow("RJ3 head not shown then anchored");
     dailyAnchor(pinDay(c.id), fresh());
+    return { c, x: anchored(dailyAnchor(nextDay(pinDay(c.id)))) };
+  },
+  head_not_shown_then_none: async () => {
+    const e = early();
+    const c = await withRow("RJ3 head not shown then none");
+    const f = fresh();
+    dailyAnchor(pinDay(c.id), f);
+    dailyAnchor(nextDay(pinDay(c.id)), e);
+    return { c, x: { head_full: f } };
+  },
+  head_branch_unreadable: async () => {
+    const c = await withRow("RJ3 head branch unreadable");
+    const f = fresh();
+    gh.seedRaw(PINS, f, seqOf(c.id), gh._repoMap(PINS).get(seqOf(c.id)).content);
+    dailyAnchor(pinDay(c.id), f);
+    return { c, arm: () => { S._internal.clearDocumentCache(); gh.forceBranchFailure(1, 503); } };
+  },
+  head_exists_failed: async () => {
+    const c = await withRow("RJ3 head exists failed");
+    dailyAnchor(pinDay(c.id), fresh());
+    return { c, arm: () => gh.forceCommitFailure(1, 0) };
+  },
+  head_compare_failed: async () => {
+    const c = await withRow("RJ3 head compare failed");
+    const a = dailyAnchor(pinDay(c.id));
+    return { c, arm: cnlCompare(a.head, 0) };
+  },
+  pin_at_head_failed: async () => {
+    const c = await withRow("RJ3 pin at head failed");
+    const a = dailyAnchor(pinDay(c.id));
+    return { c, arm: () => gh.forceRawFailure(1, 0, `@${a.head}:${seqOf(c.id)}`) };
+  },
+  pin_at_head_500: async () => {
+    const c = await withRow("RJ3 pin at head 500");
+    const a = dailyAnchor(pinDay(c.id));
+    return { c, arm: () => gh.forceRawFailure(1, 500, `@${a.head}:${seqOf(c.id)}`) };
+  },
+  record_at_commit_failed: async () => {
+    const c = await withRow("RJ3 record at commit failed");
+    const a = dailyAnchor(pinDay(c.id));
+    return { c, arm: () => gh.forceRawFailure(1, 0, `:${a.path}`) };
+  },
+  record_at_commit_404: async () => {
+    const c = await withRow("RJ3 record at commit 404");
+    const a = dailyAnchor(pinDay(c.id));
+    return { c, arm: () => gh.forceRawFailure(1, 404, `:${a.path}`) };
+  },
+  record_commits_beyond: async () => {
+    const c = await withRow("RJ3 record commits beyond");
+    const a = dailyAnchor(pinDay(c.id));
+    longHistory(a.path);
     return { c };
+  },
+  record_commits_none: async () => {
+    const c = await withRow("RJ3 record commits none");
+    const a = dailyAnchor(pinDay(c.id));
+    noHistory(a.path);
+    return { c };
+  },
+  pin_commits_beyond: async () => {
+    const c = await withRow("RJ3 pin commits beyond");
+    longHistory(seqOf(c.id));
+    return { c };
+  },
+  pin_commits_none: async () => {
+    const c = await withRow("RJ3 pin commits none");
+    noHistory(seqOf(c.id));
+    return { c };
+  },
+  pin_raw_500: async () => {
+    const c = await withRow("RJ3 pin raw 500");
+    return { c, arm: () => gh.forceRawFailure(1, 500, `:${seqOf(c.id)}`) };
+  },
+  case_branch_name: async () => {
+    const c = await withRow("RJ3 case branch name");
+    const was = store.BRANCH;
+    store.BRANCH = "not a branch name";
+    return { c, cleanup: () => { store.BRANCH = was; } };
+  },
+  case_raw_429: async () => {
+    const c = await withRow("RJ3 case raw 429");
+    return { c, arm: () => gh.forceRawFailure(1, 429, `:${C.casePath(c.id)}`) };
+  },
+  case_exists_500: async () => {
+    const e = early();
+    const c = await withRow("RJ3 case exists 500");
+    plantPin(c.id, chainOf(c.id), e);
+    return { c, arm: () => gh.forceCommitFailure(1, 500) };
+  },
+  case_compare_500: async () => {
+    const c = await withRow("RJ3 case compare 500");
+    return { c, arm: cnlCompare(sealCommit(c.id), 500) };
+  },
+  row_raw_failed: async () => {
+    const c = await withRow("RJ3 row raw failed");
+    await sealerRun();
+    return { c, rowArm: () => gh.forceRawFailure(1, 0, `:${rowPath(c.id, 1)}`) };
+  },
+  row_raw_500: async () => {
+    const c = await withRow("RJ3 row raw 500");
+    await sealerRun();
+    return { c, rowArm: () => gh.forceRawFailure(1, 500, `:${rowPath(c.id, 1)}`) };
+  },
+  row_exists_failed: async () => {
+    const e = early();
+    const c = await withRow("RJ3 row exists failed");
+    listRow(c.id, e);
+    return { c, rowArm: () => gh.forceCommitFailure(1, 0) };
+  },
+  row_compare_failed: async () => {
+    const c = await withRow("RJ3 row compare failed");
+    await sealerRun();
+    return { c, rowArm: cnlCompare(rowCommit(c.id, 1), 0) };
+  },
+  row_branch_unreadable: async () => {
+    const c = await withRow("RJ3 row branch unreadable");
+    const f = fresh();
+    gh.seedRaw(PINS, f, rowPath(c.id, 1), rowText(c.id));
+    listRow(c.id, f);
+    return { c, rowArm: () => { S._internal.clearDocumentCache(); gh.forceBranchFailure(1, 503); } };
   },
   head_exists_503: async () => {
     const c = await withRow("RJ3 head exists 503");
@@ -866,6 +1114,15 @@ const FIXTURES = {
   },
 };
 
+// unit R-L (g8): a pointer for each reason the seal judge gives
+for (const [reason, make] of Object.entries(JUDGE_POINTERS)) {
+  FIXTURES[`unreadable_${reason}`] = async () => {
+    const c = await withRow(`RJ3 unreadable ${reason}`);
+    gh.seed(PINS, latestOf(c.id), make(gh.read(PINS, latestOf(c.id))));
+    return { c };
+  };
+}
+
 // The names a sentence may use, read off the fixture as it stands.
 function namesOf(f, t) {
   const { id } = f.c;
@@ -877,7 +1134,7 @@ function namesOf(f, t) {
   } catch {
     ptr = null;
   }
-  const listed = ptr && Array.isArray(ptr.reference_commits) ? ptr.reference_commits.find((e) => e.seq === 1) : null;
+  const listed = ptr && Array.isArray(ptr.reference_commits) ? ptr.reference_commits.find((e) => e && e.seq === 1) : null;
   const [state, reason] = t.pair !== "row" ? [t.state, t.reason] : t.case || ["pinned", null];
   return {
     state, reason, row_reason: t.pair === "row" ? t.reason : undefined, words: t.words,
@@ -891,6 +1148,15 @@ function namesOf(f, t) {
 for (const t of TABLE) {
   test(`THE TABLE: ${t.from}, ${t.state}${t.reason ? ` / ${t.reason}` : ""} (${t.fx}): the pin, anchor and case-commit cells, the note, the row's cell and the reference's answer`, async () => {
     const f = await FIXTURES[t.fx]();
+    try {
+      await tableRow(t, f);
+    } finally {
+      if (f.cleanup) f.cleanup();
+    }
+  });
+}
+async function tableRow(t, f) {
+  {
     const { id } = f.c;
     const x = namesOf(f, t);
     const arm = () => {
@@ -928,7 +1194,7 @@ for (const t of TABLE) {
     assert.equal(r.status, status, JSON.stringify(r.body).slice(0, 400));
     if (status === 201) return;
     assert.deepEqual([r.body.error_code, r.body.error], [code, fill(error, x)]);
-  });
+  }
 }
 
 // =============================================================================
@@ -936,7 +1202,7 @@ for (const t of TABLE) {
 // =============================================================================
 
 test("BL1: 'no pin of this case's chain' is said only where the pointer was read and holds no pin of this chain; where it holds the chain the pin cell says so", () => {
-  const said = TABLE.filter((t) => t.pin.startsWith("no pin of this case's chain")).map((t) => `${t.state}/${t.reason}`);
+  const said = TABLE.filter((t) => t.pair === "case" && t.pin.startsWith("no pin of this case's chain")).map((t) => `${t.state}/${t.reason}`);
   assert.deepEqual([...new Set(said)], ["conflict/pointer_holds_another_chain"]);
   for (const r of ["anchored_head_off_branch", "anchored_head_not_json", "anchored_head_holds_another_chain", "anchored_head_not_a_pin",
     "case_at_commit_differs", "case_commit_not_shown"]) {
@@ -1047,6 +1313,39 @@ test("a page with a row whose commit was not read (not_read) is not kept", async
   const second = await casePage(c.id, { now: t0 + 5000, cached: true });
   assert.match(rowLine(second.html, 1), /not read: this case is not shown as pinned/, "fixture: the row is not_read");
   assert.ok(second.html.includes(`read at ${utc(t0 + 5000)}`), "read again");
+});
+
+// =============================================================================
+// UNIT R-L, THE FOLLOW-UPS TO R-J3 (g1-g8); the table rows above carry g1-g5,
+// g7 and g8
+// =============================================================================
+
+test("R-L g6: the preview tool reports pin_unavailable as could-not-look, never as a sealed record that does not hold", () => {
+  const TOOL = require("../tools/preview_dry_run.js");
+  const v = TOOL._internal.holdsVerdict({ code: "pin_unavailable", reason: "pin_pointer_unreadable", revoked: [] });
+  assert.equal(v.word, "COULD NOT LOOK");
+  assert.equal(v.text, "a key that signed it is revoked in the current key document, and whether its pin shows its case file written before " +
+    "the revocation was recorded could not be read (pin_pointer_unreadable)");
+  assert.doesNotMatch(v.text, /does not hold/);
+  assert.equal(TOOL._internal.holdsVerdict({ code: "valid_under_document" }), null, "control: a record that holds");
+  assert.equal(TOOL._internal.holdsVerdict({ code: "signer_revoked", reason: "case_not_pinned" }).word, "BROKEN", "control: a no");
+});
+
+test("R-L g2: one record naming a commit that never exists does not hold back the case: the record after it is read, and anchors it", async () => {
+  const c = await withRow("RJ3 g2 liveness");
+  const never = fresh();
+  dailyAnchor(pinDay(c.id), never);
+  const st0 = await S.anchorState(c.id, storedCase(c.id));
+  assert.deepEqual([st0.pin, st0.anchor], ["pinned", { could_not_look: "anchor_head_not_shown", head_commit: never }], "alone: could_not_look, naming the head");
+  const a = dailyAnchor(nextDay(pinDay(c.id)));
+  const st = await S.anchorState(c.id, storedCase(c.id));
+  assert.deepEqual([st.pin, st.anchor.path, st.anchor.head_commit], ["anchored", a.path, a.head]);
+});
+
+test("R-L g8: the R-J3 change log entry says what the table covers, not 'every pair'", () => {
+  const log = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
+  const rj3 = log.slice(log.indexOf("## 2026-10-13: Unit R-J3"), log.indexOf("## 2026-10-13: Unit R-J2"));
+  assert.doesNotMatch(rj3, /It lists every pair/);
 });
 
 // =============================================================================
