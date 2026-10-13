@@ -280,60 +280,6 @@ async function reference(c, role = "a", ref = "row") {
     res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
-const referenceFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.referencesDir(id)}/`)).sort();
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
-
-test("FIX D: a reference to a sealed case not pinned yet is 409 case_not_pinned with its state, writes no row and spends no quota; once the sealer pins it, the same reference is 201", async () => {
-  const c = await sealedCase("D not pinned", { pinFails: true });
-  const r = await reference(c, "a", "early");
-  assert.equal(r.status, 409, JSON.stringify(r.body));
-  assert.equal(r.body.error_code, "case_not_pinned");
-  assert.equal(r.body.state, "commit_unrecorded");
-  assert.equal(r.body.reason, "not_pinned");
-  assert.match(r.body.error, /appended only to a case that reads pinned or anchored/);
-  assert.deepEqual(referenceFiles(c.id), []);
-  assert.equal(gh.has(USAGE, H._internal.referenceQuotaPath(c.id, "a")), false, "no unit of the quota spent");
-  await sealerRun();
-  const ok = await reference(c, "a", "after the pin");
-  assert.equal(ok.status, 201, JSON.stringify(ok.body));
-  assert.deepEqual(referenceFiles(c.id), [C.referencePath(c.id, 1)]);
-});
-
-test("FIX D: every state read that is not pinned or anchored is refused with that state: pin_commit_mismatch, conflict; since unit R-J3 (F5) a pin that could not be read is 503 could_not_look, not a refusal of the row; since unit R-N (D1) the check reads the daily anchor records for a conflict", async () => {
-  const c = await sealedCase("D states");
-  const { latest, seq } = S.pinPaths(c.id);
-  const pin = gh.read(PINS, latest);
-  // could_not_look: 503, not a refusal of the row (unit R-J3, F5)
-  gh.forceGetFailure(PINS, latest, 1, 503);
-  let r = await reference(c);
-  assert.equal(r.status, 503);
-  assert.deepEqual([r.body.error_code, r.body.state, r.body.reason], ["could_not_look", "could_not_look", "pin_pointer_unreadable"]);
-  // pin_commit_mismatch: the pin names the commit that opened the case
-  const opened = gh.commitsFor(PINS, C.casePath(c.id)).slice(-1)[0].sha;
-  gh.seed(PINS, latest, { ...pin, case_commit: opened });
-  r = await reference(c);
-  assert.deepEqual([r.body.error_code, r.body.state], ["case_not_pinned", "pin_commit_mismatch"]);
-  // conflict: another chain
-  gh.seed(PINS, latest, { ...pin, chain: sha("another chain") });
-  r = await reference(c);
-  assert.deepEqual([r.body.error_code, r.body.state], ["case_not_pinned", "conflict"]);
-  assert.deepEqual(referenceFiles(c.id), []);
-  // control: pinned again; and the check reads the daily anchor records
-  // (unit R-N, D1: the anchor-conflict check)
-  gh.seed(PINS, latest, pin);
-  gh.seed(PINS, seq, pin);
-  const g0 = gh.getLog.length;
-  r = await reference(c);
-  assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.ok(gh.getLog.slice(g0).some((p) => p === "anchors"), "the daily anchor records are listed");
-  // a listing of them that fails refuses no row (unit R-L2, M4: a row is
-  // refused only on a proven anchor conflict, and asserts no anchoring)
-  const rows = referenceFiles(c.id).length;
-  gh.forceGetFailure(PINS, "anchors", 1, 503);
-  r = await reference(c, "a", "anchors unread");
-  assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal(referenceFiles(c.id).length, rows + 1);
-});
 
 // =============================================================================
 // FIX E: the two-phase reveal
@@ -343,7 +289,6 @@ const RECONCILE = require("../lib/_reconcile_http.js");
 const CP = require("../lib/_case_page.js");
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.98.9.${(ipSeq += 1) & 255}` } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -636,7 +581,7 @@ test("ONE SIGNATURE RULE: a seal with sig null reads case_signature_invalid (uns
   assert.equal((await S.sealedRecordReason(u.sealed, KD.docWith(KD.reconcileEntry(RECEIPT_KEY)))).reason, "unsigned_seal");
   const one = await S.anchorCase(u.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
   assert.deepEqual([one.ok, one.code, one.reason], [false, "case_signature_invalid", "unsigned_seal"]);
-  assert.equal(gh.has(PINS, S.pinPaths(u.id).latest), false, "never pinned");
+  assert.equal(gh.has(PINS, S.pinPaths(u.id).seq), false, "never pinned");
   const r = await reference(u);
   assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "case_signature_invalid", "unsigned_seal"]);
   const page = (await casePage(u.id)).html;
@@ -752,14 +697,6 @@ test("MUST-FAIL GAP (L23): a case that cannot be read again under the lock, befo
   assert.equal(lockOf(id).state, "released");
 });
 
-
-test("MUST-FAIL GAP (D04): anchorState with {anchor: false} answers pinned with anchor {not_looked_up: true}, so no reader takes it for 'not anchored'", async () => {
-  const c = await sealedCase("gap not looked up");
-  await sealerRun();
-  const st = await S.anchorState(c.id, S.caseChain(storedCase(c.id)), { anchor: false });
-  assert.equal(st.pin, "pinned");
-  assert.deepEqual(st.anchor, { not_looked_up: true });
-});
 
 const portRaises = () => {
   const e = new Error("port raised");

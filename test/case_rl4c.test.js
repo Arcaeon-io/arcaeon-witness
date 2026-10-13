@@ -191,7 +191,6 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -303,9 +302,10 @@ const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration f
 const PROPERTY = "No file that belongs to a case is ever deleted. A case's registration files, reference rows, withdrawal record and seal " +
   "are written once and never changed. The case root is the one case file that is updated, and only by a compare-and-swap that every " +
   "reader can follow in the repository's history.";
+// (since unit R-PIN a case has no pin pointer: its one pin is written once)
 const IN_PLACE = "Outside any case's own files, the pins repository updates two kinds of file in place: the daily anchor proofs " +
-  "(`anchors/<date>-head.txt.ots`, which the anchoring job upgrades once the Bitcoin attestation arrives) and the pin pointers " +
-  "(`pins/<namespace>/latest.json`, and a case's `pins/case/<case_id>/latest.json`, which each new pin of that case moves).";
+  "(`anchors/<date>-head.txt.ots`, which the anchoring job upgrades once the Bitcoin attestation arrives) and the namespace pin pointers " +
+  "(`pins/<namespace>/latest.json`, which each new pin of a namespace moves).";
 const OLD_PROPERTY = "No file in the pins repository is ever deleted.";
 
 // =============================================================================

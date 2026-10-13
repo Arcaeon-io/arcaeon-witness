@@ -437,12 +437,12 @@ function verdictOf(d) {
   return { degraded: d.degraded, indeterminate: d.indeterminate, overallOk: d.overallOk, namespaces: d.namespaces, errCount: d.errCount };
 }
 
-test("STATUS: a store holding a sealed case does not degrade /status; pins/case is not a namespace; case anchors are their own row (case files, pinned, pending, from the tree)", async (t) => {
+test("STATUS: a store holding a sealed case does not degrade /status; pins/case is not a namespace; case anchors are their own row (case files, pinned, withdrawn, from the tree; since unit R-PIN no pending)", async (t) => {
   healthyBoard(t);
   const before = await gatherStatusData();
   assert.equal(before.overallOk, true, `fixture: a healthy board (${JSON.stringify(verdictOf(before))})`);
   // item 2c (fix 3): the row is counted from the tree alone
-  assert.deepEqual(before.caseAnchors, { case_files: 0, pinned: 0, pending: 0, withdrawn: 0, partial: false });
+  assert.deepEqual(before.caseAnchors, { case_files: 0, pinned: 0, withdrawn: 0, partial: false });
 
   const one = await sealedCase();
   const withOne = await gatherStatusData();
@@ -451,7 +451,6 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   assert.ok(!withOne.rows.some((r) => r.ns === "case"), "no namespace row for pins/case");
   assert.equal(withOne.caseAnchors.case_files, 1);
   assert.equal(withOne.caseAnchors.pinned, 1);
-  assert.equal(withOne.caseAnchors.pending, 0);
 
   // a second, pending case and a committed (unsealed) one
   await sealedCase({ over: { scope_digest: sha("pending one") }, pinFails: true });
@@ -460,10 +459,9 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   assert.deepEqual(verdictOf(withThree), verdictOf(before), "a pending anchor changes nothing in the verdict either");
   assert.equal(withThree.caseAnchors.case_files, 3);
   assert.equal(withThree.caseAnchors.pinned, 1);
-  // item 2c (fix 3): by the tree alone the committed case and the sealed one
-  // waiting for its pin are both pending (no pin; since unit R-L4 no
-  // registration file is counted)
-  assert.equal(withThree.caseAnchors.pending, 2);
+  // unit R-PIN: the tree alone cannot say what a case with no pin file is,
+  // so it is counted as nothing (no pending count)
+  assert.equal(Object.prototype.hasOwnProperty.call(withThree.caseAnchors, "pending"), false);
   assert.equal(withThree.caseAnchors.withdrawn, 0);
 
   // the page and the JSON twin say the same
@@ -478,7 +476,8 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   await statusHandler(makeReq({ method: "GET", query: { format: "json" }, headers: { "x-forwarded-for": freshIp() } }), json);
   const j = parsed(json);
   assert.equal(j.status, "ok");
-  assert.deepEqual([j.case_anchors.case_files, j.case_anchors.pinned, j.case_anchors.pending], [3, 1, 2]);
+  assert.deepEqual([j.case_anchors.case_files, j.case_anchors.pinned], [3, 1]);
+  assert.equal(Object.prototype.hasOwnProperty.call(j.case_anchors, "pending"), false);
   assert.equal(j.case_anchors.feeds_status, false);
   assert.ok(!j.namespaces.some((n) => n.namespace === "case"));
 
@@ -488,7 +487,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   const listed = await store.listDir("pins");
   assert.ok(listed.some((e) => e.name === "case" && e.type === "dir"), "the listing shows pins/case");
   assert.equal(await store.getFile("pins/case/latest.json"), null);
-  const casePin = await store.getFile(S.pinPaths(one.id).latest);
+  const casePin = await store.getFile(S.pinPaths(one.id).seq);
   assert.equal(verdict.judgePin(casePin, { what: "x", namespace: S.pinNamespace(one.id) }).reason, "case_seal_not_a_generic_pin");
 });
 
@@ -516,7 +515,7 @@ test("STATUS: a damaged case file changes nothing in the case row, which reads n
   assert.equal(d2.indeterminate, true, "the uncounted conflicts make it indeterminate, as before 2b");
 });
 
-test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1; the reveal and the seal's header say how a case is pinned and anchored", async () => {
+test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1; the reveal and the seal's header say how a case is pinned", async () => {
   // a generic pin, so the leaf set is not empty
   const p = makeRes();
   await pinHandler(makeReq({ method: "POST", headers: { authorization: `Bearer ${OPEN_KEY}` }, body: { namespace: "case-test-log", rows: 5, chain: "abcdef01" } }), p);
@@ -537,10 +536,11 @@ test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1
 
   // the sentence, in the reveal's answer and in lib/_case_seal.js's header
   assert.equal(r.body.anchor_note, S.ANCHOR_NOTE);
-  // unit R-J (J2): a daily anchor record in this repository, and the proof not checked
-  assert.match(S.ANCHOR_NOTE, /pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record in this repository names a head .* not as a log-tree leaf/);
+  // unit R-PIN: pinned by the commit that writes its one pin, and nothing of anchoring
+  assert.match(S.ANCHOR_NOTE, /pinned by the pins-repository commit that writes its one pin, pins\/case\/<case_id>\/00000001\.json\. It is pinned as its own record, not as a log-tree leaf/);
+  assert.doesNotMatch(S.ANCHOR_NOTE, /anchor/);
   const header = fs.readFileSync(path.join(ROOT, "lib", "_case_seal.js"), "utf-8").replace(/\r\n/g, "\n").split("\n").filter((l) => l.startsWith("//")).map((l) => l.replace(/^\/\/ ?/, "")).join(" ");
-  assert.match(header.replace(/\s+/g, " "), /a case is pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record in this repository names a head that holds that pin \(THE ANCHOR WORDS, below; the OpenTimestamps proof is not checked: unit R-J, J2\), not as a log-tree leaf/);
+  assert.match(header.replace(/\s+/g, " "), /a case is pinned by the pins-repository commit that writes its pin, as its own record, not as a log-tree leaf/);
 });
 
 // =============================================================================
@@ -549,13 +549,13 @@ test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1
 
 test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra field, a missing record_kind or a wrong value is refused; the generic judge takes none of it, and the case judge takes no generic pin", async () => {
   const { id } = await sealedCase();
-  const { ns, seq, latest } = S.pinPaths(id);
-  const rec = gh.read(PINS, latest);
-  assert.deepEqual(Object.keys(rec).sort(), [...verdict.CASE_SEAL_FIELDS, "case_commit"].sort(), "Design J: every pin since names the commit that wrote the case file");
-  assert.deepEqual(gh.read(PINS, seq), rec);
-  const ok = verdict.judgeCaseSeal(asRead(rec), { what: latest, namespace: ns });
+  const { ns, seq } = S.pinPaths(id);
+  const rec = gh.read(PINS, seq);
+  assert.deepEqual(Object.keys(rec).sort(), [...verdict.CASE_SEAL_FIELDS].sort(), "Design J: every pin names the commit that wrote the case file (unit R-PIN: required)");
+  assert.ok(verdict.CASE_SEAL_FIELDS.includes("case_commit"));
+  const ok = verdict.judgeCaseSeal(asRead(rec), { what: seq, namespace: ns });
   assert.equal(ok.ok, true, JSON.stringify(ok));
-  assert.equal(verdict.judgeCaseSeal(asRead(S._internal.pinRecord(id, "1".repeat(64), REVEAL_AT)), { namespace: ns }).ok, true, "pinRecord builds the type");
+  assert.equal(verdict.judgeCaseSeal(asRead(S._internal.pinRecord(id, "1".repeat(64), REVEAL_AT, "a".repeat(40))), { namespace: ns }).ok, true, "pinRecord builds the type");
 
   const without = (k) => {
     const o = { ...rec };
@@ -564,11 +564,11 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
   };
   const plants = {
     case_seal_unknown_field: [{ ...rec, next_pin_due_by: "2026-10-11T09:00:00.000Z" }, { ...rec, cadence_hours: 24 }, { ...rec, intent: "renew" }],
-    case_seal_missing_field: [without("record_kind"), without("auth_level"), without("auth_note"), without("pinned_at")],
+    case_seal_missing_field: [without("record_kind"), without("auth_level"), without("auth_note"), without("pinned_at"), without("case_commit")],
     case_seal_wrong_record_kind: [{ ...rec, record_kind: "content_head_advance" }, { ...rec, record_kind: "publisher_heartbeat" }],
     case_seal_wrong_auth_level: [{ ...rec, auth_level: "bearer-stage0" }],
     case_seal_wrong_rows: [{ ...rec, rows: 4 }, { ...rec, rows: "3" }],
-    case_seal_wrong_seq: [{ ...rec, seq: 0 }, { ...rec, seq: "1" }, { ...rec, seq: 100000000 }], // Design J: seq 2 and on are a case's next pins
+    case_seal_wrong_seq: [{ ...rec, seq: 0 }, { ...rec, seq: "1" }, { ...rec, seq: 2 }, { ...rec, seq: 100000000 }], // unit R-PIN: one pin, seq 1
     case_seal_namespace_unreadable: [{ ...rec, namespace: "acme-prod" }, { ...rec, namespace: `case/${id.toUpperCase()}` }],
     namespace_mismatch: [{ ...rec, namespace: `case/${"9".repeat(64)}` }],
     chain_unreadable: [{ ...rec, chain: rec.chain.toUpperCase() }, { ...rec, chain: "abcdef01" }],
@@ -577,7 +577,7 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
   };
   for (const [reason, recs] of Object.entries(plants)) {
     for (const bad of recs) {
-      const v = verdict.judgeCaseSeal(asRead(bad), { what: latest, namespace: ns });
+      const v = verdict.judgeCaseSeal(asRead(bad), { what: seq, namespace: ns });
       assert.equal(v.ok, false, `${reason}: ${JSON.stringify(bad).slice(0, 120)}`);
       assert.equal(v.reason, reason, `${reason}: got ${v.reason}`);
     }
@@ -711,7 +711,7 @@ test("SEALER: a sealer run with one pending case pins it once; a second run pins
   const chain = r.body.chain;
   assert.equal(chain, S.caseChain(sealed));
   // MUST-FAIL ARM: without a trigger the case stays pending (2a)
-  assert.deepEqual(await S.anchorState(id, chain), { pin: "commit_unrecorded", reason: "not_pinned" });
+  assert.deepEqual(await S.pinState(id, chain), { pin: "not_pinned" });
 
   const writes = gh.putLog.length;
   const run1 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });
@@ -720,22 +720,22 @@ test("SEALER: a sealer run with one pending case pins it once; a second run pins
   assert.deepEqual(run1.cases.newly_pinned, [id]);
   assert.equal(run1.cases.candidates, 1);
   const pinWrites = gh.putLog.slice(writes).map((w) => w.path);
-  assert.deepEqual(pinWrites, [S.pinPaths(id).seq, S.pinPaths(id).latest], "the pin's two writes and nothing else");
-  const pinned = gh.read(PINS, S.pinPaths(id).latest);
+  assert.deepEqual(pinWrites, [S.pinPaths(id).seq], "the one pin file and nothing else (unit R-PIN)");
+  const pinned = gh.read(PINS, S.pinPaths(id).seq);
   assert.equal(pinned.chain, chain);
   assert.equal(pinned.pinned_at, new Date(REVEAL_AT + 120000).toISOString());
   assert.deepEqual(storedCase(id), sealed, "the sealed case is untouched");
 
   const run2 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 180000), keyDocument: KEYS_DOC });
   assert.equal(run2.cases.ok, true);
-  // item 2c (fix 5): a pinned case stays in the window and its pin is judged
-  assert.equal(run2.cases.candidates, 1);
+  // unit R-PIN: a root with its pin file is no candidate (item 2c's fix 5 is gone with the pointer)
+  assert.equal(run2.cases.candidates, 0);
   assert.equal(run2.cases.pinned, 1);
-  assert.deepEqual(run2.cases.already, [id]);
+  assert.deepEqual(run2.cases.already, []);
   assert.deepEqual(run2.cases.newly_pinned, []);
-  assert.equal(gh.putLog.length, writes + 2, "nothing new");
-  assert.equal(gh.read(PINS, S.pinPaths(id).latest).chain, chain, "the chain is identical");
-  assert.deepEqual((await S.anchorState(id, chain)).pin, "pinned");
+  assert.equal(gh.putLog.length, writes + 1, "nothing new");
+  assert.equal(gh.read(PINS, S.pinPaths(id).seq).chain, chain, "the chain is identical");
+  assert.deepEqual((await S.pinState(id, chain)).pin, "pinned");
 });
 
 test("SEALER: a committed case is passed over, an unbound verdict is refused, a tree it cannot read is reported; none writes, and the batch receipt stands", async () => {
@@ -768,7 +768,8 @@ test("SEALER: with more pending cases than one run reads, the window moves on ea
   // a run, it reaches all three within 2 * ceil(3 / 1) runs
   for (let minute = 0; minute < 6; minute += 1) {
     const out = await S.anchorPending({ now: REVEAL_AT + 60000 * (minute + 1), maxReads: 1, keyDocument: KEYS_DOC });
-    assert.equal(out.read, 1);
+    // unit R-PIN: a pinned root leaves the candidates, so a run reads one while any is left
+    assert.equal(out.read, out.candidates ? 1 : 0);
     for (const id of out.newly_pinned) pinnedNow.add(id);
   }
   assert.deepEqual([...pinnedNow].sort(), ids.slice().sort(), "each pinned within 2 * ceil(3 / 1) runs");

@@ -36,9 +36,8 @@
 //     its write removes the registration and appends a case log event
 //     commit_after_withdrawal.
 //   - GPT-5.6 §1.2, a reference before the case anchor exists: FIX D
-//     (lib/_case_http.js ?op=case-reference, step 1c). A case whose state is
-//     not pinned or anchored (Design J's words) is 409 case_not_pinned (named case_not_anchored before unit R-J),
-//     with its state; no row is written.
+//     (lib/_case_http.js ?op=case-reference, step 1c) refused it 409
+//     case_not_pinned until unit R-PIN removed that gate (DECIDED, below).
 //   - GPT-5.6 §1.3, a comparison that ran leaving a clean COMMITTED case:
 //     FIX E, THE TWO-PHASE REVEAL (lib/_case_http.js). The reveal writes
 //     reveal_attempt into the case before it compares; a root write that
@@ -48,15 +47,14 @@
 //     THE SECOND PHASE (lib/_case_seal.js). The pin records case_commit, the
 //     commit that wrote the sealed case file, and every reader reads the
 //     case file at it (pin_commit_mismatch when it is another case).
-//   - GPT-5.6 §5, no reference row storing its write commit: Design J, THE
-//     ROW'S TWO WRITES (lib/_case_seal.js). The row's answer names
-//     row_commit, and the case's next pin, written by the sealer's run,
-//     lists the commits of the rows written since the pin before it.
-//   - GPT-5.6 §3.4, anchored meaning only that latest.json exists: Design J,
-//     THE ANCHOR WORDS (lib/_case_seal.js). A reader says pinned (the pin
-//     holds the case's chain at the commit that wrote it, named), anchored
-//     (a daily anchor record names a head of the pins repository that holds
-//     the pin, and the record's own commit is named) or could_not_look.
+//   - GPT-5.6 §5, no reference row storing its write commit: Design J named
+//     row_commit in the row's answer and listed it in the case's next pin,
+//     until unit R-PIN removed both (DECIDED, below).
+//   - GPT-5.6 §3.4, anchored meaning only that latest.json exists: since unit
+//     R-PIN nothing says anchored (lib/_case_seal.js THE PIN WORDS). A reader
+//     says pinned only after reading the case's one pin at the commit that
+//     wrote it and the case file at the case_commit it names; the page points
+//     to the daily anchor records and `ots verify` and does not check them.
 //
 // DECIDED, AND STILL TODO (the claim is true, and the design keeps it):
 //   - GPT-5.6 §2B, A's reveal refused 409 case_withdrawn after B's
@@ -65,13 +63,20 @@
 //     refusal receipt (comparison_refused, consent_not_jointly_held); the
 //     public record does not change. The test's assertion asks for a seal,
 //     so it stays todo, and so does §2B's redacted-record test.
+//   - GPT-5.6 §1.2, a reference before the case anchor exists: unit R-PIN
+//     (the architect's ruling) removes FIX D's gate. A reference reads no pin
+//     and no anchor; a row has no pin of its own, and its note (version 4)
+//     says no anchoring is asserted. The test is todo again.
+//   - GPT-5.6 §5, no reference row storing its write commit: unit R-PIN
+//     removes row_commit. The row's note says the pins-repository commit
+//     that writes it records it, and the page links the row's history. The
+//     test is todo again.
 //
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
 //     daily anchor": the daily head anchor and its OpenTimestamps proof are
-//     an outside job, not in this repository (since Design J a reader reads
-//     the record and the pin at the head it names; the proof is not checked
-//     here);
+//     an outside job, not in this repository (since unit R-PIN nothing here
+//     reads it; the page says so and names `ots verify`);
 //   - GPT-5.6 §3.2 and Gemini §3, an operator backdating the service clock:
 //     the clock is the deployment's; a test hands the handlers any time it
 //     likes, which shows nothing about a live operator;
@@ -267,7 +272,6 @@ async function reference(body, { now = REVEAL_AT + 3600000 } = {}) {
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res, { now, keyDocument });
   return { status: res._status, html: String(res._body) };
 }
@@ -332,15 +336,14 @@ test('GPT-5.6 §1.1: "It also creates a public registration dated after a redact
   assert.ok(!gh.putLog.some((x) => x.path === REG.pathOf(gh, id, "b")), "no registration file is written");
 });
 
-test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"', async () => {
-  const { id, a } = await sealedCase({ scope_digest: sha("1.2") }, { pinFails: true });
-  assert.equal((await S.anchorState(id, S.caseChain(storedCase(id)))).pin, "commit_unrecorded", "fixture: not pinned");
-  const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
-  assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
-  assert.deepEqual(referenceFiles(id), []);
-  // FIX D: refused 409 case_not_pinned (unit R-J, J8), with the state to retry on
-  assert.deepEqual([r.status, r.body.error_code, r.body.state], [409, "case_not_pinned", "commit_unrecorded"]);
-});
+test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be appended before the case anchor exists"',
+  { todo: "DECIDED (unit R-PIN): a reference reads no pin and no anchor, and a row has no pin of its own, so a row is written on a sealed case not pinned (the assertion 'a reference row is appended only once the case is anchored' fails)" }, async () => {
+    const { id, a } = await sealedCase({ scope_digest: sha("1.2") }, { pinFails: true });
+    assert.deepEqual(await S.pinState(id, S.caseChain(storedCase(id))), { pin: "not_pinned" }, "fixture: not pinned");
+    const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
+    assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
+    assert.deepEqual(referenceFiles(id), []);
+  });
 
 test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comparison, the system has run the comparison but leaves only a normal COMMITTED case" (the sealer, run mid-reveal, reports it as not_sealed)', async (t) => {
   const { id, a, b } = await committedCase({ scope_digest: sha("1.3") });
@@ -508,8 +511,10 @@ test("FIX A: two registrations under two distinct key ids still seal, and the pa
   const page = await casePage(id);
   assert.match(page.html, /<h2>The verdict<\/h2>/);
   assert.ok(page.html.includes("honest-party-account") && page.html.includes("attacker-account"));
+  // pinned at the reveal (unit R-PIN: a pinned root is no candidate, so the sealer reads it no more)
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), true);
   const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
-  assert.deepEqual(run.already, [id]);
+  assert.deepEqual([run.candidates, run.pinned], [0, 1]);
   assert.deepEqual(run.single_party, []);
 });
 
@@ -569,7 +574,7 @@ test("FIX A: the sealer reports such a case not_sealed: single_party, and pins n
   assert.equal(run.not_sealed, 1);
   assert.deepEqual(run.single_party, [id]);
   assert.deepEqual(run.newly_pinned, []);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false);
 });
 
 test("FIX A: the case page shows such a case as single_party and names no second label", async () => {
@@ -614,7 +619,7 @@ test("FIX A: a VERDICT whose two commitments share a key id (signed by the case 
   assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
   const one = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
   assert.deepEqual(one, { ok: false, code: "not_sealed", status: "VERDICT", reason: "single_party" });
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "no pin");
   const ref = await reference({ ...proofOf(id, a), cross_reference: XREF });
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "single_party");
@@ -819,7 +824,7 @@ test("FIX B: a receipt signed by another key than the service's reconcile signer
   assert.deepEqual(await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC }), { ok: false, code: "receipt_unsigned", reason: "unknown_signer" });
   const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
   assert.deepEqual(run.refused, [{ case_id: id, code: "receipt_unsigned", reason: "unknown_signer" }]);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "no pin");
   const ref = await reference({ ...proofOf(id, a), cross_reference: XREF });
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "receipt_unsigned");
@@ -857,7 +862,6 @@ test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the c
   // the page's environment does not decide either
   for (const env of [{}, { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { [receipts.VERIFIER_ENV]: WRONG_RECEIPT_KEY.verifier }]) {
     const res = makeRes();
-    CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res,
       { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC, env });
     assert.match(String(res._body), /<h2>The verdict<\/h2>/, JSON.stringify(Object.keys(env)));
@@ -868,39 +872,37 @@ test('GPT-5.6 §3.2 (and Gemini §3, timestamps): "The public case does not bind
   const { id } = await sealedCase({ scope_digest: sha("3.2") });
   const commits = gh.commitsFor(PINS, C.casePath(id)).map((c) => c.sha);
   assert.ok(commits.length >= 2, "fixture: the case file's commits (open, registrations, seal)");
-  const text = JSON.stringify(storedCase(id)) + JSON.stringify(gh.read(PINS, S.pinPaths(id).latest));
+  const text = JSON.stringify(storedCase(id)) + JSON.stringify(gh.read(PINS, S.pinPaths(id).seq));
   assert.ok(commits.some((c) => text.includes(c)), "the sealed case or its pin names the commit that wrote it");
   // Design J: the pin names the commit that wrote the SEALED file, the newest touching it
-  assert.equal(gh.read(PINS, S.pinPaths(id).latest).case_commit, commits[0]);
+  assert.equal(gh.read(PINS, S.pinPaths(id).seq).case_commit, commits[0]);
 });
 
 test('GPT-5.6 §3.4 / §5: "pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion in any daily anchor"', async () => {
   const { id } = await sealedCase({ scope_digest: sha("3.4") });
   const chain = S.caseChain(storedCase(id));
-  // Design J: the pin alone is pinned, never anchored
-  assert.equal((await S.anchorState(id, chain)).pin, "pinned");
   // a daily anchor record naming a head of the pins repository that holds the pin
   const day = gh.commitsFor(PINS, S.pinPaths(id).seq).slice(-1)[0].date.slice(0, 10);
   gh.seedText(PINS, `anchors/${day}-head.txt`, `${gh.headOf(PINS)} ${day}T03:15:00+00:00\n`);
-  const from = gh.getLog.length;
-  const st = await S.anchorState(id, chain);
-  assert.equal(st.pin, "anchored");
-  const reads = gh.getLog.slice(from);
-  assert.ok(reads.length > 1, "anchored is said only after something beyond the pin pointer is read");
+  // unit R-PIN: no reader says anchored; pinned is said only after the pin
+  // is read at the commit that wrote it and the case file at case_commit
+  const c0 = gh.commitsLog.length;
+  const r0 = gh.rawLog.length;
+  const st = await S.pinState(id, chain);
+  assert.equal(st.pin, "pinned");
+  assert.ok(gh.commitsLog.length > c0 && gh.rawLog.length - r0 === 2, "pinned is said only after something beyond the pin file is read");
+  assert.ok(!/anchored/.test((await casePage(id)).html), "the page never says anchored");
 });
 
-test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write commit"', async () => {
-  const { id, a } = await sealedCase({ scope_digest: sha("5 row") });
-  const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
-  assert.equal(r.status, 201);
-  const [c] = gh.commitsFor(PINS, C.referencePath(id, 1));
-  assert.ok(c, "fixture: the row's commit");
-  assert.ok(JSON.stringify(r.body).includes(c.sha) || JSON.stringify(gh.read(PINS, C.referencePath(id, 1))).includes(c.sha), "the row or its answer names the commit that wrote it");
-  // Design J: the answer's row_commit, and the case's next pin lists it too
-  assert.equal(r.body.row_commit, c.sha);
-  await S.anchorPending({ now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
-  assert.deepEqual(gh.read(PINS, S.pinPaths(id).latest).reference_commits, [{ seq: 1, commit: c.sha }]);
-});
+test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write commit"',
+  { todo: "DECIDED (unit R-PIN): no row_commit; the row's note (version 4) says it is recorded by the pins-repository commit that writes it, and the page links the row's history (the assertion 'the row or its answer names the commit that wrote it' fails)" }, async () => {
+    const { id, a } = await sealedCase({ scope_digest: sha("5 row") });
+    const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
+    assert.equal(r.status, 201);
+    const [c] = gh.commitsFor(PINS, C.referencePath(id, 1));
+    assert.ok(c, "fixture: the row's commit");
+    assert.ok(JSON.stringify(r.body).includes(c.sha) || JSON.stringify(gh.read(PINS, C.referencePath(id, 1))).includes(c.sha), "the row or its answer names the commit that wrote it");
+  });
 
 // =============================================================================
 // GPT-5.6, section 4: denial of service and cost

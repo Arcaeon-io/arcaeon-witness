@@ -184,7 +184,7 @@ async function sealedCase(scope, { pinFails = false } = {}) {
   const r = await reveal(revealBody(c.id, c.a, c.b));
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
   const k = storedCase(c.id);
-  const pin = gh.read(PINS, S.pinPaths(c.id).latest);
+  const pin = gh.read(PINS, S.pinPaths(c.id).seq);
   return { ...c, k, P: pin ? pin.case_commit : null };
 }
 async function referenceAs(id, p, keyDocument) {
@@ -196,7 +196,6 @@ async function referenceAs(id, p, keyDocument) {
 }
 async function pageOf(id, keyDocument) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.94.0.${(ipSeq += 1) & 255}` } }), res,
     { now: REVEAL_AT + 3600000, keyDocument, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -266,7 +265,7 @@ test("I1: the same with P not before R (the case pinned after the revoking commi
   assert.deepEqual([ref.status, ref.body.error_code], [409, "signer_revoked"]);
   const unpinned = await sealedCase("I1 after, unpinned", { pinFails: true });
   await S.anchorCase(unpinned.id, { now: REVEAL_AT + 60000, keyDocument: CASE_REVOKED });
-  assert.equal(gh.has(PINS, S.pinPaths(unpinned.id).latest), false, "no pin");
+  assert.equal(gh.has(PINS, S.pinPaths(unpinned.id).seq), false, "no pin");
 });
 
 test("I1: an unpinned case whose signer the current document lists as revoked is signer_revoked, even with the revocation recorded after it was sealed", async () => {
@@ -276,7 +275,7 @@ test("I1: an unpinned case whose signer the current document lists as revoked is
   const got = await S.sealedRecordReason(c.k, CASE_REVOKED);
   assert.deepEqual([got.code, got.reason], ["signer_revoked", "case_not_pinned"]);
   assert.equal((await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: CASE_REVOKED })).code, "signer_revoked");
-  assert.equal(gh.has(PINS, S.pinPaths(c.id).latest), false, "the sealer does not pin it");
+  assert.equal(gh.has(PINS, S.pinPaths(c.id).seq), false, "the sealer does not pin it");
 });
 
 test("I1: a key the current document lists as revoked with no marker is signer_revoked; a marker that cannot be read, or an order that cannot be read, is signer_revoked too", async () => {
@@ -474,7 +473,7 @@ test("I3: a signer absent from the current document is signer_unlisted: no verdi
   assert.ok(p.html.includes("signer_unlisted"));
   assert.deepEqual(await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: noCase }),
     { ok: false, code: "signer_unlisted", reason: "case_key_not_listed" });
-  assert.equal(gh.has(PINS, S.pinPaths(c.id).latest), false);
+  assert.equal(gh.has(PINS, S.pinPaths(c.id).seq), false);
   const ref = await referenceAs(c.id, c.a, noReceipt);
   assert.deepEqual([ref.status, ref.body.error_code], [409, "signer_unlisted"]);
 });
@@ -641,7 +640,7 @@ test("MUST-FAIL GAP (P01): a case whose pin records the revoking commit itself (
   gh.seed(PINS, latest, { ...pin, case_commit: R });
   S._internal.clearDocumentCache();
   S._internal.clearCommitFiles();
-  const st = await S.anchorState(c.id, S.caseChain(c.k), { anchor: false });
+  const st = await S.pinState(c.id, S.caseChain(c.k));
   assert.deepEqual([st.pin, st.case_commit], ["pinned", R], "fixture: the pin records R, and the case file at R is this case");
   const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "pinned_at_or_after_revocation"]);
@@ -825,7 +824,7 @@ test("R-I2 B1 (commitsOf): the commit that wrote a pin record is the oldest touc
   assert.equal(wrote.length, 1, "fixture: written once");
   for (let i = 0; i < 105; i += 1) gh.addCommit(PINS, seq);
   S._internal.clearCommitFiles();
-  const st = await S.anchorState(c.id, S.caseChain(c.k), { anchor: false });
+  const st = await S.pinState(c.id, S.caseChain(c.k));
   assert.equal(st.pin, "pinned");
   assert.equal(st.pin_commit.sha, wrote[0].sha, "the commit that wrote it, not the 100th newest");
 });
@@ -883,24 +882,26 @@ test("R-I2 M1 (the tool): the tool runs the reader's check on the marker it woul
   assert.equal(ok.ok, true, JSON.stringify(ok));
 });
 
-test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case_not_pinned (no pin, or a legacy one with no case_commit), pin_commit_mismatch, or pin_unreadable:<reason>; since unit R-J3 (F4) a pin that could not be read is pin_unavailable, neither a yes nor a no", async () => {
+test("R-I2 m2: a case under a revoked key whose pin is not pinned says why: case_not_pinned (no pin file), pin_commit_mismatch, or pin_unreadable:<reason> (since unit R-PIN a legacy pin with no case_commit among them); since unit R-J3 (F4) a pin that could not be read is pin_unavailable, neither a yes nor a no", async () => {
   const c = await sealedCase("R-I2 pin states");
   await revoke(CASE_KEY, CASE_REVOKED);
-  const { latest, seq } = S.pinPaths(c.id);
-  const pin = gh.read(PINS, latest);
+  const { seq } = S.pinPaths(c.id);
+  const pin = gh.read(PINS, seq);
   // the pin names the commit that opened the case: the file there is another case
   const opened = gh.commitsFor(PINS, C.casePath(c.id)).slice(-1)[0].sha;
-  gh.seed(PINS, latest, { ...pin, case_commit: opened });
+  gh.seed(PINS, seq, { ...pin, case_commit: opened });
   assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "pin_commit_mismatch"]);
-  gh.seed(PINS, latest, pin);
+  gh.seed(PINS, seq, pin);
   S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, latest, 1, 503);
+  gh.forceGetFailure(PINS, seq, 1, 503);
   const u = await S.sealedRecordReason(c.k, CASE_REVOKED);
-  assert.deepEqual([u.code, u.reason], ["pin_unavailable", "pin_pointer_unreadable"]);
+  assert.deepEqual([u.code, u.reason], ["pin_unavailable", "pin_read_failed"]);
   // a legacy pin with no case_commit
   const { case_commit: _cc, ...legacy } = pin; // eslint-disable-line no-unused-vars
-  gh.seed(PINS, latest, legacy);
   gh.seed(PINS, seq, legacy);
+  assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "pin_unreadable:case_seal_missing_field"]);
+  // no pin file
+  gh._repoMap(PINS).delete(seq);
   assert.deepEqual(await reasonOf(c.k, CASE_REVOKED), ["signer_revoked", "case_not_pinned"]);
 });
 
@@ -989,14 +990,14 @@ test("R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off t
   assert.ok(off.html.includes("<h2>The key document this case names is not on the published branch</h2>"));
 });
 
-test("R-I2 GAP (S03): a case under a revoked key whose pin pointer does not read as a pin says pin_unreadable with the judge's reason", async () => {
+test("R-I2 GAP (S03): a case under a revoked key whose pin file does not read as a pin says pin_unreadable with the judge's reason", async () => {
   const c = await sealedCase("R-I2 gap pin unreadable");
   await revoke(CASE_KEY, CASE_REVOKED);
-  gh.seed(PINS, S.pinPaths(c.id).latest, { not: "a pin" });
+  gh.seed(PINS, S.pinPaths(c.id).seq, { not: "a pin" });
   const [code, reason] = await reasonOf(c.k, CASE_REVOKED);
   assert.equal(code, "signer_revoked");
   assert.match(reason, /^pin_unreadable:/);
-  assert.notEqual(reason, "pin_unreadable:pin_pointer_unreadable");
+  assert.notEqual(reason, "pin_unreadable:pin_read_failed");
 });
 
 test("R-I2 GAP (S11, L02): the branch read carries the pin token; a short history is walked in one commits read", async () => {
@@ -1041,13 +1042,14 @@ test("R-I2 GAP (M03): a commit that removed the marker file reads as nothing the
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], JSON.stringify(a));
 });
 
-test("R-I2 GAP (K02): a pin pointer whose numbered record has no commit at all is could_not_look, never a crash; since unit R-L (g5) it says the repository lists no commit for it (pin_commits_none), not that a read failed", async () => {
+test("R-I2 GAP (K02): a pin file with no commit at all is could_not_look, never a crash; since unit R-L (g5) it says the repository lists no commit for it (pin_commits_none), not that a read failed", async () => {
   const c = await sealedCase("R-I2 gap no record commits", { pinFails: true });
   const chain = S.caseChain(c.k);
   const caseCommit = gh.commitsFor(PINS, C.casePath(c.id))[0].sha;
-  gh.seed(PINS, S.pinPaths(c.id).latest, S._internal.pinRecord(c.id, chain, REVEAL_AT, caseCommit));
-  assert.equal(gh.commitsFor(PINS, S.pinPaths(c.id).seq).length, 0, "fixture: the numbered record was never written");
-  const st = await S.anchorState(c.id, chain, { anchor: false });
+  // the file put in the mock's tree directly, with no commit (unit R-PIN: there is no pointer to plant)
+  gh._repoMap(PINS).set(S.pinPaths(c.id).seq, { content: JSON.stringify(S._internal.pinRecord(c.id, chain, REVEAL_AT, caseCommit), null, 2) + "\n", sha: "f".repeat(40) });
+  assert.equal(gh.commitsFor(PINS, S.pinPaths(c.id).seq).length, 0, "fixture: no commit wrote the pin file");
+  const st = await S.pinState(c.id, chain);
   assert.deepEqual([st.pin, st.reason], ["could_not_look", "pin_commits_none"]);
 });
 

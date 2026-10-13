@@ -184,7 +184,6 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -219,7 +218,6 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const pinsPaths = () => [...gh._repoMap(PINS).keys()];
 const esc = (s) => CP._internal.esc(s);
-const sealerRun = (dt = 60000, env = deployedEnv()) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env });
 const read = (rel) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
 const README = () => read("README.md").replace(/\s+/g, " ");
 function jsFiles(dir) {
@@ -373,106 +371,8 @@ test("R-L L4: a withdrawal that loses (the case sealed first, or expired) writes
 // =============================================================================
 // L5: the pin chain always advances
 // =============================================================================
-
-// Reads that touch case `id`'s files or pins, across the mock's logs.
-const caseReads = (id) => [...gh.getLog, ...gh.commitsLog, ...gh.rawLog].filter((k) => String(k).includes(id)).length;
-const pinReadsOf = (id, from) => [...gh.getLog.slice(from.get), ...gh.rawLog.slice(from.raw)].filter((k) => String(k).includes(`pins/case/${id}/`));
-const logMarks = () => ({ get: gh.getLog.length, raw: gh.rawLog.length });
-
-// A case at pin `top`: row 1 listed by pin 2 (the sealer's), and pins
-// 3..top over it carrying its index.
-async function atPin(scope, top) {
-  const c = await sealedCase(scope);
-  assert.equal((await reference(c, { role: "a" })).status, 201);
-  await sealerRun();
-  const { latest } = S.pinPaths(c.id);
-  const p2 = gh.read(PINS, S._internal.pinPath(c.id, 2));
-  assert.deepEqual(p2.listed_by, [{ seq: 1, pin_seq: 2 }], "the sealer's pin carries its index");
-  const { reference_commits: _r, ...carry } = p2; // eslint-disable-line no-unused-vars
-  for (let n = 3; n <= top; n += 1) gh.seed(PINS, S._internal.pinPath(c.id, n), { ...carry, seq: n });
-  if (top > 2) gh.seed(PINS, latest, { ...carry, seq: top });
-  return c;
-}
-// Row 2, appended: never refused for the pin count.
-async function rowTwo(c) {
-  const r = await reference(c, { role: "b" });
-  assert.equal(r.status, 201, `a row is never refused for the pin count: ${JSON.stringify(r.body).slice(0, 200)}`);
-}
-
-test("R-L L5: a case at pin 40 with a new row gets pin 41 listing it, and what writing it reads does not grow with the pin count", async () => {
-  const small = await atPin("RL L5 at pin 3", 3);
-  const big = await atPin("RL L5 at pin 40", 40);
-  await rowTwo(small);
-  await rowTwo(big);
-  const r0 = { small: caseReads(small.id), big: caseReads(big.id) };
-  const m = logMarks();
-  await sealerRun(120000);
-  const p41 = gh.read(PINS, S._internal.pinPath(big.id, 41));
-  assert.deepEqual(p41.reference_commits, [{ seq: 2, commit: gh.commitsFor(PINS, C.referencePath(big.id, 2))[0].sha }]);
-  assert.deepEqual(p41.listed_by, [{ seq: 1, pin_seq: 2 }, { seq: 2, pin_seq: 41 }]);
-  assert.equal(gh.read(PINS, S.pinPaths(big.id).latest).seq, 41);
-  assert.equal(gh.read(PINS, S.pinPaths(small.id).latest).seq, 4);
-  const cost = { small: caseReads(small.id) - r0.small, big: caseReads(big.id) - r0.big };
-  assert.equal(cost.big, cost.small, `the same reads at pin 40 as at pin 3: ${JSON.stringify(cost)}`);
-  assert.ok(cost.big <= L5_BOUND, `at most ${L5_BOUND} reads of the case: ${cost.big}`);
-  const pinsRead = pinReadsOf(big.id, m);
-  for (let n = 2; n <= 40; n += 1) assert.ok(!pinsRead.some((k) => k.endsWith(`/${String(n).padStart(8, "0")}.json`)), `pin ${n} is not read`);
-  // the page: each row's listing pin read directly, no walk
-  const m2 = logMarks();
-  const page = (await casePage(big.id)).html;
-  assert.match(page, /reference row 1[\s\S]*listed by pin 2, read when this page was read/);
-  assert.match(page, /reference row 2[\s\S]*listed by pin 41, read when this page was read/);
-  const below = pinReadsOf(big.id, m2).map((k) => k.slice(k.lastIndexOf("/") + 1)).filter((n) => /^\d{8}\.json$/.test(n) && n !== "00000001.json");
-  assert.deepEqual([...new Set(below)], ["00000002.json"], "only pin 2 is read below the pointer");
-});
-const L5_BOUND = 20;
-
-test("R-L L5: a chain written before the index, longer than the walk reads, still gets its next pin: the rows the walk did not reach are listed again, with the index", async () => {
-  const c = await sealedCase("RL L5 legacy");
-  assert.equal((await reference(c, { role: "a" })).status, 201);
-  const commit = gh.commitsFor(PINS, C.referencePath(c.id, 1))[0].sha;
-  const base = gh.read(PINS, S.pinPaths(c.id).seq);
-  let rec = base;
-  for (let n = 2; n <= 25; n += 1) {
-    rec = { ...base, seq: n, ...(n === 2 ? { reference_commits: [{ seq: 1, commit }] } : {}) };
-    gh.seed(PINS, S._internal.pinPath(c.id, n), rec);
-  }
-  gh.seed(PINS, S.pinPaths(c.id).latest, rec);
-  await sealerRun();
-  const p26 = gh.read(PINS, S._internal.pinPath(c.id, 26));
-  assert.deepEqual([p26.reference_commits, p26.listed_by], [[{ seq: 1, commit }], [{ seq: 1, pin_seq: 26 }]]);
-  assert.equal(gh.read(PINS, S.pinPaths(c.id).latest).seq, 26);
-});
-
-test("R-L L5: an index that names a pin that does not list the row says so on the page", async () => {
-  const c = await atPin("RL L5 index wrong", 2);
-  await rowTwo(c);
-  await sealerRun(120000);
-  const { latest } = S.pinPaths(c.id);
-  const top = gh.read(PINS, latest);
-  gh.seed(PINS, S._internal.pinPath(c.id, 2), { ...gh.read(PINS, S._internal.pinPath(c.id, 2)), reference_commits: [{ seq: 5, commit: "e".repeat(40) }], listed_by: [{ seq: 5, pin_seq: 2 }] });
-  assert.ok(top.listed_by.some((e) => e.seq === 1 && e.pin_seq === 2), "fixture: the pointer's index names pin 2 for row 1");
-  const page = (await casePage(c.id)).html;
-  assert.match(page, /reference row 1[\s\S]*not read: the pin the pointer&#39;s index names for this row does not list it \(index_not_in_pin\)/);
-});
-
-test("R-L L5: the seal judge holds an index to its own pin: sorted, each row once, no later pin, and this pin's own rows in it", () => {
-  const verdict = require("../lib/_verdict.js");
-  const id = "a".repeat(64);
-  const pin = S._internal.pinRecord(id, "b".repeat(64), REVEAL_AT, "c".repeat(40));
-  const judge = (rec) => verdict.judgeCaseSeal({ json: rec }, { namespace: S.pinNamespace(id) });
-  const at3 = { ...pin, seq: 3, reference_commits: [{ seq: 2, commit: "d".repeat(40) }] };
-  assert.equal(judge({ ...at3, listed_by: [{ seq: 1, pin_seq: 2 }, { seq: 2, pin_seq: 3 }] }).ok, true);
-  for (const bad of [
-    [{ seq: 2, pin_seq: 3 }, { seq: 1, pin_seq: 2 }],
-    [{ seq: 1, pin_seq: 2 }, { seq: 1, pin_seq: 2 }, { seq: 2, pin_seq: 3 }],
-    [{ seq: 1, pin_seq: 4 }, { seq: 2, pin_seq: 3 }],
-    [{ seq: 1, pin_seq: 2 }],
-    [],
-    [{ seq: 1, pin_seq: 2, extra: 1 }, { seq: 2, pin_seq: 3 }],
-  ]) assert.equal(judge({ ...at3, listed_by: bad }).reason, "case_seal_listed_by_unreadable", JSON.stringify(bad));
-  assert.equal(judge({ ...pin, listed_by: [{ seq: 1, pin_seq: 1 }] }).reason, "case_seal_listed_by_unreadable", "the seal's own pin lists no row");
-});
+// (Unit R-PIN removed the next pins, the index and their tests: a case has
+// one pin, written once.)
 
 // =============================================================================
 // L6: two sentences
@@ -528,55 +428,6 @@ test("R-L L7: the change log says the withdrawn-tape listing was removed before 
 // left alive, each caught here
 // =============================================================================
 
-// A case at pin 3 whose index lists row 1 by pin 2 and row 2 by pin 3.
-async function indexed(scope) {
-  const c = await atPin(scope, 2);
-  await rowTwo(c);
-  await sealerRun(120000);
-  const top = gh.read(PINS, S.pinPaths(c.id).latest);
-  assert.deepEqual([top.seq, top.listed_by], [3, [{ seq: 1, pin_seq: 2 }, { seq: 2, pin_seq: 3 }]]);
-  return { c, top, chain: S.caseChain(storedCase(c.id)) };
-}
-
-test("MUST-FAIL GAP (S08, S22b): the index reads only the pins that list the rows wanted; a next pin's auth_note says what listed_by is", async () => {
-  const { c, top, chain } = await indexed("RL gap want");
-  gh.forceGetFailure(PINS, S._internal.pinPath(c.id, 2), 1, 503);
-  const r = await S._internal.listedReferences(c.id, chain, top, new Set([2]));
-  assert.equal(r.ok, true, JSON.stringify(r));
-  assert.deepEqual([...r.listed], [[2, { commit: top.reference_commits[0].commit, pin_seq: 3 }]]);
-  assert.ok(top.auth_note.endsWith("; listed_by, when present, names for every row this pin or a pin below it lists the pin that lists it."),
-    top.auth_note);
-});
-
-test("MUST-FAIL GAP (S10, S11, S12): a pin the index names for a wanted row is pin_unreadable when its read fails, pin_below_not_a_pin when it is not this case's pin, and pin_below_absent when it is gone", async () => {
-  const { c, top, chain } = await indexed("RL gap index reads");
-  const p2 = S._internal.pinPath(c.id, 2);
-  const reasonFor = async () => (await S._internal.listedReferences(c.id, chain, top, new Set([1]))).reason;
-  assert.equal(await reasonFor(), undefined, "control: row 1 is read from pin 2");
-  gh.forceGetFailure(PINS, p2, 1, 503);
-  assert.equal(await reasonFor(), "pin_unreadable");
-  gh.seed(PINS, p2, { not: "a pin" });
-  assert.equal(await reasonFor(), "pin_below_not_a_pin");
-  gh._repoMap(PINS).delete(p2);
-  assert.equal(await reasonFor(), "pin_below_absent");
-});
-
-test("MUST-FAIL GAP (S17, S22): a chain from before the index whose walk stops on a pin it read gets no next pin, and the sealer is told why", async () => {
-  const c = await sealedCase("RL gap legacy stops");
-  assert.equal((await reference(c, { role: "a" })).status, 201);
-  const commit = gh.commitsFor(PINS, C.referencePath(c.id, 1))[0].sha;
-  const base = gh.read(PINS, S.pinPaths(c.id).seq);
-  gh.seed(PINS, S._internal.pinPath(c.id, 2), { ...base, seq: 2, reference_commits: [{ seq: 1, commit }] });
-  const p3 = { ...base, seq: 3 };
-  gh.seed(PINS, S._internal.pinPath(c.id, 3), p3);
-  gh.seed(PINS, S.pinPaths(c.id).latest, p3);
-  gh._repoMap(PINS).delete(S._internal.pinPath(c.id, 2));
-  const caseCommit = gh.commitsFor(PINS, C.casePath(c.id))[0].sha;
-  const r = await S._internal.nextPin(c.id, S.caseChain(storedCase(c.id)), REVEAL_AT + 7200000, caseCommit);
-  assert.deepEqual(r, { ok: false, reason: "pin_below_absent" });
-  assert.equal(gh.has(PINS, S._internal.pinPath(c.id, 4)), false, "no next pin");
-});
-
 test("MUST-FAIL GAP (S02): a revocation marker held from an earlier read whose file cannot be read this time is a marker that cannot be read", async () => {
   const c = await sealedCase("RL gap marker read fails");
   const CASE_REVOKED = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
@@ -600,22 +451,3 @@ test("MUST-FAIL GAP (H21, H22): the withdrawal's answer carries the public claim
     "is kept except the sha256 of the salt, in the withdrawal record.");
 });
 
-
-test("MUST-FAIL GAP (V02): a next pin's index is never empty", () => {
-  const verdict = require("../lib/_verdict.js");
-  const id = "a".repeat(64);
-  const pin = S._internal.pinRecord(id, "b".repeat(64), REVEAL_AT, "c".repeat(40));
-  const judge = (rec) => verdict.judgeCaseSeal({ json: rec }, { namespace: S.pinNamespace(id) });
-  assert.equal(judge({ ...pin, seq: 3 }).ok, true, "control: no index");
-  assert.equal(judge({ ...pin, seq: 3, listed_by: [] }).reason, "case_seal_listed_by_unreadable");
-});
-
-test("MUST-FAIL GAP (V07, V08): an index entry's seq is within the seal's bound, and its pin is a next pin, never the seal's own", () => {
-  const verdict = require("../lib/_verdict.js");
-  const id = "a".repeat(64);
-  const pin = S._internal.pinRecord(id, "b".repeat(64), REVEAL_AT, "c".repeat(40));
-  const judge = (rec) => verdict.judgeCaseSeal({ json: rec }, { namespace: S.pinNamespace(id) });
-  const at3 = { ...pin, seq: 3, reference_commits: [{ seq: 2, commit: "d".repeat(40) }] };
-  assert.equal(judge({ ...at3, listed_by: [{ seq: 1, pin_seq: 1 }, { seq: 2, pin_seq: 3 }] }).reason, "case_seal_listed_by_unreadable", "pin 1");
-  assert.equal(judge({ ...at3, listed_by: [{ seq: 2, pin_seq: 3 }, { seq: 100000000, pin_seq: 2 }] }).reason, "case_seal_listed_by_unreadable", "seq bound");
-});

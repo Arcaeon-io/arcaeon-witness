@@ -182,7 +182,6 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -217,7 +216,6 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const pinsPaths = () => [...gh._repoMap(PINS).keys()];
 const esc = (s) => CP._internal.esc(s);
-const sealerRun = (dt = 60000, env = deployedEnv()) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env });
 const read = (rel) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
 const README = () => read("README.md").replace(/\s+/g, " ");
 // =============================================================================
@@ -263,7 +261,6 @@ test("R-L2 M2: a withdrawal whose root write kept losing while the case read fin
 test("R-L2 M3: a case holds at most 500 reference rows: the 500th is written, the 501st is refused 409 row_limit in a plain sentence, and the README states the cap", async () => {
   assert.equal(S.MAX_REFERENCE_ROWS, 500);
   const c = await sealedCase("RL2 M3 cap");
-  await sealerRun();
   for (let n = 1; n <= 499; n += 1) gh.seed(PINS, C.referencePath(c.id, n), { seeded: n });
   const at500 = await reference(c, { role: "a" });
   assert.equal(at500.status, 201, JSON.stringify(at500.body).slice(0, 300));
@@ -308,42 +305,7 @@ test("R-L2 L4: a withdrawal that loses to a reveal attempt, or to another withdr
 // THE MINORS
 // =============================================================================
 
-// A case at pin `top` whose pins carry no index (written before unit R-L),
-// row 1 listed by pin 2 (the R-L L5 legacy fixture).
-async function legacyChain(scope, top) {
-  const c = await sealedCase(scope);
-  assert.equal((await reference(c, { role: "a" })).status, 201);
-  const commit = gh.commitsFor(PINS, C.referencePath(c.id, 1))[0].sha;
-  const base = gh.read(PINS, S.pinPaths(c.id).seq);
-  let rec = base;
-  for (let n = 2; n <= top; n += 1) {
-    rec = { ...base, seq: n, ...(n === 2 ? { reference_commits: [{ seq: 1, commit }] } : {}) };
-    gh.seed(PINS, S._internal.pinPath(c.id, n), rec);
-  }
-  gh.seed(PINS, S.pinPaths(c.id).latest, rec);
-  return c;
-}
-const AUTH_INDEXED = "reference_commits, when present, lists the commits that wrote the case's reference rows that no earlier pin lists;";
-const AUTH_PARTIAL = "reference_commits, when present, lists the commits that wrote the case's reference rows that the pins read below " +
-  "this one do not list; the pins below were written before listed_by and were not read to the chain's start, so an earlier pin may list " +
-  "some of them too;";
-
-test("R-L2 (a minor): a next pin written after a walk that did not reach the chain's start says an earlier pin may list its rows too; a pin written from an index says no earlier pin lists them", async () => {
-  const c = await legacyChain("RL2 auth legacy", 25);
-  await sealerRun();
-  const p26 = gh.read(PINS, S._internal.pinPath(c.id, 26));
-  assert.ok(p26.auth_note.includes(AUTH_PARTIAL), p26.auth_note);
-  assert.ok(!p26.auth_note.includes("rows that no earlier pin lists"), p26.auth_note);
-  const d = await legacyChain("RL2 auth short legacy", 3);
-  await sealerRun(120000);
-  const p4 = gh.read(PINS, S._internal.pinPath(d.id, 4));
-  assert.equal(p4, null, "fixture: row 1 is listed, nothing to write");
-  const e = await sealedCase("RL2 auth indexed");
-  assert.equal((await reference(e, { role: "a" })).status, 201);
-  await sealerRun(180000);
-  const p2 = gh.read(PINS, S._internal.pinPath(e.id, 2));
-  assert.ok(p2.auth_note.includes(AUTH_INDEXED), p2.auth_note);
-});
+// (Unit R-PIN removed the minor's next-pin tests with the next pins.)
 
 // =============================================================================
 // MUST-FAIL GAP (unit R-L2): the mutants the pass over the lines R-L2 changed
@@ -351,14 +313,3 @@ test("R-L2 (a minor): a next pin written after a walk that did not reach the cha
 // =============================================================================
 
 const failedFetch = () => ({ ok: false, status: 503, json: async () => ({}), text: async () => "" });
-
-test("MUST-FAIL GAP (S72): a pin written from an index says no earlier pin lists its rows", async () => {
-  const e = await sealedCase("RL2 gap index auth");
-  assert.equal((await reference(e, { role: "a" })).status, 201);
-  await sealerRun();
-  assert.equal((await reference(e, { role: "b" })).status, 201);
-  await sealerRun(120000);
-  const p3 = gh.read(PINS, S._internal.pinPath(e.id, 3));
-  assert.ok(Array.isArray(gh.read(PINS, S._internal.pinPath(e.id, 2)).listed_by), "fixture: pin 3 is written from pin 2's index");
-  assert.ok(p3.auth_note.includes(AUTH_INDEXED), p3.auth_note);
-});

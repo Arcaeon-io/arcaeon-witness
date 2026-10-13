@@ -188,7 +188,6 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -455,10 +454,10 @@ test("R-L4: the sealer's index and the status counts read no registration file: 
   const id = "a".repeat(64);
   const bare = [{ path: C.casePath(id), type: "blob" }];
   const withFiles = [...bare, { path: REG.pathOf(gh, id, "a"), type: "blob" }, { path: REG.pathOf(gh, id, "b"), type: "blob" }];
-  assert.deepEqual(S.caseTreeIndex(bare).sealable, [id]);
-  assert.deepEqual(S.caseTreeIndex(withFiles).sealable, [id]);
+  assert.deepEqual(S.caseTreeIndex(bare).candidates, [id]);
+  assert.deepEqual(S.caseTreeIndex(withFiles).candidates, [id]);
   assert.deepEqual(S.caseAnchorSummary(bare), S.caseAnchorSummary(withFiles));
-  assert.deepEqual(S.caseAnchorSummary(bare), { case_files: 1, pinned: 0, pending: 1, withdrawn: 0, partial: false });
+  assert.deepEqual(S.caseAnchorSummary(bare), { case_files: 1, pinned: 0, withdrawn: 0, partial: false }); // unit R-PIN: no pending
 });
 
 // =============================================================================
@@ -729,26 +728,25 @@ test("MUST-FAIL GAP (S21, S22, S24): the marker repair says a case it could not 
   assert.deepEqual(run.could_not_look, [{ case_id: c.id, reason: "registration_unreadable" }]);
 });
 
-test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file): the page reads each projected file once, says a file it could not read and is then not kept, shows an EXPIRED case no registrations, and keeps no page of an inconsistent record", async () => {
+test("MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file; since unit R-PIN no page is kept): the page reads each projected file once, says a file it could not read, shows an EXPIRED case no registrations, and answers 503 for an inconsistent record", async () => {
   const c = await committedCase("RL4 gap page reads");
   const apath = REG.pathOf(gh, c.id, "a");
   const from = gh.getLog.length;
-  assert.equal((await render(c.id)).definite, true, "fixture: a page that is kept");
+  assert.equal((await render(c.id)).status, 200, "fixture: a page");
   assert.equal(gh.getLog.slice(from).filter((p) => p === apath).length, 1, "the projected file, read once");
   gh.forceGetFailure(PINS, apath, 1, 503);
   const unread = await render(c.id);
   assert.ok(registrationsOf(unread.html).includes("role a its registration file could not be read when this page was read (registration_unreadable)"),
     registrationsOf(unread.html));
-  assert.equal(unread.definite, false);
   // a file written and not confirmed is neither read nor linked
   const u = await unconfirmedA("RL4 gap page link");
   assert.equal((await render(u.id)).html.includes(u.rpath), false);
   // EXPIRED, every role projected: no registrations panel
   assert.doesNotMatch((await render(c.id, Date.parse(DEADLINE) + 1000)).html, /<h2>Registrations<\/h2>/);
-  // an inconsistent record's page is never kept (unit R-L4b: 503)
+  // an inconsistent record's page (unit R-L4b: 503)
   gh._repoMap(PINS).get(apath).content += " ";
   const inconsistent = await render(c.id);
-  assert.deepEqual([inconsistent.status, inconsistent.definite], [503, undefined]);
+  assert.equal(inconsistent.status, 503);
 });
 
 test("MUST-FAIL GAP (C02): a case root whose projection's sha256 is not 64 hex is not a valid case record", async () => {

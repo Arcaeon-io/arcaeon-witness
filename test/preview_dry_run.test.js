@@ -211,7 +211,7 @@ test("ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --p
     `${CASE_ENTRY.key_id.replace(/[.+/]/g, "\\$&")}, verified under its active entry in public/\\.well-known/arcaeon/case-signing-keys\\.json, ` +
     `the document it names at commit ${KD.commitOf(TEST_DOC)}; ` +
     `chain ${S.caseChain(sealed)}, the case's own, pin pinned$`));
-  assert.match(r.by.f.line, new RegExp(`case ${id} is pinned at commit [0-9a-f]{40}, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\); not anchored yet$`));
+  assert.match(r.by.f.line, new RegExp(`case ${id} is pinned at commit [0-9a-f]{40}, chain ${S.caseChain(gh.read(PINS, C.casePath(id)))} \\(pinned at its reveal\\)$`));
   assert.match(r.by.g.line, /README\.md, package\.json, package-lock\.json, lib\/ \d+, tools\/ \d+, test\/ \d+\): every one answered HTTP 404/);
 
   // The reveal really went out chunked, with no content-length.
@@ -472,7 +472,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   assert.equal(failed, 1);
   assert.match(healed.by.e.line, /pin commit_unrecorded/);
   assert.equal(word(healed, "f"), "VERIFIED", healed.show);
-  assert.match(healed.by.f.line, /pinned 1, already 0[^;]*; case [0-9a-f]{64} is pinned at commit [0-9a-f]{40}, chain [0-9a-f]{64} \(pinned by this pass\); not anchored yet$/);
+  assert.match(healed.by.f.line, /pinned 1, already 0[^;]*; case [0-9a-f]{64} is pinned at commit [0-9a-f]{40}, chain [0-9a-f]{64} \(pinned by this pass\)$/);
 
   // A sealable case whose file does not read: the pass refuses it.
   gh = new MockGitHubStore();
@@ -498,7 +498,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   }) } });
   assert.equal(word(elsewhere, "f"), "COULD NOT LOOK");
   assert.match(elsewhere.by.f.line, /does not hold case [0-9a-f]{64}, which this run opened on the preview, so it is not the preview's pins store/);
-  assert.equal(gh.putLog.some((w) => w.path.startsWith("pins/case/") && w.path.endsWith("latest.json") && w.repo === PINS), true, "only the reveal pinned");
+  assert.equal(gh.putLog.some((w) => w.path.startsWith("pins/case/") && w.path.endsWith("/00000001.json") && w.repo === PINS), true, "only the reveal pinned");
   assert.equal(process.env.GITHUB_PIN_TOKEN, "test-token", "the pin token is put back");
 });
 
@@ -533,8 +533,17 @@ test("(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to th
 });
 
 test("T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it", async (t) => {
-  // The pass reports this run's case as could_not_look (its named document
-  // did not read), and nothing anchored.
+  // The reveal's pin write fails, so the case is a candidate (unit R-PIN: a
+  // pinned root is none), and the pass reports it as could_not_look (its
+  // named document did not read), and nothing pinned.
+  let failed = 0;
+  intercept((u, opts) => {
+    if ((opts.method || "GET") === "PUT" && /^\/repos\/test-owner\/test-pins\/contents\/pins\/case\/[0-9a-f]{64}\/00000001\.json$/.test(u.pathname) && failed === 0) {
+      failed += 1;
+      return answer(500, { message: "mock: the reveal's pin write fails" });
+    }
+    return undefined;
+  });
   const real = S.anchorPending;
   t.mock.method(S, "anchorPending", async (o) => {
     const rep = await real(o);
@@ -547,17 +556,17 @@ test("T06, T07 (f) DESIGN I: a pass that could not read the key document this ru
   assert.match(r.by.f.line, /, could not look 1; the key document case [0-9a-f]{64} names could not be read \(http_404\), so the pass did not pin it$/);
 });
 
-test("(f) REVIEW FIX 3: an anchored state counts only under the reveal's own chain; an anchor read under another chain is BROKEN", async (t) => {
-  const real = S.anchorState;
-  S.anchorState = async () => ({ pin: "anchored", record: { chain: "0".repeat(64) } });
+test("(f) REVIEW FIX 3: a pinned state counts only under the reveal's own chain; a pin read under another chain is BROKEN (unit R-PIN: no anchored state)", async (t) => {
+  const real = S.pinState;
+  S.pinState = async () => ({ pin: "pinned", record: { chain: "0".repeat(64) }, pin_commit: { sha: "1".repeat(40), date: null } });
   t.after(() => {
-    S.anchorState = real;
+    S.pinState = real;
   });
   const r = await dryRun(t, { pinToken: PIN_TOKEN });
-  S.anchorState = real;
+  S.pinState = real;
   assert.equal(word(r, "e"), "VERIFIED", r.show);
   assert.equal(word(r, "f"), "BROKEN", r.show);
-  assert.match(r.by.f.line, /case [0-9a-f]{64} reads anchored under chain "0{64}", not the reveal's chain [0-9a-f]{64}$/);
+  assert.match(r.by.f.line, /case [0-9a-f]{64} reads pinned under chain "0{64}", not the reveal's chain [0-9a-f]{64}$/);
 });
 
 // =============================================================================
@@ -832,10 +841,10 @@ test("T03 (f) DESIGN J: a case still not pinned after the pass, its pin write fa
 });
 
 test("T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, naming why", async (t) => {
-  const real = S.anchorState;
-  S.anchorState = async () => ({ pin: "could_not_look", reason: "pin_commit_unreadable" });
+  const real = S.pinState;
+  S.pinState = async () => ({ pin: "could_not_look", reason: "pin_commit_unreadable" });
   t.after(() => {
-    S.anchorState = real;
+    S.pinState = real;
   });
   const r = await dryRun(t, { pinToken: PIN_TOKEN });
   assert.equal(word(r, "f"), "COULD NOT LOOK", r.show);

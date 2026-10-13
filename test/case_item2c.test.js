@@ -282,7 +282,7 @@ test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the
   assert.equal(storedCase(id).sig, null);
   const r = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
   assert.deepEqual([r.ok, r.code, r.reason], [false, "case_signature_invalid", "unsigned_seal"]);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "never pinned");
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "never pinned");
 });
 
 // =============================================================================
@@ -376,7 +376,7 @@ test("FIX 3: the status row reads no case file and no pin; a truncated tree make
   const reads = gh.getLog.length;
   const d = await gatherStatusData();
   assert.ok(!gh.getLog.slice(reads).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case file, no case pin read");
-  assert.deepEqual(d.caseAnchors, { case_files: 3, pinned: 1, pending: 1, withdrawn: 1, partial: false });
+  assert.deepEqual(d.caseAnchors, { case_files: 3, pinned: 1, withdrawn: 1, partial: false }); // unit R-PIN: no pending
 
   // the mock tree, marked truncated
   gh.treeTruncated = true;
@@ -438,43 +438,9 @@ test("FIX 4: checkKeyDocument refuses an unknown top-level field by name; the co
 // =============================================================================
 // FIX 5: pinned cases stay in the sealer's window; a squatter is reported
 // =============================================================================
+// (Unit R-PIN removed this fix's test with the pointer it read: a root with
+// its pin file is no longer a candidate, and its one pin is never rewritten.)
 
-test("FIX 5: a squatter or unreadable latest.json under a pinned case is reported by the sealer's pass, never skipped, and never written over", async () => {
-  const { id } = await sealedCase();
-  const { latest, seq } = S.pinPaths(id);
-  const squatter = S._internal.pinRecord(id, "e".repeat(64), REVEAL_AT);
-  gh.seed(PINS, latest, squatter);
-  const writes = gh.putLog.length;
-  const run = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000), keyDocument: KEYS_DOC });
-  assert.equal(run.cases.ok, true, JSON.stringify(run.cases));
-  assert.equal(run.cases.candidates, 1);
-  assert.equal(run.cases.pinned, 1);
-  assert.deepEqual(run.cases.conflict, [id], "the squatter is reported");
-  assert.equal(gh.putLog.length, writes, "nothing written over");
-  assert.deepEqual(gh.read(PINS, latest), squatter);
-  // an unreadable pointer
-  const { auth_note, ...partial } = squatter; // eslint-disable-line no-unused-vars
-  gh.seed(PINS, latest, partial);
-  const run2 = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });
-  assert.deepEqual(run2.cases.unreadable, [id]);
-  assert.equal(gh.putLog.length, writes);
-  // a pin under a case that is not sealed at all: a pin no seal backs
-  const c = await committedCase({ over: { scope_digest: sha("pin without seal") } });
-  gh.seed(PINS, S.pinPaths(c.id).latest, S._internal.pinRecord(c.id, "d".repeat(64), REVEAL_AT));
-  const w2 = gh.putLog.length;
-  const run3 = await S.anchorPending({ now: REVEAL_AT + 180000, keyDocument: KEYS_DOC });
-  assert.ok(run3.conflict.includes(c.id), JSON.stringify(run3));
-  assert.equal(run3.not_sealed, 0, "reported as the conflict it is, not passed over");
-  assert.equal(gh.putLog.length, w2);
-  // control: the real pin reads as already anchored
-  gh.seed(PINS, latest, gh.read(PINS, seq));
-  const run4 = await S.anchorPending({ now: REVEAL_AT + 240000, keyDocument: KEYS_DOC });
-  assert.ok(run4.already.includes(id));
-  // MUST-FAIL ARM: 2b's candidate list left out every pinned case, so the
-  // squatter was never read again.
-  const idx = S.caseTreeIndex([...gh.repos.get(PINS).keys()].map((p) => ({ path: p, type: "blob" })));
-  assert.deepEqual(idx.sealable.filter((x) => !idx.pinned.has(x)), [], "2b's window would have been empty");
-});
 
 // =============================================================================
 // FIX 6: the sealer skips terminal root states
@@ -559,7 +525,6 @@ async function reference(body, { now = REVEAL_AT + 3600000, env = SIGNED, keyDoc
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res, { now, keyDocument });
   return { status: res._status, html: String(res._body), headers: res._headers };
 }
@@ -806,9 +771,9 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.equal(row.signed_by, CASE_KEY_ID);
   assert.equal(S.publishedSignatureReason(row, KEYS_DOC), null, "signed with the case key");
   assert.match(row.anchor_note, /no pin of its own/);
-  // unit R-J2 (B2): the row's sentence, version 3
-  assert.match(row.anchor_note, /recorded by the pins-repository commit that writes it\. A later pin of the case may list that commit\. This row is anchored only if a pin that lists it is, and no anchoring is asserted here\./);
-  assert.equal(row.note_version, 3);
+  // unit R-PIN: the row's sentence, version 4 (version 3 was never issued)
+  assert.equal(row.anchor_note, "This row has no pin of its own. It is recorded by the pins-repository commit that writes it, and no anchoring is asserted here.");
+  assert.equal(row.note_version, 4);
   // the sealed case is untouched, and records in it is still the count at seal time
   assert.deepEqual(storedCase(id), sealed);
   assert.equal((await S.liveRecords(storedCase(id), { keyDocument: KEYS_DOC })).records, 2, "the live count, from the row");
@@ -1026,7 +991,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
     assert.ok(pc.html.includes(`https://github.com/${PINS}/commits/main/${REG.pathOf(gh, c.id, r)}`), `${r}: the registration record`);
   }
 
-  // VERDICT, anchored, signed, with the test key listed in the key document
+  // VERDICT, pinned, signed, with the test key listed in the key document
   const s = await sealedCase({ over: { scope_digest: sha("page sealed") } });
   const listed = await casePage(s.id);
   assert.equal(listed.status, 200);
@@ -1036,8 +1001,10 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.match(pv, /<span class="word pass">MATCHED<\/span>/);
   assert.match(pv, /none: every call matched \(5 matched\)/);
   assert.match(pv, /one record: this service&#39;s/);
-  assert.match(pv, /pinned, not anchored yet: no daily anchor record held its pin when this page was read/);
-  assert.ok(pv.includes(S.ANCHOR_NOTE.replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;")), "the anchor sentence");
+  // unit R-PIN: the pin line, and the fixed sentence under it; never "anchored"
+  assert.match(pv, /Pinned at commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}" rel="nofollow noopener noreferrer">[0-9a-f]{12}<\/a> \(the pins repository&#39;s commit time, [^)]+\)/);
+  assert.ok(pv.includes("Daily anchor records and their OpenTimestamps proofs are in <code>anchors/</code> in the pins repository; this page does not check them"), "the fixed sentence");
+  assert.ok(!/anchored/.test(pv));
   assert.ok(pv.includes(CASE_KEY_ID), "signed_by");
   // since Design I: the key document the case names, at its commit, cited
   const named = storedCase(s.id).signed_under;
@@ -1069,7 +1036,7 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(!String(ru._body).includes(">MATCHED<"));
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
-  assert.match((await casePage(p.id)).html, /commit_unrecorded: the case is sealed and not yet pinned \(not_pinned\)/); // unit R-J3 (F1)
+  assert.match((await casePage(p.id)).html, /Not pinned: no pin file is present under this case's namespace \(not_pinned\)\./); // unit R-PIN
   // ALTERED: the word and the first divergence; and a reference row makes it two records, with the cross-reference shown
   const alt = await committedWith({ scope_digest: sha("page altered") }, ALT_AGENT, ALT_TOOL);
   assert.equal((await reveal(revealBody(alt.id, alt.a, alt.b))).status, 201);

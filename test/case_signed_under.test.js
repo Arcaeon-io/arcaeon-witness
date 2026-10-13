@@ -393,7 +393,7 @@ test("THE CURRENT DOCUMENT MUST LIST BOTH KEYS (unit R-I, I3; Design I said the 
 
 test("SIGNER SINCE REVOKED (since unit R-I, by commit order): valid under the named document, the current document marks a key revoked, and its marker was written after the case was pinned: the case stays sealed, and the answer names the key, revoked_since, the revoking commit R, the document's commit and the case's pin commit P; a case not pinned is signer_revoked", async () => {
   const { id, a, k } = await sealedCase("since revoked");
-  const P = gh.read(PINS, S.pinPaths(id).latest).case_commit;
+  const P = gh.read(PINS, S.pinPaths(id).seq).case_commit;
   const caseRevoked = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY));
   const W = KD.serve(gh, caseRevoked);
   const marked = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: caseRevoked, write: true });
@@ -454,7 +454,7 @@ test("REVOKED OR RETIRED IN THE NAMED DOCUMENT (by status; since unit R-I retrie
   // the sealer refuses it and pins nothing; the reference refuses it
   const run = await S.anchorCase(early.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
   assert.deepEqual(run, { ok: false, code: "case_signature_invalid", reason: "signer_revoked" });
-  assert.equal(gh.has(PINS, S.pinPaths(early.id).latest), false);
+  assert.equal(gh.has(PINS, S.pinPaths(early.id).seq), false);
   assert.equal((await referenceAs(early.id, early.a)).status, 409);
 });
 
@@ -475,7 +475,7 @@ test("A LATER DOCUMENT NEVER MAKES A FORMERLY UNVERIFIABLE STORED SIGNATURE VERI
   for (const c of [caseUnlisted, receiptUnlisted]) {
     const run = await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: later });
     assert.equal(run.ok, false, JSON.stringify(run));
-    assert.equal(gh.has(PINS, S.pinPaths(c.id).latest), false);
+    assert.equal(gh.has(PINS, S.pinPaths(c.id).seq), false);
   }
 });
 
@@ -498,14 +498,13 @@ test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, networ
   assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "http_404" }]);
   assert.deepEqual(run.refused, []);
   assert.deepEqual(run.newly_pinned, []);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "no pin");
   const ref = await referenceAs(id, a);
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "document_unavailable");
   assert.equal(ref.body.reason, "http_404");
   // the page: could not look, 503, neither the verdict nor DOES NOT VERIFY
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.97.0.1" } }), res,
     { now: REVEAL_AT + 3600000, keyDocument: DOC, env: {} });
   const html = String(res._body);
@@ -558,7 +557,6 @@ test("AN UNREADABLE CURRENT DOCUMENT: whether a key was since revoked cannot be 
 
 async function pageOf(id, { keyDocument = DOC, env = {} } = {}) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.98.0.${(ipSeq += 1) & 255}` } }), res,
     { now: REVEAL_AT + 3600000, keyDocument, env });
   return { status: res._status, html: String(res._body) };
@@ -568,7 +566,7 @@ const verdictWord = (html) => {
   return m ? m[1] : null;
 };
 
-test("THE PAGE NAMES ITS DOCUMENT AND ITS PIN: sealed under document <sha256> at commit <W> (a link to the document there), pinned at commit <P> with the pins repository's commit time; retrieved_at is labelled service clock, unverified", async () => {
+test("THE PAGE NAMES ITS DOCUMENT AND ITS PIN: sealed under document <sha256> at commit <W> (a link to the document there), since unit R-PIN \"Pinned at commit <P> (the pins repository's commit time, T)\"; retrieved_at is labelled service clock, unverified", async () => {
   const { id, k } = await sealedCase("page names");
   const su = k.signed_under;
   const p = await pageOf(id);
@@ -580,29 +578,29 @@ test("THE PAGE NAMES ITS DOCUMENT AND ITS PIN: sealed under document <sha256> at
   const pinCommits = gh.commitsFor(PINS, S.pinPaths(id).seq);
   assert.equal(pinCommits.length, 1, "fixture: the numbered pin record was written once");
   const P = pinCommits[0];
-  assert.ok(p.html.includes(`pinned at commit <a href="https://github.com/${store.REPO}/commit/${P.sha}"`), "the pin's commit, linked");
-  assert.ok(p.html.includes(`${P.date} (the pins repository&#39;s commit time)`), "with the repository's commit time");
+  assert.ok(p.html.includes(`Pinned at commit <a href="https://github.com/${store.REPO}/commit/${P.sha}"`), "the pin's commit, linked");
+  assert.ok(p.html.includes(`(the pins repository&#39;s commit time, ${P.date})`), "with the repository's commit time");
   assert.equal(verdictWord(p.html), "MATCHED");
 });
 
 test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and still shows the verdict", async () => {
   const pending = await sealedCase("page pending", { pinFails: true });
   const p = await pageOf(pending.id);
-  assert.ok(p.html.includes("not pinned yet"), "no pin, no pin commit");
+  assert.ok(p.html.includes("Not pinned: no pin file is present under this case's namespace (not_pinned)."), "no pin, no pin commit");
   assert.equal(verdictWord(p.html), "MATCHED");
   const pinned = await sealedCase("page pin unreadable");
   gh.forceCommitsFailure(PINS, S.pinPaths(pinned.id).seq, 1, 500);
   const q = await pageOf(pinned.id);
-  // Design J: a pin whose commit cannot be read is could_not_look, no claim;
-  // since unit R-J3 the cell says the pointer was read, and which read failed
-  assert.ok(q.html.includes("could_not_look: a pin of this case's chain was read, and the commit that wrote its pin record could not be read when this page was read (pin_commit_unreadable)"));
+  // Design J: a pin whose commit cannot be read is could_not_look, no claim,
+  // and the cell says which read failed
+  assert.ok(q.html.includes("could_not_look: the commit that wrote its pin record could not be read when this page was read (pin_commit_unreadable), so the case is not shown as pinned."));
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 
 test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order; since unit R-I2 word for word what is proven): the banner names the key and says \"The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked at its commit W.\", each linked; the case stays sealed and its verdict word does not change", async () => {
   const { id } = await sealedCase("page since revoked");
   const before = await pageOf(id);
-  const P = gh.read(PINS, S.pinPaths(id).latest).case_commit;
+  const P = gh.read(PINS, S.pinPaths(id).seq).case_commit;
   const revoked = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY));
   const W = KD.serve(gh, revoked);
   const marked = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
@@ -693,7 +691,7 @@ test("DOCUMENT UNRECORDED, THE READERS: the page shows the record as not verifyi
   assert.deepEqual(await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: DOC }), { ok: false, code: "document_unrecorded", reason: "no_signed_under" });
   const run = await S.anchorPending({ now: REVEAL_AT + 60000, keyDocument: DOC });
   assert.deepEqual(run.refused, [{ case_id: id, code: "document_unrecorded", reason: "no_signed_under" }]);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false, "no pin");
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "no pin");
   const ref = await referenceAs(id, a);
   assert.equal(ref.status, 409, JSON.stringify(ref.body));
   assert.equal(ref.body.error_code, "document_unrecorded");
@@ -782,7 +780,7 @@ test("P13 (the page's reads): a case not pinned yet reads no pin commit history"
   const { id } = await sealedCase("P13", { pinFails: true });
   const before = gh.commitsLog.length;
   const p = await pageOf(id);
-  assert.ok(p.html.includes("not pinned yet"));
+  assert.ok(p.html.includes("Not pinned: no pin file is present"));
   // (since unit R-L2, B2: the page reads the registration paths' histories for removals, and no pin's)
   assert.deepEqual(gh.commitsLog.slice(before).filter((k) => !/cases\/[0-9a-f]{64}\/commit_[ab]\.json/.test(String(k))), [], "no pin's commits listing");
 });
@@ -792,5 +790,5 @@ test("L01 (lib/_sealer.js anchorCases): the current document it is handed is the
   const run = await sealer.anchorCases({ now: new Date(REVEAL_AT + 60000), keyDocument: { ...DOC, extra: true } });
   assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "current_document_unreadable" }]);
   assert.deepEqual(run.newly_pinned, []);
-  assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
+  assert.equal(gh.has(PINS, S.pinPaths(id).seq), false);
 });

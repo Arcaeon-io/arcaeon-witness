@@ -406,7 +406,6 @@ async function sealedCase({ pinFails = false } = {}) {
 // key it does not list is signer_unlisted), as RECEIPT_DOC does
 async function page(id = ID, keyDocument = RECEIPT_DOC) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.93.0.1" } }), res, { now: REVEAL_AT + 3600000, keyDocument });
   return { status: res._status, html: String(res._body) };
 }
@@ -476,16 +475,15 @@ test("P07 (signedByHtml): a WITHDRAWN record signed by a key the key document do
   assert.ok(!unlisted.html.includes("the signature verifies under the published verifier"));
 });
 
-test("P08 (anchorHtml): a pin pointer holding another chain reads as a conflict on the page, never as anchored", async () => {
+test("P08 (pinnedHtml): a pin file holding another chain reads as a conflict on the page, never as pinned", async () => {
   await sealedCase();
-  const latest = S.pinPaths(ID).latest;
-  gh.seed(PINS, latest, { ...gh.read(PINS, latest), chain: "f".repeat(64) });
+  const pin = S.pinPaths(ID).seq;
+  gh.seed(PINS, pin, { ...gh.read(PINS, pin), chain: "f".repeat(64) }, { keepHistory: true });
   const pg = await page();
   assert.equal(pg.status, 200);
-  // unit R-J2 (B1): worded by the reason
-  assert.match(pg.html, /conflict: the pin pointer under this case&#39;s namespace holds another chain \(pointer_holds_another_chain\)/);
-  assert.ok(!pg.html.includes("anchored: a daily anchor record"), "not anchored");
-  assert.ok(!pg.html.includes("pinned at commit"), "not pinned");
+  // unit R-J2 (B1): worded by the reason (unit R-PIN: the one pin file)
+  assert.match(pg.html, /conflict: the pin file under this case&#39;s namespace holds another chain \(pin_holds_another_chain\)/);
+  assert.ok(!pg.html.includes("Pinned at commit"), "not pinned");
 });
 
 test("P10 (crossRows): a reference row's operator is escaped on the page", async () => {
@@ -522,7 +520,7 @@ test("E03 (sealOnce): a batch pass that refuses does not stop the case pass: a p
   assert.equal(r.reason, "pending_document_corrupt");
   assert.ok(r.cases && r.cases.ok, JSON.stringify(r.cases));
   assert.deepEqual(r.cases.newly_pinned, [ID]);
-  assert.equal(gh.has(PINS, S.pinPaths(ID).latest), true);
+  assert.equal(gh.has(PINS, S.pinPaths(ID).seq), true);
 });
 
 test("A01 (api/verify.js): ?op=case-withdraw reaches the withdrawal handler: a withdrawal's body for an unknown case is 404 case_not_found, not a reveal's unknown_field", async () => {

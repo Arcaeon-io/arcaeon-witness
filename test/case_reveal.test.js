@@ -728,7 +728,7 @@ test("TEST 8: registered before the deadline and revealed at or after it is expi
   assert.equal(runs(), 1);
 });
 
-test("TEST 8: a pin that fails after the case write leaves the sealed case standing and pin: pending, computed from the pin's absence and stored nowhere", async () => {
+test("TEST 8: a pin that fails after the case write leaves the sealed case standing and not_pinned, computed from the pin file's absence and stored nowhere", async () => {
   const { id, a, b } = await committedCase();
   const paths = S.pinPaths(id);
   assert.equal(paths.ns, `case/${id}`);
@@ -742,8 +742,7 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under", "reveal_attempts"].sort(),
     "no anchor or pin field in the case (its reveal attempts are part of the sealed base: unit R-N, E1)");
   assert.equal(gh.has(PINS, paths.seq), false);
-  assert.equal(gh.has(PINS, paths.latest), false);
-  assert.deepEqual(await S.anchorState(id, r.body.chain), { pin: "commit_unrecorded", reason: "not_pinned" }, "computed from the pin's absence");
+  assert.deepEqual(await S.pinState(id, r.body.chain), { pin: "not_pinned" }, "computed from the pin file's absence");
   // MUST-FAIL ARM: storing the state in the case is refused by the schema
   assert.equal(C.validateCase({ ...k, anchor: "pending" }).code, "unknown_field");
   assert.equal(C.validateCase({ ...k, pin: "pending" }).code, "unknown_field");
@@ -777,7 +776,7 @@ test("TEST 8: a case write that fails leaves no pin and the case COMMITTED; the 
   assert.equal(runs(), 2);
 });
 
-test("TEST 8: a retry by case_id never changes the chain: after a failed pin, after a lost pointer, and on a repeat", async () => {
+test("TEST 8: a retry by case_id never changes the chain: after a failed pin, and on a repeat (unit R-PIN: there is no pointer to lose)", async () => {
   const { id, a, b } = await committedCase();
   const paths = S.pinPaths(id);
   gh.forceFailure(PINS, paths.seq, 1, 502);
@@ -793,13 +792,12 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   assert.equal(retry.ok, true);
   assert.equal(retry.pin, "pinned");
   assert.equal(retry.chain, chain, "the retry's chain is the seal's");
-  const pinned = gh.read(PINS, paths.latest);
+  const pinned = gh.read(PINS, paths.seq);
   assert.equal(pinned.chain, chain);
   assert.equal(pinned.namespace, `case/${id}`);
   assert.equal(pinned.rows, 3);
   assert.equal(pinned.seq, 1);
   assert.equal(pinned.record_kind, "case_seal");
-  assert.deepEqual(gh.read(PINS, paths.seq), pinned, "the numbered record and the pointer are one record");
   assert.deepEqual(storedCase(id), k, "the sealed case was not touched");
   // a repeat writes nothing
   const writes = gh.putLog.length;
@@ -808,21 +806,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   assert.equal(again.existing, true);
   assert.equal(again.chain, chain);
   assert.equal(gh.putLog.length, writes);
-  assert.equal((await S.anchorState(id, chain)).pin, "pinned");
-
-  // a lost pointer: the numbered record landed, the pointer did not; the
-  // retry adopts the record it finds, unchanged
-  const c2 = await committedCase({ over: { scope_digest: sha("lost pointer") } });
-  const p2 = S.pinPaths(c2.id);
-  gh.forceFailure(PINS, p2.latest, 1, 502);
-  const r2 = await reveal(revealBody(c2.id, c2.a, c2.b));
-  assert.equal(r2.body.pin, "commit_unrecorded");
-  const orphan = gh.read(PINS, p2.seq);
-  assert.equal(orphan.chain, r2.body.chain);
-  const retry2 = await S.anchorCase(c2.id, { now: REVEAL_AT + 7200000, keyDocument: KEYS_DOC });
-  assert.equal(retry2.pin, "pinned");
-  assert.equal(retry2.chain, r2.body.chain);
-  assert.deepEqual(gh.read(PINS, p2.latest), orphan, "adopted as it was, its first pinned_at kept");
+  assert.equal((await S.pinState(id, chain)).pin, "pinned");
 
   // MUST-FAIL ARM: a retry that re-sealed (a fresh time, say) would pin
   // another chain; and another chain under the namespace is never written over.
@@ -835,7 +819,7 @@ test("TEST 8: a retry by case_id never changes the chain: after a failed pin, af
   // Item 2b: the squatter is a well-formed case_seal record (lib/_verdict.js
   // judgeCaseSeal) holding another chain, so it reads as a conflict; one
   // missing the type's auth fields reads as unreadable. Neither is written over.
-  const squatter = { ...S._internal.pinRecord(c3.id, "e".repeat(64), Date.parse("2026-10-10T09:00:00Z")) };
+  const squatter = { ...S._internal.pinRecord(c3.id, "e".repeat(64), Date.parse("2026-10-10T09:00:00Z"), "a".repeat(40)) };
   gh.seed(PINS, p3.seq, squatter);
   const w3 = gh.putLog.length;
   const retry3 = await S.anchorCase(c3.id, { keyDocument: KEYS_DOC });
@@ -874,7 +858,7 @@ test("SEAL: a case is sealed once; a reveal that loses the race to another is re
   assert.equal(outer.body.error_code, "not_committed");
   assert.equal(outer.body.status, "VERDICT");
   assert.equal(storedCase(id).reveals.a.revealed_at, "2026-10-10T09:00:01Z", "the winner's seal stands");
-  assert.equal(gh.read(PINS, S.pinPaths(id).latest).chain, inner.body.chain);
+  assert.equal(gh.read(PINS, S.pinPaths(id).seq).chain, inner.body.chain);
 });
 
 // =============================================================================

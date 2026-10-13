@@ -198,7 +198,6 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
-  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -582,33 +581,17 @@ test("R-N E1: the schema: reveal_attempts only on COMMITTED or VERDICT, entries 
 // D1: the reference runs the anchor-conflict check
 // =============================================================================
 
-test("R-N D1: a reference row runs the anchor-conflict check before it takes a row: a daily anchor record whose head holds another chain for the pin is 409 anchor_conflict, with no row and no quota", async () => {
-  const c = await sealedCase("RN anchor conflict");
-  const { seq } = S.pinPaths(c.id);
-  const ours = gh.read(PINS, seq);
-  const set = (rec) => {
-    gh._repoMap(PINS).get(seq).content = JSON.stringify(rec, null, 2) + "\n";
-    return gh.addCommit(PINS, seq, "mock: the numbered pin record rewritten");
-  };
-  const other = set({ ...ours, chain: sha("another chain") });
-  const day = gh.commitsFor(PINS, seq).slice(-1)[0].date.slice(0, 10);
-  gh.seedText(PINS, `anchors/${day}-head.txt`, `${other} ${day}T03:15:00+00:00\n`);
-  set(ours);
-  const r = await reference(c);
-  assert.deepEqual([r.status, r.body.error_code], [409, "anchor_conflict"], JSON.stringify(r.body).slice(0, 300));
-  assert.equal(gh.has(PINS, C.referencePath(c.id, 1)), false);
-  assert.equal(gh.has(USAGE, H._internal.referenceQuotaPath(c.id, "a")), false);
-});
-
 // =============================================================================
 // T1: the §2B todos are plain assertions now
 // =============================================================================
 
-test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing)", () => {
+test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing; since unit R-PIN §1.2 and §5 are todo again, decided)", () => {
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(todos.length, 1, JSON.stringify(todos));
+  assert.equal(todos.length, 3, JSON.stringify(todos));
   assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
+  assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-PIN)")).length, 2, "§1.2 and §5");
+  assert.ok(!todos.some((t) => /2B/.test(t)));
 });
 
 // =============================================================================
@@ -816,17 +799,6 @@ test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape h
   await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KEYS, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [409, "case_withdrawn"]);
   assert.equal(gh._commitsOf(PINS).length, commits, "nothing written to the pins repository");
-});
-
-test("MUST-FAIL GAP (H40): a reference to an anchored case takes a row", async () => {
-  const c = await sealedCase("RN gap anchored");
-  await sealerRun();
-  const { seq } = S.pinPaths(c.id);
-  const day = gh.commitsFor(PINS, seq).slice(-1)[0].date.slice(0, 10);
-  gh.seedText(PINS, `anchors/${day}-head.txt`, `${gh.headOf(PINS)} ${day}T03:15:00+00:00\n`);
-  assert.equal((await S.anchorState(c.id, S.caseChain(storedCase(c.id)))).pin, "anchored", "fixture: anchored");
-  const r = await reference(c);
-  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
 });
 
 test("MUST-FAIL GAP (P04): the page names the latest attempt", async () => {

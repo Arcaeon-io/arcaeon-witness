@@ -592,10 +592,9 @@ true, complete, or honestly produced; only that they were not fabricated after
 the fact. Each day's anchor covers all history through the previous day's
 anchor commits, forming a chain.
 
-A case page's "anchored" claims less than this. It says a daily anchor
-record in this repository names a head of the pins repository's branch that
-holds the case's pin, read at that head. The page does not check the
-OpenTimestamps proof; check it yourself with `ots verify`, as above.
+A case page never says a case is anchored. It does not read the daily
+anchor records or their proofs; it says where they are, and that you can
+check one yourself with `ots verify`, as above.
 
 ## Witness log
 
@@ -847,9 +846,20 @@ changed. The case root is the one case file that is updated, and only by a
 compare-and-swap that every reader can follow in the repository's history.
 Outside any case's own files, the pins repository updates two kinds of file
 in place: the daily anchor proofs (`anchors/<date>-head.txt.ots`, which the
-anchoring job upgrades once the Bitcoin attestation arrives) and the pin
-pointers (`pins/<namespace>/latest.json`, and a case's
-`pins/case/<case_id>/latest.json`, which each new pin of that case moves).
+anchoring job upgrades once the Bitcoin attestation arrives) and the
+namespace pin pointers (`pins/<namespace>/latest.json`, which each new pin
+of a namespace moves).
+
+A sealed case has exactly one pin, `pins/case/<case_id>/00000001.json`,
+written once by the reveal or by the sealer after the seal, and it records
+`case_commit`, the commit that wrote the sealed case file; a pin without it
+is not read as a pin. Nothing else is ever written under a case's pin
+namespace: no pointer and no next pin. A case's pin line on its page says
+"Pinned at commit P (the pins repository's commit time, T)", or what was
+read instead. Files a preview pins repository may hold from before this
+release under a case's pin namespace (`latest.json`, and `0000000N.json`
+for N above 1) are left where they are and ignored, and no case code reads
+the daily anchor files under `anchors/`.
 
 A registration file is a claim, and it stands only once the case root
 projects it. Each claim has its own file,
@@ -889,20 +899,17 @@ no code reads or writes them.
 ### A reference row's sentence
 
 A second operator's reference row is signed and create-only, and carries a
-fixed sentence about its anchoring, `anchor_note`, with `note_version: 3`:
+fixed sentence about its anchoring, `anchor_note`, with `note_version: 4`:
 "This row has no pin of its own. It is recorded by the pins-repository
-commit that writes it. A later pin of the case may list that commit. This
-row is anchored only if a pin that lists it is, and no anchoring is
-asserted here." Version 2 of this sentence was never issued. A row carrying
-`note_version` 2 reads `row_note_v2`, and a row with no `note_version` reads
-`row_note_v1`; neither is counted. A case holds at most 500 reference rows; the 501st
-is refused 409 `row_limit`. A row is refused on a proven anchor conflict
-(409 `anchor_conflict`); an anchor that could not be looked up, a head the
-repository does not show and a changed daily anchor record refuse no row,
-since the row asserts no anchoring, and the case page says the anchor state
-as read. The case page says a row is recorded by
-its commit and listed by a pin only when it read that pin, shows the row's
-anchor state as not computed, and never calls a row anchored.
+commit that writes it, and no anchoring is asserted here." Versions 2 and 3
+of this sentence were never issued. A row carrying `note_version` 2 or 3
+reads `row_note_v2` or `row_note_v3`, and a row with no `note_version`
+reads `row_note_v1`; none of them is counted. A case holds at most 500
+reference rows; the 501st is refused 409 `row_limit`. A row is never
+refused for its case's pin or anchoring: no pin and no anchor is read for a
+row, and its answer names no commit. The case page shows each row with a
+link to it and the commit that wrote it, and says nothing of its pin or its
+anchoring.
 
 ### The sealer's window
 

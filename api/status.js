@@ -169,10 +169,9 @@ module.exports = async (req, res) => {
           <td><code>pins/case/</code> <a class="src" href="${esc(TREE("pins/case"))}" title="every case seal pin">tree</a></td>
           <td>${esc(caseAnchors.case_files)}</td>
           <td>${esc(caseAnchors.pinned)}</td>
-          <td>${esc(caseAnchors.pending)}</td>
           <td>${esc(caseAnchors.withdrawn)}</td>
         </tr>`
-    : `<tr class="row-error"><td><code>pins/case/</code></td><td colspan="4">case anchors not counted: ${esc(caseErr || "unknown")}</td></tr>`;
+    : `<tr class="row-error"><td><code>pins/case/</code></td><td colspan="3">case anchors not counted: ${esc(caseErr || "unknown")}</td></tr>`;
   const casePartialHtml = caseAnchors && caseAnchors.partial
     ? `<p class="muted"><strong>Partial.</strong> The repository tree came back truncated on this read, so these counts may be short. They are not a full count.</p>`
     : "";
@@ -354,10 +353,10 @@ ${brandMark.FAVICON_LINK}
   </div>
 
   <h2>Case seals</h2>
-  <p class="muted">A sealed case (the case protocol) is pinned by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Pinned</em> means the case has a pin pointer, by path alone; whether the pin holds the case's chain at the commit that wrote it, and whether a daily anchor record holds it (anchored), the case's own page says. <em>Pending</em> means it has no pin yet: a case open or committed, a sealed case waiting for the operator's sealer run to write its pin, or one past its deadline with no reveal. No registration file is counted: a registration stands only by the case root's projection, which the tree does not show. The tree alone cannot tell those apart; the case's own page can. <em>Withdrawn</em> cases carry the withdrawal marker and are never pending. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <p class="muted">A sealed case (the case protocol) is pinned by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Pinned</em> means the case has its pin file, by path alone; whether the pin holds the case's chain at the commit that wrote it, the case's own page says. A case with no pin file is not counted as anything here: the tree alone cannot say whether it is open, committed, sealed and waiting for the operator's sealer run, or past its deadline. No registration file is counted. <em>Withdrawn</em> cases carry the withdrawal marker. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
   <div class="panel scroll">
     <table>
-      <thead><tr><th>where</th><th>case files</th><th>pinned</th><th>pending</th><th>withdrawn</th></tr></thead>
+      <thead><tr><th>where</th><th>case files</th><th>pinned</th><th>withdrawn</th></tr></thead>
       <tbody>${caseRowHtml}</tbody>
     </table>
     ${casePartialHtml}
