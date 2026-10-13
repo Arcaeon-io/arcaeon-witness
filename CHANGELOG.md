@@ -1,5 +1,56 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-N3: plain words once the tape is listed, a partial offline receipt check, listed_at, and a window no fixed period holds still (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **N1, the BLOCKER: the words after the listing** (`lib/_case_http.js`, `lib/_reconcile_http.js`, `lib/_case_page.js`, README).
+  - Since R-N2 B1 the listing is written before the withdrawal record. A listing can therefore stand with no withdrawn case: the root write fails after it, or a reveal that passed the listing check seals first.
+  - The listing's 409 `consent_withdrawn` now says "A party that committed to this tape digest in a case has withdrawn that case, or asked to. This service does not compare a tape so listed.", at `?op=reconcile` and at the reveal.
+  - Every withdrawal refusal sent after the listing is confirmed says so, and carries `tape_listed: true`. None says "nothing was withdrawn".
+    - A root write that fails, and a case that moved (`reason: "case_moved"`), are 503 `store_error`: "The withdrawal record was not written. Your tape digest is already listed, so this service will not compare that tape. Send the same withdrawal again to finish."
+    - A reveal that sealed first is 409 `case_sealed`: "This case sealed before the withdrawal could land, so it stays a public verdict. Your tape digest is listed, so this service will not compare that tape again."
+    - Another withdrawal or a reveal attempt that landed first is refused by its own code. The words say the record was not written, why, and that the tape is listed.
+  - The page of a reveal attempt that did not complete says the same reveal seals it "unless a tape in it has since been listed as withdrawn".
+  - The README section "A withdrawn tape's listing" says when a listing stands without a withdrawn case, and that it only ever refuses.
+- **N2.** A retry on a WITHDRAWN case whose listing cannot be confirmed is 503 `withdrawn_commitment_unconfirmed`: "The case is withdrawn. The tape listing could not be confirmed this time. Send the same withdrawal again."
+- **N3, the offline receipt check is partial** (`tools/check_refusal_receipt.js`).
+  - With `--document` the tool prints `{ok: false, reason: "offline_partial", signature_ok, not_checked}` and exits 3, whatever it found. Only the online check prints `ok: true` and exits 0.
+  - The header and the README say the offline check proves the signature against the document you supplied, and nothing about whether that document is the published one.
+  - `main` is exported for the tests.
+- **N4.** The listing holds `{listed_at}`, the time it was first written. A retry that writes a missing listing writes the retry's time, so `listed_at` can differ from the withdrawal's own time. The README says so.
+- **N6, the sealer's window** (`lib/_case_seal.js` `rotatingWindow`, THE WINDOW'S START).
+  - The start is derived from the run's full timestamp, turned by the golden ratio. No fixed run period reads the same slice forever.
+  - The old start stood still under hourly runs with 12 or 30 candidates, five a run.
+  - The cost: runs a minute apart no longer read each candidate within exactly ceil(n / max) runs. Measured over lists of up to 300 entries, they do within twice that. A period whose turn falls near a fraction with a small denominator moves slowly, and the comment says so.
+  - The SEALER window test's run bound is now 2 × ceil(3 / 1), by design.
+- **N7.** This entry, and the corrected counts and must-fail commits in the R-N2 entry below.
+- **N8, the body audit** (`test/response_bodies.test.js`, `test/helpers/http_mocks.js`).
+  - The audit records every status, 2xx included, with the handler that sent it, and asserts that the child run passed.
+  - Each of the four named bodies is tied to the handler that sends it, not to its code alone.
+  - A retried withdrawal's 200 drops a stored unsigned record's `sig_reason` (`withdrawalAnswer`). A signed record is shown whole.
+- **Also.** Tests show that a multipart reveal goes through the listing gate, and that the 409 `consent_withdrawn` bodies carry no receipt field.
+- **Not in this unit: N5 stays open.** A removal commit on a marker path makes the marker unreadable for good (R-N2 m1, below).
+- **Tests.**
+  - New: `test/case_rn3.test.js`, 9 tests, each failing before the change.
+  - Updated by design:
+    - `listed_at` in `test/case_rn.test.js` and `test/case_rn2.test.js`;
+    - the listing's words and the tool's exit 3 in `test/case_rn2.test.js`;
+    - the SEALER window bound in `test/case_item2b.test.js`;
+    - the audit in `test/response_bodies.test.js`.
+- Suite at 92f17ad: 1280 tests, 1276 pass, the 2 environment skips, 0 fail, 2 todo.
+- **The must-fail pass, and the gap-test commit** (2a547be).
+  - 50 defects were planted, one at a time, over every line R-N3 changed, with the whole suite run against each. The unit's own tests caught 33.
+  - The 17 that survived:
+    - H06, H07, H08: the `case_moved` 503's words, reason and `tape_listed`;
+    - H11 to H15: a lost root write's standing, its listed sentence, and the `case_withdrawn`, `reveal_attempted` and `expired` words;
+    - H21: the retry's 503 without its `case_id`;
+    - P02: the clause on the page of an attempt with no recorded completion;
+    - S02, S03, S04, S07: G made even, a clock that is not finite or not whole, the minute only;
+    - T05, T06, T09: an unreadable receipt read as `signature_ok: true`, a truthy online `ok`, `--document` before the receipt.
+  - Six gap tests in `test/case_rn3.test.js` catch all 17. None is left as equivalent.
+  - H23 and H24, R-N2's B08 and B09 on the line R-N3 rewrote, are caught by the N2 test.
+  - The harness runs the suite in a copy without `.git`, as in every earlier pass. There the same tests run, but 3 more of them skip because they need a repository: 5 skips, not 2 (measured at d0a7342 and 18ae018).
+- At 2a547be, with the gap tests: 1286 tests, 1282 pass, the 2 environment skips, 0 fail, 2 todo.
+
 ## 2026-10-13: Unit R-N2: fixes from the second reader's pass over R-N (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **B1, the withdrawn-tape listing fails closed** (`lib/_case_http.js`, `lib/_case_seal.js`).
@@ -30,7 +81,14 @@
 - **Tests.**
   - New: `test/case_rn2.test.js` (12 tests) and `test/response_bodies.test.js` (1 test), each failing before the change, and the M2 todo.
   - Updated by design: the trust-root n1/M03/n4 assertions (m1, m2), the race words (m4), the off-branch reason (m6), the B2 body assertions (`test/case_redteam.test.js`, `test/case_item2b.test.js`, `test/case_item2d.test.js`), and the tests that withdraw one case and then reveal another with the same fixture tapes, which now forget the listing first.
-- Suite 1248 -> 1262 tests, 0 fail, 2 todo. Here: 1258 pass and the 2 environment skips.
+- Suite 1248 -> 1262 tests at d0a7342, 0 fail, 2 todo. Here: 1258 pass and the 2 environment skips. (Checked again in unit R-N3, N7: that is what the suite prints at d0a7342 in a git checkout.)
+- **The must-fail pass, and the gap-test commit** (18ae018; listed in unit R-N3, N7).
+  - d0a7342 and 18ae018 were pushed before this pass finished. 18ae018 was drafted ahead of its results.
+  - 65 defects were planted, one at a time, over every line R-N2 changed, with the whole suite run against each. The unit's own tests caught 44.
+  - The gap tests in 18ae018 (9 tests) caught 18 of the 21 that survived: B01, B03, B05, C03, C11, L07, L08, M08, R02, R04, R10, R11, R13, R15, T01, T03, T05 and T07.
+  - B08 and B09 survived 18ae018: a retry whose listing fails, ignored or answered 200. Unit R-N3 rewrote that line (N2). Its N2 test and gap tests catch both on the new code (H23, H24 in the R-N3 entry).
+  - M09 survives: the walk of one-registration cases also taking pinned ones. The service writes a pin only for a sealed case, which holds both registration files, so the two differ only for a pin planted by someone with write access to the pins repository. Such a case is then walked by the mutant and not by the code. No test pins that down, and R-N3 does not change the line.
+  - At 18ae018 the suite prints, here, 1271 tests: 1267 pass, the 2 environment skips, 0 fail, 2 todo. The second reader's run at 18ae018 printed 1278 and 1274, which this checkout does not reproduce.
 
 ## 2026-10-13: Unit R-N: one signature rule everywhere, the refusal receipt made real, the reconcile bypass closed, and the withdrawal lease made honest (branch `case-protocol-2026-10-10`, NOT deployed)
 
