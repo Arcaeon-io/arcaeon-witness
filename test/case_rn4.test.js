@@ -9,6 +9,8 @@
 //   R4  the offline receipt check returns {signature_ok, reason}, never ok;
 //   R6  the sealer's window: runs to cover 30 entries hourly and daily;
 //   R7  "withdrawn by another request".
+// (unit R-L, L1: the withdrawn-tape listing is removed. Its tests here are
+// deleted; the sweep keeps every other refusal, with the plain tail.)
 // The setup below is test/case_rn3.test.js's (its header there).
 "use strict";
 
@@ -126,7 +128,9 @@ function plantStamp(hash) {
 }
 async function commit(id, p, now = NOW, extra = {}) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res, { now, ...extra });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res,
+    { now, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC, ...extra });
   return { status: res._status, body: parsed(res) };
 }
 async function register(id, p) {
@@ -240,7 +244,7 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
 // The case key revoked (unit R-I): the current document, its marker, the tool.
 const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
@@ -253,34 +257,25 @@ async function revoke() {
   assert.equal(out.ok, true, JSON.stringify(out));
   return { W, R: out.commit, path: out.path };
 }
-const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buffer.from(tapeSha256, "hex"))}.json`;
-
 
 // =============================================================================
 // UNIT R-N4
 // =============================================================================
 
-// A withdrawal whose root write loses, after its listing is confirmed, to
-// the case `seedWith` writes while the listing goes out (test/case_rn3.test.js).
-async function lostAfterListing(scope, seedWith) {
+// A withdrawal whose root write loses to the case `seedWith` writes while
+// the root write goes out (since unit R-L, L1: there is no listing before it).
+async function lostRootWrite(scope, seedWith) {
   const c = await committedCase(scope);
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
   const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${listing}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`),
     async () => gh.seed(PINS, C.casePath(c.id), seedWith(c, storedCase(c.id)), { keepHistory: true }),
     () => withdraw(c.id, c.b),
   );
   assert.equal(r.fired, true);
-  assert.equal(gh.has(PINS, listing), true, "the listing stands");
   return { c, w: r.out };
 }
-// Every case here holds the same two fixture tapes, so a listing left by one
-// case's withdrawal refuses the next case's reveal: forgotten before one.
-function forgetListings() {
-  for (const p of [...gh.repos.get(PINS).keys()]) if (p.startsWith("withdrawn_commitments/")) gh.repos.get(PINS).delete(p);
-}
-// A withdrawal that loses to a reveal sealing the case after it took the
-// lock and before it listed (test/case_rn3.test.js, N1).
+// A withdrawal that loses to a reveal sealing the case after it read the
+// case and before its root write.
 async function sealedFirst(scope) {
   const c = await committedCase(scope);
   const r = await during(
@@ -293,54 +288,25 @@ async function sealedFirst(scope) {
   return { c, w: r.out };
 }
 
-// R1: the tail of every refusal that wrote nothing, exactly; the listing's
-// own refusal; R3 and R7, the words after a confirmed listing.
-const TAIL = "This request wrote nothing. A tape digest listed by an earlier withdrawal request stays listed.";
-const LISTING_UNCONFIRMED = "The tape listing could not be confirmed, so this request went no further. Send the same withdrawal again.";
-const MAY_NOT_BE_WRITTEN = "The withdrawal record may not have been written. Your tape digest is already listed, so this service will not compare " +
-  "that tape. Send the same withdrawal again to finish or to confirm.";
-const LOST_TO_ANOTHER = "The withdrawal record was not written by this request: the case was withdrawn by another request while it ran. " +
-  "Your tape digest is listed, so this service will not compare that tape.";
+// R1: the tail of every refusal that wrote nothing, exactly (since unit R-L,
+// L1: the listing's sentence is gone, and "This request wrote nothing." is the
+// plain tail); a withdrawal that lost after it took the lock wrote the lock
+// in the private usage repository and nothing to the pins repository; R3, a
+// root write that threw.
+const TAIL = "This request wrote nothing.";
+const LOST_TAIL = "This request wrote nothing to the pins repository.";
+const MAY_NOT_BE_WRITTEN = "The withdrawal record may not have been written. Send the same withdrawal again to finish or to confirm.";
 const NOTHING = /nothing was withdrawn/;
 // follow-up f1: a lock write that failed may have landed, so the lock's own
 // refusal claims only the case record
 const LOCK_TAIL = "This request wrote nothing to the case record. Try again shortly.";
 
-test("R-N4 R1 (b): the listing lands, a reveal seals first, the same withdrawal is sent again: the second body ends with the tail and never says 'nothing was withdrawn'", async () => {
-  const { c, w } = await sealedFirst("RN4 sealed first, again");
-  assert.doesNotMatch(JSON.stringify(w.body), NOTHING);
-  const again = await withdraw(c.id, c.b, { now: REVEAL_AT + 5000 });
-  assert.deepEqual([again.status, again.body.error_code], [409, "case_sealed"], JSON.stringify(again.body));
-  assert.ok(again.body.error.endsWith(`. ${TAIL}`), again.body.error);
-  assert.doesNotMatch(JSON.stringify(again.body), NOTHING);
-  assert.equal(has(again.body, "tape_listed"), false, "this request confirmed no listing");
-});
-
-test("R-N4 R1 (a): the listing lands, the root write fails, the deadline passes, the same withdrawal is sent again: the second body ends with the tail and never says 'nothing was withdrawn'; the README says when a listing stands and what sending again does", async () => {
-  const c = await committedCase("RN4 root fails, then expired");
-  gh.forceFailure(PINS, C.casePath(c.id), 1, 502);
-  const w = await withdraw(c.id, c.b);
-  assert.deepEqual([w.status, w.body.error_code, w.body.error, w.body.tape_listed], [503, "store_error", MAY_NOT_BE_WRITTEN, true], JSON.stringify(w.body));
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.b.tape_sha256)), true);
-  const again = await withdraw(c.id, c.b, { now: Date.parse(DEADLINE) + 1000 });
-  assert.deepEqual([again.status, again.body.error_code], [409, "expired"], JSON.stringify(again.body));
-  assert.ok(again.body.error.endsWith(`. ${TAIL}`), again.body.error);
-  assert.doesNotMatch(JSON.stringify(again.body), NOTHING);
-  // R2: every sentence holds in every state
-  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8").replace(/\s+/g, " ");
-  for (const s of ["whenever a withdrawal request gets as far as the listing and then does not finish",
-    "finishes it only if the case can still be withdrawn",
-    "is repaired only by the withdrawer sending the withdrawal again, and until then the tape is not refused",
-    "A listing only ever refuses."]) {
-    assert.ok(readme.includes(s), s);
-  }
-});
-
-test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request and second, never says 'nothing was withdrawn'; one that confirmed no listing claims none and ends with the tail", async (t) => {
+test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdrawal handler gives, first request and second, never says 'nothing was withdrawn' and claims no listing; one that wrote nothing ends with the tail", async (t) => {
   const out = [];
-  // kind: "tail" (wrote nothing; ends with the tail), "listing" (the listing
-  // not confirmed), "listed" (this request confirmed the listing), "plain"
-  // (refused before the case is read: method, body, no such case)
+  // kind: "tail" (wrote nothing; ends with the tail), "lost" (lost after it
+  // took the lock: ends with the pins tail), "landed" (the root write threw,
+  // so it may have landed), "lock" (the lock's own tail), "plain" (refused
+  // before the case is read: method, body, no such case)
   // the sweep opens some thirty cases with one open key: a fresh budget and
   // a fresh day's open quota for each step (lib/_ratelimit.js, ~30 calls per
   // key per window; THE OPEN QUOTA, twenty a day)
@@ -375,7 +341,6 @@ test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request a
   const c2 = await committedCase("RN4 sweep case junk");
   gh.seed(PINS, C.casePath(c2.id), { not: "a case" });
   await drive("case junk", "tail", 503, "case_record_unreadable", () => withdraw(c2.id, c2.b));
-  forgetListings();
   const sealed = await sealedCase("RN4 sweep sealed");
   await drive("sealed", "tail", 409, "case_sealed", () => withdraw(sealed.id, sealed.b, { now: REVEAL_AT + 5000 }));
   const gone = await committedCase("RN4 sweep withdrawn");
@@ -418,29 +383,22 @@ test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request a
   gh.forceGetFailure(USAGE, lockPath(l3.id), 1, 503);
   await drive("lock read", "lock", 503, "case_lock_unreachable", () => withdraw(l3.id, l3.b));
 
-  // 5a. the listing
-  const n1 = await committedCase("RN4 sweep listing");
-  gh.forceFailure(PINS, withdrawnCommitmentPath(n1.b.tape_sha256), 1, 502);
-  await drive("listing", "listing", 503, "withdrawn_commitment_unconfirmed", () => withdraw(n1.id, n1.b));
-
-  // after the listing is confirmed
+  // the root write
   const f1 = await committedCase("RN4 sweep root fails");
   gh.forceFailure(PINS, C.casePath(f1.id), 1, 502);
-  await drive("root fails", "listed", 503, "store_error", () => withdraw(f1.id, f1.b));
+  await drive("root fails", "landed", 503, "store_error", () => withdraw(f1.id, f1.b));
   assert.equal(out[out.length - 1].r.body.error, MAY_NOT_BE_WRITTEN, "R3");
-  const moved = await lostAfterListing("RN4 sweep moved", () => ({ not: "a case" }));
-  await drive("moved", "listed", 503, "store_error", async () => moved.w);
-  forgetListings();
+  const moved = await lostRootWrite("RN4 sweep moved", () => ({ not: "a case" }));
+  await drive("moved", "lost", 503, "store_error", async () => moved.w);
   const first = await sealedFirst("RN4 sweep sealed first");
-  await drive("sealed first", "listed", 409, "case_sealed", async () => first.w);
+  await drive("sealed first", "lost", 409, "case_sealed", async () => first.w);
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const byA = await lostAfterListing("RN4 sweep lost to a", (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
-  await drive("lost to another", "listed", 409, "case_withdrawn", async () => byA.w);
-  assert.equal(byA.w.body.error, LOST_TO_ANOTHER, "R7");
-  const lostTried = await lostAfterListing("RN4 sweep lost to attempt", (c, k) => attemptOf(k));
-  await drive("lost to an attempt", "listed", 409, "reveal_attempted", async () => lostTried.w);
-  const lostLate = await lostAfterListing("RN4 sweep lost to deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
-  await drive("lost to a deadline", "listed", 409, "expired", async () => lostLate.w);
+  const byA = await lostRootWrite("RN4 sweep lost to a", (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
+  await drive("lost to another", "lost", 409, "case_withdrawn", async () => byA.w);
+  const lostTried = await lostRootWrite("RN4 sweep lost to attempt", (c, k) => attemptOf(k));
+  await drive("lost to an attempt", "lost", 409, "reveal_attempted", async () => lostTried.w);
+  const lostLate = await lostRootWrite("RN4 sweep lost to deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
+  await drive("lost to a deadline", "lost", 409, "expired", async () => lostLate.w);
 
   // the second request
   await drive("again: sealed first", "tail", 409, "case_sealed", () => withdraw(first.c.id, first.c.b, { now: REVEAL_AT + 5000 }));
@@ -448,22 +406,18 @@ test("R-N4 R1 sweep: every refusal the withdrawal handler gives, first request a
   await drive("again: lost to another", "tail", 409, "case_withdrawn", () => withdraw(byA.c.id, byA.c.b, { now: NOW + 5000 }));
   await drive("again: lost to an attempt", "tail", 409, "reveal_attempted", () => withdraw(lostTried.c.id, lostTried.c.b, { now: NOW + 5000 }));
   await drive("again: lost to a deadline", "tail", 409, "expired", () => withdraw(lostLate.c.id, lostLate.c.b, { now: NOW + 5000 }));
-  const rt = await committedCase("RN4 sweep retry unconfirmed");
+  const rt = await committedCase("RN4 sweep retry read");
   assert.equal((await withdraw(rt.id, rt.b)).status, 201);
-  const rtl = withdrawnCommitmentPath(rt.b.tape_sha256);
-  gh.forceConflict(PINS, rtl, 1);
-  gh.forceGetFailure(PINS, rtl, 2, 503);
-  await drive("again: withdrawn, listing unconfirmed", "plain", 503, "withdrawn_commitment_unconfirmed", () => withdraw(rt.id, rt.b, { now: NOW + 5000 }));
+  gh.forceGetFailure(PINS, C.registrationPath(rt.id, "b"), 1, 503);
+  await drive("again: withdrawn, registration unread", "plain", 503, "store_unreachable", () => withdraw(rt.id, rt.b, { now: NOW + 5000 }));
 
   for (const { label, kind, r } of out) {
     const text = JSON.stringify(r.body);
     assert.doesNotMatch(text, NOTHING, label);
-    if (kind !== "listed") {
-      assert.doesNotMatch(text, /Your tape digest is (already )?listed/, `${label}: claims no listing it did not confirm`);
-      assert.equal(has(r.body, "tape_listed"), false, label);
-    }
+    assert.doesNotMatch(text, /listed|listing/, `${label}: claims no listing`);
+    assert.equal(has(r.body, "tape_listed"), false, label);
     if (kind === "tail") assert.ok(r.body.error.endsWith(`. ${TAIL}`), `${label}: ${r.body.error}`);
-    if (kind === "listing") assert.equal(r.body.error, LISTING_UNCONFIRMED, label);
+    if (kind === "lost") assert.ok(r.body.error.includes(` ${LOST_TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);
   }
   assert.ok(out.length >= 30, `driven: ${out.length}`);
@@ -523,13 +477,6 @@ test("MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other 
     JSON.stringify(regRead.body));
 });
 
-test("MUST-FAIL GAP (W14): the listing's own refusal names its case", async () => {
-  const c = await committedCase("RN4 gap listing case id");
-  gh.forceFailure(PINS, withdrawnCommitmentPath(c.b.tape_sha256), 1, 502);
-  const w = await withdraw(c.id, c.b);
-  assert.deepEqual([w.status, w.body.error_code, w.body.error, w.body.case_id], [503, "withdrawn_commitment_unconfirmed", LISTING_UNCONFIRMED, c.id]);
-});
-
 // =============================================================================
 // THE FOLLOW-UPS FROM THE LAST READ OF R-N4 (f1-f7)
 // =============================================================================
@@ -545,16 +492,6 @@ test("f1: a withdrawal whose lock could not be read or written (a write that may
   const b = await withdraw(w2.id, w2.b);
   assert.equal(b.body.error, `this case's lock could not be read or written; this is not a 'no'. ${LOCK_TAIL}`);
   assert.doesNotMatch(a.body.error + b.body.error, /A tape digest listed by an earlier/);
-});
-
-test("f2, f3: the README says the tape is refused usually as 409 consent_withdrawn, that an earlier check can refuse first and an unreadable listing is 503 consent_unreadable, and that a missing listing leaves the tape unrefused on account of this case", () => {
-  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8").replace(/\s+/g, " ");
-  for (const s of ["refuse that tape, usually as 409 `consent_withdrawn`",
-    "An earlier check can refuse first (a sealed case's reveal is `not_committed`)",
-    "a listing that cannot be read is 503 `consent_unreadable`",
-    "and until then the tape is not refused on account of this case (another case's withdrawal may have listed the same digest)"]) {
-    assert.ok(readme.includes(s), s);
-  }
 });
 
 test("f4: the withdrawer's retry on a WITHDRAWN case whose registration cannot be read (a read failure, not an absence) is 503 'The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.'", async () => {
@@ -576,20 +513,3 @@ test("f6: a reveal_attempts list holding no attempt event does not throw: the ca
   assert.deepEqual([ws({ ...kase, reveal_attempts: [] }, NOW, "c".repeat(64)).code], ["reveal_attempted"]);
 });
 
-test("f7: a WITHDRAWN case whose listing is missing: ?op=reconcile compares the tape (not refused on account of this case) until the withdrawer sends the withdrawal again, which writes the listing; then it is refused", async () => {
-  const c = await committedCase("f7 listing missing");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
-  gh.repos.get(PINS).delete(listing);
-  const before = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
-  assert.equal(before.status, 200, JSON.stringify(before.body).slice(0, 300));
-  // someone else sending the withdrawal does not repair it
-  const other = await withdraw(c.id, c.a, { now: NOW + 4000 });
-  assert.deepEqual([other.status, other.body.error_code], [409, "case_withdrawn"]);
-  assert.equal(gh.has(PINS, listing), false);
-  const retry = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([retry.status, retry.body.withdrawn_commitment], [200, "written"], JSON.stringify(retry.body));
-  assert.deepEqual(gh.read(PINS, listing), { listed_at: C.utcSeconds(NOW + 5000) });
-  const after = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
-  assert.deepEqual([after.status, after.body.error_code], [409, "consent_withdrawn"]);
-});

@@ -31,7 +31,7 @@ const ALLOWED_DELETE = {
   // case lock, and a case log event (commit_after_withdrawal) is appended so
   // the attempt stays visible. The removal is itself a commit, so the file
   // stays in the repository's history. The module refuses any other path.
-  "lib/_case_unregister.js": "the pin repo, but only a registration file written after its case's withdrawal (red-team fix C); the module refuses every other path",
+  "lib/_case_unregister.js": "the pin repo, but only a registration file written after its case's withdrawal (red-team fix C), and only one a signed repair note names (unit R-L); the module refuses every other path",
   "tools/ceiling_probe.js": "deletes only the throwaway probe repository it created itself",
 };
 
@@ -259,8 +259,13 @@ test("the one pin-repository deletion (red-team fix C) refuses every path but a 
   assert.deepEqual(Object.keys(U), ["removeRegistrationAfterWithdrawal"]);
   const original = global.fetch;
   let asked = 0;
-  global.fetch = async () => {
+  // unit R-L (L3): the repair note's read answers a note naming commit_b at blob b...b
+  const note = (id) => JSON.stringify({ case_id: id, removed_path: `cases/${id}/commit_b.json`, removed_blob_sha: "b".repeat(40) });
+  global.fetch = async (url, o) => {
     asked += 1;
+    if (((o && o.method) || "GET") === "GET") {
+      return { ok: true, status: 200, json: async () => ({ content: Buffer.from(note("a".repeat(64))).toString("base64"), sha: "c".repeat(40) }), text: async () => "" };
+    }
     return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
   };
   try {
@@ -272,7 +277,7 @@ test("the one pin-repository deletion (red-team fix C) refuses every path but a 
     await assert.rejects(U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_a.json`, "not-a-sha", "m"), /blob sha/);
     assert.equal(asked, 0, "nothing was asked of the store");
     await U.removeRegistrationAfterWithdrawal(`cases/${id}/commit_b.json`, "b".repeat(40), "m");
-    assert.equal(asked, 1, "control: a registration file is removed");
+    assert.equal(asked, 2, "control: a registration file a repair note names is removed (the note read, then the removal)");
   } finally {
     global.fetch = original;
   }

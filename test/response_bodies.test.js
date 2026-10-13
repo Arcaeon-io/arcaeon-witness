@@ -52,7 +52,8 @@ test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and rec
   };
   const fivexx = rows.filter((r) => r.status >= 500);
   const codes = new Set(fivexx.map(codeOf));
-  for (const c of ["signer_unavailable", "document_unavailable", "operator_key_not_configured", "case_signer_unavailable", "consent_unreadable",
+  // (unit R-L, L1: consent_unreadable is gone with the withdrawn-tape listing)
+  for (const c of ["signer_unavailable", "document_unavailable", "operator_key_not_configured", "case_signer_unavailable",
     "store_unreachable", "store_error", "internal_error", "case_lock_unreachable", "key_store_unreachable"]) {
     assert.ok(codes.has(c), `driven: ${c}`);
   }

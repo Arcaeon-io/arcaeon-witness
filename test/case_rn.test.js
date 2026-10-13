@@ -24,8 +24,9 @@
 // The binding decisions (N1-N4, C1-C3, E1, D1, T1) and the owner's four
 // answers of 2026-10-13: C1 deletes only a registration whose creating
 // commit comes after the withdrawal's; the lease race writes no log event;
-// the refusal names the requester by a `role` field; the withdrawn tape is
-// recorded at withdrawn_commitments/<sha256(tape_sha256)>.json.
+// the refusal names the requester by a `role` field; the withdrawn tape was
+// recorded at withdrawn_commitments/<sha256(tape_sha256)>.json (removed
+// before release by unit R-L, L1: test/case_rl.test.js).
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -142,7 +143,9 @@ function plantStamp(hash) {
 }
 async function commit(id, p, now = NOW, extra = {}) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res, { now, ...extra });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res,
+    { now, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC, ...extra });
   return { status: res._status, body: parsed(res) };
 }
 async function register(id, p) {
@@ -256,8 +259,7 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
-// N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // The case key revoked (unit R-I): the current document, its marker, the tool.
 const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
 const revokedDoc = () => CASE_REVOKED;
@@ -269,7 +271,6 @@ async function revoke() {
   assert.equal(out.ok, true, JSON.stringify(out));
   return { W, R: out.commit, path: out.path };
 }
-const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buffer.from(tapeSha256, "hex"))}.json`;
 
 // =============================================================================
 // N1: one signature rule everywhere; the refusal receipt is signed or not issued
@@ -373,43 +374,10 @@ test("R-N N1: ONE SIGNATURE RULE: a withdrawal is written signed or not at all: 
   assert.doesNotMatch(JSON.stringify(w.body), /WITNESS_|is not set/);
   assert.deepEqual(storedCase(c.id), before);
   assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c.id)), false);
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.b.tape_sha256)), false);
 });
 
 // =============================================================================
 // N2: ?op=reconcile refuses a withdrawn tape
-// =============================================================================
-
-test("R-N N2: the withdrawal records the withdrawer's tape digest at withdrawn_commitments/<sha256(tape_sha256)>.json, holding only {withdrawn_at}; ?op=reconcile reads that path once per tape and refuses 409 consent_withdrawn for either tape, naming no case and issuing no receipt", async () => {
-  const c = await committedCase("RN reconcile");
-  const w = await withdraw(c.id, c.b);
-  assert.equal(w.status, 201, JSON.stringify(w.body));
-  const listed = withdrawnCommitmentPath(c.b.tape_sha256);
-  assert.deepEqual(gh.read(PINS, listed), { listed_at: storedCase(c.id).withdrawal.at }, "unit R-N3 (N4): listed_at");
-  assert.equal(w.body.withdrawn_commitment, "written");
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.a.tape_sha256)), false, "only the withdrawer's digest is known");
-  for (const [x, y] of [[AGENT_TAPE, TOOL_TAPE], [TOOL_TAPE, AGENT_TAPE]]) {
-    const g0 = gh.getLog.length;
-    const r = await reconcileCall(x, y);
-    assert.deepEqual([r.status, r.body.error_code], [409, "consent_withdrawn"], JSON.stringify(r.body).slice(0, 300));
-    assert.equal(has(r.body, "receipt") || has(r.body, "verdict"), false, "no receipt, no verdict");
-    assert.ok(!JSON.stringify(r.body).includes(c.id), "names no case");
-    const reads = gh.getLog.slice(g0).filter((p) => p.startsWith("withdrawn_commitments/"));
-    assert.deepEqual(reads.sort(), [withdrawnCommitmentPath(sha(x)), withdrawnCommitmentPath(sha(y))].sort(), "one read per tape");
-  }
-  // control: two tapes neither withdrawn compare
-  const ok = await reconcileCall(AGENT_TAPE, AGENT_TAPE);
-  assert.equal(ok.status, 200, JSON.stringify(ok.body).slice(0, 300));
-  assert.ok(ok.body.receipt);
-  // a consent read that fails is not a yes: 503, nothing compared
-  gh.forceGetFailure(PINS, withdrawnCommitmentPath(sha(AGENT_TAPE)), 1, 503);
-  const u = await reconcileCall(AGENT_TAPE, AGENT_TAPE);
-  assert.deepEqual([u.status, u.body.error_code], [503, "consent_unreadable"]);
-  assert.equal(has(u.body, "receipt"), false);
-});
-
-// =============================================================================
-// N3: the refusal reads one role's opening, the requester's own
 // =============================================================================
 
 test("R-N N3: without a valid own opening the refusal is 404 not_a_party, with no receipt and no change anywhere", async () => {
@@ -487,12 +455,12 @@ test("R-N N4: a withdrawal that lands after the reveal hashed its tapes, before 
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
 });
 
-test("R-N N4: the commit's lost race writes no case log event: the removal's commit, whose message names the reason, is the only trace", async () => {
+test("R-N N4: the commit's lost race writes no case log event; since unit R-L (L3) the removal's record is its signed repair note, which the removal's commit names", async () => {
   const x = await lostRace("RN no log");
   assert.deepEqual(logFiles(x.id), [], "no public entry on the withdrawn case");
   assert.equal(has(x.out, "log_event"), false);
   assert.equal(x.out.registration_removed, true);
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /written after the withdrawal, removed/);
+  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//); // unit R-L (L3)
 });
 
 // =============================================================================
@@ -514,7 +482,7 @@ test("R-N C1: a late registration whose removal fails: registration_recorded tru
   assert.ok(entry, JSON.stringify(run.withdrawn_repaired));
   assert.deepEqual([entry.removed, entry.kept], [["b"], ["a"]]);
   assert.ok(gh.compareLog.slice(c0).filter((k) => k.startsWith(`${PINS}:`)).length >= 2, "one compare read per registration");
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /written after the withdrawal, removed/);
+  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//); // unit R-L (L3)
   // a second run removes nothing more
   const again = await sealerRun(120000);
   const e2 = again.withdrawn_repaired.find((e) => e.case_id === x.id);
@@ -575,23 +543,21 @@ test("R-N C3: the lease clock is read at acquisition and on each wait: a lease t
   assert.equal(r.body.registration.registered_at, C.utcSeconds(T), "the registration keeps the request's time");
 });
 
-test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 200 and rewrites a marker that failed (since unit R-N2, B1, a listing that fails is 503 before the record, test/case_rn2.test.js); another role or another salt is still 409", async () => {
+test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 200 and rewrites a marker that failed; another role or another salt is still 409", async () => {
   const c = await committedCase("RN retry");
   const mpath = C.withdrawnMarkerPath(c.id);
-  const lpath = withdrawnCommitmentPath(c.b.tape_sha256);
   gh.forceFailure(PINS, mpath, 1, 502);
   const w = await withdraw(c.id, c.b);
   assert.equal(w.status, 201, JSON.stringify(w.body));
-  assert.deepEqual([w.body.marker, w.body.withdrawn_commitment], ["failed", "written"]);
+  assert.equal(w.body.marker, "failed");
   const record = storedCase(c.id);
   const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.equal(again.status, 200, JSON.stringify(again.body));
   assert.equal(again.body.existing, true);
-  assert.deepEqual([again.body.marker, again.body.withdrawn_commitment], ["written", "existing"]);
-  assert.deepEqual(gh.read(PINS, lpath), { listed_at: record.withdrawal.at }, "first written with the withdrawal (unit R-N3, N4)");
+  assert.equal(again.body.marker, "written");
   assert.deepEqual(storedCase(c.id), record, "the withdrawal record is not written again");
   const third = await withdraw(c.id, c.b, { now: NOW + 6000 });
-  assert.deepEqual([third.status, third.body.marker, third.body.withdrawn_commitment], [200, "existing", "existing"]);
+  assert.deepEqual([third.status, third.body.marker], [200, "existing"]);
   const other = await withdraw(c.id, c.a, { now: NOW + 7000 });
   assert.deepEqual([other.status, other.body.error_code], [409, "case_withdrawn"]);
   const salted = await withdraw(c.id, c.b, { now: NOW + 8000, salt: C.newSalt() });
@@ -694,12 +660,11 @@ test("R-N D1: a reference row runs the anchor-conflict check before it takes a r
 // T1: the §2B todos are plain assertions now
 // =============================================================================
 
-test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-N2 beside the M2 open question)", () => {
+test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing)", () => {
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(todos.length, 2, JSON.stringify(todos));
+  assert.equal(todos.length, 1, JSON.stringify(todos));
   assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
-  assert.ok(todos.some((t) => /a digest already published in a sealed case can still be listed by a stranger/.test(t)), "the M2 open question");
 });
 
 // =============================================================================
@@ -852,17 +817,18 @@ test("MUST-FAIL GAP (R19, R23, R24): the withdrawn path removes nothing it canno
   const x = await lostRace("RN gap repair unknown", { deleteFails: true });
   // the first pins compare of the repair (role a's) answers 404
   gh.forceCompareFailure(1, 404, `${PINS}:`);
-  const one = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  const deployment = { env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC }; // unit R-L (L3): the repair signs its notes
+  const one = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
   assert.deepEqual(one.unknown, [{ role: "a", reason: "registration_order_not_found" }]);
   assert.deepEqual(one.removed, ["b"]);
   assert.equal(gh.has(PINS, C.registrationPath(x.id, "a")), true, "a registration it cannot order stays");
   // the withdrawal's commit cannot be read: every role unknown, by that reason
   gh.forceCommitsFailure(PINS, C.casePath(x.id), 1, 503);
   S._internal.clearCommitFiles();
-  const two = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  const two = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
   assert.deepEqual(two.unknown, [{ role: "a", reason: "commits_unreadable" }, { role: "b", reason: "commits_unreadable" }]);
   // b is gone now: passed over, not unknown
-  const three = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  const three = await S.repairWithdrawn(x.id, { roles: ["a", "b"], ...deployment });
   assert.deepEqual([three.unknown, three.kept, three.removed], [[], ["a"], []]);
 });
 
@@ -957,7 +923,7 @@ test("MUST-FAIL GAP (H09, H10): the read-after-write unwind's removal names why,
     return { rpath, out: r.out };
   };
   const x = await run("RN gap unwind message");
-  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment a unconfirmed after its write, removed/);
+  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment a removed \(registration_unconfirmed\); repair note removals\//); // unit R-L (L3)
   const viaMock = global.fetch;
   global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
   t.after(() => { global.fetch = viaMock; });
@@ -988,14 +954,15 @@ test("MUST-FAIL GAP (H13, H17, H19): a refusal whose withdrawal commit cannot be
   assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body).slice(0, 200));
 });
 
-test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is recorded for that tape", async () => {
+test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is written", async () => {
   const c = await committedCase("RN gap retry tape");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const res = makeRes();
   const other = sha("another tape");
+  const commits = gh._commitsOf(PINS).length;
   await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KEYS, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [409, "case_withdrawn"]);
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(other)), false);
+  assert.equal(gh._commitsOf(PINS).length, commits, "nothing written to the pins repository");
 });
 
 test("MUST-FAIL GAP (H40): a reference to an anchored case takes a row", async () => {

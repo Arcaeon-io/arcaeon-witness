@@ -115,7 +115,9 @@ function plantStamp(hash) {
 }
 async function commit(id, p, now = NOW) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res, { now });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res,
+    { now, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function register(id, p) {
@@ -181,7 +183,7 @@ test("FIX C: a withdrawal the commit sees under the case lock writes nothing: 40
   assert.equal(lockOf(id).state, "released");
 });
 
-test("FIX C: the race lost after the write (the commit's lock lease ran out and the withdrawal took it over): the registration is removed inside the same critical section; since unit R-N (N4) no case log event is written, and the removal's commit names why", async () => {
+test("FIX C: the race lost after the write (the commit's lock lease ran out and the withdrawal took it over): the registration is removed inside the same critical section; since unit R-N (N4) no case log event is written; since unit R-L (L3) a signed repair note is written first, and the removal's commit names it", async () => {
   const id = await openCase("C lost");
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
@@ -203,7 +205,8 @@ test("FIX C: the race lost after the write (the commit's lock lease ran out and 
   assert.equal(gh.has(PINS, rpath), false, "the registration does not stand");
   const history = gh.commitsFor(PINS, rpath);
   assert.equal(history.length, 2, "written, then removed: both are commits of the public history");
-  assert.match(history[0].message, /commitment b written after the withdrawal, removed/, "the removal's commit says why");
+  assert.match(history[0].message, /commitment b removed \(registration_after_withdrawal\); repair note removals\//, "the removal's commit names its note");
+  assert.equal(gh.read(PINS, S.repairNotePath(id, rpath)).removed_path, rpath, "the note, the record of the removal");
   assert.deepEqual(logFiles(id), [], "no public entry on the withdrawn case (unit R-N, N4)");
   assert.equal(Object.prototype.hasOwnProperty.call(r.out.body, "log_event"), false);
   assert.equal(r.out.body.received_at, C.utcSeconds(NOW + 1000));
@@ -308,7 +311,7 @@ async function reference(c, role = "a", ref = "row") {
   return { status: res._status, body: parsed(res) };
 }
 const referenceFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.referencesDir(id)}/`)).sort();
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 
 test("FIX D: a reference to a sealed case not pinned yet is 409 case_not_pinned with its state, writes no row and spends no quota; once the sealer pins it, the same reference is 201", async () => {
   const c = await sealedCase("D not pinned", { pinFails: true });
@@ -739,7 +742,11 @@ test("MUST-FAIL GAP (U06, U07, U09): the removal names the store's configured br
   const rpath = C.registrationPath(id, "a");
   gh.seed(PINS, rpath, { a: 1 });
   const blob = gh.repos.get(PINS).get(rpath).sha;
+  // unit R-L (L3): a removal is asked only with a repair note naming the file and blob
+  const note = (sha) => gh.seed(PINS, S.repairNotePath(id, rpath), { case_id: id, removed_path: rpath, removed_blob_sha: sha });
+  note("0".repeat(40));
   await assert.rejects(U.removeRegistrationAfterWithdrawal(rpath, "0".repeat(40), "m"), /github remove .* -> 409/);
+  note(blob);
   assert.equal(gh.has(PINS, rpath), true, "a refused removal removes nothing");
   // the request names the store's configured branch, whatever it is (U09)
   const branch = store.BRANCH;

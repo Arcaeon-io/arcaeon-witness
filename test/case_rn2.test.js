@@ -34,8 +34,8 @@
 // The binding decisions (N1-N4, C1-C3, E1, D1, T1) and the owner's four
 // answers of 2026-10-13: C1 deletes only a registration whose creating
 // commit comes after the withdrawal's; the lease race writes no log event;
-// the refusal names the requester by a `role` field; the withdrawn tape is
-// recorded at withdrawn_commitments/<sha256(tape_sha256)>.json.
+// the refusal names the requester by a `role` field. (The withdrawn-tape
+// listing B1, M1 and M2 were about was removed in unit R-L, L1, with its tests.)
 "use strict";
 
 process.env.GITHUB_PIN_REPO = "test-owner/test-pins";
@@ -152,7 +152,9 @@ function plantStamp(hash) {
 }
 async function commit(id, p, now = NOW, extra = {}) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res, { now, ...extra });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res,
+    { now, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC, ...extra });
   return { status: res._status, body: parsed(res) };
 }
 async function register(id, p) {
@@ -266,7 +268,7 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
 // The case key revoked (unit R-I): the current document, its marker, the tool.
 const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
@@ -279,37 +281,12 @@ async function revoke() {
   assert.equal(out.ok, true, JSON.stringify(out));
   return { W, R: out.commit, path: out.path };
 }
-const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buffer.from(tapeSha256, "hex"))}.json`;
 
 // =============================================================================
 // UNIT R-N2
 // =============================================================================
 
-// M2: the one sentence the listing's refusal says, at ?op=reconcile and at the reveal.
-// (since unit R-N3, N1: "or asked to", since a listing can stand with no withdrawn case)
-const LISTED = "A party that committed to this tape digest in a case has withdrawn that case, or asked to. This service does not compare a tape so listed.";
-
-test("R-N2 B1: the withdrawn-tape listing is written first and confirmed: four 409s on its path (no file there) are 503 with nothing else written and no note; a retry then lands the listing, the record and the marker", async () => {
-  const c = await committedCase("RN2 listing first");
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
-  const before = storedCase(c.id);
-  gh.forceConflict(PINS, listing, 4);
-  const w = await withdraw(c.id, c.b);
-  assert.deepEqual([w.status, w.body.error_code], [503, "withdrawn_commitment_unconfirmed"], JSON.stringify(w.body));
-  assert.deepEqual(storedCase(c.id), before, "no root change");
-  assert.equal(gh.has(PINS, listing), false);
-  assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c.id)), false, "no marker");
-  assert.equal(has(w.body, "withdrawn_commitment_note"), false, "the note is printed only when the listing is confirmed");
-  const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.equal(again.status, 201, JSON.stringify(again.body));
-  assert.equal(again.body.withdrawn_commitment, "written");
-  assert.match(again.body.withdrawn_commitment_note, /consent_withdrawn/);
-  assert.equal(storedCase(c.id).status, "WITHDRAWN");
-  assert.deepEqual(gh.read(PINS, listing), { listed_at: storedCase(c.id).withdrawal.at }, "unit R-N3 (N4): listed_at");
-  assert.equal(again.body.marker, "written");
-});
-
-test("R-N2 B1: the marker and the listing read the path back before they answer \"existing\": a conflict with no file there is a failure, a file there is existing", async () => {
+test("R-N2 B1: the marker reads its path back before it answers \"existing\": a conflict with no file there is a failure, a file there is existing", async () => {
   const c = await committedCase("RN2 marker read back");
   gh.forceConflict(PINS, C.withdrawnMarkerPath(c.id), 4);
   const w = await withdraw(c.id, c.b);
@@ -317,37 +294,6 @@ test("R-N2 B1: the marker and the listing read the path back before they answer 
   assert.equal(w.body.marker, "failed", "no file there");
   assert.equal(await S.writeWithdrawnMarker(c.id, storedCase(c.id).withdrawal.at), "written");
   assert.equal(await S.writeWithdrawnMarker(c.id, storedCase(c.id).withdrawal.at), "existing", "a file there");
-  gh.forceConflict(PINS, withdrawnCommitmentPath(c.a.tape_sha256), 4);
-  assert.equal(await S.writeWithdrawnCommitment(c.a.tape_sha256, "2026-10-10T08:00:02Z"), "failed");
-  assert.equal(await S.writeWithdrawnCommitment(c.b.tape_sha256, "2026-10-10T08:00:02Z"), "existing");
-});
-
-test("R-N2 M1, M2: the joint reveal is gated by the withdrawn list: a listed tape revealed in a new case (its holder registered both roles) is 409 consent_withdrawn before the attempt, in the listing's own words; a listing read that fails is 503", async (t) => {
-  const x = await committedCase("RN2 listed source");
-  assert.equal((await withdraw(x.id, x.b)).status, 201);
-  const y = await committedCase("RN2 new case");
-  const before = storedCase(y.id);
-  const writes = gh.putLog.length;
-  const compare = t.mock.method(RECONCILE, "compare");
-  const r = await reveal(y);
-  assert.deepEqual([r.status, r.body.error_code], [409, "consent_withdrawn"], JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.error, LISTED);
-  assert.equal(compare.mock.callCount(), 0, "nothing compared");
-  assert.deepEqual(gh.putLog.slice(writes), [], "nothing written");
-  assert.deepEqual(storedCase(y.id), before, "no attempt");
-  const z = await committedCase("RN2 listing unread");
-  gh.forceGetFailure(PINS, withdrawnCommitmentPath(z.a.tape_sha256), 1, 503);
-  const u = await reveal(z);
-  assert.deepEqual([u.status, u.body.error_code], [503, "consent_unreadable"], JSON.stringify(u.body).slice(0, 300));
-  assert.equal(storedCase(z.id).status, "COMMITTED");
-  assert.equal(has(storedCase(z.id), "reveal_attempts"), false);
-});
-
-test("R-N2 M2: ?op=reconcile refuses a listed tape in exactly the listing's words, naming no one's consent", async () => {
-  const c = await committedCase("RN2 reconcile words");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  const r = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
-  assert.deepEqual([r.status, r.body.error_code, r.body.error], [409, "consent_withdrawn", LISTED]);
 });
 
 test("R-N2 M3: the sealer writes a failed withdrawn marker for a case with ONE registration file, a WITHDRAWN root and no pin", async () => {
@@ -460,11 +406,11 @@ test("R-N2 m7: an unsigned withdrawal record is labelled 'withdrawal record, uns
   assert.deepEqual([r.status, r.body.error_code], [409, "case_withdrawn"]);
 });
 
-test("R-N2 m8: the WITHDRAWN page says a registration shown to be written after the withdrawal is removed, and one whose order cannot be shown stays and does not stand", async () => {
+test("R-N2 m8 (since unit R-L, L3: after a signed repair note): the WITHDRAWN page says a registration shown to be written after the withdrawal is removed, and one whose order cannot be shown stays and does not stand", async () => {
   const c = await committedCase("RN2 note");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   assert.ok((await casePage(c.id)).html.includes(
-    "A registration shown to be written after the withdrawal is removed. One whose order cannot be shown stays and does not stand."));
+    "A registration shown to be written after the withdrawal is removed, after a signed repair note that records the removal is written. One whose order cannot be shown stays and does not stand."));
 });
 
 test("R-N2 m10: registration_recorded reports the file's real state on the projection path and on the abandoned branch", async () => {

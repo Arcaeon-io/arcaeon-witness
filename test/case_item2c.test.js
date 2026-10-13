@@ -571,14 +571,6 @@ function referenceFiles(id) {
 // WITHDRAWAL (design test 10, the race, the proof)
 // =============================================================================
 
-// unit R-N2 (B1, M1): a withdrawal lists its tape before its root write, and
-// the listing gates every later reveal of that tape, here as in production.
-// The fixture tapes are shared by every case a test opens, so a test that
-// withdraws one case and then reveals another forgets the listings first.
-const forgetListings = () => {
-  for (const p of [...gh.repos.get(PINS).keys()]) if (p.startsWith("withdrawn_commitments/")) gh.repos.get(PINS).delete(p);
-};
-
 test("TEST 10: a withdrawal before the joint reveal publishes only the redacted record, signed with the case key, with no labels or commitments; the marker is written; withdrawal after the seal is refused", async () => {
   const { id, a, b } = await committedCase({ over: { scope_digest: sha("test 10") } });
   const before = storedCase(id);
@@ -623,7 +615,6 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.equal(again.body.error_code, "case_withdrawn");
 
   // after the seal: refused, nothing written, the sealed case untouched
-  forgetListings();
   const s = await sealedCase({ over: { scope_digest: sha("test 10 sealed") } });
   const sealed = storedCase(s.id);
   const writes = gh.putLog.length;
@@ -747,12 +738,10 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   assert.deepEqual(pinFilesOf(c1.id), [], "no pin");
   assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c1.id)), true);
 
-  // (2) the withdrawal reads COMMITTED and proves; the reveal seals first
-  forgetListings();
+  // (2) the withdrawal reads COMMITTED and proves; the reveal seals first,
+  // as the withdrawal's lock write goes out, before its root write
   const c2 = await committedCase({ over: { scope_digest: sha("race withdrawal loses") } });
-  // (since unit R-N2, B1, the withdrawal lists its tape before its root
-  // write, and that listing refuses a reveal of the tape: the reveal that
-  // seals first runs as the withdrawal's lock write goes out, before it lists)
+  const pinsBefore = gh._commitsOf(PINS).length;
   const r2 = await interleave(H._internal.caseLockPath(c2.id), () => withdraw(proofOf(c2.id, c2.a)), () => reveal(revealBody(c2.id, c2.a, c2.b), { now: REVEAL_AT + 1000 }));
   assert.equal(r2.inner.status, 201, `the reveal won: ${JSON.stringify(r2.inner.body).slice(0, 200)}`);
   assert.equal(r2.outer.status, 409, JSON.stringify(r2.outer.body));
@@ -760,8 +749,10 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   assert.equal(storedCase(c2.id).status, "VERDICT", "the seal stands");
   assert.equal(storedCase(c2.id).reveals.a.revealed_at, "2026-10-10T09:00:01Z");
   assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c2.id)), false, "no marker for a sealed case");
-  // the listing the losing withdrawal wrote first stays: it only refuses (unit R-N2, B1)
-  assert.equal(gh.has(PINS, S.withdrawnCommitmentPath(c2.a.tape_sha256)), true, "the orphan listing");
+  // the losing withdrawal wrote nothing to the pins repository (unit R-L, L4)
+  assert.ok(r2.outer.body.error.endsWith("This request wrote nothing to the pins repository."), r2.outer.body.error);
+  assert.ok(gh._commitsOf(PINS).slice(pinsBefore).every((cm) => cm.path === C.casePath(c2.id) || cm.path.startsWith(`pins/case/${c2.id}/`)),
+    "only the reveal's writes");
 
   // (3) a registration projected between the withdrawal's read and write is
   // no race to lose: the redacted record goes over the fresh case, and the

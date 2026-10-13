@@ -216,7 +216,9 @@ function party(caseId, role, tape, salt = C.newSalt()) {
 // roles, two key ids, red-team fix A).
 async function commit(id, p, now = NOW, key = REG.KEYS[p.role]) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, key)), res, { now });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }, key)), res,
+    { now, env: KD.deployed(gh, SIGNED, KEYS_DOC), keyDocument: KEYS_DOC });
   return res;
 }
 async function register(id, p, key = REG.KEYS[p.role]) {
@@ -685,29 +687,6 @@ test('GPT-5.6 §2B: "It does not identify the parties, commitments"', async () =
   }
 });
 
-// unit R-N2 (M2): the open question, left as a todo. The withdrawn-tape
-// listing (lib/_case_seal.js THE WITHDRAWN COMMITMENT) names a tape only by
-// its digest, and a digest is public once a case is sealed. A stranger who
-// copies one, commits to it in a case of their own and withdraws lists it,
-// and ?op=reconcile then refuses that tape for everyone. The 409's words say
-// only what is proven; the behaviour is the open question.
-test("R-N2 M2 OPEN: a digest already published in a sealed case can still be listed by a stranger",
-  { todo: "OPEN: a digest already published in a sealed case can still be listed by a stranger, who commits to it in a case of their own and withdraws; ?op=reconcile then refuses the tape (the assertion 'the tape still compares' fails)" }, async () => {
-    const sealed = await sealedCase({ scope_digest: sha("M2 published") });
-    const published = storedCase(sealed.id).reveals.b.tape_sha256;
-    // the stranger holds the digest, not the tape
-    const id = await openCase({ scope_digest: sha("M2 stranger") });
-    const salt = C.newSalt();
-    const a = { role: "a", tape_sha256: published, salt, commitment_sha256: C.commitmentSha256({ case_id: id, role: "a", tape_sha256: published, salt }) };
-    await register(id, a);
-    const w = await withdraw(proofOf(id, a), { now: NOW + 2000 });
-    assert.equal(w.status, 201, JSON.stringify(w.body));
-    const res = makeRes();
-    await RECONCILE.handleReconcile(req("reconcile", { agent_tape_b64: AGENT_TAPE.toString("base64"), tool_tape_b64: TOOL_TAPE.toString("base64") }), res,
-      { env: SIGNED, keyDocument: KEYS_DOC });
-    assert.equal(res._status, 200, `the tape still compares: ${JSON.stringify(parsed(res)).slice(0, 200)}`);
-  });
-
 test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, or lifetime addendum quota"', async () => {
   const { id, a } = await sealedCase({ scope_digest: sha("2C") });
   let accepted = 0;
@@ -966,12 +945,10 @@ test('Gemini 3.1 Pro §1: "if a withdraw and a reveal are processed simultaneous
   assert.deepEqual(statuses, [201, 409], `${JSON.stringify(w.body).slice(0, 120)} / ${JSON.stringify(r.body).slice(0, 120)}`);
   const final = storedCase(id).status;
   assert.equal(final, w.status === 201 ? "WITHDRAWN" : "VERDICT");
-  // since unit R-N2 (B1, M1) the withdrawal lists its tape before its root
-  // write, and the reveal reads that listing before its attempt: a reveal
-  // that loses to the withdrawal is refused by the listing or by the CAS
+  // a reveal that loses to the withdrawal is refused by the CAS (since unit
+  // R-L, L1, there is no listing to refuse it first)
   const loser = (w.status === 201 ? r : w).body.error_code;
-  if (w.status === 201) assert.ok(["case_withdrawn", "consent_withdrawn"].includes(loser), loser);
-  else assert.equal(loser, "case_sealed");
+  assert.equal(loser, w.status === 201 ? "case_withdrawn" : "case_sealed");
 });
 
 test('Gemini 3.1 Pro §2: "one party commits but refuses to reveal ... to prevent the protocol from stalling indefinitely": at the deadline the case reads EXPIRED and is terminal', async () => {

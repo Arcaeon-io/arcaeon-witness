@@ -4,6 +4,8 @@
 //       before the withdrawal record): its words say "or asked to", and every
 //       refusal after a confirmed listing says the tape is listed;
 //   N2  the retry's 503 on a withdrawn case says the case is withdrawn;
+//   (unit R-L, L1: the withdrawn-tape listing is removed; the tests of N1,
+//   N2, N4 and the listing gate are deleted with it)
 //   N3  the offline receipt check is partial, never ok;
 //   N4  the listing's field is listed_at;
 //   N6  the sealer's window cannot stall under a fixed run period;
@@ -164,7 +166,9 @@ function plantStamp(hash) {
 }
 async function commit(id, p, now = NOW, extra = {}) {
   const res = makeRes();
-  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res, { now, ...extra });
+  // unit R-L (L3): the commit path signs a repair note before it removes anything
+  await H.handleCaseCommit(req("case-commit", REG.signedBody({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 })), res,
+    { now, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC, ...extra });
   return { status: res._status, body: parsed(res) };
 }
 async function register(id, p) {
@@ -278,7 +282,7 @@ const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
-const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
+const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
 // The case key revoked (unit R-I): the current document, its marker, the tool.
 const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
@@ -291,85 +295,13 @@ async function revoke() {
   assert.equal(out.ok, true, JSON.stringify(out));
   return { W, R: out.commit, path: out.path };
 }
-const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buffer.from(tapeSha256, "hex"))}.json`;
 
 // UNIT R-N3
 // =============================================================================
 
-const { makeRawReq } = require("./helpers/http_mocks.js");
-
-// N1: the words, exactly.
-const LISTED = "A party that committed to this tape digest in a case has withdrawn that case, or asked to. This service does not compare a tape so listed.";
-// (since unit R-N4, R3: "may not have been written", and "or to confirm")
-const NOT_WRITTEN = "The withdrawal record may not have been written. Your tape digest is already listed, so this service will not compare that tape. Send the same withdrawal again to finish or to confirm.";
-const SEALED_FIRST = "This case sealed before the withdrawal could land, so it stays a public verdict. Your tape digest is listed, so this service will not compare that tape again.";
-// N2
-const RETRY_UNCONFIRMED = "The case is withdrawn. The tape listing could not be confirmed this time. Send the same withdrawal again.";
-
-test("R-N3 N1: a listing written, then a root write that fails: 503 in plain words (the record not written, the tape listed, send it again), never 'nothing was withdrawn'; ?op=reconcile then refuses the tape with 'or asked to', and no receipt", async () => {
-  const c = await committedCase("RN3 root fails");
-  gh.forceFailure(PINS, C.casePath(c.id), 1, 502);
-  const w = await withdraw(c.id, c.b);
-  assert.deepEqual([w.status, w.body.error_code], [503, "store_error"], JSON.stringify(w.body));
-  assert.equal(w.body.error, NOT_WRITTEN);
-  assert.equal(w.body.tape_listed, true);
-  assert.doesNotMatch(JSON.stringify(w.body), /nothing was withdrawn/);
-  assert.equal(storedCase(c.id).status, "COMMITTED", "no withdrawn case");
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.b.tape_sha256)), true, "the listing stands");
-  const r = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
-  assert.deepEqual([r.status, r.body.error_code, r.body.error], [409, "consent_withdrawn", LISTED]);
-  for (const k of ["receipt", "refusal_receipt", "verdict"]) assert.equal(has(r.body, k), false, `no ${k}`);
-  // the same withdrawal again finishes
-  const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.equal(again.status, 201, JSON.stringify(again.body));
-  assert.equal(again.body.withdrawn_commitment, "existing");
-});
-
-test("R-N3 N1: a reveal that seals before the withdrawal lands (after the withdrawal took the lock, before it listed): 409 case_sealed in plain words, and the listing present", async () => {
-  const c = await committedCase("RN3 sealed first");
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(c.id)}`),
-    () => reveal(c),
-    () => withdraw(c.id, c.b, { now: REVEAL_AT + 1000 }),
-  );
-  assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body).slice(0, 200));
-  assert.deepEqual([r.out.status, r.out.body.error_code], [409, "case_sealed"], JSON.stringify(r.out.body));
-  assert.equal(r.out.body.error, SEALED_FIRST);
-  assert.equal(r.out.body.tape_listed, true);
-  assert.doesNotMatch(JSON.stringify(r.out.body), /nothing was withdrawn/);
-  assert.equal(storedCase(c.id).status, "VERDICT");
-  assert.equal(gh.has(PINS, withdrawnCommitmentPath(c.b.tape_sha256)), true);
-  assert.equal((await reconcileCall(AGENT_TAPE, TOOL_TAPE)).body.error, LISTED);
-});
-
-test("R-N3 N1: the page of a COMMITTED case with a failed attempt says the same reveal seals it unless a tape in it has since been listed as withdrawn; the README says when a listing stands without a withdrawn case and that it only refuses", async () => {
-  const c = await committedCase("RN3 page words");
-  let puts = 0;
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    if ((o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`) && ++puts === 2) gh.forceFailure(PINS, C.casePath(c.id), 1, 502);
-    return viaMock(url, o);
-  };
-  try {
-    assert.equal((await reveal(c)).status, 503);
-  } finally {
-    global.fetch = viaMock;
-  }
-  assert.ok((await casePage(c.id)).html.includes("unless a tape in it has since been listed as withdrawn"));
-  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
-  assert.match(readme, /A listing can stand without a withdrawn case/);
-  assert.match(readme, /only ever refuses/);
-});
-
-test("R-N3 N2: a retry on a WITHDRAWN case whose listing cannot be confirmed this time says the case is withdrawn", async () => {
-  const c = await committedCase("RN3 retry unconfirmed");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
-  gh.forceConflict(PINS, listing, 1);
-  gh.forceGetFailure(PINS, listing, 2, 503);
-  const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([r.status, r.body.error_code, r.body.error], [503, "withdrawn_commitment_unconfirmed", RETRY_UNCONFIRMED], JSON.stringify(r.body));
-});
+// (unit R-L, L1: the listing N1, N2 and N4 were about is removed, with its
+// tests; a withdrawal that loses after it took the lock ends with this tail)
+const WROTE_NO_PINS = "This request wrote nothing to the pins repository.";
 
 test("R-N3 N3: the offline receipt check is partial: it prints ok false, offline_partial, whether the signature holds against the supplied document, what it did not check, and exits 3; only the online check prints ok true and exits 0", async (t) => {
   const c = await committedCase("RN3 offline partial");
@@ -415,20 +347,6 @@ test("R-N3 N3: the offline receipt check is partial: it prints ok false, offline
   }
 });
 
-test("R-N3 N4: the listing records listed_at, the time it was first written, which can differ from the withdrawal's time; the README says so", async () => {
-  const c = await committedCase("RN3 listed at");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
-  assert.deepEqual(gh.read(PINS, listing), { listed_at: storedCase(c.id).withdrawal.at });
-  // the listing gone (an earlier build's withdrawal, say): a retry writes it, at its own time
-  gh.repos.get(PINS).delete(listing);
-  const again = await withdraw(c.id, c.b, { now: NOW + 600000 });
-  assert.equal(again.status, 200, JSON.stringify(again.body));
-  assert.deepEqual(gh.read(PINS, listing), { listed_at: C.utcSeconds(NOW + 600000) });
-  assert.notEqual(storedCase(c.id).withdrawal.at, C.utcSeconds(NOW + 600000));
-  assert.match(fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8"), /listed_at[^.]*can differ/);
-});
-
 test("R-N3 N6: the sealer's window cannot read one slice forever under a fixed run period: hourly runs advance through 12 entries and through 30, five a run, and runs a minute apart do too", () => {
   const W = S._internal.rotatingWindow;
   const t0 = Date.parse("2026-10-13T00:00:00Z");
@@ -447,33 +365,6 @@ test("R-N3 N6: the sealer's window cannot read one slice forever under a fixed r
   assert.match(src, /THE WINDOW'S START \(unit R-N3, N6\)/);
 });
 
-test("R-N3: a multipart reveal goes through the listing gate; a 409 consent_withdrawn carries no receipt field, at the reveal and at ?op=reconcile", async () => {
-  const x = await committedCase("RN3 listed by");
-  assert.equal((await withdraw(x.id, x.b)).status, 201);
-  const y = await committedCase("RN3 multipart");
-  const boundary = "----arcaeonRN3";
-  const parts = [["case_id", y.id], ["reveals", JSON.stringify(revealBody(y.id, y.a, y.b).reveals)], ["tape_a", y.a.tape, "a.jsonl"], ["tape_b", y.b.tape, "b.jsonl"]];
-  const chunks = [];
-  for (const [name, data, filename] of parts) {
-    chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"${filename ? `; filename="${filename}"` : ""}\r\n\r\n`, "latin1"));
-    chunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data, "utf-8"));
-    chunks.push(Buffer.from("\r\n", "latin1"));
-  }
-  chunks.push(Buffer.from(`--${boundary}--\r\n`, "latin1"));
-  const rq = makeRawReq({ method: "POST", headers: { "content-type": `multipart/form-data; boundary=${boundary}`, "x-forwarded-for": nextIp() }, rawBody: Buffer.concat(chunks) });
-  rq.query = { op: "case-reveal" };
-  const res = makeRes();
-  const writes = gh.putLog.length;
-  await H.handleCaseReveal(rq, res, { now: REVEAL_AT, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC });
-  const body = parsed(res);
-  assert.deepEqual([res._status, body.error_code, body.error], [409, "consent_withdrawn", LISTED], JSON.stringify(body).slice(0, 300));
-  for (const k of ["receipt", "refusal_receipt", "verdict"]) assert.equal(has(body, k), false, `no ${k}`);
-  assert.deepEqual(gh.putLog.slice(writes), [], "nothing written");
-  const r = await reconcileCall(AGENT_TAPE, TOOL_TAPE);
-  assert.equal(r.status, 409);
-  for (const k of ["receipt", "refusal_receipt", "verdict"]) assert.equal(has(r.body, k), false, `no ${k}`);
-});
-
 test("R-N3 N8: a retried withdrawal's 200 never carries a stored sig_reason", async () => {
   const c = await committedCase("RN3 retry sig_reason");
   const rec = S.withdrawnRecord(storedCase(c.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: c.b.salt },
@@ -490,49 +381,51 @@ test("R-N3 N8: a retried withdrawal's 200 never carries a stored sig_reason", as
 // changed left alive, each caught here
 // =============================================================================
 
-// A withdrawal whose root write loses, after its listing is confirmed, to
-// the case `seedWith` writes while the listing goes out.
-async function lostAfterListing(scope, seedWith) {
+// A withdrawal whose root write loses to the case `seedWith` writes while
+// the root write goes out (since unit R-L, L1: there is no listing before it).
+async function lostRootWrite(scope, seedWith) {
   const c = await committedCase(scope);
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
   const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${listing}`),
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`),
     async () => gh.seed(PINS, C.casePath(c.id), seedWith(c, storedCase(c.id)), { keepHistory: true }),
     () => withdraw(c.id, c.b),
   );
   assert.equal(r.fired, true);
-  assert.equal(gh.has(PINS, listing), true, "the listing stands");
   return { c, w: r.out };
 }
 
-test("MUST-FAIL GAP (H11-H15): a root write lost after the listing, to another withdrawal, a reveal attempt or a deadline, says the record was not written and the tape is listed, keeps the case's standing, and never says 'nothing was withdrawn'", async () => {
+test("MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing): a root write lost to another withdrawal, a reveal attempt or a deadline keeps the case's standing, says this request wrote nothing to the pins repository, and never says 'nothing was withdrawn'", async () => {
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const byA = await lostAfterListing("RN3 gap lost to a withdrawal",
+  const byA = await lostRootWrite("RN3 gap lost to a withdrawal",
     (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
-  assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id, byA.w.body.tape_listed],
-    [409, "case_withdrawn", "WITHDRAWN", byA.c.id, true], JSON.stringify(byA.w.body));
-  assert.equal(byA.w.body.error, "The withdrawal record was not written by this request: the case was withdrawn by another request while it ran. " +
-    "Your tape digest is listed, so this service will not compare that tape.");
-  const tried = await lostAfterListing("RN3 gap lost to an attempt", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
+  assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id],
+    [409, "case_withdrawn", "WITHDRAWN", byA.c.id], JSON.stringify(byA.w.body));
+  assert.equal(byA.w.body.error, `the case is already withdrawn. ${WROTE_NO_PINS}`);
+  const tried = await lostRootWrite("RN3 gap lost to an attempt", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
     commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] }));
-  assert.deepEqual([tried.w.status, tried.w.body.error_code, tried.w.body.status, tried.w.body.tape_listed], [409, "reveal_attempted", "COMMITTED", true],
+  assert.deepEqual([tried.w.status, tried.w.body.error_code, tried.w.body.status, tried.w.body.reveal_attempt_at], [409, "reveal_attempted", "COMMITTED", C.utcSeconds(NOW + 1000)],
     JSON.stringify(tried.w.body));
-  assert.equal(tried.w.body.error, "The withdrawal record was not written: a joint reveal of this case was attempted while this withdrawal ran, and a " +
-    "case whose comparison was attempted is not withdrawn by one role. Your tape digest is listed, so this service will not compare that tape.");
+  assert.equal(tried.w.body.error, "a joint reveal of this case was attempted (the case records the attempt), and a case whose comparison was attempted " +
+    `is not withdrawn by one role. ${WROTE_NO_PINS}`);
   // a root rewritten with an earlier deadline (only a write outside this
   // service moves a deadline) reads EXPIRED by the withdrawal's clock
-  const late = await lostAfterListing("RN3 gap lost to a deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
-  assert.deepEqual([late.w.status, late.w.body.error_code, late.w.body.status, late.w.body.tape_listed], [409, "expired", "EXPIRED", true],
+  const late = await lostRootWrite("RN3 gap lost to a deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
+  assert.deepEqual([late.w.status, late.w.body.error_code, late.w.body.status], [409, "expired", "EXPIRED"],
     JSON.stringify(late.w.body));
-  assert.equal(late.w.body.error, "The withdrawal record was not written: the case reads EXPIRED by this service's clock. " +
-    "Your tape digest is listed, so this service will not compare that tape.");
-  for (const b of [byA.w.body, tried.w.body, late.w.body]) assert.doesNotMatch(JSON.stringify(b), /nothing was withdrawn/);
+  assert.equal(late.w.body.error, "the case's deadline has passed by this service's clock, so it reads EXPIRED, and an expired case is not withdrawn. " +
+    WROTE_NO_PINS);
+  for (const b of [byA.w.body, tried.w.body, late.w.body]) {
+    assert.doesNotMatch(JSON.stringify(b), /nothing was withdrawn|listed/);
+    assert.equal(has(b, "tape_listed"), false);
+  }
 });
 
-test("MUST-FAIL GAP (H06-H08): a root that moved to something unreadable after the listing is 503 store_error, reason case_moved, in the same plain words, with tape_listed", async () => {
-  const lost = await lostAfterListing("RN3 gap case moved", () => ({ not: "a case" }));
-  assert.deepEqual([lost.w.status, lost.w.body.error_code, lost.w.body.reason, lost.w.body.tape_listed, lost.w.body.error],
-    [503, "store_error", "case_moved", true, NOT_WRITTEN], JSON.stringify(lost.w.body));
+test("MUST-FAIL GAP (H06-H08; since unit R-L, L1, no listing): a root that moved to something unreadable while the withdrawal was written is 503 store_error, reason case_moved, in plain words", async () => {
+  const lost = await lostRootWrite("RN3 gap case moved", () => ({ not: "a case" }));
+  assert.deepEqual([lost.w.status, lost.w.body.error_code, lost.w.body.reason, lost.w.body.case_id, lost.w.body.error],
+    [503, "store_error", "case_moved", lost.c.id,
+      `the case moved while this withdrawal was written, and what it is now could not be read. ${WROTE_NO_PINS} Send the same withdrawal again.`],
+    JSON.stringify(lost.w.body));
 });
 
 test("MUST-FAIL GAP (H21): the retry's 503 names its case; and a signed record's 200 shows the case exactly as stored", async () => {
@@ -541,11 +434,10 @@ test("MUST-FAIL GAP (H21): the retry's 503 names its case; and a signed record's
   const again = await withdraw(c.id, c.b, { now: NOW + 4000 });
   assert.equal(again.status, 200);
   assert.deepEqual(again.body.case, storedCase(c.id), "signed: shown whole, sig_reason: null included");
-  const listing = withdrawnCommitmentPath(c.b.tape_sha256);
-  gh.forceConflict(PINS, listing, 1);
-  gh.forceGetFailure(PINS, listing, 2, 503);
+  // (since unit R-L, L1: the retry's 503 is its registration read failing)
+  gh.forceGetFailure(PINS, C.registrationPath(c.id, "b"), 1, 503);
   const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([r.status, r.body.case_id], [503, c.id], JSON.stringify(r.body));
+  assert.deepEqual([r.status, r.body.error_code, r.body.case_id], [503, "store_unreachable", c.id], JSON.stringify(r.body));
 });
 
 test("MUST-FAIL GAP (S02, S03, S04, S07): the window's start: G is odd, so a period of 2^63 ms moves it; a clock that is not finite or not whole never throws; every millisecond counts", () => {
@@ -558,7 +450,7 @@ test("MUST-FAIL GAP (S02, S03, S04, S07): the window's start: G is odd, so a per
   assert.notDeepEqual(W(ten, 1, t0), W(ten, 1, t0 + 30000), "half a minute turns the start by 0.309 of the list");
 });
 
-test("MUST-FAIL GAP (P02): the page of an attempt with no recorded completion says the same reveal seals it unless a tape in it has since been listed as withdrawn", async () => {
+test("MUST-FAIL GAP (P02; since unit R-L, L1, no listing clause): the page of an attempt with no recorded completion says the same reveal, sent again before the deadline, seals it", async () => {
   const c = await committedCase("RN3 gap page attempt");
   const k = storedCase(c.id);
   gh.seed(PINS, C.casePath(c.id), { ...k, reveal_attempts: [{ event: "attempt",
@@ -566,7 +458,8 @@ test("MUST-FAIL GAP (P02): the page of an attempt with no recorded completion sa
     { keepHistory: true });
   const html = (await casePage(c.id)).html;
   assert.ok(html.includes("does not record that it completed"), html.slice(0, 400));
-  assert.ok(html.includes("unless a tape in it has since been listed as withdrawn"));
+  assert.ok(html.includes("the same reveal, sent again before the deadline, seals it."));
+  assert.equal(html.includes("listed as withdrawn"), false);
 });
 
 test("MUST-FAIL GAP (T05, T06, T09): the online check exits 0 only for ok: true itself; --document before the receipt is still the partial offline check; an unreadable receipt offline is signature_ok false", async (t) => {

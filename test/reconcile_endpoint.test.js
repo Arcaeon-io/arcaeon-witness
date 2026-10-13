@@ -30,11 +30,9 @@ const fixtures = require("./fixtures/reconcile/cases.json");
 const SIGNER = checkpoint.generateKey("arcaeon.io/reconcile-endpoint-test/2026-10-12");
 process.env[receipts.SIGNER_ENV] = SIGNER.signer;
 const KD = require("./helpers/key_document.js");
-const S = require("../lib/_case_seal.js");
-const crypto = require("node:crypto");
-// unit R-N (N2): ?op=reconcile reads the pins repository's withdrawn
-// commitments, one read per tape, before it compares; this file's store
-// holds none, so every comparison here goes ahead
+// unit R-L (L1): ?op=reconcile reads nothing from a store (the withdrawn
+// commitments read of unit R-N, N2 is removed); the mock store stays
+// installed so that a read would be caught here, not sent
 const { MockGitHubStore, install } = require("./helpers/mock_store.js");
 install(new MockGitHubStore());
 const DOC = Object.freeze(KD.docWith(KD.reconcileEntry(SIGNER)));
@@ -387,7 +385,7 @@ test("MULTIPART: a duplicate part, a missing part and a boundary-less body are t
 
 // -- nothing kept -------------------------------------------------------------------
 
-test("NO PERSISTENCE: a comparison makes no network call but the two consent reads (unit R-N, N2: one per tape, naming each only by the sha256 of its sha256) and logs nothing of the tapes", async (t) => {
+test("NO PERSISTENCE (since unit R-L, L1, no consent reads): a comparison makes no network call and logs nothing of the tapes", async (t) => {
   const realFetch = global.fetch;
   const urls = [];
   global.fetch = async (url, o) => { urls.push(String(url)); return realFetch(url, o); };
@@ -397,10 +395,7 @@ test("NO PERSISTENCE: a comparison makes no network call but the two consent rea
   t.after(() => { global.fetch = realFetch; Object.assign(console, orig); });
   const r = await call(jsonReq({ agent_tape: AGENT.toString("utf-8"), tool_tape: TOOL.toString("utf-8") }));
   assert.equal(r.status, 200);
-  const digest = (b) => crypto.createHash("sha256").update(b).digest("hex");
-  assert.deepEqual(urls.map((u) => new URL(u).pathname.replace(/^.*\/contents\//, "")).sort(),
-    [S.withdrawnCommitmentPath(digest(AGENT)), S.withdrawnCommitmentPath(digest(TOOL))].sort(), "the two consent reads, and nothing else");
-  for (const tape of [AGENT, TOOL]) assert.ok(!urls.join("\n").includes(digest(tape)), "no tape digest in a request");
+  assert.deepEqual(urls, [], "no network call");
   const firstReq = JSON.parse(AGENT.toString("utf-8").split("\n")[0]).req;
   assert.ok(!logged.join("\n").includes(firstReq));
   assert.equal(r.res._headers["cache-control"], "no-store");

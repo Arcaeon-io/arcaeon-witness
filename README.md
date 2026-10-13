@@ -793,6 +793,10 @@ that someone with write access to the pins repository forces to
 5,000 commits or more reads `revocation_marker_unreadable` for good, and
 every case under that key reads `signer_revoked`; this bound is accepted.
 
+A key once shown revoked by a valid marker stays revoked. If the marker file
+is later removed, the answer is that the marker cannot be read, never that
+the key is trusted again.
+
 ### Checking a refusal receipt
 
 A joint reveal of a withdrawn case is refused 409 `case_withdrawn`, and a
@@ -819,27 +823,40 @@ prints `{ok: false, reason: "offline_partial", signature_ok, signature_reason,
 not_checked}`
 and exits 3. Only the full online check prints `ok: true` and exits 0.
 
-### A withdrawn tape's listing
+### Withdrawal
 
-A withdrawal request lists the withdrawer's tape digest, at
-`withdrawn_commitments/<sha256 of the digest's 32 bytes>.json` in the pins
-repository, before it writes the withdrawal record. While a listing stands,
-`?op=reconcile` and the joint reveal refuse that tape, usually as 409
-`consent_withdrawn`, "A party that committed to this tape digest in a case
-has withdrawn that case, or asked to." An earlier check can refuse first (a
-sealed case's reveal is `not_committed`), and a listing that cannot be read
-is 503 `consent_unreadable`.
-A listing can stand without a withdrawn case whenever a withdrawal request
-gets as far as the listing and then does not finish: for example, the
-record write fails, the case seals first, a reveal attempt or the deadline
-lands first, or the case moves. Sending the same withdrawal again finishes
-it only if the case can still be withdrawn. A WITHDRAWN case whose listing
-is missing is repaired only by the withdrawer sending the withdrawal again,
-and until then the tape is not refused on account of this case (another
-case's withdrawal may have listed the same digest). A listing holds only
-`listed_at`, the time it was first written, which can differ from the
-withdrawal's own time. A listing only ever refuses. It names no case and no
-one, and it stops this service comparing that tape, nothing more.
+Withdrawal before the reveal closes that case; it does not recall a tape a
+counterparty already holds, and no verdict ever binds a key that did not
+sign in the case that produced it.
+
+A withdrawal (`?op=case-withdraw`) proves the requesting role by its
+commitment preimage, takes the case's lock, writes the signed withdrawal
+record over the OPEN or COMMITTED case, writes the withdrawn marker, and
+answers. A withdrawal that loses to a seal, a reveal attempt or the deadline
+writes nothing to the pins repository and removes nothing. A withdrawal
+request that wrote nothing says "This request wrote nothing."
+
+A listing of withdrawn tape digests was added in unit R-N and removed before
+release (see the change log). Files under withdrawn_commitments/ that a pins
+repository may hold from before this release are ignored: no code reads or
+writes them.
+
+This repository is create-only except for removals that carry a signed
+repair note. A registration file written after its case's withdrawal (the
+registration's lease ran out and the withdrawal took it over), or one whose
+case could not be read after its write, is removed only after a repair note,
+`removals/<case_id>/<sha256 of the removed path>.json`, is written
+create-only and read back: `{kind: "case-repair-note", v: 1, case_id,
+removed_path, removed_blob_sha, removed_file_sha256, reason,
+withdrawal_commit, at, signed_under, signed_by, sig, sig_reason: null}`,
+signed with a case key under the one signature rule, `reason` either
+`registration_after_withdrawal` or `registration_unconfirmed` (then
+`withdrawal_commit` is null). A note that cannot be written and read back
+means nothing is removed. A removal that fails after its note leaves the
+note, and the sealer's next run completes the removal without a second note.
+The case page lists a case's repair notes, each verified under the key
+document it names, and says when a registration file of the case reads
+removed with no valid note.
 
 ### A reference row's sentence
 
