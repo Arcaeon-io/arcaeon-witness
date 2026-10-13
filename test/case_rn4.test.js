@@ -488,3 +488,39 @@ test("R-N4 R6: the sealer's window, 30 entries five a run: an hourly run reads e
     assert.ok(text.includes("an hourly run reads every entry within 12 runs and a daily run within 28"), where);
   }
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-N4): the mutants the pass over the lines R-N4 changed
+// left alive, each caught here
+// =============================================================================
+
+test("MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other handler's tail as it was: '; ' or ', and ' before a clause", async () => {
+  // the commit's lock: busy (the default joiner) and unreachable (", and ")
+  const id = await openCase("RN4 gap commit lock");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  gh.seed(USAGE, H._internal.caseLockPath(id), { kind: "case-lock", v: 1, case_id: id, holder: "someone-else", op: "commit",
+    acquired_at: C.utcSeconds(NOW), expires_at: new Date(NOW + 600000).toISOString(), state: "held" });
+  const busy = await commit(id, a);
+  assert.equal(busy.body.error,
+    "another request holds this case's lock (a registration or a withdrawal is being written); try again shortly; nothing was registered");
+  gh.forceGetFailure(USAGE, H._internal.caseLockPath(id), 1, 503);
+  const unreachable = await commit(id, a);
+  assert.equal(unreachable.body.error, "this case's lock could not be read or written; this is not a 'no', and nothing was registered");
+  // the reference's case read and registration read (", and ")
+  const c = await sealedCase("RN4 gap reference reads");
+  gh.forceGetFailure(PINS, C.casePath(c.id), 1, 503);
+  const caseRead = await reference(c);
+  assert.deepEqual([caseRead.status, caseRead.body.error], [503, "the case record could not be read; this is not a 'no', and no row was written"]);
+  gh.forceGetFailure(PINS, C.registrationPath(c.id, "a"), 1, 503);
+  const regRead = await reference(c);
+  assert.deepEqual([regRead.status, regRead.body.error], [503, "a registration record could not be read; this is not a 'no', and no row was written"],
+    JSON.stringify(regRead.body));
+});
+
+test("MUST-FAIL GAP (W14): the listing's own refusal names its case", async () => {
+  const c = await committedCase("RN4 gap listing case id");
+  gh.forceFailure(PINS, withdrawnCommitmentPath(c.b.tape_sha256), 1, 502);
+  const w = await withdraw(c.id, c.b);
+  assert.deepEqual([w.status, w.body.error_code, w.body.error, w.body.case_id], [503, "withdrawn_commitment_unconfirmed", LISTING_UNCONFIRMED, c.id]);
+});
