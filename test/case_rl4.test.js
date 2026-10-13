@@ -346,8 +346,9 @@ test("R-L4: a different registration for a role whose file is written and not pr
   plantStamp(other.commitment_sha256);
   const before = gh._commitsOf(PINS).length;
   const r = await commit(u.id, other, NOW + 1500);
-  assert.deepEqual([r.status, r.body.error_code, r.body.existing_sha256, r.body.registration_recorded], [409, "registration_exists", fileSha256(u.rpath), false],
-    JSON.stringify(r.body));
+  assert.deepEqual([r.status, r.body.error_code, r.body.existing_sha256, r.body.differs, r.body.registration_recorded],
+    [409, "registration_exists", fileSha256(u.rpath), "commitment_sha256", false], JSON.stringify(r.body));
+  assert.match(r.body.error, /its commitment_sha256 is not this registration's/);
   assert.equal(gh._commitsOf(PINS).length, before, "nothing written");
   assert.equal(storedCase(u.id).commitments.a, null);
 });
@@ -463,4 +464,66 @@ test("R-L4: the sealer's index and the status counts read no registration file: 
   assert.deepEqual(S.caseTreeIndex(withFiles).sealable, [id]);
   assert.deepEqual(S.caseAnchorSummary(bare), S.caseAnchorSummary(withFiles));
   assert.deepEqual(S.caseAnchorSummary(bare), { case_files: 1, pinned: 0, pending: 1, withdrawn: 0, partial: false });
+});
+
+// =============================================================================
+// RULE 3 AS CORRECTED (the architect's finding): the same registration is
+// the same PARTY-SUPPLIED fields, never the same bytes
+// =============================================================================
+
+test("R-L4 (rule 3 corrected): the same registration re-sent with a later clock projects the ORIGINAL file as it is: its own sha256 and its own registered_at, 200 existing", async () => {
+  const u = await unconfirmedA("RL4 corrected later clock");
+  const original = fileText(u.rpath);
+  const later = NOW + 3600000;
+  const again = await commit(u.id, u.a, later);
+  assert.deepEqual([again.status, again.body.existing], [200, true], JSON.stringify(again.body).slice(0, 300));
+  const k = storedCase(u.id);
+  assert.equal(k.commitments.a.registration_sha256, sha(Buffer.from(original, "utf8")), "the original file's sha256");
+  assert.equal(k.commitments.a.registered_at, C.utcSeconds(NOW), "the original file's registered_at, not the re-send's clock");
+  assert.equal(again.body.registration.registered_at, C.utcSeconds(NOW));
+  assert.equal(fileText(u.rpath), original, "nothing written over it");
+});
+
+test("R-L4 (rule 3 corrected): a file holding the same party-supplied fields in other bytes (another layout, the service's fields of its own) is the same registration, projected as it is", async () => {
+  const u = await unconfirmedA("RL4 corrected other bytes");
+  const rec = gh.read(PINS, u.rpath);
+  // the same record, written compactly and with fields in another order
+  const { sig, verifier, ...rest } = rec;
+  const other = JSON.stringify({ sig, verifier, ...rest });
+  gh._repoMap(PINS).get(u.rpath).content = other;
+  const again = await commit(u.id, u.a, NOW + 1500);
+  assert.deepEqual([again.status, again.body.existing], [200, true], JSON.stringify(again.body).slice(0, 300));
+  assert.equal(storedCase(u.id).commitments.a.registration_sha256, sha(Buffer.from(other, "utf8")));
+});
+
+test("R-L4 (rule 3 corrected): the same role under a different key is 409 registration_exists naming the existing sha256 and the field that differs, and nothing is written", async () => {
+  const u = await unconfirmedA("RL4 corrected other key");
+  const before = gh._commitsOf(PINS).length;
+  const r = await commit(u.id, { ...u.a, key: REG.KEYS.b }, NOW + 1500);
+  assert.deepEqual([r.status, r.body.error_code, r.body.existing_sha256, r.body.differs], [409, "registration_exists", fileSha256(u.rpath), "verifier"],
+    JSON.stringify(r.body));
+  assert.equal(gh._commitsOf(PINS).length, before, "nothing written");
+  assert.equal(storedCase(u.id).commitments.a, null);
+});
+
+test("R-L4 (rule 3 corrected): two overlapping sends of the same registration with different clocks are answered by the one file: both answers carry its registered_at", async () => {
+  const id = await openCase("RL4 corrected overlap clocks");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const rpath = C.registrationPath(id, "a");
+  const late = NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000;
+  const r = await during(
+    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+    () => commit(id, a, late),
+    () => commit(id, a, NOW),
+  );
+  assert.equal(gh.commitsFor(PINS, rpath).length, 1, "one file");
+  assert.equal(projectionsOf(id, "a"), 1, "one projection");
+  const held = gh.read(PINS, rpath);
+  assert.equal(held.registered_at, C.utcSeconds(late), "fixture: the later send wrote first");
+  for (const x of [r.inner, r.out]) {
+    assert.ok(x.status === 200 || x.status === 201, JSON.stringify(x.body).slice(0, 200));
+    assert.equal(x.body.registration.registered_at, held.registered_at);
+    assert.deepEqual(x.body.case.commitments.a, projectionOf(rpath));
+  }
 });

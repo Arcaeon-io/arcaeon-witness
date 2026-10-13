@@ -853,9 +853,12 @@ of the root shows no withdrawal and no seal, by a compare-and-swap on the
 root. If that read or that write fails, nothing more is written and the
 answer is 503 `registration_unconfirmed`: the registration file is written
 and is not yet confirmed; send the same registration again. The same
-registration sent again finds the file and projects it, and a different
-registration for that role is 409 `registration_exists`, naming the sha256
-of the file that is there. A file the root does not project has no
+registration is the same fields a party supplies (the case, the role, the
+commitment, the registering key and its signature), never the same bytes:
+sent again, it finds the file and projects that file as it is, with the
+time it was first received. A registration whose party-supplied fields
+differ is 409 `registration_exists`, naming the sha256 of the file that is
+there and the field that differs. A file the root does not project has no
 standing: the case page says it is written and not confirmed while the case
 is open, and, once the case is withdrawn, sealed or past its deadline, that
 it has no standing and cannot acquire it. Every reader takes a case's
