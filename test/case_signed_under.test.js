@@ -587,7 +587,7 @@ test("THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and 
   assert.equal(verdictWord(q.html), "MATCHED");
 });
 
-test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order; since unit R-I2 word for word what is proven): the banner names the key and says \"The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked from its commit W.\", each linked; the case stays sealed and its verdict word does not change", async () => {
+test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order; since unit R-I2 word for word what is proven): the banner names the key and says \"The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked at its commit W.\", each linked; the case stays sealed and its verdict word does not change", async () => {
   const { id } = await sealedCase("page since revoked");
   const before = await pageOf(id);
   const P = gh.read(PINS, S.pinPaths(id).latest).case_commit;
@@ -601,7 +601,7 @@ test("SIGNER SINCE REVOKED ON THE PAGE (since unit R-I, by commit order; since u
   const a = (href, sha) => `<a href="${href}" rel="nofollow noopener noreferrer">${sha.slice(0, 12)}</a>`;
   assert.ok(p.html.includes(`The case key <code>${KD.keyIdOf(CASE_KEY)}</code> is revoked. The case file was written at commit ` +
     `${a(`https://github.com/${store.REPO}/commit/${P}`, P)}, before this key's revocation was recorded in the pins repository at commit ` +
-    `${a(`https://github.com/${store.REPO}/commit/${marked.commit}`, marked.commit)}. The key document lists the key as revoked from its commit ` +
+    `${a(`https://github.com/${store.REPO}/commit/${marked.commit}`, marked.commit)}. The key document lists the key as revoked at its commit ` +
     `${a(`https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${W}/${S.CASE_KEYS_FILE}`, W)}.`), "word for word");
   assert.ok(!/pinned before the revocation|revoked after this case was pinned/.test(p.html), "never more than is proven");
   assert.ok(!p.html.includes(CURRENT_COMMIT), "never the reader's own deployment");

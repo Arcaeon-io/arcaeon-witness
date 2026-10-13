@@ -5,11 +5,12 @@
 //
 // WHY A MARKER. A sealed case's pin is a commit of the pins repository; the
 // key document is a file of this repository. Git orders commits only within
-// one repository, so "was this case pinned before the key was revoked?" is
-// answered in the pins repository: the commit that writes the key's marker,
+// one repository, so the order a reader can show is one of the pins
+// repository: the commit that writes the key's marker,
 // revocations/<fingerprint>.json, is the revoking commit R, and a case whose
-// pin records a commit strictly before R keeps its verdict (under a banner);
-// any other case signed by the key does not verify. A marker counts only
+// pin records a case-file commit the compare shows strictly before R keeps
+// its verdict (under a banner); any other case signed by the key does not
+// verify. A marker counts only
 // beside the key document's own revocation: a marker for a key the current
 // document does not list as revoked revokes nothing (the sealer's run
 // reports it as marker_without_revocation).
@@ -58,14 +59,17 @@ const store = require("../lib/_store.js");
 const S = require("../lib/_case_seal.js");
 
 // The commits touching the key document on `branch`, oldest first (every
-// page). Throws when a page cannot be read.
+// page, following the Link header's next page; unit R-N, n2: a short page
+// is not the last). Throws when a page cannot be read.
 async function documentCommitsOldestFirst(branch) {
   const target = { repo: S.KEY_DOCUMENT_REPO, branch, tokenEnv: store.PINS_TARGET.tokenEnv };
   const all = [];
-  for (let page = 1; page <= 50; page += 1) {
-    const list = await store.listCommits(S.CASE_KEYS_FILE, { perPage: 100, page }, target);
-    all.push(...list);
-    if (list.length < 100) return all.reverse();
+  let page = 1;
+  for (let n = 0; n < 50; n += 1) {
+    const got = await store.listCommitsPage(S.CASE_KEYS_FILE, { perPage: 100, page }, target);
+    all.push(...got.list);
+    if (got.next === null) return all.reverse();
+    page = got.next;
   }
   throw new Error("the key document has more commits than this command walks");
 }

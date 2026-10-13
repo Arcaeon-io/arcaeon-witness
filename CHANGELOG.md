@@ -1,5 +1,20 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-N, commit 1: the follow-ups from the second reader's pass over R-I2 (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **n1, a 404 is not proof** (`lib/_case_seal.js` `revocationMarkerOf`). A candidate skipped on a 404 might be the real R, read before the host had it. That covers nothing on the raw host at that commit, and a revoking commit that the branch's compare does not show (`commitOnBranch` now marks that answer `not_found`). When a marker is found after any such skip, each skipped candidate is read once more. Unless every one skips again, the answer is `revocation_marker_unreadable`, and a marker found after such a skip is never kept.
+- **n2, the walk follows the Link header** (`lib/_store.js` `listCommitsPage`). A page shorter than `per_page` is no longer taken as the last. The reader (`allCommitsOf`) and the marker tool both follow `rel="next"`. A next page that does not move forward is a read that failed, never a loop.
+- **n3.** A sentence in the README's `KEY_DOCUMENT_BRANCH` section: a marker path forced past 5,000 commits reads `revocation_marker_unreadable` for good, and this bound is accepted.
+- **n4, the walk's cost.**
+  - At most `MARKER_CANDIDATES_READ` = 200 candidate reads per key per request, second reads included; one more is `revocation_marker_unreadable`.
+  - A compare answer that is off the branch, or not before, is kept for the instance. A 404 is read again.
+  - A key document read by its commit with nothing to match is kept for the instance, apart from the reads held to a sha256 (I5 unchanged).
+- **n5, the banner** says the key document lists the key as revoked **at** its commit W, not "from": the reader checks the document at W only.
+- **n6.** `pinned_at_or_after_revocation` is answered only when the compare shows that order (ahead or identical). A 404 or a diverged compare is `order_not_shown`. The marker tool's header comment and the R-I2 change-log line are corrected.
+- **n7.** The bound test asserts that the refusal names no revoking commit at all.
+- **The dry run's usage.** `node tools/preview_dry_run.js --help` prints the `KEY_DOCUMENT_BRANCH` lines (now a test, which runs it).
+- Suite 1198 -> 1209 tests, 0 fail, 3 todo. Here: 1204 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-I2, the must-fail pass over the lines it changed, and the tests that close its gaps (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The pass.** One pass over only the lines unit R-I2 changed. Mutants went into `lib/_case_seal.js`, `lib/_case_page.js`, `lib/_case_http.js`, `lib/_store.js`, `tools/record_key_revocation.js`, `tools/preview_dry_run.js`, `README.md` and the key document's notes. 62 defects were planted one at a time, with the whole suite run against each.
@@ -31,7 +46,7 @@
   - A read that fails before the first valid marker is found answers unreadable, never a later commit.
   - With none valid it is `revocation_marker_invalid`.
   - `tools/record_key_revocation.js` runs the same check on the marker it would write, against the readers' published branch (`KEY_DOCUMENT_BRANCH` of its shell), and refuses one a reader would reject: `marker_rejected`, nothing written.
-- **M2, the banner says what is proven** (`lib/_case_page.js`). "The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked from its commit W." P links to the case_commit, R to the marker's commit, and W to the document at the marker's `revoked_in_commit`. "Pinned before the revocation" is gone from the page, the refusal words and the notes.
+- **M2, the banner says what is proven** (`lib/_case_page.js`). "The case file was written at commit P, before this key's revocation was recorded in the pins repository at commit R. The key document lists the key as revoked from its commit W." P links to the case_commit, R to the marker's commit, and W to the document at the marker's `revoked_in_commit`. "Pinned before the revocation" is gone from the page and the notes. (Corrected in unit R-N, n6: the reason code `pinned_at_or_after_revocation` stayed, and it was also answered when the compare showed no order; since R-N it is answered only when the compare shows that order, and a 404 or diverged compare is `order_not_shown`.)
 - **The minor findings, m1 to m7.**
   - **m1, the notes on retired keys.** A retired key still verifies seals under a document where it was active, with no commit order, and a key suspected of compromise must be revoked, not retired. "Pinned before it" is defined as the case-file commit the pin records.
   - **m2, the pin's state in the reason.** A case under a revoked key whose pin is not pinned says why: `case_not_pinned`, `pin_commit_mismatch`, or `pin_unreadable:<reason>`.

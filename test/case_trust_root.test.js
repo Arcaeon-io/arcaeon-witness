@@ -205,7 +205,7 @@ const verdictShown = (html) => html.includes("<h2>The verdict</h2>");
 const aTo = (href, sha) => `<a href="${href}" rel="nofollow noopener noreferrer">${sha.slice(0, 12)}</a>`;
 const bannerSentence = (P, R, W) =>
   `The case file was written at commit ${aTo(`https://github.com/${store.REPO}/commit/${P}`, P)}, before this key's revocation was recorded in ` +
-  `the pins repository at commit ${aTo(`https://github.com/${store.REPO}/commit/${R}`, R)}. The key document lists the key as revoked from ` +
+  `the pins repository at commit ${aTo(`https://github.com/${store.REPO}/commit/${R}`, R)}. The key document lists the key as revoked at ` +
   `its commit ${aTo(`https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${W}/${S.CASE_KEYS_FILE}`, W)}.`;
 
 // The revocation, published: the current document served at a later commit
@@ -763,6 +763,8 @@ test("MUST-FAIL GAP (T02, T04, T10, T11, T12, T13, T14, T15): the tool refuses a
   assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "the marker path");
   gh.forceCommitsFailure(S.KEY_DOCUMENT_REPO, S.CASE_KEYS_FILE, 1, 503);
   assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "the document's commits");
+  // unit R-N (n4): a document read by its commit is kept, so the failure needs a fresh instance
+  S._internal.clearDocumentCache();
   gh.forceRawFailure(1, 503, S.KEY_DOCUMENT_REPO);
   assert.equal((await TOOL.recordRevocation({ keyId, currentDocument: CASE_REVOKED })).code, "could_not_look", "a document on the way");
 });
@@ -807,7 +809,9 @@ test("R-I2 B1: R is found by walking every page of the marker path's commits; pa
   S._internal.clearCommitFiles();
   const a = await S.sealedRecordReason(c.k, CASE_REVOKED);
   assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], "the oldest commit cannot be reached within the bound");
-  assert.notEqual(a.revoked.revoking_commit, R);
+  // unit R-N (n7): the refusal names the key and no revoking commit at all, R or a later one
+  assert.deepEqual(a.revoked, [{ role: "case", key_id: KD.keyIdOf(CASE_KEY), revoked_since: "2026-10-11" }]);
+  assert.ok(!JSON.stringify(a).includes(R), "R is named nowhere in the answer");
 });
 
 test("R-I2 B1 (commitsOf): the commit that wrote a pin record is the oldest touching it, past the first page of its history", async () => {
@@ -907,9 +911,10 @@ test("R-I2 m3: the DOES NOT VERIFY notice says the current document's two rules,
 });
 
 test("R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the branch read is kept; the page does not say 'try again' for a commit off the branch", async () => {
-  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false }, "main exists: a commit it does not have is off");
+  // unit R-N (n1): off, and marked as a 404, so a walk that skips on it reads it again
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false, not_found: true }, "main exists: a commit it does not have is off");
   const n = gh.branchLog.length;
-  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false });
+  assert.deepEqual(await S.commitOnBranch("6".repeat(40)), { on: false, not_found: true });
   assert.equal(gh.branchLog.length, n, "the branch read is kept");
   assert.deepEqual(await S.commitOnBranch("6".repeat(40), { branch: "no-such-branch" }), { unknown: "branch_unreadable" });
   S._internal.clearDocumentCache();
@@ -1047,4 +1052,212 @@ test("R-I2 GAP (T02, J04, J05): the tool's printed usage names KEY_DOCUMENT_BRAN
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", ".well-known", "arcaeon", "case-signing-keys.json"), "utf8"));
   assert.match(doc.status_meaning.revoked, /the case-file commit the case's pin records comes before the revoking commit in the pins repository; it says nothing of when this document's revocation was committed or deployed/);
   assert.match(doc.rotation, /the oldest commit at which the marker's path holds a valid marker for the key, so no later write moves it/);
+});
+
+// =============================================================================
+// UNIT R-N, THE FOLLOW-UPS (n1 to n7) from the second reader's pass over R-I2
+// at be26c37
+// =============================================================================
+
+const fresh = async (k, current) => {
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  return S.sealedRecordReason(k, current);
+};
+const commitsReads = (mp) => gh.commitsLog.filter((p) => p === mp).length;
+
+test("R-N n1: a raw-host 404 at the real R, with a later rewrite that is valid, does not let the rewrite become R: the skipped commit is read once more, and unless it skips again the answer is revocation_marker_unreadable; a marker found after such a skip is not kept", async () => {
+  const c = await sealedCase("R-N n1 raw");
+  const { R, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  // a case pinned after R, then a rewrite of the same valid marker after it
+  const late = await sealedCase("R-N n1 raw, late");
+  const R2 = gh.addCommit(PINS, mp);
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(1, 404, `${PINS}@${R}:${mp}`);
+  const a = await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"], "R read again holds a marker: the rewrite is not R");
+  // the 404 holds on the second read: it skips again, the rewrite is taken, and it is not kept
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(2, 404, `${PINS}@${R}:${mp}`);
+  const b = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(b.code, "signer_since_revoked", JSON.stringify(b));
+  assert.equal(b.revoked[0].revoking_commit, R2);
+  assert.equal(gh.rawLog.filter((k) => k === `${PINS}@${R}:${mp}`).length >= 2, true, "read twice");
+  const n = commitsReads(mp);
+  const again = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(commitsReads(mp), n + 1, "walked again: a marker found after a skip is never kept");
+  assert.equal(again.revoked[0].revoking_commit, R, "and R, once it reads, is R");
+  await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.equal(commitsReads(mp), n + 1, "a marker found with no skip is kept");
+});
+
+test("R-N n1: a compare 404 on the revoking commit of the real R (the branch known to exist) is the same: read again, unreadable unless it skips again", async () => {
+  await sealedCase("R-N n1 compare");
+  const { R, W, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  const late = await sealedCase("R-N n1 compare, late");
+  gh.addCommit(PINS, mp);
+  const branchCompare = `${S.KEY_DOCUMENT_REPO}:${S.keyDocumentBranch()}...${W}`;
+  // the branch is known to exist (kept), so the 404 alone reads as off
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  assert.deepEqual(await S.commitOnBranch("8".repeat(40)), { on: false, not_found: true }, "a 404 on a branch that exists");
+  gh.forceCompareFailure(1, 404, branchCompare);
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
+  assert.ok(gh.compareLog.filter((k) => k === branchCompare).length >= 2, "the skipped candidate's order read again");
+  // a second 404 on the re-read skips again: the later one is taken, not kept
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  gh.forceCompareFailure(2, 404, branchCompare);
+  const b = await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.notEqual(b.revoked[0].revoking_commit, R);
+  const n = commitsReads(mp);
+  await S.sealedRecordReason(late.k, CASE_REVOKED);
+  assert.equal(commitsReads(mp), n + 1, "not kept");
+});
+
+test("R-N n2: the walk of a path's commits follows the Link header's rel=\"next\": a short page with a next page is not the last, for the reader and for the tool", async () => {
+  const c = await sealedCase("R-N n2");
+  const { R, path: mp } = await revoke(CASE_KEY, CASE_REVOKED);
+  const late = await sealedCase("R-N n2, late");
+  for (let i = 0; i < 12; i += 1) gh.addCommit(PINS, mp);
+  gh.commitsPageCap = 5; // the host answers five a page, and says there are more
+  const a = await fresh(late.k, CASE_REVOKED);
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "pinned_at_or_after_revocation"], "R is the oldest, past the short pages");
+  assert.equal((await fresh(c.k, CASE_REVOKED)).revoked[0].revoking_commit, R);
+  // the tool's walk of the key document's history, the same
+  gh.commitsPageCap = 0;
+  const RECEIPT_GONE = KD.docWith(KD.entry(CASE_KEY), revokedIn(RECEIPT_KEY, "2026-10-12", "reconcile"));
+  const first = KD.serve(gh, RECEIPT_GONE);
+  for (let i = 0; i < 7; i += 1) KD.serve(gh, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked", revokedSince: "2026-10-12", note: `again ${i}` })));
+  gh.commitsPageCap = 3;
+  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(RECEIPT_KEY), currentDocument: RECEIPT_GONE });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(out.marker.revoked_in_commit, first, "the oldest, past the short pages");
+});
+
+test("R-N n2: a next page that does not move forward is a list that cannot be read, never a loop", async () => {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const r = await viaMock(url, o);
+    if (!String(url).includes("/commits?")) return r;
+    return { ...r, headers: { get: (h) => (h.toLowerCase() === "link" ? `<https://api.github.com/repos/${PINS}/commits?path=x&page=1>; rel="next"` : null) } };
+  };
+  try {
+    await assert.rejects(store.listCommitsPage("x", { perPage: 100, page: 1 }), /next page/);
+  } finally {
+    global.fetch = viaMock;
+  }
+});
+
+test("R-N n4: the walk reads at most 200 candidates per request, then answers revocation_marker_unreadable; a valid marker at the 200th is found", async () => {
+  // the case key: 199 stray writes, then the valid marker (the 200th candidate)
+  const c = await sealedCase("R-N n4 cap");
+  const W = KD.serve(gh, KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), revokedIn(RECEIPT_KEY, "2026-10-11", "reconcile")));
+  const both = KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), revokedIn(RECEIPT_KEY, "2026-10-11", "reconcile"));
+  gh.seed(PINS, markerPath(CASE_KEY), { stray: 0 });
+  for (let i = 1; i < 199; i += 1) gh.seed(PINS, markerPath(CASE_KEY), { stray: i }, { keepHistory: true });
+  const R = writeMarker(CASE_KEY, W);
+  // the reconcile key: 200 stray writes, then the valid marker (the 201st)
+  gh.seed(PINS, markerPath(RECEIPT_KEY), { stray: 0 });
+  for (let i = 1; i < 200; i += 1) gh.seed(PINS, markerPath(RECEIPT_KEY), { stray: i }, { keepHistory: true });
+  writeMarker(RECEIPT_KEY, W);
+  const a = await fresh(c.k, KD.docWith(revokedIn(CASE_KEY, "2026-10-11"), KD.reconcileEntry(RECEIPT_KEY)));
+  assert.equal(a.code, "signer_since_revoked", JSON.stringify(a).slice(0, 300));
+  assert.equal(a.revoked[0].revoking_commit, R);
+  const b = await fresh(c.k, both);
+  assert.deepEqual([b.code, b.reason], ["signer_revoked", "revocation_marker_unreadable"], "the 201st candidate is never read");
+  assert.equal(S.MARKER_CANDIDATES_READ, 200);
+});
+
+test("R-N n4: a negative compare is kept for the instance (off the branch; not before), a 404 is read again, and a key document read by commit is kept", async () => {
+  const side = gh.seedSideCommit(S.KEY_DOCUMENT_REPO, "5".repeat(40));
+  assert.deepEqual(await S.commitOnBranch(side), { on: false });
+  let n = gh.compareLog.length;
+  assert.deepEqual(await S.commitOnBranch(side), { on: false });
+  assert.equal(gh.compareLog.length, n, "an answer that is off is kept");
+  const ghost = "7".repeat(40);
+  await S.commitOnBranch(ghost);
+  n = gh.compareLog.length;
+  await S.commitOnBranch(ghost);
+  assert.equal(gh.compareLog.length, n + 1, "a 404 is read again");
+  // not before: the order of a case pinned after R, read once
+  await revoke(CASE_KEY, CASE_REVOKED);
+  const late = await sealedCase("R-N n4 order kept");
+  assert.equal((await S.sealedRecordReason(late.k, CASE_REVOKED)).reason, "pinned_at_or_after_revocation");
+  n = gh.compareLog.length;
+  assert.equal((await S.sealedRecordReason(late.k, CASE_REVOKED)).reason, "pinned_at_or_after_revocation");
+  assert.equal(gh.compareLog.length, n, "an order that is not before is kept");
+  // the document at a commit, read with nothing to match, is kept
+  const W = KD.serve(gh, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY)));
+  const at = `${S.KEY_DOCUMENT_REPO}@${W}:`;
+  assert.equal((await S.fetchNamedDocument(W)).ok, true);
+  const r = gh.rawLog.filter((k) => k.startsWith(at)).length;
+  assert.equal((await S.fetchNamedDocument(W)).ok, true);
+  assert.equal(gh.rawLog.filter((k) => k.startsWith(at)).length, r, "kept by its commit");
+  // a failed read is not kept
+  const W2 = KD.serve(gh, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY, { status: "retired" })));
+  gh.forceRawFailure(1, 503, W2);
+  assert.equal((await S.fetchNamedDocument(W2)).ok, false);
+  assert.equal((await S.fetchNamedDocument(W2)).ok, true);
+});
+
+test("R-N n5: the banner says the key document lists the key as revoked AT its commit W", async () => {
+  const c = await sealedCase("R-N n5");
+  const { W, R } = await revoke(CASE_KEY, CASE_REVOKED);
+  const p = await pageOf(c.id, CASE_REVOKED);
+  assert.ok(p.html.includes(bannerSentence(c.P, R, W)));
+  assert.ok(p.html.includes("lists the key as revoked at its commit"));
+  assert.ok(!p.html.includes("revoked from its commit"));
+});
+
+test("R-N n6: pinned_at_or_after_revocation is answered only when the compare shows that order; a compare that cannot show it (a 404, or diverged) is order_not_shown", async () => {
+  const c = await sealedCase("R-N n6");
+  const { R } = await revoke(CASE_KEY, CASE_REVOKED);
+  S._internal.clearDocumentCache();
+  gh.forceCompareFailure(1, 404, `${PINS}:${R}...${c.P}`);
+  const nf = await S.sealedRecordReason(c.k, CASE_REVOKED);
+  assert.deepEqual([nf.code, nf.reason], ["signer_revoked", "order_not_shown"]);
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if (String(url).endsWith(`/compare/${R}...${c.P}`)) {
+      return { status: 200, ok: true, json: async () => ({ status: "diverged", ahead_by: 1, behind_by: 1 }), text: async () => "{}" };
+    }
+    return viaMock(url, o);
+  };
+  try {
+    S._internal.clearDocumentCache();
+    const dv = await S.sealedRecordReason(c.k, CASE_REVOKED);
+    assert.deepEqual([dv.code, dv.reason], ["signer_revoked", "order_not_shown"]);
+  } finally {
+    global.fetch = viaMock;
+  }
+  // ahead stays pinned_at_or_after_revocation (I1 above; identical: MUST-FAIL GAP P01)
+  const late = await sealedCase("R-N n6 late");
+  assert.equal((await fresh(late.k, CASE_REVOKED)).reason, "pinned_at_or_after_revocation");
+});
+
+test("R-N n6: the tool's notes and the change log say no more than the reason code does", () => {
+  const root = path.join(__dirname, "..");
+  const tool = fs.readFileSync(path.join(root, "tools", "record_key_revocation.js"), "utf8");
+  assert.ok(!/pinned before the key was revoked/.test(tool), "the tool's comment");
+  const log = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+  assert.ok(!log.includes("\"Pinned before the revocation\" is gone from the page, the refusal words and the notes."), "the R-I2 line");
+  assert.match(log, /`pinned_at_or_after_revocation`[^\n]*only when the compare shows that order[^\n]*`order_not_shown`/);
+});
+
+test("R-N: tools/preview_dry_run.js prints KEY_DOCUMENT_BRANCH in its usage (--help), not only in a comment", () => {
+  const { spawnSync } = require("node:child_process");
+  const out = spawnSync(process.execPath, [path.join(__dirname, "..", "tools", "preview_dry_run.js"), "--help"], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /KEY_DOCUMENT_BRANCH/);
+  assert.match(out.stdout, /published/);
+});
+
+test("R-N n3: the README says a marker path forced past the walk's bound reads unreadable for good, accepted", () => {
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  assert.match(readme, /past 5,000 commits[^.]*revocation_marker_unreadable[^.]*for good/);
 });

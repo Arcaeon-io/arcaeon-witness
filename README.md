@@ -782,7 +782,10 @@ against it. A preview deployment of another branch sets it to that branch.
 The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
 steps (e) and (f), and `tools/record_key_revocation.js` holds the marker to
-it.
+it. The readers walk at most 5,000 commits of a key's marker path (50 pages
+of 100), so a marker path someone with write access to the pins repository
+forces past 5,000 commits reads `revocation_marker_unreadable` for good, and
+every case under that key reads `signer_revoked`; this bound is accepted.
 
 ## Testing
 

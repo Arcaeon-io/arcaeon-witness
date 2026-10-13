@@ -70,7 +70,11 @@
 //        document's commit, as test/helpers/key_document.js serves it).
 //
 //   GET  /repos/<repo>/commits?...&page=<n> pages the list per_page at a time
-//        (1-based), as GitHub does.
+//        (1-based), as GitHub does, and says where the next page is as GitHub
+//        does, in a Link header (rel="next" and rel="last"; none on the last
+//        page). Set commitsPageCap to n > 0 and the host answers at most n a
+//        page whatever per_page asks (unit R-N, n2: a short page is not the
+//        last).
 //
 //   GET  /repos/<repo>/branches/<name> -> 200 {name, commit} | 404 (unit R-I2:
 //        whether the branch a compare read named exists). branchLog records
@@ -101,11 +105,12 @@ function textResponse(status, text) {
   };
 }
 
-function fakeResponse(status, bodyObj) {
+function fakeResponse(status, bodyObj, headers = {}) {
   const bodyText = JSON.stringify(bodyObj);
   return {
     status,
     ok: status >= 200 && status < 300,
+    headers: { get: (name) => (Object.prototype.hasOwnProperty.call(headers, String(name).toLowerCase()) ? headers[String(name).toLowerCase()] : null) },
     json: async () => bodyObj,
     text: async () => bodyText,
   };
@@ -140,6 +145,7 @@ class MockGitHubStore {
     this.commits = new Map();
     this._commitSeq = 0;
     this.commitsLog = []; // [path] — every commits-for-path read, in order
+    this.commitsPageCap = 0; // see the header (0: per_page as asked)
     this._forcedCommitsFailure = new Map(); // "repo::path" -> {remaining, status}
     // Raw reads (see the header): "repo@ref:path" -> text.
     this.raw = new Map();
@@ -410,13 +416,19 @@ class MockGitHubStore {
         forced.remaining -= 1;
         return fakeResponse(forced.status, { message: "mock: forced commits read failure" });
       }
-      const perPage = Math.max(1, Math.min(100, Number(u.searchParams.get("per_page")) || 30));
+      const asked = Math.max(1, Math.min(100, Number(u.searchParams.get("per_page")) || 30));
+      // commitsPageCap (unit R-N, n2): the host answers fewer than per_page a page
+      const perPage = this.commitsPageCap > 0 ? Math.min(asked, this.commitsPageCap) : asked;
       const page = Math.max(1, Number(u.searchParams.get("page")) || 1);
-      const list = this._commitsOf(cm[1]).filter((c) => p === null || c.path === p).slice().reverse().slice((page - 1) * perPage, page * perPage);
+      const all = this._commitsOf(cm[1]).filter((c) => p === null || c.path === p).slice().reverse();
+      const list = all.slice((page - 1) * perPage, page * perPage);
+      const at = (n) => { const next = new URL(u.href); next.searchParams.set("page", String(n)); return `<${next.href}>`; };
+      const last = Math.max(1, Math.ceil(all.length / perPage));
+      const link = page < last ? `${at(page + 1)}; rel="next", ${at(last)}; rel="last"` : null;
       return fakeResponse(200, list.map((c) => ({
         sha: c.sha,
         commit: { message: c.message, author: { date: c.date }, committer: { date: c.date } },
-      })));
+      })), link ? { link } : {});
     }
 
     const m = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/(.+)$/);
