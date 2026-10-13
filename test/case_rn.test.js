@@ -257,6 +257,17 @@ const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWi
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
+// The case key revoked (unit R-I): the current document, its marker, the tool.
+const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
+const revokedDoc = () => CASE_REVOKED;
+const TOOL = { recordRevocation: (...args) => require("../tools/record_key_revocation.js").recordRevocation(...args) };
+const markerFor = (W) => ({ kind: "key-revocation", v: 1, key_id: KD.keyIdOf(CASE_KEY), key_fingerprint: S.keyFingerprint(CASE_KEY.verifier), revoked_in_commit: W });
+async function revoke() {
+  const W = KD.serve(gh, CASE_REVOKED);
+  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  return { W, R: out.commit, path: out.path };
+}
 const withdrawnCommitmentPath = (tapeSha256) => `withdrawn_commitments/${sha(Buffer.from(tapeSha256, "hex"))}.json`;
 
 // =============================================================================
@@ -688,4 +699,319 @@ test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.t
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
   assert.equal(todos.length, 1, JSON.stringify(todos));
   assert.match(todos[0], /reads 20 rows/);
+});
+
+// =============================================================================
+// UNIT R-N: the must-fail pass's gaps (each test kills a planted defect the
+// tests above let through; the ids are the pass's)
+// =============================================================================
+
+test("MUST-FAIL GAP (F04): a read held to a sha256 never takes a document kept by its commit: it reads the commit again", async () => {
+  const W = KD.serve(gh, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY), KD.entry(LOG_KEY)));
+  const at = `${S.KEY_DOCUMENT_REPO}@${W}:`;
+  assert.equal((await S.fetchNamedDocument(W)).ok, true);
+  const n = gh.rawLog.filter((k) => k.startsWith(at)).length;
+  const held = await S.fetchNamedDocument(W, "e".repeat(64));
+  assert.equal(held.ok, true);
+  assert.equal(gh.rawLog.filter((k) => k.startsWith(at)).length, n + 1, "read again");
+});
+
+test("MUST-FAIL GAP (F11): an order the compare answers 404 is read again on the next request, never kept", async () => {
+  const c = await sealedCase("RN gap order 404");
+  const { R } = await revoke(c);
+  S._internal.clearDocumentCache();
+  gh.forceCompareFailure(1, 404, `${PINS}:${R}...`);
+  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).reason, "order_not_shown");
+  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).code, "signer_since_revoked", "read again, and now shown");
+});
+
+test("MUST-FAIL GAP (F16): the second reads count toward the bound: 150 commits that removed the marker, then a valid one, is more than 200 reads", async () => {
+  const c = await sealedCase("RN gap second reads");
+  const W = KD.serve(gh, revokedDoc());
+  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
+  for (let i = 0; i < 150; i += 1) gh._recordCommit(PINS, mp, "mock: removed", null);
+  gh.seed(PINS, mp, markerFor(W), { keepHistory: true });
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const a = await S.sealedRecordReason(storedCase(c.id), revokedDoc());
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
+});
+
+test("MUST-FAIL GAP (F19): a candidate that is not JSON is a plain skip: a marker found after it is kept", async () => {
+  const c = await sealedCase("RN gap not json");
+  const W = KD.serve(gh, revokedDoc());
+  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
+  gh.seedText(PINS, mp, "not json");
+  gh.seed(PINS, mp, markerFor(W), { keepHistory: true });
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).code, "signer_since_revoked");
+  const n = gh.commitsLog.filter((p) => p === mp).length;
+  await S.sealedRecordReason(storedCase(c.id), revokedDoc());
+  assert.equal(gh.commitsLog.filter((p) => p === mp).length, n, "kept");
+});
+
+test("MUST-FAIL GAP (F23): a skipped candidate whose second read fails is unreadable, never passed over", async (t) => {
+  const c = await sealedCase("RN gap second read fails");
+  const { R, path: mp } = await revoke(c);
+  gh.addCommit(PINS, mp);
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  const key = `/${PINS}/${R}/${mp}`;
+  let reads = 0;
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if (String(url).startsWith("https://raw.githubusercontent.com") && String(url).endsWith(key)) {
+      reads += 1;
+      const status = reads === 1 ? 404 : 503;
+      return { status, ok: false, json: async () => ({}), text: async () => "" };
+    }
+    return viaMock(url, o);
+  };
+  t.after(() => { global.fetch = viaMock; });
+  const a = await S.sealedRecordReason(storedCase(c.id), revokedDoc());
+  assert.equal(reads, 2, "read twice");
+  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
+});
+
+test("MUST-FAIL GAP (F26, T02): a walk asks for the page the Link header names, not the one after the last", async (t) => {
+  await sealedCase("RN gap link page");
+  const W = KD.serve(gh, revokedDoc());
+  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
+  gh.seed(PINS, mp, markerFor(W));
+  const asked = { pins: [], doc: [] };
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const u = new URL(String(url));
+    if (!u.pathname.endsWith("/commits")) return viaMock(url, o);
+    const which = u.searchParams.get("path") === mp ? "pins" : u.searchParams.get("path") === S.CASE_KEYS_FILE ? "doc" : null;
+    const page = Number(u.searchParams.get("page") || 1);
+    if (which) asked[which].push(page);
+    const r = await viaMock(url, o);
+    if (!which || page !== 1) return r;
+    const next = new URL(u.href);
+    next.searchParams.set("page", "3");
+    return { ...r, headers: { get: (h) => (h.toLowerCase() === "link" ? `<${next.href}>; rel="next"` : null) } };
+  };
+  t.after(() => { global.fetch = viaMock; });
+  S._internal.clearDocumentCache();
+  S._internal.clearCommitFiles();
+  await S.sealedRecordReason(storedCase((await sealedCase("RN gap link page, read")).id), revokedDoc());
+  assert.deepEqual(asked.pins, [1, 3]);
+  await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revokedDoc() });
+  assert.deepEqual(asked.doc, [1, 3]);
+});
+
+test("MUST-FAIL GAP (R07): a case the tree shows withdrawn with no registration file is passed over by the withdrawn path, and the run does not fail", async () => {
+  const id = await openCase("RN gap withdrawn no registrations");
+  gh.seed(PINS, C.casePath(id), { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+    withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("s"), reason: "party_choice" }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "planted" },
+  { keepHistory: true });
+  gh.seed(PINS, C.withdrawnMarkerPath(id), { kind: "case-withdrawn-marker", v: 1, case_id: id, withdrawn_at: "2026-10-10T08:30:00Z" });
+  const run = await sealerRun();
+  assert.equal(run.ok, true);
+  assert.deepEqual(run.withdrawn_repaired, []);
+});
+
+test("MUST-FAIL GAP (R14, R15, R16, R17): the withdrawal's commit is the oldest of the newest WITHDRAWN run, read at most five deep, and a read that fails says so", async () => {
+  // many commits before the withdrawal are not read past the run
+  const c = await committedCase("RN gap W deep");
+  for (let i = 0; i < 5; i += 1) gh.addCommit(PINS, C.casePath(c.id));
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const W = gh.commitsFor(PINS, C.casePath(c.id))[0].sha;
+  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: true, commit: W });
+  // a rewrite of the withdrawn root: W stays the first
+  const W2 = gh.addCommit(PINS, C.casePath(c.id));
+  S._internal.clearCommitFiles();
+  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: true, commit: W }, "not the rewrite");
+  assert.notEqual(W, W2);
+  // six WITHDRAWN commits are past the bound
+  for (let i = 0; i < 4; i += 1) gh.addCommit(PINS, C.casePath(c.id));
+  assert.deepEqual(await S.withdrawalCommitOf(c.id), { ok: false, reason: "withdrawal_commit_beyond_bound" });
+  // a read that fails
+  const d = await committedCase("RN gap W unread");
+  assert.equal((await withdraw(d.id, d.b)).status, 201);
+  const newest = gh.commitsFor(PINS, C.casePath(d.id))[0].sha;
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(1, 503, `${PINS}@${newest}:${C.casePath(d.id)}`);
+  assert.deepEqual(await S.withdrawalCommitOf(d.id), { ok: false, reason: "case_at_commit_http_503" });
+});
+
+test("MUST-FAIL GAP (R18, H14): a role with no registration file on a withdrawn case is not a party (404), never could-not-look", async () => {
+  const id = await openCase("RN gap unregistered role");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  assert.equal((await withdraw(id, a)).status, 201);
+  const r = await reveal({ id, a, b }, { body: { ...revealBody(id, a, b), role: "b" } });
+  assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body));
+});
+
+test("MUST-FAIL GAP (R19, R23, R24): the withdrawn path removes nothing it cannot order: an order neither before nor after, or a withdrawal commit it cannot read, is unknown; an absent file is passed over", async () => {
+  const x = await lostRace("RN gap repair unknown", { deleteFails: true });
+  // the first pins compare of the repair (role a's) answers 404
+  gh.forceCompareFailure(1, 404, `${PINS}:`);
+  const one = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  assert.deepEqual(one.unknown, [{ role: "a", reason: "registration_order_not_found" }]);
+  assert.deepEqual(one.removed, ["b"]);
+  assert.equal(gh.has(PINS, C.registrationPath(x.id, "a")), true, "a registration it cannot order stays");
+  // the withdrawal's commit cannot be read: every role unknown, by that reason
+  gh.forceCommitsFailure(PINS, C.casePath(x.id), 1, 503);
+  S._internal.clearCommitFiles();
+  const two = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  assert.deepEqual(two.unknown, [{ role: "a", reason: "commits_unreadable" }, { role: "b", reason: "commits_unreadable" }]);
+  // b is gone now: passed over, not unknown
+  const three = await S.repairWithdrawn(x.id, { roles: ["a", "b"] });
+  assert.deepEqual([three.unknown, three.kept, three.removed], [[], ["a"], []]);
+});
+
+test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a reconcile key the named document lists as retired, does not verify", async () => {
+  const at = C.utcSeconds(REVEAL_AT);
+  const signer = S.loadReconcileSigner(KEYS, { keyDocument: DOC });
+  const checkRecord = require("../lib/_check_record.js");
+  const base = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder: KD.signedUnder(gh, DOC, at) }, signer);
+  const withReason = { ...base, sig_reason: "a reason", sig: null };
+  withReason.sig = crypto.sign(null, checkRecord.preimage(withReason), signer.privateKey).toString("base64");
+  assert.deepEqual(await S.verifyRefusalReceipt(withReason, DOC), { ok: false, reason: "malformed_field" });
+  const retired = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }));
+  const underRetired = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder: KD.signedUnder(gh, retired, at) }, signer);
+  assert.deepEqual(await S.verifyRefusalReceipt(underRetired, DOC), { ok: false, reason: "signer_not_active" });
+});
+
+test("MUST-FAIL GAP (C03, C04, C06): a refusal names role a or b and carries exactly its opening's two fields; a joint reveal's role is a or b", async () => {
+  const c = await committedCase("RN gap opening forms");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const own = { tape_sha256: c.a.tape_sha256, salt: c.a.salt };
+  for (const [name, body] of [
+    ["role c with an opening under c", { ...revealBody(c.id, c.a, c.b), role: "c", reveals: { c: own } }],
+    ["an opening with a field more", { ...revealBody(c.id, c.a, c.b), role: "a", reveals: { a: { ...own, note: "x" } } }],
+  ]) {
+    const r = await reveal(c, { body });
+    assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], `${name}: ${JSON.stringify(r.body).slice(0, 200)}`);
+  }
+  const live = await committedCase("RN gap live role");
+  const r = await reveal(live, { body: { ...revealBody(live.id, live.a, live.b), role: "c" } });
+  assert.deepEqual([r.status, r.body.error_code, r.body.field], [400, "bad_role", "role"]);
+});
+
+test("MUST-FAIL GAP (C13): a sealed case whose list ends in a failure is refused at that entry", async () => {
+  const c = await sealedCase("RN gap sealed ends in failure");
+  const k = storedCase(c.id);
+  const v = C.validateCase({ ...k, reveal_attempts: [...k.reveal_attempts, { event: "failure", reason: "case_seal_failed", at: "2026-10-10T09:00:00Z" }] });
+  assert.deepEqual([v.code, v.field], ["status_inconsistent", "reveal_attempts.1"]);
+});
+
+test("MUST-FAIL GAP (H04): the lease is released at the lease clock's time", async () => {
+  const id = await openCase("RN gap released at");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  let t = NOW + 1000;
+  const r = await commit(id, a, NOW + 1000, { clock: () => (t += 250) });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const lock = lockOf(id);
+  assert.ok(Date.parse(lock.released_at) > Date.parse(lock.acquired_at), JSON.stringify(lock));
+  assert.ok(Date.parse(lock.released_at) <= t);
+});
+
+// A lost race whose DELETE answers `status` after doing `then` to the store.
+async function lostRaceDelete(scope, status, then) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if ((o && o.method) === "DELETE") {
+      await then(String(url), o, viaMock);
+      return { ok: false, status, json: async () => ({}), text: async () => "" };
+    }
+    return viaMock(url, o);
+  };
+  try {
+    return await lostRace(scope);
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+
+test("MUST-FAIL GAP (H06, H07): registration_recorded is read back when the removal is not confirmed: a removal that landed but answered 500 is false; a read-back that fails says it may be there (true)", async () => {
+  const landed = await lostRaceDelete("RN gap removal landed", 500, (url, o, viaMock) => viaMock(url, o));
+  assert.equal(landed.out.registration_removed, false);
+  assert.equal(gh.has(PINS, landed.rpath), false, "fixture: it is gone");
+  assert.equal(landed.out.registration_recorded, false, "the file's real state");
+  const unread = await lostRaceDelete("RN gap read-back fails", 500, async (url) => {
+    const path = decodeURIComponent(new URL(url).pathname.replace(/^\/repos\/[^/]+\/[^/]+\/contents\//, ""));
+    gh.forceGetFailure(PINS, path, 1, 503);
+  });
+  assert.equal(unread.out.registration_recorded, true);
+});
+
+test("MUST-FAIL GAP (H09, H10): the read-after-write unwind's removal names why, and a removal that fails is reported with the file's state", async (t) => {
+  const run = async (scope) => {
+    const id = await openCase(scope);
+    const a = party(id, "a", AGENT_TAPE);
+    plantStamp(a.commitment_sha256);
+    const rpath = C.registrationPath(id, "a");
+    const r = await during(
+      (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${rpath}`),
+      async () => gh.forceGetFailure(PINS, C.casePath(id), 1, 503),
+      () => commit(id, a),
+    );
+    return { rpath, out: r.out };
+  };
+  const x = await run("RN gap unwind message");
+  assert.match(gh.commitsFor(PINS, x.rpath)[0].message, /commitment a unconfirmed after its write, removed/);
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((o && o.method) === "DELETE" ? { ok: false, status: 500, json: async () => ({}), text: async () => "" } : viaMock(url, o));
+  t.after(() => { global.fetch = viaMock; });
+  const y = await run("RN gap unwind refused");
+  assert.deepEqual([y.out.status, y.out.body.registration_removed, y.out.body.registration_recorded], [503, false, true]);
+});
+
+test("MUST-FAIL GAP (H13, H17, H19): a refusal whose withdrawal commit cannot be read is 503 naming it; a registration file that does not read is no party's; a deployment whose document is not confirmed issues no receipt", async () => {
+  const c = await committedCase("RN gap refusal reads");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  S._internal.clearCommitFiles();
+  gh.forceCommitsFailure(PINS, C.casePath(c.id), 1, 503);
+  const u = await reveal(c, { body: ownOpening(c, "a") });
+  assert.deepEqual([u.status, u.body.error_code], [503, "store_unreachable"]);
+  assert.match(u.body.error, /the withdrawal's commit could not be read/);
+  // a deployment naming a commit the readers cannot confirm
+  const res = makeRes();
+  await H.handleCaseReveal(req("case-reveal", ownOpening(c, "a")), res, { now: REVEAL_AT, env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: "9".repeat(40) }, keyDocument: DOC });
+  assert.deepEqual([res._status, parsed(res).error_code], [503, "document_unavailable"], JSON.stringify(parsed(res)).slice(0, 200));
+  assert.equal(has(parsed(res), "refusal_receipt"), false);
+  // a registration file that does not read, written before the withdrawal
+  const d = await committedCase("RN gap bad registration");
+  const reg = gh.read(PINS, C.registrationPath(d.id, "a"));
+  gh.seed(PINS, C.registrationPath(d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
+  const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
+  const r = await reveal(d, { body: ownOpening(d, "a") });
+  assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body).slice(0, 200));
+});
+
+test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is recorded for that tape", async () => {
+  const c = await committedCase("RN gap retry tape");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const res = makeRes();
+  const other = sha("another tape");
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KEYS, keyDocument: DOC });
+  assert.deepEqual([res._status, parsed(res).error_code], [409, "case_withdrawn"]);
+  assert.equal(gh.has(PINS, withdrawnCommitmentPath(other)), false);
+});
+
+test("MUST-FAIL GAP (H40): a reference to an anchored case takes a row", async () => {
+  const c = await sealedCase("RN gap anchored");
+  await sealerRun();
+  const { seq } = S.pinPaths(c.id);
+  const day = gh.commitsFor(PINS, seq).slice(-1)[0].date.slice(0, 10);
+  gh.seedText(PINS, `anchors/${day}-head.txt`, `${gh.headOf(PINS)} ${day}T03:15:00+00:00\n`);
+  assert.equal((await S.anchorState(c.id, S.caseChain(storedCase(c.id)))).pin, "anchored", "fixture: anchored");
+  const r = await reference(c);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+});
+
+test("MUST-FAIL GAP (P04): the page names the latest attempt", async () => {
+  const c = await committedCase("RN gap latest attempt");
+  await revealSealFails(c, REVEAL_AT);
+  await revealSealFails(c, REVEAL_AT + 60000);
+  const page = await casePage(c.id);
+  assert.match(page.html, /The latest: A joint reveal was attempted at 2026-10-10T09:01:00Z/);
 });
