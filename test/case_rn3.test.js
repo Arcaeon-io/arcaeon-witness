@@ -299,7 +299,8 @@ const { makeRawReq } = require("./helpers/http_mocks.js");
 
 // N1: the words, exactly.
 const LISTED = "A party that committed to this tape digest in a case has withdrawn that case, or asked to. This service does not compare a tape so listed.";
-const NOT_WRITTEN = "The withdrawal record was not written. Your tape digest is already listed, so this service will not compare that tape. Send the same withdrawal again to finish.";
+// (since unit R-N4, R3: "may not have been written", and "or to confirm")
+const NOT_WRITTEN = "The withdrawal record may not have been written. Your tape digest is already listed, so this service will not compare that tape. Send the same withdrawal again to finish or to confirm.";
 const SEALED_FIRST = "This case sealed before the withdrawal could land, so it stays a public verdict. Your tape digest is listed, so this service will not compare that tape again.";
 // N2
 const RETRY_UNCONFIRMED = "The case is withdrawn. The tape listing could not be confirmed this time. Send the same withdrawal again.";
@@ -383,10 +384,10 @@ test("R-N3 N3: the offline receipt check is partial: it prints ok false, offline
   const notChecked = ["the document's commit is on the published branch", "the key is still listed, not revoked, in the current key document"];
   const good = offline("receipt.json");
   assert.equal(good.status, 3, good.stdout + good.stderr);
-  assert.deepEqual(JSON.parse(good.stdout), { ok: false, reason: "offline_partial", signature_ok: true, not_checked: notChecked });
+  assert.deepEqual(JSON.parse(good.stdout), { ok: false, reason: "offline_partial", signature_ok: true, signature_reason: null, not_checked: notChecked });
   const forged = offline("forged.json");
   assert.equal(forged.status, 3);
-  assert.deepEqual(JSON.parse(forged.stdout), { ok: false, reason: "offline_partial", signature_ok: false, not_checked: notChecked });
+  assert.deepEqual(JSON.parse(forged.stdout), { ok: false, reason: "offline_partial", signature_ok: false, signature_reason: "bad_signature", not_checked: notChecked });
   // online: the readers' own check decides; its answer is printed and sets the exit code
   const T = require("../tools/check_refusal_receipt.js");
   const run = async (answer) => {
@@ -509,7 +510,7 @@ test("MUST-FAIL GAP (H11-H15): a root write lost after the listing, to another w
     (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
   assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id, byA.w.body.tape_listed],
     [409, "case_withdrawn", "WITHDRAWN", byA.c.id, true], JSON.stringify(byA.w.body));
-  assert.equal(byA.w.body.error, "The withdrawal record was not written by this request: the case was withdrawn by another while it ran. " +
+  assert.equal(byA.w.body.error, "The withdrawal record was not written by this request: the case was withdrawn by another request while it ran. " +
     "Your tape digest is listed, so this service will not compare that tape.");
   const tried = await lostAfterListing("RN3 gap lost to an attempt", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
     commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] }));
@@ -598,5 +599,5 @@ test("MUST-FAIL GAP (T05, T06, T09): the online check exits 0 only for ok: true 
   assert.equal(first, 3);
   assert.equal(firstOut.reason, "offline_partial");
   assert.equal(garbled, 3);
-  assert.deepEqual([garbledOut.ok, garbledOut.reason, garbledOut.signature_ok], [false, "offline_partial", false]);
+  assert.deepEqual([garbledOut.ok, garbledOut.reason, garbledOut.signature_ok, garbledOut.signature_reason], [false, "offline_partial", false, "unreadable"]);
 });

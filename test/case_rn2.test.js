@@ -434,13 +434,14 @@ test("R-N2 m6: the README has a section on checking a refusal receipt, and tools
   // since unit R-N3 (N3) offline is partial: ok false, exit 3, and whether the signature holds
   const good = run(path.join(dir, "receipt.json"), path.join(dir, "doc.json"));
   assert.equal(good.status, 3, good.stdout + good.stderr);
-  assert.deepEqual([JSON.parse(good.stdout).reason, JSON.parse(good.stdout).signature_ok], ["offline_partial", true]);
+  assert.deepEqual([JSON.parse(good.stdout).reason, JSON.parse(good.stdout).signature_ok, JSON.parse(good.stdout).signature_reason], ["offline_partial", true, null]);
   fs.writeFileSync(path.join(dir, "forged.json"), JSON.stringify({ ...rr, role: "b" }));
   const bad = run(path.join(dir, "forged.json"), path.join(dir, "doc.json"));
   assert.equal(bad.status, 3);
-  assert.equal(JSON.parse(bad.stdout).signature_ok, false);
+  assert.deepEqual([JSON.parse(bad.stdout).signature_ok, JSON.parse(bad.stdout).signature_reason], [false, "bad_signature"], "unit R-N4 (R4)");
   fs.writeFileSync(path.join(dir, "other.json"), JSON.stringify(KD.docWith(KD.entry(CASE_KEY))));
-  assert.equal(JSON.parse(run(path.join(dir, "receipt.json"), path.join(dir, "other.json")).stdout).signature_ok, false, "another document");
+  const other = JSON.parse(run(path.join(dir, "receipt.json"), path.join(dir, "other.json")).stdout);
+  assert.deepEqual([other.signature_ok, other.signature_reason], [false, "document_sha256_mismatch"], "another document (unit R-N4, R4)");
 });
 
 test("R-N2 m7: an unsigned withdrawal record is labelled 'withdrawal record, unsigned: not a record' and its sig_reason is never printed; the case still reads WITHDRAWN and the refusal does not depend on the signature", async () => {
@@ -587,13 +588,14 @@ test("MUST-FAIL GAP (R10, R11, R13, R15): the offline checker holds the receipt 
   const at = C.utcSeconds(REVEAL_AT);
   const fields = { caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64) };
   const good = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(good, DOC), { ok: true }, "the signature holds against the document supplied (unit R-N3, N3: the tool prints it as partial)");
-  assert.deepEqual(offline({ ...good, v: 2 }, DOC), { ok: false, reason: "malformed_field" });
+  // unit R-N4 (R4): {signature_ok, reason}, never a key named ok
+  assert.deepEqual(offline(good, DOC), { signature_ok: true, reason: null }, "the signature holds against the document supplied");
+  assert.deepEqual(offline({ ...good, v: 2 }, DOC), { signature_ok: false, reason: "malformed_field" });
   const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(byCase, DOC), { ok: false, reason: "signer_unpublished" });
+  assert.deepEqual(offline(byCase, DOC), { signature_ok: false, reason: "signer_unpublished" });
   const retired = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }));
   const underRetired = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, retired, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(underRetired, retired), { ok: false, reason: "signer_not_active" });
+  assert.deepEqual(offline(underRetired, retired), { signature_ok: false, reason: "signer_not_active" });
 });
 
 // The commit's projection, with `then` run as its first case-file PUT goes out.

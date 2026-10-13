@@ -13,8 +13,10 @@
 // the published branch, needs the network, and so does whether the key is
 // still listed, not revoked, in the current document. So the offline check
 // never prints ok: true. It prints {ok: false, reason: "offline_partial",
-// signature_ok, not_checked} and exits 3, whatever it found (an input it
-// cannot read is signature_ok: false).
+// signature_ok, signature_reason, not_checked} and exits 3, whatever it
+// found (an input it cannot read is signature_ok: false, signature_reason
+// "unreadable"). The exported offline() answers {signature_ok, reason},
+// never a key named ok (unit R-N4, R4).
 // Without --document: the readers' own check (verifyRefusalReceipt), which
 // reads the named document from GitHub's raw host, checks its commit is on
 // the published branch, and holds the key to the current document this
@@ -30,7 +32,7 @@ const { canonicalBytes } = require("../lib/_check_record.js");
 const NOT_CHECKED_OFFLINE = ["the document's commit is on the published branch", "the key is still listed, not revoked, in the current key document"];
 
 function offline(rec, doc) {
-  const no = (reason) => ({ ok: false, reason });
+  const no = (reason) => ({ signature_ok: false, reason });
   const form = S.refusalReceiptFormReason(rec);
   if (form) return no(form);
   if (crypto.createHash("sha256").update(canonicalBytes(doc)).digest("hex") !== rec.signed_under.document_sha256) return no("document_sha256_mismatch");
@@ -40,7 +42,7 @@ function offline(rec, doc) {
   if (!e) return no("signer_unpublished");
   if (e.status !== "active") return no("signer_not_active");
   const sr = S.signatureReason(rec, e.verifier);
-  return sr ? no(sr.reason) : { ok: true };
+  return sr ? no(sr.reason) : { signature_ok: true, reason: null };
 }
 
 async function main(argv) {
@@ -51,13 +53,14 @@ async function main(argv) {
     return 1;
   }
   if (at >= 0) {
-    let signatureOk = false;
+    let sig;
     try {
-      signatureOk = offline(JSON.parse(fs.readFileSync(file, "utf8")), JSON.parse(fs.readFileSync(argv[at + 1], "utf8"))).ok;
+      sig = offline(JSON.parse(fs.readFileSync(file, "utf8")), JSON.parse(fs.readFileSync(argv[at + 1], "utf8")));
     } catch {
-      signatureOk = false;
+      sig = { signature_ok: false, reason: "unreadable" };
     }
-    process.stdout.write(`${JSON.stringify({ ok: false, reason: "offline_partial", signature_ok: signatureOk, not_checked: NOT_CHECKED_OFFLINE }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: false, reason: "offline_partial", signature_ok: sig.signature_ok, signature_reason: sig.reason,
+      not_checked: NOT_CHECKED_OFFLINE }, null, 2)}\n`);
     return 3;
   }
   let out;
