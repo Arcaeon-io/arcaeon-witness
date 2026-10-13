@@ -565,3 +565,72 @@ test("R-L4c c4: registration_exists is gone, and 'cannot acquire it' is printed 
     assert.equal(/cannot acquire it/.test(read(f).replace(/\s+/g, " ")), false, f);
   }
 });
+
+// =============================================================================
+// MUST-FAIL GAP TESTS: what the must-fail pass over the lines R-L4c changed
+// found no test for
+// =============================================================================
+
+test("MUST-FAIL GAP (K22, K23): a case root whose claim is not 64 hex is not a valid case record, and no claim path is made from one", async () => {
+  const c = await committedCase("RL4c gap claim hex");
+  const k = storedCase(c.id);
+  const r = C.validateCase({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, claim_sha256: "not hex" } } });
+  assert.deepEqual([r.ok, r.field], [false, "commitments.b.claim_sha256"]);
+  assert.throws(() => C.registrationPath(c.id, "a", "../../cases/x"), (e) => e instanceof C.CaseError && e.field === "claim_sha256");
+});
+
+test("MUST-FAIL GAP (H08, H18, H27): the answers name what they say: the loser of the compare-and-swap is not recorded and names its own path; a late re-send and a replay name the path", async () => {
+  const u = await unconfirmedA("RL4c gap named");
+  const other = party(u.id, "a", AGENT_TAPE);
+  plantStamp(other.commitment_sha256);
+  const r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(u.id)}`),
+    () => commit(u.id, other, NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000), () => commit(u.id, u.a, NOW + 1000));
+  assert.deepEqual([r.out.body.error_code, r.out.body.registration_recorded, r.out.body.registration_path], ["role_already_committed", false, u.rpath]);
+  const v = await unconfirmedA("RL4c gap late named");
+  const late = await commit(v.id, v.a, D + 1000);
+  assert.deepEqual([late.body.error_code, late.body.registration_path], ["late_commitment", v.rpath]);
+  const c = await committedCase("RL4c gap replay named");
+  const replay = await commit(c.id, c.a, NOW + 1500);
+  assert.deepEqual([replay.status, replay.body.registration_path], [200, claimPathOf(c.id, c.a)]);
+});
+
+test("MUST-FAIL GAP (S04, S05): a projected file is held to being the registration record of the claim the root names: a file that is not a registration record, or that is at another claim's path, is never taken", async () => {
+  // a file that is not a registration record, its sha256 and entry projected by hand
+  const c = await committedCase("RL4c gap not a record");
+  const apath = regFiles(c.id, "a")[0];
+  const junk = JSON.stringify({ ...gh.read(PINS, apath), note: "a field no registration has" }, null, 2) + "\n";
+  gh.seedText(PINS, apath, junk);
+  const k = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, a: { ...k.commitments.a, registration_sha256: sha(Buffer.from(junk, "utf8")) } } },
+    { keepHistory: true });
+  const r = await reveal(c);
+  assert.notEqual(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual([r.body.role, r.body.reason], ["a", "projection_differs_from_file"]);
+  // the same file, at another claim's path that the root names by hand
+  const d = await committedCase("RL4c gap other claim");
+  const bpath = regFiles(d.id, "b")[0];
+  const otherClaim = "e".repeat(64);
+  gh.seedText(PINS, `registrations/${d.id}/b/${otherClaim}.json`, fileText(bpath));
+  const kd = storedCase(d.id);
+  gh.seed(PINS, C.casePath(d.id), { ...kd, commitments: { ...kd.commitments, b: { ...kd.commitments.b, claim_sha256: otherClaim } } }, { keepHistory: true });
+  const s = await reveal(d);
+  assert.notEqual(s.status, 201, JSON.stringify(s.body).slice(0, 300));
+  assert.deepEqual([s.body.role, s.body.reason], ["b", "projection_differs_from_file"]);
+});
+
+test("MUST-FAIL GAP (P06): the single-party page links each registration file at its claim's path", async () => {
+  const id = await openCase("RL4c gap single party");
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(b.commitment_sha256);
+  const rec = C.registrationRecord({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256, registered_at: C.utcSeconds(NOW),
+    stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(b.commitment_sha256))[0].sha, stamped_at: "2026-10-10T07:45:00.123Z",
+    ...REG.keyFields({ case_id: id, role: "b", commitment_sha256: b.commitment_sha256 }, REG.KEYS.a) });
+  const bpath = REG.recordPath(rec);
+  gh.seed(PINS, bpath, rec);
+  gh.seed(PINS, C.casePath(id), C.applyRegistration(storedCase(id), rec, fileSha256(bpath)), { keepHistory: true });
+  assert.equal(C.singleParty(storedCase(id)), true, "fixture: single party");
+  const html = (await casePage(id, NOW + 5000)).html;
+  for (const p of [regFiles(id, "a")[0], bpath]) assert.ok(html.includes(`https://github.com/${PINS}/commits/main/${p}`), p);
+});
