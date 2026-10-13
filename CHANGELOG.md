@@ -1,5 +1,14 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-L4b: the DAMAGED state is cut; an inconsistent case record is 503 case_record_inconsistent (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The architect's ruling, built as written.** "A projected entry whose file is missing or does not hash to the projected sha256 is answered 503 `case_record_inconsistent` by every handler, and the page shows the could-not-look page with that reason and the sentence: 'A registration file does not match the hash this case records for it; this page shows nothing from this case until it does.' The case cannot seal and is never pinned; nothing is written, nothing is deleted." The substance of R-L4's rule 4 stands (never silently resolved, never sealed, never pinned); only the named state goes, since `case_record_inconsistent` already names the condition. This also closes the second reader's B3, whose words were DAMAGED's.
+- **What changed.** `lib/_case_seal.js` `projectedRegistrations` answers `inconsistent` (reasons `registration_file_missing`, `registration_file_differs`, `projection_differs_from_file`). The commit path, the reveal, the withdrawal and its retry, and the reference answer 503 `case_record_inconsistent` with the role and the reason. The sealer reports such a case under `refused`, with its role. The case page is the could-not-look page (503, never kept): `case_record_inconsistent`, the sentence, and the links to the case file and its history, and nothing else from the case.
+- **Removed.** `damagedWords` and the sealer's `damaged` list (`lib/_case_seal.js`); `damagedPage` (`lib/_case_page.js`); the code `case_damaged` and the status `DAMAGED` (`lib/_case_http.js`). `test/case_rj3.test.js`'s state table had no DAMAGED rows, so none were removed there.
+- **Tests.** New: `test/case_rl4b.test.js`, 4 tests, each failing at ffce92e. Updated by design (DAMAGED's 409 to the 503): `case_rl4` (the rule test, the reasons gap test, H55, the page gap test), `case_fix_mutation_gaps`, `case_mutation_gaps` (H36), `case_reveal`, `case_rn`, `case_rn4`. None deleted.
+- **The must-fail pass.** 18 defects planted over every line R-L4b changed in `lib/_case_http.js`, `lib/_case_seal.js` and `lib/_case_page.js` at 1a01395, each alone with the whole suite run: 18 caught, none survived.
+- Counts, as `npm test` prints them: 1a01395 and this entry: 1553 tests, 1550 pass, 2 skipped, 0 fail, 1 todo (bare `node --test`: 1560, 1557).
+
 ## 2026-10-13: Unit R-L4c: the second reader's fixes to R-L4; a registration file is keyed by its claim (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The second reader's pass over R-L4 at 2b05ee7 found the structural fault ended, four sentences false in reachable states, and one design gap. The architect's ruling on c4 replaced c4 as first sent and trimmed c2; it is built as ruled.
