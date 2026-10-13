@@ -1,5 +1,42 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-L2: a repair note records a removal decided, the page says what it read, notes keyed on the file, and a row refused only on a proven anchor conflict (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **B1, a note records a removal decided.** A repair note is described everywhere as "a removal of this file was recorded for <reason>", never as a removal made.
+  - The case page's Removals panel says, for each note, what it read at the note's path: the same file still there ("a repair note is written; the removal has not been made"), another file there ("removed; another file is at that path now"), nothing there ("removed"), or the same file under a case that sealed with it ("a repair note was written and the removal was not made; the registration stood and the case sealed").
+  - The sealer completes every recorded removal whose file is still at its path, for every reason, without a second note (`completeRemovals`, a window of the cases holding a note; `removals_completed` in its answer). A registration that stood while its case sealed with it is never removed, and nothing is removed under a VERDICT. The README says so.
+- **B2, three outcomes for a removed file.** A file the page reads as removed is "removed without a record" only when no note is there. A note whose check could not look (the document it names or the current document unreadable, or the note itself) says "its repair note could not be verified when this page was read", is no finding, and keeps the page out of the cache. A note that definitely does not verify says so, with its reason. The page reads a registration path's files from its history: the commits touching it and the file at each.
+- **M1, a note keyed on the file.** A note is kept at `removals/<case_id>/<sha256 of removed_path, removed_blob_sha and created_in_commit, a newline between>.json` and records `created_in_commit` (`v: 2`). A second removal on the same path gets its own note, and a byte-identical file created by a later commit is another file: no note of the earlier file removes it. Notes of the form before (`v: 1`, keyed on the path alone) are read and labelled as the old form, and nothing acts on them.
+- **M2.** After a withdrawal's write kept losing, the 503 says "the case kept changing while this request tried to write; nothing was written. Send it again." (`case_kept_changing`) when the case read fine and can still be withdrawn; "what it is now could not be read" (`case_moved`) is said only when that read failed or read no case.
+- **M3.** A case holds at most 500 reference rows (`MAX_REFERENCE_ROWS`); the 501st is 409 `row_limit`, and the eight-digit `references_full` it replaces could not be reached. The comment beside the constant gives the arithmetic: a pin at the cap is under 35 KB, against the contents API's 1 MB inline limit that `lib/_store.js` `getFile` reads through.
+- **M4.** In `dailyAnchorOf`, a head whose compare is not_found and a record whose newest commit names another head, or no head (`anchor_record_names_no_head`, with its own words), are misses: the records after them are read. A reference row is refused only on a proven anchor conflict (409 `anchor_conflict`); the 503 `anchor_unreadable` and its words are gone, and the case page's anchor cell is unchanged.
+- **The minors.**
+  - The L2 test inspects the sealed case, its receipt and the reveal's answer: every key id they name, past the service's own keys, is one of the two that registered in that case, and no key id of another case in the same store appears.
+  - L4: a withdrawal that loses to a reveal attempt, or to another withdrawal, writes nothing to the pins repository and removes nothing.
+  - A next pin written after a walk that did not reach a legacy chain's start says an earlier pin may list its rows too.
+  - The one removal (`lib/_case_unregister.js`) needs the file's creating commit, reads the note kept for that file, checks its signature itself, and checks that the file at the path is the one that commit created.
+- **Tests.**
+  - New: `test/case_rl2.test.js`, 14 tests. On c7ccdb2, 13 fail; the L4 test passes, the behaviour already held.
+  - `test/case_rj3.test.js`: a table row (`anchor_record_names_no_head`) and two M4 tests; the table's anchor rows expect the row taken (201); the R-L H36 gap test is deleted, the 503 it pinned being gone. On c7ccdb2, 23 fail.
+  - Updated by design: `case_rl` (its race learns the note's path after the write; notes in v 2; the panel and refusal words; the L2 test), `case_consent`, `case_rn2`, `case_signed_under` (P13 counts pin histories only), `no_delete_record`.
+- **The must-fail pass, and the gap-test commit** (ec87459).
+  - 114 defects were planted, one at a time, over every line R-L2 changed in `lib/_case_seal.js`, `lib/_case_http.js`, `lib/_case_page.js` and `lib/_case_unregister.js`, with the whole suite run against each. The unit's own tests caught 76, and none timed out.
+  - The 38 that survived, by place:
+    - the note's form by its version (S09-S11) and `sealedWithRegistration` (S17-S19);
+    - the removal's creating commit when none is given, and its read-back (S22-S25, S27);
+    - the walk of a path's history (S31-S34, S39) and the match of a removal to its note (S44, S45);
+    - completion's reports and guards (S50-S54, S56, S57, S59);
+    - the index pin's `auth_note` (S72), and the creating commit the sealer and the commit path hand the removal (S75, H01);
+    - the commit path's refusals in full (H04-H07);
+    - the unread note's row and the kept page (P05, P13, P14);
+    - the removal guard's version check and its commits read (U02, U06).
+  - 12 gap tests in `test/case_rl2.test.js` catch 35 of them.
+  - Three are left as equivalent. S31: a path with one commit and no file now yields no removal either way. S56: the sealed branch returns before the line it changes. P14: a removal whose note could not be verified always has an unverified or unread note, which the kept-page check already refuses.
+- Counts, as `npm test` prints them (a bare `node --test` adds the 7 files in `test/helpers/` to tests and to passes):
+  - 0ccad6d (R-L2): 1544 tests, 1541 pass, 2 skipped, 0 fail, 1 todo.
+  - ec87459 (gap tests): 1556 tests, 1553 pass, 2 skipped, 0 fail, 1 todo. A bare `node --test`: 1563 and 1560.
+  - The change log commit changes no test, and the final tip prints what ec87459 prints.
+
 ## 2026-10-13: Unit R-L: the withdrawn-tape listing removed, a signed note for every removal, and a pin chain that always advances; and eight follow-ups to R-J3 (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The listing, removed (L1, L7).** The withdrawn-tape listing introduced in unit R-N was removed before release. A list keyed on a tape digest was a permanent, one-sided way for a stranger to stop a published tape from ever being compared here, one changed byte evaded it, and the service cannot recall bytes a counterparty already holds.
