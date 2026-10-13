@@ -532,9 +532,10 @@ test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1
 
   // the sentence, in the reveal's answer and in lib/_case_seal.js's header
   assert.equal(r.body.anchor_note, S.ANCHOR_NOTE);
-  assert.match(S.ANCHOR_NOTE, /pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record names a head .* not as a log-tree leaf/);
+  // unit R-J (J2): a daily anchor record in this repository, and the proof not checked
+  assert.match(S.ANCHOR_NOTE, /pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record in this repository names a head .* not as a log-tree leaf/);
   const header = fs.readFileSync(path.join(ROOT, "lib", "_case_seal.js"), "utf-8").replace(/\r\n/g, "\n").split("\n").filter((l) => l.startsWith("//")).map((l) => l.replace(/^\/\/ ?/, "")).join(" ");
-  assert.match(header.replace(/\s+/g, " "), /a case is pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record names a head that holds that pin \(THE ANCHOR WORDS, below\), not as a log-tree leaf/);
+  assert.match(header.replace(/\s+/g, " "), /a case is pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record in this repository names a head that holds that pin \(THE ANCHOR WORDS, below; the OpenTimestamps proof is not checked: unit R-J, J2\), not as a log-tree leaf/);
 });
 
 // =============================================================================

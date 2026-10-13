@@ -444,6 +444,7 @@ async function sealedCase({ pinFails = false } = {}) {
 // key it does not list is signer_unlisted), as RECEIPT_DOC does
 async function page(id = ID, keyDocument = RECEIPT_DOC) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.93.0.1" } }), res, { now: REVEAL_AT + 3600000, keyDocument });
   return { status: res._status, html: String(res._body) };
 }

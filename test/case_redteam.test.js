@@ -37,7 +37,7 @@
 //     commit_after_withdrawal.
 //   - GPT-5.6 §1.2, a reference before the case anchor exists: FIX D
 //     (lib/_case_http.js ?op=case-reference, step 1c). A case whose state is
-//     not pinned or anchored (Design J's words) is 409 case_not_anchored,
+//     not pinned or anchored (Design J's words) is 409 case_not_pinned (named case_not_anchored before unit R-J),
 //     with its state; no row is written.
 //   - GPT-5.6 §1.3, a comparison that ran leaving a clean COMMITTED case:
 //     FIX E, THE TWO-PHASE REVEAL (lib/_case_http.js). The reveal writes
@@ -265,6 +265,7 @@ async function reference(body, { now = REVEAL_AT + 3600000 } = {}) {
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res, { now, keyDocument });
   return { status: res._status, html: String(res._body) };
 }
@@ -335,8 +336,8 @@ test('GPT-5.6 §1.2 (and Gemini §1, intermediate states): "A reference may be a
   const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
   assert.notEqual(r.status, 201, "a reference row is appended only once the case is anchored");
   assert.deepEqual(referenceFiles(id), []);
-  // FIX D: refused 409 case_not_anchored, with the state to retry on
-  assert.deepEqual([r.status, r.body.error_code, r.body.state], [409, "case_not_anchored", "commit_unrecorded"]);
+  // FIX D: refused 409 case_not_pinned (unit R-J, J8), with the state to retry on
+  assert.deepEqual([r.status, r.body.error_code, r.body.state], [409, "case_not_pinned", "commit_unrecorded"]);
 });
 
 test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comparison, the system has run the comparison but leaves only a normal COMMITTED case" (the sealer, run mid-reveal, reports it as not_sealed)', async (t) => {
@@ -869,6 +870,7 @@ test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the c
   // the page's environment does not decide either
   for (const env of [{}, { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { [receipts.VERIFIER_ENV]: WRONG_RECEIPT_KEY.verifier }]) {
     const res = makeRes();
+    CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res,
       { now: REVEAL_AT + 3600000, keyDocument: KEYS_DOC, env });
     assert.match(String(res._body), /<h2>The verdict<\/h2>/, JSON.stringify(Object.keys(env)));

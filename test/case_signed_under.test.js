@@ -505,6 +505,7 @@ test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, networ
   assert.equal(ref.body.reason, "http_404");
   // the page: could not look, 503, neither the verdict nor DOES NOT VERIFY
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.97.0.1" } }), res,
     { now: REVEAL_AT + 3600000, keyDocument: DOC, env: {} });
   const html = String(res._body);
@@ -557,6 +558,7 @@ test("AN UNREADABLE CURRENT DOCUMENT: whether a key was since revoked cannot be 
 
 async function pageOf(id, { keyDocument = DOC, env = {} } = {}) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.98.0.${(ipSeq += 1) & 255}` } }), res,
     { now: REVEAL_AT + 3600000, keyDocument, env });
   return { status: res._status, html: String(res._body) };

@@ -151,6 +151,7 @@ async function commit(id, p, key = REG.KEYS[p.role], now = NOW) {
 }
 async function casePage(id, now = REVEAL_AT) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.95.0.1" } }), res, { now, keyDocument: KEYS_DOC });
   return { status: res._status, html: String(res._body) };
 }

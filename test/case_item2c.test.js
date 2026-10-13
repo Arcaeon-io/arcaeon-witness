@@ -559,6 +559,7 @@ async function reference(body, { now = REVEAL_AT + 3600000, env = SIGNED, keyDoc
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": freshIp() } }), res, { now, keyDocument });
   return { status: res._status, html: String(res._body), headers: res._headers };
 }
@@ -814,7 +815,9 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.equal(row.signed_by, CASE_KEY_ID);
   assert.equal(S.publishedSignatureReason(row, KEYS_DOC), null, "signed with the case key");
   assert.match(row.anchor_note, /no pin of its own/);
-  assert.match(row.anchor_note, /pins-repository commit that writes it and by the daily anchor of the repository head/);
+  // unit R-J (J1): the row's sentence, version 2
+  assert.match(row.anchor_note, /recorded by the pins-repository commit that writes it and listed by the case's next pin; it is anchored only when that pin is/);
+  assert.equal(row.note_version, 2);
   // the sealed case is untouched, and records in it is still the count at seal time
   assert.deepEqual(storedCase(id), sealed);
   assert.equal((await S.liveRecords(storedCase(id), { keyDocument: KEYS_DOC })).records, 2, "the live count, from the row");

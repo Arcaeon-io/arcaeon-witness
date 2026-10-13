@@ -148,6 +148,7 @@ async function sealedCase(scope, { pinFails = false } = {}) {
 }
 async function casePage(id) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.98.0.${(ipSeq += 1) & 255}` } }), res,
     { now: REVEAL_AT + 3600000, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -182,7 +183,7 @@ test("PINNED: a sealed case whose pin holds its chain reads pinned, naming the c
   const g0 = gh.getLog.length;
   const c0 = gh.commitsLog.length;
   const r0 = gh.rawLog.length;
-  const st = await S.anchorState(id, chainOf(id));
+  const st = await S.anchorState(id, storedCase(id)); // unit R-J (J4): the case served, held to its bytes at case_commit
   assert.equal(st.pin, "pinned");
   assert.deepEqual(st.pin_commit, { sha: wrote.sha, date: wrote.date });
   assert.equal(st.anchor, null, "no daily anchor record holds it");
@@ -201,7 +202,8 @@ test("ANCHORED: a daily anchor record whose head holds the pin reads anchored, n
   assert.equal(st.pin, "anchored");
   const rc = gh.commitsFor(PINS, a.path)[0];
   assert.equal(rc.sha, a.commit);
-  assert.deepEqual(st.anchor, { path: a.path, head_commit: a.head, claimed_at: a.claimedAt, record_commit: { sha: a.commit, date: rc.date } });
+  assert.deepEqual(st.anchor, { path: a.path, head_commit: a.head, claimed_at: a.claimedAt, record_commit: { sha: a.commit, date: rc.date }, proof: "unchecked" },
+    "unit R-J (J2): the OpenTimestamps proof is not checked, and the state says so");
   assert.deepEqual(st.pin_commit.sha, wroteIt(S.pinPaths(id).seq).sha, "the pin's own commit is named too");
   // the pin was read at the head the record names, and the record at the commit that wrote it
   assert.ok(gh.rawLog.includes(`${PINS}@${a.head}:${S.pinPaths(id).seq}`));
@@ -349,12 +351,13 @@ test("THE PAGE: pinned names the commit that wrote the pin and says no daily anc
   assert.ok(pinned.includes(`pinned at commit <a ${commitLink(wrote.sha)}`), "the pin's commit, linked");
   assert.match(pinned, /\(the pins repository&#39;s commit time\)/);
   assert.match(pinned, /pinned, not anchored yet: no daily anchor record read on this request holds its pin/);
-  assert.ok(!pinned.includes("anchored: a daily anchor record holds its pin"));
+  assert.ok(!pinned.includes("anchored: a daily anchor record in this repository names a head that holds this pin"));
   assert.ok(!pinned.includes("anchored: its pin"), "the old words are gone");
 
   const a = dailyAnchor(pinDay(id));
   const anchored = (await casePage(id)).html;
-  assert.match(anchored, /anchored: a daily anchor record holds its pin/);
+  // unit R-J (J2): what is checked, and that the proof is not
+  assert.match(anchored, /anchored: a daily anchor record in this repository names a head that holds this pin; this page does not check the OpenTimestamps proof\./);
   assert.ok(anchored.includes(`href="${PINS_URL}/blob/${a.commit}/${a.path}"`), "the record, at the commit that wrote it");
   assert.ok(anchored.includes(`written at commit <a ${commitLink(a.commit)}`), "the record's own commit");
   assert.ok(anchored.includes(`names the head <a ${commitLink(a.head)}`), "the head of the pins repository it names");
@@ -367,7 +370,8 @@ test("THE PAGE: pinned names the commit that wrote the pin and says no daily anc
 });
 
 test("THE NOTE: a case is pinned by the commit that writes its pin and anchored only by a daily anchor record, named with that record's commit", () => {
-  assert.match(S.ANCHOR_NOTE, /^A case is pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record names a head of the pins repository that holds that pin; the record's own commit is named beside the word\./);
+  // unit R-J (J2): a daily anchor record in this repository, and the proof not checked
+  assert.match(S.ANCHOR_NOTE, /^A case is pinned by the pins-repository commit that writes its pin, and anchored only when a daily anchor record in this repository names a head that holds that pin; this service does not check the OpenTimestamps proof\. The record's own commit is named beside the word\./);
   assert.match(S.ANCHOR_NOTE, /not as a log-tree leaf/);
   assert.ok(!/is anchored by the pins-repository commit/.test(S.ANCHOR_NOTE), "a commit alone never anchors");
 });
@@ -430,7 +434,7 @@ test("TWO WRITES: the reveal reads back the commit the pins repository assigned 
   }
 });
 
-test("THE VERIFIER NEVER TRUSTS case_commit AS AN ID: a pin naming a commit at which the case file is not the case its chain names is pin_commit_mismatch, never pinned and never anchored; a commit it cannot read it at is could_not_look", async () => {
+test("THE VERIFIER NEVER TRUSTS case_commit AS AN ID: a pin naming a commit at which the case file is not the case served, byte for byte, is pin_commit_mismatch, never pinned and never anchored; since unit R-J (J3) so is one naming a commit that does not exist; only a read that fails is could_not_look", async () => {
   const { id } = await sealedCase("J mismatch");
   const chain = chainOf(id);
   const opened = gh.commitsFor(PINS, C.casePath(id)).slice(-1)[0].sha; // the case file as opened, not as sealed
@@ -438,17 +442,19 @@ test("THE VERIFIER NEVER TRUSTS case_commit AS AN ID: a pin naming a commit at w
   const a = dailyAnchor(dayOf(Date.now() + DAY));
   const st = await S.anchorState(id, chain);
   assert.equal(st.pin, "pin_commit_mismatch");
-  assert.equal(st.reason, "case_at_commit_is_another_case");
+  assert.equal(st.reason, "case_at_commit_differs");
   assert.equal(st.case_commit, opened);
   assert.ok(gh.rawLog.includes(`${PINS}@${opened}:${C.casePath(id)}`), "it read the case file at the commit the pin names");
   assert.ok(!gh.rawLog.some((k) => k.startsWith(`${PINS}@${a.head}:`)), "and looked no further: never anchored");
   const page = (await casePage(id)).html;
-  assert.match(page, /pin_commit_mismatch: its pin names commit <a [^>]+>[0-9a-f]{12}<\/a> for the case file, and the case file at that commit is not the case whose chain the pin holds\. Never pinned, never anchored\./);
+  assert.match(page, /pin_commit_mismatch: its pin names commit <a [^>]+>[0-9a-f]{12}<\/a> for the case file, and that commit of the pins repository's branch does not hold this case file byte for byte \(case_at_commit_differs\)\. Never pinned, never anchored\./);
   assert.ok(!page.includes("pinned at commit"));
-  // a commit the raw host does not serve the file at: no claim
+  // unit R-J (J3), inverted: a commit the repository does not have is a
+  // mismatch, never could_not_look (its existence read from the commits API)
   S._internal.clearCommitFiles();
   plantPin(id, chain, "f".repeat(40));
-  assert.deepEqual(await S.anchorState(id, chain), { pin: "could_not_look", reason: "case_at_commit_http_404" });
+  const forged = await S.anchorState(id, chain);
+  assert.deepEqual([forged.pin, forged.reason, forged.case_commit], ["pin_commit_mismatch", "case_commit_not_found", "f".repeat(40)]);
   gh.forceRawFailure(1, 503, `:${C.casePath(id)}`);
   plantPin(id, chain, sealCommit(id));
   assert.deepEqual(await S.anchorState(id, chain), { pin: "could_not_look", reason: "case_at_commit_http_503" });
@@ -530,7 +536,7 @@ test("SWAPPED FILE: a late retry that would pin a different commit of a swapped 
   }
   assert.ok(swapCommit, "fixture: the swap happened during the read-back");
   assert.deepEqual(run.newly_pinned, []);
-  assert.deepEqual(run.refused, [{ case_id: id, code: "pin_commit_mismatch", reason: "case_at_commit_is_another_case" }]);
+  assert.deepEqual(run.refused, [{ case_id: id, code: "pin_commit_mismatch", reason: "case_at_commit_differs" }]);
   assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "nothing pinned");
   assert.equal(gh.has(PINS, S.pinPaths(id).latest), false);
 
@@ -544,7 +550,7 @@ test("SWAPPED FILE: a late retry that would pin a different commit of a swapped 
   assert.match((await casePage(id)).html, /pin_commit_mismatch/);
   const again = await S.anchorPending({ now: REVEAL_AT + 120000, keyDocument: DOC });
   assert.deepEqual(again.already, [], "never read as pinned");
-  assert.deepEqual(again.refused, [{ case_id: id, code: "pin_commit_mismatch", reason: "case_at_commit_is_another_case" }]);
+  assert.deepEqual(again.refused, [{ case_id: id, code: "pin_commit_mismatch", reason: "case_at_commit_differs" }]);
 });
 
 // =============================================================================
@@ -652,7 +658,7 @@ test("A ROW SWAPPED WHILE THE SEALER READS ITS COMMIT BACK IS NOT LISTED; A PIN 
   gh.seed(PINS, S._internal.pinPath(c.id, 2), bad);
   gh.seed(PINS, S.pinPaths(c.id).latest, bad);
   const line = rowLine((await casePage(c.id)).html, 1);
-  assert.match(line, /pin_commit_mismatch: pin 2 names commit <a [^>]+>[0-9a-f]{12}<\/a> for this row, and the row at that commit is another row/);
+  assert.match(line, /pin_commit_mismatch: pin 2 names commit <a [^>]+>[0-9a-f]{12}<\/a> for this row, and that commit of the pins repository's branch does not hold this row byte for byte \(reference_at_commit_differs\)/);
   assert.ok(!line.includes("written at commit"));
 });
 
@@ -726,6 +732,7 @@ test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded
   const current = "c".repeat(40);
   const render = async (keyDocument, env) => {
     const res = makeRes();
+    CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: c.id }, headers: { "x-forwarded-for": `10.98.1.${(ipSeq += 1) & 255}` } }), res,
       { now: REVEAL_AT + 3600000, keyDocument, env });
     return String(res._body);
@@ -740,7 +747,7 @@ test("EVERY COMMIT IS A LINK: on a sealed page, anchored and with a row recorded
   const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
   assert.equal(marked.ok, true, JSON.stringify(marked));
   const banner = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: current });
-  assert.match(page, /anchored: a daily anchor record holds its pin/, "fixture: anchored");
+  assert.match(page, /anchored: a daily anchor record in this repository names a head that holds this pin/, "fixture: anchored");
   assert.match(rowLine(page, 1), /written at commit/, "fixture: the row, recorded");
   assert.match(banner, /A key that signed this case is revoked\./, "fixture: the banner");
   const one = commitsOnPage(page);
@@ -869,7 +876,7 @@ test("B03 (a commit whose case file is not JSON): a pin naming it is pin_commit_
   plantPin(id, chainOf(id), garbage);
   const st = await S.anchorState(id, chainOf(id));
   assert.equal(st.pin, "pin_commit_mismatch");
-  assert.equal(st.reason, "case_at_commit_is_another_case");
+  assert.equal(st.reason, "case_at_commit_differs");
 });
 
 test("C01, C02 (a numbered record holds its own seq): the seal's record read at its commit with another seq is a conflict, and an orphan at seq 1 that says seq 2 is never adopted", async () => {
@@ -991,7 +998,7 @@ test("C13 (the pointer moved from the record read): when another writer moves th
 test("C18 (a row of a case not pinned yet): its commit is commit_unrecorded, the case's own second phase not done, never could_not_look", async () => {
   const c = await sealedCase("J row unpinned", { pinFails: true });
   // a row on a case not pinned: since red-team fix D the handler refuses one, so it is planted, as a row written before would be
-  assert.equal((await reference(c, "a", "early-row")).body.error_code, "case_not_anchored", "fixture: the handler refuses it now");
+  assert.equal((await reference(c, "a", "early-row")).body.error_code, "case_not_pinned", "fixture: the handler refuses it now");
   const row = S.referenceRow({ caseId: c.id, seq: 1, crossReference: { ...XREF, reference: "early-row" }, recordedAt: C.utcSeconds(REVEAL_AT + 1800000),
     appendedBy: "role:a" }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   gh.seed(PINS, rowPath(c.id, 1), row);

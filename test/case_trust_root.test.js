@@ -196,6 +196,7 @@ async function referenceAs(id, p, keyDocument) {
 }
 async function pageOf(id, keyDocument) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.94.0.${(ipSeq += 1) & 255}` } }), res,
     { now: REVEAL_AT + 3600000, keyDocument, env: {} });
   return { status: res._status, html: String(res._body) };
@@ -289,7 +290,10 @@ test("I1: a key the current document lists as revoked with no marker is signer_r
   assert.deepEqual([(await S.sealedRecordReason(c.k, CASE_REVOKED)).code, (await S.sealedRecordReason(c.k, CASE_REVOKED)).code],
     ["signer_revoked", "signer_since_revoked"], "an unreadable marker is not remembered");
   S._internal.clearDocumentCache();
-  gh.forceCompareFailure(1, 503, PINS);
+  // the order compare itself, compare/<R>...<P> (since unit R-J, J6, the case
+  // commit's own branch read comes first, compare/main...<P>)
+  const R = gh.commitsFor(PINS, path).slice(-1)[0].sha;
+  gh.forceCompareFailure(1, 503, `${PINS}:${R}...`);
   const unread = await S.sealedRecordReason(c.k, CASE_REVOKED);
   assert.deepEqual([unread.code, unread.reason], ["signer_revoked", "revocation_order_unreadable"]);
 });

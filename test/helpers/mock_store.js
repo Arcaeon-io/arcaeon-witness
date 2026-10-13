@@ -76,6 +76,13 @@
 //        page whatever per_page asks (unit R-N, n2: a short page is not the
 //        last).
 //
+//   GET  /repos/<repo>/commits/<sha> -> 200 {sha, commit} | 422 (unit R-J,
+//        J3: whether a commit exists, as GitHub answers it: 422 "No commit
+//        found for SHA" for one it does not have). A commit of the
+//        repository's branch, or one planted with seedSideCommit(), exists.
+//        commitLog records every read ("repo:sha"), and forceCommitFailure()
+//        makes reads fail.
+//
 //   GET  /repos/<repo>/branches/<name> -> 200 {name, commit} | 404 (unit R-I2:
 //        whether the branch a compare read named exists). branchLog records
 //        every read, and forceBranchFailure() makes reads fail. seed(repo,
@@ -158,6 +165,13 @@ class MockGitHubStore {
     this.branches = new Map(); // repo -> its branch's name ("main" unless set)
     this.branchLog = []; // ["repo:name"] — every branch read, in order
     this._forcedBranchFailure = null; // {remaining, status}
+    this.commitLog = []; // ["repo:sha"] — every single-commit read, in order (unit R-J)
+    this._forcedCommitFailure = null; // {remaining, status}
+  }
+
+  // Force the next `n` single-commit reads to fail with `status` (0: network error).
+  forceCommitFailure(n = 1, status = 500) {
+    this._forcedCommitFailure = { remaining: n, status };
   }
 
   // A public file's text at one commit, served on the raw host.
@@ -404,6 +418,23 @@ class MockGitHubStore {
       if (bi < 0 || hi < 0) return fakeResponse(404, { message: "Not Found" });
       const status = hi < bi ? "behind" : hi === bi ? "identical" : "ahead";
       return fakeResponse(200, { status, ahead_by: Math.max(0, hi - bi), behind_by: Math.max(0, bi - hi) });
+    }
+
+    // Single-commit read (lib/_store.js commitExists; unit R-J): see the header.
+    const one = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/commits\/([^/]+)$/);
+    if (one && ((opts && opts.method) || "GET") === "GET") {
+      this.commitLog.push(`${one[1]}:${one[2]}`);
+      const forced = this._forcedCommitFailure;
+      if (forced && forced.remaining > 0) {
+        forced.remaining -= 1;
+        if (forced.status === 0) throw new TypeError("mock: fetch failed (forced network error)");
+        return fakeResponse(forced.status, { message: "mock: forced commit read failure" });
+      }
+      const side = this.sideCommits.get(one[1]) || new Set();
+      if (!this._commitsOf(one[1]).some((c) => c.sha === one[2]) && !side.has(one[2])) {
+        return fakeResponse(422, { message: `No commit found for SHA: ${one[2]}` });
+      }
+      return fakeResponse(200, { sha: one[2], commit: { message: "mock" } });
     }
 
     // Commits-for-path read (_store.js listCommits): see the header.

@@ -177,6 +177,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
   const res = makeRes();
+  CP._internal.clearPageCache(); // unit R-J (J7): each view here reads afresh
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
     { now, keyDocument: DOC, env: {} });
   return { status: res._status, html: String(res._body) };

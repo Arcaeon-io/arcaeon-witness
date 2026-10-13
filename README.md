@@ -592,6 +592,11 @@ true, complete, or honestly produced; only that they were not fabricated after
 the fact. Each day's anchor covers all history through the previous day's
 anchor commits, forming a chain.
 
+A case page's "anchored" claims less than this. It says a daily anchor
+record in this repository names a head of the pins repository's branch that
+holds the case's pin, read at that head. The page does not check the
+OpenTimestamps proof; check it yourself with `ots verify`, as above.
+
 ## Witness log
 
 One cumulative Merkle tree (RFC 9162 hashing) over every create-only record
