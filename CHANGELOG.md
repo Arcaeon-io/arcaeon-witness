@@ -1,5 +1,24 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-13: Unit R-I2, the must-fail pass over the lines it changed, and the tests that close its gaps (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The pass.** One pass over only the lines unit R-I2 changed. Mutants went into `lib/_case_seal.js`, `lib/_case_page.js`, `lib/_case_http.js`, `lib/_store.js`, `tools/record_key_revocation.js`, `tools/preview_dry_run.js`, `README.md` and the key document's notes. 62 defects were planted one at a time, with the whole suite run against each.
+- **The result.** The unit's own tests caught 51. Six new tests in `test/case_trust_root.test.js` close 8 of the 11 that survived.
+- **The 3 left are equivalent:**
+  - **P10:** the off-branch wording applied to the current document too. A current document that does not read never has the reason `commit_not_on_branch`.
+  - **S04:** a fallback reason that is never needed. Every non-pinned state `anchorState` answers carries a reason string.
+  - **ST01:** a branch-read 404 that throws instead. The caller reads a throw and a 404 alike, as a branch that is not there.
+- **What the new tests pin:**
+  - the could-not-look headings (a commit off the branch, the current document);
+  - `pin_unreadable` with the judge's reason for a pointer that is not a pin;
+  - the pin token on the branch read;
+  - one commits read for a short history;
+  - a commit that removed the marker read as nothing there;
+  - a numbered record with no commit read as could_not_look, not a crash;
+  - the tool's printed usage;
+  - the notes' "pinned before it" and "no later write moves it" sentences.
+- Suite 1192 -> 1198 tests, 0 fail, 3 todo. Here: 1193 pass and the 2 environment skips.
+
 ## 2026-10-13: Unit R-I2: fixes from the second reader's pass over R-I (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **B1, R past the first page** (`lib/_case_seal.js`).
