@@ -419,3 +419,148 @@ test("J8: a reference to a sealed case whose pin did not land is 409 case_not_pi
     assert.ok(!fs.readFileSync(path.join(__dirname, "..", "lib", f), "utf8").includes("case_not_anchored"), f);
   }
 });
+
+// =============================================================================
+// MUST-FAIL GAP (unit R-J): the mutants the pass over the lines R-J changed
+// left alive, each caught here
+// =============================================================================
+
+test("MUST-FAIL GAP (A03): a row whose note_version is not 2 is refused by name", async () => {
+  const { id } = await sealedCase("RJ gap note version");
+  const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
+  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
+  for (const v of [1, 3, "2"]) assert.equal(C.validateReferenceRow({ ...good, note_version: v }).code, "unknown_version", String(v));
+});
+
+test("MUST-FAIL GAP (B06, B07): a commit's existence is read once and kept", async () => {
+  const early = gh.seedText(PINS, "notes/gap-early.txt", "before the case\n");
+  const { id } = await sealedCase("RJ gap exists once");
+  plantPin(id, chainOf(id), early);
+  for (let i = 0; i < 2; i += 1) assert.equal((await S.anchorState(id, storedCase(id))).reason, "case_absent_at_commit");
+  assert.equal(gh.commitLog.filter((k) => k === `${PINS}:${early}`).length, 1);
+});
+
+test("MUST-FAIL GAP (B23): a head whose branch read fails leaves the case pinned, its anchor could_not_look", async () => {
+  const { id } = await sealedCase("RJ gap head unknown");
+  const a = dailyAnchor(pinDay(id));
+  gh.forceCompareFailure(1, 503, `...${a.head}`);
+  const st = await S.anchorState(id, storedCase(id));
+  assert.deepEqual([st.pin, st.anchor], ["pinned", { could_not_look: "anchor_head_compare_http_503" }]);
+});
+
+test("MUST-FAIL GAP (B25, B26): given a chain, the case read from the branch is served only when it has that chain; a read that fails is could_not_look", async () => {
+  const { id } = await sealedCase("RJ gap chain mode");
+  const other = sha("a chain that is not this case's");
+  plantPin(id, other, sealCommit(id));
+  assert.deepEqual(await S.anchorState(id, other).then((s) => [s.pin, s.reason]), ["pin_commit_mismatch", "case_at_commit_differs"]);
+  plantPin(id, chainOf(id), sealCommit(id));
+  gh.forceGetFailure(PINS, C.casePath(id), 1, 503);
+  assert.deepEqual(await S.anchorState(id, chainOf(id)), { pin: "could_not_look", reason: "case_unreadable" });
+});
+
+test("MUST-FAIL GAP (C01): a reference to a case whose anchored head holds no JSON is 409 anchor_conflict", async () => {
+  const c = await sealedCase("RJ gap reference head");
+  const p = S.pinPaths(c.id).seq;
+  const good = gh._repoMap(PINS).get(p).content;
+  gh._repoMap(PINS).get(p).content = "not json\n";
+  const bad = gh.addCommit(PINS, p, "mock: the numbered pin record rewritten as text");
+  dailyAnchor(pinDay(c.id), bad);
+  gh._repoMap(PINS).get(p).content = good;
+  gh.addCommit(PINS, p, "mock: put back");
+  const r = await reference(c);
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "anchor_conflict", "anchored_head_not_json"], JSON.stringify(r.body).slice(0, 300));
+});
+
+test("MUST-FAIL GAP (D04, D05, D06): the case commit row says the commit does not hold this case file byte for byte; an anchored page links the case file at case_commit; a page whose pin is not read links the branch's file", async () => {
+  const { id } = await sealedCase("RJ gap links");
+  dailyAnchor(pinDay(id));
+  const anchored = (await casePage(id)).html;
+  assert.match(anchored, /anchored: a daily anchor record/, "fixture: anchored");
+  assert.ok(anchored.includes(`href="${PINS_URL}/blob/${sealCommit(id)}/${C.casePath(id)}"`));
+  const early = gh.seedText(PINS, "notes/gap-other.txt", "x\n");
+  const { id: id2 } = await sealedCase("RJ gap mismatch page");
+  plantPin(id2, chainOf(id2), early);
+  const mismatch = (await casePage(id2)).html;
+  assert.ok(mismatch.includes("does not hold this case file byte for byte</td>"), "the case commit row");
+  assert.ok(mismatch.includes(`href="${PINS_URL}/blob/${store.BRANCH}/${C.casePath(id2)}"`), "the branch's file");
+  assert.ok(!mismatch.includes(`/blob/${early}/`));
+});
+
+test("MUST-FAIL GAP (D09, D10, D11): the cache answers only the same key document, never an earlier clock, and never a page that was not 200", async () => {
+  const { id } = await sealedCase("RJ gap cache keys");
+  const t0 = REVEAL_AT + 3600000;
+  await casePage(id, { now: t0 });
+  const view = async (now, keyDocument) => {
+    const r0 = reads();
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": `10.252.0.${(ipSeq += 1) & 255}` } }), res,
+      { now, keyDocument, env: {} });
+    return { status: res._status, read: reads() > r0 };
+  };
+  assert.deepEqual(await view(t0 + 1000, DOC), { status: 200, read: false }, "control: cached");
+  assert.equal((await view(t0 + 2000, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)))).read, true, "another key document");
+  CP._internal.clearPageCache();
+  await view(t0, DOC);
+  assert.equal((await view(t0 - 1000, DOC)).read, true, "an earlier clock");
+  // a page that was not 200 is never kept: the named document unreadable
+  CP._internal.clearPageCache();
+  S._internal.clearDocumentCache();
+  const su = storedCase(id).signed_under;
+  gh.forceRawFailure(2, 503, `@${su.document_commit}:`);
+  const down = await view(t0 + 5000, DOC);
+  assert.equal(down.status, 503, "fixture: the named document could not be read");
+  assert.equal((await view(t0 + 6000, DOC)).read, true, "read again after a 503");
+});
+
+test("MUST-FAIL GAP (B18): a row whose read at its commit fails is could_not_look, never pin_commit_mismatch", async () => {
+  const c = await sealedCase("RJ gap row read");
+  assert.equal((await reference(c)).status, 201);
+  await sealerRun();
+  const st = await S.anchorState(c.id, storedCase(c.id));
+  const live = await S.liveRecords(storedCase(c.id), { keyDocument: DOC });
+  S._internal.clearCommitFiles();
+  gh.forceRawFailure(1, 503, `:${rowPath(c.id, 1)}`);
+  const states = await S.referenceCommitStates(c.id, chainOf(c.id), st, live.rows);
+  assert.deepEqual([states.get(1).state, states.get(1).reason], ["could_not_look", "reference_at_commit_http_503"]);
+});
+
+test("MUST-FAIL GAP (B29, C04, D07): a reader that holds the case it serves never reads the case file again: the page, a reference, and the sealed check under a revoked key", async () => {
+  const caseReads = (id) => gh.getLog.filter((p) => p === C.casePath(id)).length;
+  const c = await sealedCase("RJ gap served once");
+  let r0 = caseReads(c.id);
+  assert.equal((await casePage(c.id)).status, 200);
+  assert.equal(caseReads(c.id) - r0, 1, "the page reads the case once");
+  r0 = caseReads(c.id);
+  assert.equal((await reference(c)).status, 201);
+  assert.equal(caseReads(c.id) - r0, 1, "a reference reads the case once");
+  const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
+  r0 = caseReads(c.id);
+  const answer = await S.sealedRecordReason(storedCase(c.id), revoked);
+  assert.deepEqual([answer.code, answer.reason], ["signer_revoked", "no_revocation_marker"]);
+  assert.equal(caseReads(c.id) - r0, 0, "the sealed check reads no case file");
+});
+
+test("MUST-FAIL GAP (D12): the page cache holds at most PAGE_CACHE_MAX (500) cases, dropping the oldest first", async () => {
+  const usage = () => gh.repos.get(process.env.GITHUB_USAGE_REPO) || new Map();
+  const ids = [];
+  for (let i = 0; i < 501; i += 1) {
+    // a fresh day's open quota and a fresh budget every fifteen opens
+    if (i % 15 === 0) {
+      for (const p of [...usage().keys()]) if (p.startsWith("case_opens/")) usage().delete(p);
+      require("../lib/_ratelimit.js").setStore(null);
+    }
+    const o = makeRes();
+    await H.handleCaseOpen(req("case-open", opening(`RJ gap cache bound ${i}`), OPEN_AUTH), o, { now: NOW });
+    assert.equal(o._status, 201, JSON.stringify(o._body).slice(0, 200));
+    ids.push(o._body.case_id);
+  }
+  require("../lib/_ratelimit.js").setStore(null);
+  CP._internal.clearPageCache();
+  const t0 = REVEAL_AT + 3600000;
+  for (const id of ids) assert.equal((await casePage(id, { now: t0, cached: true })).status, 200);
+  const r0 = reads();
+  await casePage(ids[500], { now: t0 + 1000, cached: true });
+  assert.equal(reads(), r0, "the newest is kept");
+  await casePage(ids[0], { now: t0 + 1000, cached: true });
+  assert.ok(reads() > r0, "the oldest was dropped");
+});
