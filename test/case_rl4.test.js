@@ -698,32 +698,6 @@ test("MUST-FAIL GAP (H36, H45): the file at the path that could not be read writ
   assert.deepEqual([lost.status, lost.body.error_code, lost.body.registration_recorded], [503, "store_error", false], JSON.stringify(lost.body));
 });
 
-test("MUST-FAIL GAP (H55): a retried withdrawal whose root before the withdrawal projects a file no longer at its path is 503 case_record_inconsistent (since unit R-L4b)", async () => {
-  const c = await committedCase("RL4 gap retry damaged");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "b")).content += " ";
-  const again = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([again.status, again.body.error_code], [503, "case_record_inconsistent"], JSON.stringify(again.body).slice(0, 200));
-});
-
-test("MUST-FAIL GAP (S06, S07, S09): the root before the withdrawal is read within its bound, a read that fails says so, and a version that is not a case is not taken", async () => {
-  const c = await committedCase("RL4 gap root bound");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  assert.equal((await S.rootBeforeWithdrawal(c.id)).ok, true, "fixture");
-  for (let i = 0; i < 5; i += 1) gh.addCommit(PINS, C.casePath(c.id), "mock: the withdrawn root again");
-  assert.deepEqual(await S.rootBeforeWithdrawal(c.id), { ok: false, reason: "withdrawal_commit_beyond_bound" });
-  const d = await committedCase("RL4 gap root unread");
-  assert.equal((await withdraw(d.id, d.b)).status, 201);
-  S._internal.clearCommitFiles();
-  gh.forceRawFailure(1, 503, `@${gh.commitsFor(PINS, C.casePath(d.id))[0].sha}:${C.casePath(d.id)}`);
-  assert.deepEqual(await S.rootBeforeWithdrawal(d.id), { ok: false, reason: "case_at_commit_http_503" });
-  const e = await committedCase("RL4 gap root not a case");
-  const rec = S.withdrawnRecord(storedCase(e.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: e.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
-  gh.seed(PINS, C.casePath(e.id), { not: "a case" }, { keepHistory: true });
-  gh.seed(PINS, C.casePath(e.id), rec, { keepHistory: true });
-  assert.deepEqual(await S.rootBeforeWithdrawal(e.id), { ok: false, reason: "case_before_withdrawal_unreadable" });
-});
-
 test("MUST-FAIL GAP (S21, S22, S24): the marker repair says a case it could not read and leaves a root that is not withdrawn; the sealer says a registration file it could not read", async () => {
   const c = await committedCase("RL4 gap marker");
   gh.forceGetFailure(PINS, C.casePath(c.id), 1, 503);

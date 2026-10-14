@@ -405,6 +405,7 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
   plant("withdrawn", 404, "not_a_party", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("withdrawn") } });
     gh.seed(PINS, C.casePath(id), { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+      commitments: storedCase(id).commitments,
       withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("the withdrawing salt") }, limits: C.LIMITS.slice(), signed_by: null, sig: null,
       sig_reason: "withdrawn in this test" });
     return revealBody(id, a, b);

@@ -116,6 +116,8 @@ const VERDICT = Object.freeze({
 });
 const WITHDRAWN = Object.freeze({
   v: 1, case_id: ID, protocol_version: "case/1", status: "WITHDRAWN", opened_at: OPENING.opened_at,
+  // since unit R-L5 the record keeps the root's projection as it stood
+  commitments: COMMITTED.commitments,
   withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("salt a") },
   limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "withdrawn in this test",
 });

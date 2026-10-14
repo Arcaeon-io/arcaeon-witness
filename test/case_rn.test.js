@@ -570,29 +570,17 @@ test("MUST-FAIL GAP (H04): the lease is released at the lease clock's time", asy
 });
 
 
-test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdrawal cannot be read is 503 naming it; a registration file that is not the one that root projected is 503 case_record_inconsistent (since unit R-L4b), and no receipt is issued; a deployment whose document is not confirmed issues no receipt", async () => {
+// Since unit R-L5 the refusal reads no history and no registration file
+// (the withdrawn record keeps the projection), so H13's and H17's arms went
+// with those reads; H19's stands.
+test("MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt", async () => {
   const c = await committedCase("RN gap refusal reads");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
-  S._internal.clearCommitFiles();
-  gh.forceCommitsFailure(PINS, C.casePath(c.id), 1, 503);
-  const u = await reveal(c, { body: ownOpening(c, "a") });
-  assert.deepEqual([u.status, u.body.error_code], [503, "store_unreachable"]);
-  // (since unit R-L4: the commitment comes from the root the withdrawal wrote over)
-  assert.match(u.body.error, /the case root before the withdrawal could not be read/);
   // a deployment naming a commit the readers cannot confirm
   const res = makeRes();
   await H.handleCaseReveal(req("case-reveal", ownOpening(c, "a")), res, { now: REVEAL_AT, env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: "9".repeat(40) }, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [503, "document_unavailable"], JSON.stringify(parsed(res)).slice(0, 200));
   assert.equal(has(parsed(res), "refusal_receipt"), false);
-  // a registration file changed after the root projected it (since unit R-L4b: 503 case_record_inconsistent)
-  const d = await committedCase("RN gap bad registration");
-  const reg = gh.read(PINS, REG.pathOf(gh, d.id, "a"));
-  gh.seed(PINS, REG.pathOf(gh, d.id, "a"), { ...reg, note: "not a registration field" }, { keepHistory: true });
-  const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
-  gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
-  const r = await reveal(d, { body: ownOpening(d, "a") });
-  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(r.body).slice(0, 200)); // unit R-L4e
-  assert.equal(has(r.body, "refusal_receipt"), false);
 });
 
 test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is written", async () => {

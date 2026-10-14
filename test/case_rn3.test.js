@@ -409,16 +409,14 @@ test("MUST-FAIL GAP (H06-H08; since unit R-L, L1, no listing): a root that moved
     JSON.stringify(lost.w.body));
 });
 
-test("MUST-FAIL GAP (H21): the retry's 503 names its case; and a signed record's 200 shows the case exactly as stored", async () => {
+// Since unit R-L5 the retry reads no registration file, so it has no 503 of
+// its own and that arm is gone.
+test("MUST-FAIL GAP (H21): a signed record's 200 shows the case exactly as stored", async () => {
   const c = await committedCase("RN3 gap retry body");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const again = await withdraw(c.id, c.b, { now: NOW + 4000 });
   assert.equal(again.status, 200);
   assert.deepEqual(again.body.case, storedCase(c.id), "signed: shown whole, sig_reason: null included");
-  // (since unit R-L, L1: the retry's 503 is its registration read failing)
-  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "b"), 1, 503);
-  const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([r.status, r.body.error_code, r.body.case_id], [503, "store_unreachable", c.id], JSON.stringify(r.body));
 });
 
 test("MUST-FAIL GAP (S02, S03, S04, S07): the window's start: G is odd, so a period of 2^63 ms moves it; a clock that is not finite or not whole never throws; every millisecond counts", () => {

@@ -389,10 +389,6 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   await drive("again: root failed, then expired", "tail", 409, "expired", () => withdraw(f1.id, f1.b, { now: Date.parse(DEADLINE) + 1000 }));
   await drive("again: lost to another", "tail", 409, "case_withdrawn", () => withdraw(byA.c.id, byA.c.b, { now: NOW + 5000 }));
   await drive("again: lost to a deadline", "tail", 409, "expired", () => withdraw(lostLate.c.id, lostLate.c.b, { now: NOW + 5000 }));
-  const rt = await committedCase("RN4 sweep retry read");
-  assert.equal((await withdraw(rt.id, rt.b)).status, 201);
-  gh.forceGetFailure(PINS, REG.pathOf(gh, rt.id, "b"), 1, 503);
-  await drive("again: withdrawn, registration unread", "plain", 503, "store_unreachable", () => withdraw(rt.id, rt.b, { now: NOW + 5000 }));
 
   for (const { label, kind, r } of out) {
     const text = JSON.stringify(r.body);
@@ -405,8 +401,9 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
     if (kind === "lost") assert.ok(r.body.error.includes(` ${LOST_TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);
   }
-  // since unit R-RV the three reveal_attempted arms are gone: 27
-  assert.ok(out.length >= 27, `driven: ${out.length}`);
+  // since unit R-RV the three reveal_attempted arms are gone, and since unit
+  // R-L5 the retry's registration read with its 503: 26
+  assert.ok(out.length >= 26, `driven: ${out.length}`);
 });
 
 test("R-N4 R6: the sealer's window, 30 entries five a run: an hourly run reads every entry within 12 runs and a daily run within 28, from every start time sampled, and some start needs all of them; the comment and the README say so", () => {
@@ -479,16 +476,5 @@ test("f1: a withdrawal whose lock could not be read or written (a write that may
   const b = await withdraw(w2.id, w2.b);
   assert.equal(b.body.error, `this case's lock could not be read or written; this is not a 'no'. ${LOCK_TAIL}`);
   assert.doesNotMatch(a.body.error + b.body.error, /A tape digest listed by an earlier/);
-});
-
-test("f4: the withdrawer's retry on a WITHDRAWN case whose registration cannot be read (a read failure, not an absence) is 503 'The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.'", async () => {
-  const c = await committedCase("f4 retry read fails");
-  assert.equal((await withdraw(c.id, c.b)).status, 201);
-  gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "b"), 1, 503);
-  const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
-  assert.deepEqual([r.status, r.body.error_code, r.body.error, r.body.case_id],
-    [503, "store_unreachable", "The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.", c.id], JSON.stringify(r.body));
-  // sent again once the read works: 200, the record as it stands
-  assert.equal((await withdraw(c.id, c.b, { now: NOW + 6000 })).status, 200);
 });
 

@@ -472,6 +472,7 @@ test("FIX 6: a case with the withdrawn marker is not considered for a pin (its c
   // (c) a WITHDRAWN root whose marker is missing: read once, terminal
   const x = await committedCase({ over: { scope_digest: sha("withdrawn root") } });
   gh.seed(PINS, C.casePath(x.id), { v: 1, case_id: x.id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+    commitments: storedCase(x.id).commitments,
     withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "unsigned in this test" });
   writes = gh.putLog.length;
   const r3 = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
@@ -536,7 +537,7 @@ function referenceFiles(id) {
 // WITHDRAWAL (design test 10, the race, the proof)
 // =============================================================================
 
-test("TEST 10: a withdrawal before the joint reveal publishes only the redacted record, signed with the case key, with no labels or commitments; the marker is written; withdrawal after the seal is refused", async () => {
+test("TEST 10: a withdrawal before the joint reveal publishes only the redacted record, signed with the case key, with no labels, keeping the root's commitments as they stood (since unit R-L5); the marker is written; withdrawal after the seal is refused", async () => {
   const { id, a, b } = await committedCase({ over: { scope_digest: sha("test 10") } });
   const before = storedCase(id);
   const regA = gh.read(PINS, REG.pathOf(gh, id, "a"));
@@ -554,12 +555,13 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   // Design N: the reason code, party_choice when the request names none
   assert.deepEqual(k.withdrawal, { by_role: "a", at: "2026-10-10T09:00:00Z", salt_sha256: C.saltSha256(a.salt), reason: "party_choice" });
   assert.deepEqual(k.limits, C.LIMITS.slice());
-  // no labels, no commitments
+  // no labels; the commitments exactly as the root projected them (unit R-L5)
   const text = JSON.stringify(k);
-  for (const leak of [AGENT.label, TOOL.label, a.commitment_sha256, b.commitment_sha256, before.scope_digest, regA.stamp_commit, regB.stamp_commit]) {
+  for (const leak of [AGENT.label, TOOL.label, before.scope_digest]) {
     assert.ok(!text.includes(leak), `the redacted record carries ${leak.slice(0, 20)}`);
   }
-  for (const f of ["party_a", "party_b", "commitments", "scope_digest", "reveals", "verdict"]) assert.ok(!(f in k), f);
+  for (const f of ["party_a", "party_b", "scope_digest", "reveals", "verdict"]) assert.ok(!(f in k), f);
+  assert.deepEqual(k.commitments, before.commitments, "the projection, exactly as it stood");
   // signed with the case key, confirmed by the document
   assert.equal(k.signed_by, CASE_KEY_ID);
   assert.equal(S.publishedSignatureReason(k, KEYS_DOC), null);
@@ -591,7 +593,7 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.equal(gh.has(PINS, C.withdrawnMarkerPath(s.id)), false);
   // MUST-FAIL ARM: the case object it replaced carried both labels and both commitments
   const full = JSON.stringify(before);
-  assert.ok(full.includes(AGENT.label) && full.includes(a.commitment_sha256));
+  assert.ok(full.includes(AGENT.label) && full.includes(a.commitment_sha256) && full.includes(b.commitment_sha256));
 });
 
 test("WITHDRAWAL: a preimage that does not recompute the named role's registration is refused withdraw_unauthorized; nothing is written, and nothing of any preimage but salt_sha256 is kept or logged", async (t) => {

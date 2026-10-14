@@ -670,15 +670,23 @@ test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which
   assert.match(page.html, /by role b, at /);
 });
 
-// unit R-N (T1): the redacted root carries no label and no commitment
-// (design: WITHDRAWN_FIELDS), asserted as it is.
+// unit R-N (T1): the redacted root carries no label (design:
+// WITHDRAWN_FIELDS), asserted as it is. DECIDED (unit R-L5): it keeps the
+// case root's commitments exactly as they stood, inside the signed record,
+// so the commitments are identified and the parties' labels are not.
 test('GPT-5.6 §2B: "It does not identify the parties, commitments"', async () => {
   const { id, a, b } = await committedCase({ scope_digest: sha("2B parties") });
+  const before = storedCase(id);
   assert.equal((await withdraw(proofOf(id, b))).status, 201);
-  const text = JSON.stringify(storedCase(id));
-  for (const s of ["agent-operator@example.com", "tool-operator@example.com", a.commitment_sha256, b.commitment_sha256]) {
+  const k = storedCase(id);
+  const text = JSON.stringify(k);
+  for (const s of ["agent-operator@example.com", "tool-operator@example.com"]) {
     assert.ok(!text.includes(s), `the redacted root does not carry ${s.slice(0, 24)}`);
   }
+  assert.ok(!("party_a" in k) && !("party_b" in k));
+  assert.deepEqual(k.commitments, before.commitments, "unit R-L5: the projection kept as it stood");
+  assert.equal(k.commitments.a.commitment_sha256, a.commitment_sha256);
+  assert.equal(k.commitments.b.commitment_sha256, b.commitment_sha256);
 });
 
 test('GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): "Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, or lifetime addendum quota"', async () => {

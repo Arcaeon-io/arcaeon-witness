@@ -838,6 +838,13 @@ answers. A withdrawal that loses to a seal or the deadline writes nothing to
 the pins repository. A withdrawal request that wrote nothing says "This
 request wrote nothing."
 
+The withdrawal record keeps the case root's `commitments` exactly as they
+stood when it was written, inside the signed record. Every reader of a
+withdrawn case takes a role's standing from them: the refusal receipt, a
+withdrawal sent again, and the case page. None of them reads a registration
+file or the root's history to decide it, and a registration file the record
+does not project does not stand.
+
 The joint reveal writes the case root once: the sealed case, by
 compare-and-swap over the COMMITTED root it read. A reveal that fails
 writes nothing, so the case stays COMMITTED as it was, and either role may

@@ -604,6 +604,7 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
   gh.seed(PINS, C.casePath(vid), verdictCase);
   const wid = C.deriveCaseId(C.validateOpening(opening({ scope_digest: sha("withdrawn case") })).opening);
   const withdrawn = { v: 1, case_id: wid, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+    commitments: { a: null, b: entry(sha("w"), "b") },
     withdrawal: { by_role: "b", at: "2026-10-10T07:55:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "unsigned in this test" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: the planted WITHDRAWN record is valid");
   gh.seed(PINS, C.casePath(wid), withdrawn);
@@ -1214,7 +1215,11 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
   const a = party(id, "a", "agent tape\n");
   plantStamp(a.commitment_sha256);
   const cpath = C.casePath(id);
+  // since unit R-L5 the record keeps the projection: b's, which b proved
+  const bEntry = { commitment_sha256: sha("b's commitment"), registered_at: "2026-10-10T07:50:00Z", stamp_commit: "5".repeat(40),
+    stamped_at: "2026-10-10T07:49:00.000Z", key_id: REG.keyIdOf(REG.KEYS.b), registration_sha256: sha("registration file b"), claim_sha256: sha("claim b") };
   const withdrawn = { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
+    commitments: { a: null, b: bEntry },
     withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "withdrawn in this test" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: a valid redacted record");
   const viaMock = global.fetch;
@@ -1303,12 +1308,18 @@ test("SCHEMA: an unknown field, an altered limit, a stored EXPIRED, a wrong id, 
     assert.equal(r.ok, false, code);
     assert.equal(r.code, code, `${code}: got ${JSON.stringify(r)}`);
   }
-  // a redacted withdrawal that still carries a label is not the redacted form
+  // a redacted withdrawal that still carries a label is not the redacted form;
+  // since unit R-L5 it keeps the projection, and one without it is refused
+  const aEntry = { commitment_sha256: sha("a's commitment"), registered_at: "2026-10-10T07:35:00Z", stamp_commit: "5".repeat(40),
+    stamped_at: "2026-10-10T07:34:00.000Z", key_id: REG.keyIdOf(REG.KEYS.a), registration_sha256: sha("registration file a"), claim_sha256: sha("claim a") };
   const withdrawn = { v: 1, case_id: good.case_id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: good.opened_at,
+    commitments: { a: aEntry, b: null },
     withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "x" };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true });
   assert.equal(C.validateCase({ ...withdrawn, party_a: good.party_a }).code, "unknown_field");
-  assert.equal(C.validateCase({ ...withdrawn, commitments: good.commitments }).code, "unknown_field");
+  const bare = { ...withdrawn };
+  delete bare.commitments;
+  assert.equal(C.validateCase(bare).ok, false, "a withdrawn record without its projection");
 });
 
 // =============================================================================
