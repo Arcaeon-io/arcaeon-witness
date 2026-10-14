@@ -25,8 +25,11 @@ const { spawnSync } = require("node:child_process");
 const DOCUMENTED = Object.freeze(["COULD_NOT_LOOK"]);
 const ENV_LIKE = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g;
 
-test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among them, carries no environment-style name in its body", () => {
-  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bodies-")), "bodies.jsonl");
+test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among them, carries no environment-style name in its body", (t) => {
+  // the audit file is large (every body the suites drive): removed after the read
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bodies-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const out = path.join(dir, "bodies.jsonl");
   const files = fs.readdirSync(__dirname).filter((f) => /^(case_.+|reconcile_endpoint)\.test\.js$/.test(f)).sort().map((f) => path.join(__dirname, f));
   assert.ok(files.length >= 15, `the suites: ${files.length}`);
   const env = { ...process.env, ARCAEON_BODY_AUDIT: out };

@@ -590,3 +590,97 @@ test("R-SIG: the page prints no 'unsigned:' cell; an open or committed case's si
   assert.equal(cell(p.html, "signed by"), esc(C.UNSEALED_SIG_REASON));
   assert.doesNotMatch(read("lib/_case_page.js"), /unsigned: \$\{/);
 });
+
+// =============================================================================
+// R-SIG's must-fail gap tests: each fails with its planted defect
+// =============================================================================
+
+test("MUST-FAIL GAP (G07): a stored receipt with sig null alone, or an empty sig, is malformed_field at verdict.sig", async () => {
+  const k = (await fourRecords("RSIG gap G07")).seal;
+  for (const sig of [null, ""]) {
+    const v = C.validateCase({ ...k, verdict: { ...k.verdict, sig } });
+    assert.deepEqual([v.ok, v.code, v.field], [false, "malformed_field", "verdict.sig"], JSON.stringify(sig));
+  }
+});
+
+test("MUST-FAIL GAP (T02): the exported receipt binding refuses a receipt with sig null: receipt_signature_unreadable", async () => {
+  const k = (await fourRecords("RSIG gap T02")).seal;
+  assert.equal(S.checkSealedReceipt(k), null, "control");
+  assert.equal(S.checkSealedReceipt({ ...k, verdict: { ...k.verdict, sig: null } }), "receipt_signature_unreadable");
+});
+
+test("MUST-FAIL GAP (T24): a refusal receipt whose signed_under lacks a field is missing_field", async () => {
+  const { receipt } = await fourRecords("RSIG gap T24");
+  assert.equal(S.refusalReceiptFormReason(receipt), null, "control");
+  for (const k of ["document_sha256", "document_commit"]) {
+    const { [k]: _gone, ...su } = receipt.signed_under; // eslint-disable-line no-unused-vars
+    assert.equal(S.refusalReceiptFormReason({ ...receipt, signed_under: su }), "missing_field", k);
+  }
+});
+
+test("MUST-FAIL GAP (T29, T30): a reference row whose named document cannot be read is unreadable, not invalid, and the live count is not established", async () => {
+  const s = await sealedCase("RSIG gap T29");
+  assert.equal((await reference(s)).status, 201);
+  const sealed = storedCase(s.id);
+  assert.equal(sealed.cross_reference, null, "fixture: the seal carries no cross_reference");
+  S._internal.clearDocumentCache();
+  gh.forceRawFailure(1000, 503);
+  let live;
+  try {
+    live = await S.liveRecords(sealed, { keyDocument: DOC });
+  } finally {
+    gh.forceRawFailure(0);
+  }
+  assert.deepEqual([live.ok, live.records, live.indeterminate, live.unreadable, live.invalid, live.rows.length],
+    [true, null, true, [1], [], 0], JSON.stringify(live));
+});
+
+test("MUST-FAIL GAP (U08): a reference to a case whose seal signature does not verify is refused 409 signature_invalid in words", async () => {
+  const s = await sealedCase("RSIG gap U08");
+  gh.seed(PINS, C.casePath(s.id), flipSig(storedCase(s.id)));
+  const r = await reference(s);
+  assert.deepEqual([r.status, r.body.error_code], [409, "signature_invalid"], JSON.stringify(r.body).slice(0, 300));
+  assert.ok(r.body.error.includes("its signature is not confirmed under the key document it names"), r.body.error);
+});
+
+test("MUST-FAIL GAP (U09): the refusal receipt's 409 says what was read, and nothing of consent", async () => {
+  const w = await committedCase("RSIG gap U09");
+  assert.equal((await withdraw(w.id, w.b)).status, 201);
+  const r = await reveal(w, { body: ownOpening(w, "a") });
+  assert.equal(r.status, 409);
+  assert.ok(r.body.error.startsWith("the case was withdrawn, so this reveal is refused and its tapes are never decoded or hashed; nothing was compared, " +
+    "and nothing about the tapes is kept."), r.body.error);
+  assert.doesNotMatch(r.body.error, /consent/i);
+});
+
+test("MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read", async () => {
+  const w = await committedCase("RSIG gap V03");
+  assert.equal((await withdraw(w.id, w.b)).status, 201);
+  const rec = storedCase(w.id);
+  const ok = cell((await casePage(w.id)).html, "signed by");
+  assert.ok(ok.startsWith(`<code>${esc(rec.signed_by)}</code>, the signature verified under the key document this record names, at commit `), ok);
+  assert.ok(ok.includes(rec.signed_under.document_commit.slice(0, 12)), ok);
+  S._internal.clearDocumentCache();
+  gh.forceRawFailure(1000, 503);
+  let html;
+  try {
+    html = (await casePage(w.id)).html;
+  } finally {
+    gh.forceRawFailure(0);
+  }
+  const no = cell(html, "signed by");
+  assert.equal(no, `<code>${esc(rec.signed_by)}</code>: the key document this record names could not be read when this page was read (http_503), ` +
+    "so its signature is not confirmed");
+});
+
+test("MUST-FAIL GAP (V09): the does-not-verify page names the failed check in words for signature_invalid", async () => {
+  const s = await sealedCase("RSIG gap V09");
+  gh.seed(PINS, C.casePath(s.id), flipSig(storedCase(s.id)));
+  const p = await casePage(s.id);
+  assert.ok(cell(p.html, "the check that failed").startsWith(
+    esc("the case signature: it is not confirmed under the verifier its signed_by names in the key document the case names")), p.html.slice(0, 600));
+});
+
+test("MUST-FAIL GAP (R03): the README says the page reads \"No reason was given.\" when a withdrawal names none", () => {
+  assert.ok(README().includes("otherwise it has none, and the case page says \"No reason was given.\""));
+});

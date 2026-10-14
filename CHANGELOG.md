@@ -1,5 +1,199 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-14: Unit R-SIG: signed_under on every signed record; one reader; no unsigned records (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 490aa02 (the unit: tests, code, README, key document) and this entry's commit (the gap tests, the change log, and a test temp-file fix, below).
+- **The architect's rulings.**
+  - Rule 5 reads "note_version must equal 4". A row at version 3, never issued, reads `row_note_v3` and is not rewritten. Any other version, or none, is `malformed_field`.
+  - `case_signature_invalid` is now `signature_invalid`, everywhere.
+  - `withdrawal.reason` is optional and absent when not given.
+  - Rule 11's sentence is printed as written.
+- **Rule 1.** `signed_under` is exactly `{document_sha256, document_commit}` (`lib/_case.js` `SIGNED_UNDER_FIELDS`, `checkSignedUnder`). It is required on all four signed records: the sealed case, the withdrawal record, the reference row and the refusal receipt. `retrieved_at` is gone, and a record carrying it is `unknown_field`. An OPEN or COMMITTED root carrying `signed_under` is `status_inconsistent`.
+- **Rule 2: one reader.** `signedUnderReason(rec, role, doc)` in `lib/_case_seal.js` checks, in order:
+  1. the named document (`namedDocumentOf`): its commit on the published branch, and the document there the one `signed_under.document_sha256` names;
+  2. `signed_by` listed active in `role` there;
+  3. the signature over the record minus `sig`;
+  4. the current document `doc` listing the key in `role` with the same verifier (else `signer_unlisted`), not revoked (else `signer_revoked`, R-REV's answer, called as it was).
+
+  It answers `valid_under_document`, `signature_invalid`, `signer_unlisted`, `signer_revoked` or `document_unavailable`, each with a reason. Its callers:
+  - `sealedRecordReason`: single party, then the receipt's binding, then `signedUnderReason(rec, "case")`, then the reconcile receipt under the same named document in role `reconcile`, then the current document's listing of the reconcile key;
+  - `judgeReferenceRow`, now async (`liveRecords` and the reference handler await it): the row's form, then `signedUnderReason(row, "case")`. A row whose named document could not be read is counted unreadable, never invalid;
+  - the withdrawn page's "signed by" cell (`withdrawalSignedByHtml`): `signedUnderReason(root, "case")`;
+  - `verifyRefusalReceipt` and `tools/check_refusal_receipt.js`: the form (`refusalReceiptFormReason`), then `signedUnderReason(rec, "reconcile")`. The tool's offline mode passes the supplied file as the named document (`{named}`), and the reader then skips the branch read and the current-document step. The tool still never prints `ok: true` offline.
+- **Rule 3.** The withdrawal and the reference confirm their document as the reveal does (`sealingDocument`, then `confirmSealingDocument`, through one helper, `signingDocument`). If it is not confirmed they answer 503 `document_unavailable`, write nothing, and the sentence ends with the request's "wrote nothing" tail. The withdrawal confirms after the role's proof and before loading its signer. The reference confirms before the sealed check.
+- **Rule 4.**
+  - `signRecord` throws without a signer: "signRecord: no signer (CODE); no record is written unsigned".
+  - `sig_reason` is null on every signed record. On an OPEN or COMMITTED root it is exactly `UNSEALED_SIG_REASON`; any other value is `malformed_field`, and null is `sig_reason_missing`.
+  - `sig` must be a non-empty string on a VERDICT, a WITHDRAWN record and a reference row (else `malformed_field`), and on a refusal receipt (its form: `malformed_field`).
+  - `row_unsigned` is gone.
+- **Rule 5 (ruled).** `note_version` 4. A row at version 3 reads `row_note_v3`; any other version, or none, is `malformed_field`. `row_note_v1` and `row_note_v2` are gone. `REFERENCE_ANCHOR_NOTE` is unchanged.
+- **Rule 6.** A stored reconcile receipt inside a seal carries a non-empty `sig` (else `malformed_field` at `verdict.sig`) and no `unsigned_reason` (else `malformed_field`). `RECEIPT_OPTIONAL` is `["verdict_digest_note"]`.
+- **Rule 7.** `validateWithdrawBody` and `withdrawnRecord` record a reason only when the request names one. The withdrawn page's reason cell reads "No reason was given." when there is none. `DEFAULT_WITHDRAWAL_REASON` and the "written before Design N" sentence are gone.
+- **Rule 8.** `appended_by` is `preimage:a`, `preimage:b` or `operator`. The page prints "appended on presentation of role a's commitment preimage" or "appended with the operator key".
+- **Rule 9.** The refusal receipt's `reason` is `case_withdrawn`. The 409's sentence no longer speaks of consent: "the case was withdrawn, so this reveal is refused and its tapes are never decoded or hashed; nothing was compared, and nothing about the tapes is kept. ..."
+- **Rule 10.** One case-root judge, `judgeCase(got, caseId)`, exported from `lib/_case_seal.js`. It is used by the handlers in `lib/_case_http.js` (7 calls; the handler's own copy is removed), the sealer (`anchorCase`, `repairWithdrawn`) and the page (`handleCasePage`).
+- **Rule 11 (ruled).** The registrations panel and the README carry exactly: "A registration file is signed by the registering party over the case, role and commitment; its registered_at, stamp_commit and stamped_at are the service's unsigned arrival note until a seal copies them into signed bytes."
+- **Rule 12.** The key document's `description` now names every signed record and its key, in the brief's three sentences. The rest of the description is unchanged.
+- **Signatures checked against a key document, before this unit** (`lib/_case_seal.js` unless named):
+  - `publishedSignatureReason`: reference rows (through `judgeReferenceRow`) and the withdrawn page (`lib/_case_page.js` `signedByHtml`), under the CURRENT document;
+  - `sealedRecordReason`: the seal and its receipt, under the named document;
+  - `verifyRefusalReceipt`: its own named-document code;
+  - `checkStoredReceipt` with `receiptSignerReason`: a receipt under a given verifier (no production caller);
+  - `tools/check_refusal_receipt.js` `offline`: its own verification against the supplied file.
+- **After:** `signedUnderReason`, for all four records and the tool's offline mode. `sealedRecordReason` also checks the embedded receipt, under the same named document `signedUnderReason` read and in role `reconcile`.
+  - Not against a key document, and unchanged: the seal-time checks of the receipt this request's own signer just produced (`checkReceipt`, `storableReceipt`), and a registration's party signature (`lib/_case.js`).
+  - `signatureReason` stays as the primitive (one verifier, one record), and `signedUnderReason` is its one caller.
+- **Removed**, with line counts:
+  - `lib/_case_seal.js`, 2326 lines to 2299:
+    - `publishedSignatureReason` (10 lines);
+    - `checkStoredReceipt` (7) and `receiptSignerReason` (7), with `RECEIPT_UNSIGNED_REASONS` (1), and their exports;
+    - signRecord's unsigned branch;
+    - `verifyRefusalReceipt`'s own named-document code;
+    - the `document_unrecorded` answer;
+    - `row_note_v1`/`row_note_v2` handling;
+    - `retrieved_at` in every writer.
+  - `lib/_case_http.js`, 2367 to 2387. It grows by `signingDocument` and the two confirmations. Removed:
+    - its own `judgeCase` (8);
+    - `withoutSigReason` (4) and the "stored unsigned" note;
+    - `UNSEALED_WORDS.document_unrecorded`;
+    - the consent clause.
+  - `lib/_case_page.js`, 710 to 719. Removed:
+    - `signedByHtml` (10);
+    - the `unsigned: ...` cells;
+    - the `retrieved_at` cell;
+    - `UNVERIFIED_CHECKS.document_unrecorded`;
+    - the "written before Design N" sentence.
+  - `lib/_case.js`, 1438 to 1461. It grows by `checkSig`, `checkSignedBy` and `checkSignedUnder`. Removed:
+    - `DEFAULT_WITHDRAWAL_REASON` and its export;
+    - `row_note_v1` and `row_note_v2` from `CODES`;
+    - `retrieved_at`.
+  - `tools/check_refusal_receipt.js`, 78 to 72: its own crypto, and the `crypto` and `canonicalBytes` requires.
+  - Tests deleted (2): `case_signed_under`'s two DOCUMENT UNRECORDED tests (33 lines), with their helper `unrecordedCase`.
+- **The four records as they now stand** (every one signed by `signRecord`: `signed_by` a key id, `sig` base64 Ed25519 over the json-c14n:v1 bytes of the record minus `sig`, `sig_reason` null; `signed_under` `{document_sha256: 64 hex, document_commit: 40 hex}`):
+  - **Sealed case** (`cases/<case_id>.json`, status VERDICT), signed with the case key: `v, case_id, protocol_version, policy_version, scope_digest, party_a, party_b, opened_at, deadline, commitments {a, b}, reveals {a, b}, verdict` (the signed reconcile receipt: `kind, v, claim, tapes, method, verdict, verdict_digest, compared_at, does_not_claim, signer, sig`, optionally `verdict_digest_note`; never `unsigned_reason`), `records, cross_reference, status, withdrawal: null, limits, signed_under, signed_by, sig, sig_reason`.
+  - **Withdrawal record** (the same path, status WITHDRAWN), signed with the case key: `v, case_id, protocol_version, status, opened_at, commitments {a, b}` (the root's projection as it stood; the withdrawing role's entry not null), `withdrawal {by_role, at, salt_sha256, reason?}` (`reason`, only when given, is `party_choice`, `deadline` or `other`), `limits, signed_under, signed_by, sig, sig_reason`.
+  - **Reference row** (`cases/<case_id>/references/<seq>.json`), signed with the case key: `kind: "case_reference", v: 1, case_id, seq, cross_reference {operator, reference, url}, recorded_at, appended_by` (`preimage:a`, `preimage:b` or `operator`), `anchor_note` (`REFERENCE_ANCHOR_NOTE`), `note_version: 4, signed_under, signed_by, sig, sig_reason`.
+  - **Refusal receipt** (in the 409 body; written nowhere), signed with the reconcile key: `kind: "comparison_refused", v: 1, case_id, at, reason: "case_withdrawn", role, commitment_sha256, signed_under, signed_by, sig, sig_reason`.
+- **Tests.**
+  - New, `test/case_rsig.test.js`: the brief's 1 to 12, plus 8 more:
+    - one reader;
+    - one case-root judge;
+    - `signature_invalid` everywhere;
+    - the stored receipt must be signed;
+    - `sig_reason` only on OPEN or COMMITTED roots;
+    - rule 11;
+    - rule 12;
+    - no `unsigned:` page cell.
+
+    Also nine must-fail gap tests (below). 29 tests in all.
+  - Rewritten in about 30 files, for the new forms:
+    - planted records carry `signed_under` with two fields and are signed;
+    - `signature_invalid`;
+    - `preimage:a`;
+    - `case_withdrawn`;
+    - no default reason;
+    - `note_version` 4;
+    - writers given a deployment the document is confirmed for (`test/helpers/key_document.js` `KD.deployedFor`);
+    - a receipt altered without re-signing the case now reads `signature_invalid`, the case signature being checked first, so the receipt tests re-sign the case.
+- **A test's temp file.** `test/response_bodies.test.js` wrote its audit file (about 18 MB, every body the case suites drive) to a fresh temp directory on every run and never removed it, so every suite run and every planted-defect run left one behind. It now removes the directory after the read. Nothing else in the test changes.
+- **The R-L5 gap found during this unit** (a registration projected between a withdrawal's read and its write was missing from the kept projection) is not built here. The reader's B1 on R-L5 ruled its fix, and it is built as R-L5f.
+- **The must-fail pass.** 75 defects were planted over the lines R-SIG changed, each alone with the whole suite run: `lib/_case.js` 19, `lib/_case_seal.js` 33, `lib/_case_http.js` 7, `lib/_case_page.js` 10, the tool 2, the README 3, the key document 1. 63 were caught. Of the 12 that survived, 11 are each caught by a gap test in `test/case_rsig.test.js` (9 tests), and 1 is equivalent:
+  - T12, the current document's verifier not compared beside its key id. `checkKeyDocument` refuses an entry whose `key_id` is not its verifier's key id, and a key id's 8 hex are a hash of the key's name and public key. One key id under two verifiers therefore needs a 32-bit collision, which no test can build. The comparison stays.
+
+  The table:
+
+  | id | file | planted defect | result |
+  |---|---|---|---|
+  | G01 | `lib/_case.js` | rule: a signed record with sig null is accepted by the schema | caught (2 failing) |
+  | G02 | `lib/_case.js` | rule: a signed record may carry a sig_reason | caught (4 failing) |
+  | G03 | `lib/_case.js` | rule: an open case may carry any sig_reason | caught (2 failing) |
+  | G04 | `lib/_case.js` | an unsigned case with sig_reason null reads malformed_field, not sig_reason_missing | caught (4 failing) |
+  | G05 | `lib/_case.js` | signed_by need not be a key id | caught (2 failing) |
+  | G06 | `lib/_case.js` | withdrawn: signed_under's shape not checked | caught (2 failing) |
+  | G07 | `lib/_case.js` | a stored receipt with sig null is accepted | survived; caught by the gap test (G07) |
+  | G08 | `lib/_case.js` | a stored receipt may say unsigned_reason | caught (2 failing) |
+  | G09 | `lib/_case.js` | a VERDICT without signed_under reads malformed_field, not missing_field | caught (4 failing) |
+  | G10 | `lib/_case.js` | an open case may carry signed_under | caught (2 failing) |
+  | G11 | `lib/_case.js` | signed_under may carry other fields (retrieved_at) | caught (4 failing) |
+  | G12 | `lib/_case.js` | signed_under's field list keeps retrieved_at (required) | caught (356 failing) |
+  | G13 | `lib/_case.js` | the withdrawal reason defaults to party_choice | caught (6 failing) |
+  | G14 | `lib/_case.js` | a version-3 row reads malformed_field | caught (6 failing) |
+  | G15 | `lib/_case.js` | note_version 5 accepted | caught (4 failing) |
+  | G16 | `lib/_case.js` | a row without note_version reads missing_field | caught (6 failing) |
+  | G17 | `lib/_case.js` | appended_by role:a accepted | caught (2 failing) |
+  | G18 | `lib/_case.js` | row: signed_under's shape not checked | caught (2 failing) |
+  | G19 | `lib/_case.js` | row: sig not checked by the schema | caught (2 failing) |
+  | T01 | `lib/_case_seal.js` | signRecord returns an unsigned record with no signer | caught (10 failing) |
+  | T02 | `lib/_case_seal.js` | the binding accepts a receipt with sig null | survived; caught by the gap test (T02) |
+  | T03 | `lib/_case_seal.js` | a receipt may carry unsigned_reason | caught (2 failing) |
+  | T04 | `lib/_case_seal.js` | offline: the supplied document's sha256 not checked | caught (2 failing) |
+  | T05 | `lib/_case_seal.js` | the named document's revoked key verifies | caught (6 failing) |
+  | T06 | `lib/_case_seal.js` | a key in another role verifies | caught (8 failing) |
+  | T07 | `lib/_case_seal.js` | the signature itself is not checked | caught (13 failing) |
+  | T08 | `lib/_case_seal.js` | offline runs the current-document step | caught (6 failing) |
+  | T09 | `lib/_case_seal.js` | an unreadable current document holds | caught (11 failing) |
+  | T10 | `lib/_case_seal.js` | a key not in the current document holds | caught (15 failing) |
+  | T11 | `lib/_case_seal.js` | a key revoked in the current document holds | caught (21 failing) |
+  | T12 | `lib/_case_seal.js` | the current document's verifier not compared | survived; equivalent (below) |
+  | T13 | `lib/_case_seal.js` | could-not-look read as signature_invalid | caught (16 failing) |
+  | T14 | `lib/_case_seal.js` | the seal goes on to the receipt when the case signature fails | caught (15 failing) |
+  | T15 | `lib/_case_seal.js` | a revoked reconcile key in the named document signs the receipt | caught (2 failing) |
+  | T16 | `lib/_case_seal.js` | a case key may sign the receipt | caught (2 failing) |
+  | T17 | `lib/_case_seal.js` | the receipt's signature not verified | caught (4 failing) |
+  | T18 | `lib/_case_seal.js` | an unlisted reconcile key holds | caught (6 failing) |
+  | T19 | `lib/_case_seal.js` | a revoked reconcile key holds | caught (11 failing) |
+  | T20 | `lib/_case_seal.js` | judgeCase: a root at another case's path holds | caught (2 failing) |
+  | T21 | `lib/_case_seal.js` | withdrawnRecord writes a default reason | caught (7 failing) |
+  | T22 | `lib/_case_seal.js` | the receipt's reason is consent_withdrawn | caught (7 failing) |
+  | T23 | `lib/_case_seal.js` | receipt form: signed_under may carry other fields | caught (4 failing) |
+  | T24 | `lib/_case_seal.js` | receipt form: a missing signed_under field reads malformed_field | survived; caught by the gap test (T24) |
+  | T25 | `lib/_case_seal.js` | receipt form: an unsigned receipt passes the form | caught (4 failing) |
+  | T26 | `lib/_case_seal.js` | verifyRefusalReceipt drops the detail | caught (8 failing) |
+  | T27 | `lib/_case_seal.js` | a version-3 row reads reference_row_note_v3 | caught (2 failing) |
+  | T28 | `lib/_case_seal.js` | a row's signature is not read | caught (7 failing) |
+  | T29 | `lib/_case_seal.js` | a row whose document could not be read is invalid | survived; caught by the gap test (T29, T30) |
+  | T30 | `lib/_case_seal.js` | liveRecords: an unavailable row counted invalid | survived; caught by the gap test (T29, T30) |
+  | T31 | `lib/_case_seal.js` | an invalid row without a detail carries detail undefined/null | caught (8 failing) |
+  | T32 | `lib/_case_seal.js` | the refusal receipt read in role case | caught (9 failing) |
+  | T33 | `lib/_case_seal.js` | the answer carries a third field | caught (4 failing) |
+  | U01 | `lib/_case_http.js` | a writer signs under an unconfirmed document | caught (2 failing) |
+  | U02 | `lib/_case_http.js` | the withdrawal does not confirm its document | caught (2 failing) |
+  | U03 | `lib/_case_http.js` | the reference does not confirm its document | caught (4 failing) |
+  | U04 | `lib/_case_http.js` | appended_by names the other role | caught (6 failing) |
+  | U08 | `lib/_case_http.js` | the answer's signature_invalid words | survived; caught by the gap test (U08) |
+  | U09 | `lib/_case_http.js` | the receipt message speaks of consent | survived; caught by the gap test (U09) |
+  | U10 | `lib/_case_http.js` | the 503 names no reason | caught (2 failing) |
+  | V01 | `lib/_case_page.js` | rule 11: the page's registration-file sentence | caught (2 failing) |
+  | V02 | `lib/_case_page.js` | an invalid withdrawal signature shown as verified | caught (6 failing) |
+  | V03 | `lib/_case_page.js` | could-not-look shown as not confirmed with a code | survived; caught by the gap test (V03, V10) |
+  | V04 | `lib/_case_page.js` | the page names no code | caught (4 failing) |
+  | V05 | `lib/_case_page.js` | the page names a default reason | caught (6 failing) |
+  | V06 | `lib/_case_page.js` | an open case's signed-by cell | caught (2 failing) |
+  | V07 | `lib/_case_page.js` | a preimage row read as the operator's | caught (2 failing) |
+  | V08 | `lib/_case_page.js` | the invalid-row note drops the detail | caught (2 failing) |
+  | V09 | `lib/_case_page.js` | the unverified page has no words for signature_invalid | survived; caught by the gap test (V09) |
+  | V10 | `lib/_case_page.js` | the verified cell names no commit | survived; caught by the gap test (V03, V10) |
+  | K01 | the tool | the tool reads the receipt in role case | caught (6 failing) |
+  | K02 | the tool | the tool skips the form | caught (2 failing) |
+  | R01 | README | rule 11: the README sentence | caught (2 failing) |
+  | R02 | README | README: the receipt's reason | caught (2 failing) |
+  | R03 | README | README: the no-reason sentence | survived; caught by the gap test (R03) |
+  | D01 | key document | the key document's description of signed_under | caught (2 failing) |
+
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1454 tests, 1447 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1448 pass, 1 skipped.
+- **UNSURE.**
+  - `sig_reason` stays on signed records as null, not removed, so that every record has one field list and the form check is one rule.
+  - A key that the named document lists but not as active reads `signature_invalid` with reason `signer_not_active`. The revoked answer (`signer_revoked`, `key_revoked`) is the current document's, as R-REV built it.
+  - The seal's order is the case signature first, then the receipt. A receipt altered without re-signing the case therefore reads `signature_invalid` (the case's bytes changed), not `verdict_unbound`.
+  - `receipt_unsigned` is kept as the seal's code for a receipt signer the named document does not list as an active reconcile key (`unknown_signer`, `signer_not_active`).
+  - A named commit that is not on the published branch is `document_unavailable` with reason `commit_not_on_branch` (could-not-look), as the seal read it before. It is not a separate code.
+  - The reference confirms its document before its sealed check, so a raw host that is down answers 503 `document_unavailable`, not 409. The withdrawal confirms its document after the role's proof and before its signer.
+  - A receipt without a signature, inside a stored seal, is refused by the case schema (`malformed_field`). At the seal it is `receipt_unknown_field`, because `unsigned_reason` is no longer a receipt field.
+  - `publishedEntry` stays exported, with no `lib/` caller.
+  - The page's "signed by" row for an OPEN or COMMITTED case prints `UNSEALED_SIG_REASON`, the fixed sentence the root carries.
+  - A reference row whose named document could not be read counts as unreadable, never invalid: like a row whose read failed, it leaves the live count not established when no valid row is read.
+  - No record written before this unit exists anywhere (nothing is deployed), so no reader keeps a path for one: a sealed case, row or withdrawal record without `signed_under`, or a row at version 1 or 2, is refused by its schema.
+
 ## 2026-10-14: Unit R-L5: the withdrawal record keeps the root's projection; a withdrawn case's readers read no file or history (branch `case-protocol-2026-10-10`, NOT deployed)
 
 R-L5's first commit precedes unit R-RVf on the branch: the architect's R-RVf rulings were built next, as ordered. This entry and R-L5's gap tests follow R-RVf.
