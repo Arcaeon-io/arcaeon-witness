@@ -157,7 +157,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope) {
@@ -193,7 +193,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -289,18 +289,21 @@ test("R-N N1, N3: a refusal on a withdrawn case with the requester's own valid o
   assert.deepEqual(Object.keys(rr).sort(),
     ["at", "case_id", "commitment_sha256", "kind", "reason", "role", "sig", "sig_reason", "signed_by", "signed_under", "v"]);
   assert.deepEqual([rr.kind, rr.v, rr.case_id, rr.at, rr.reason, rr.role, rr.commitment_sha256, rr.sig_reason],
-    ["comparison_refused", 1, c.id, C.utcSeconds(REVEAL_AT), "consent_not_jointly_held", "a", c.a.commitment_sha256, null]);
+    ["comparison_refused", 1, c.id, C.utcSeconds(REVEAL_AT), "case_withdrawn", "a", c.a.commitment_sha256, null]);
   assert.equal(rr.signed_by, KD.keyIdOf(RECEIPT_KEY), "the reconcile key");
-  assert.deepEqual(rr.signed_under, { document_sha256: KD.sha256(canonicalBytes(DOC)), document_commit: KD.commitOf(DOC), retrieved_at: C.utcSeconds(REVEAL_AT) });
+  assert.deepEqual(rr.signed_under, { document_sha256: KD.sha256(canonicalBytes(DOC)), document_commit: KD.commitOf(DOC) });
   assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: true });
   // bound: another role, another commitment, another time do not verify
   for (const forged of [{ ...rr, role: "b" }, { ...rr, commitment_sha256: c.b.commitment_sha256 }, { ...rr, at: C.utcSeconds(REVEAL_AT + 1000) }]) {
-    assert.equal((await S.verifyRefusalReceipt(forged, DOC)).reason, "bad_signature");
+    assert.deepEqual(await S.verifyRefusalReceipt(forged, DOC), { ok: false, reason: "signature_invalid", detail: "bad_signature" });
   }
   // under the NAMED document: a commit off the published branch is not a document, and a sha256 that is not the commit's is not it
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC)).reason, "document_not_on_branch");
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_sha256: "e".repeat(64) } }, DOC)).reason, "document_sha256_mismatch");
+  // (since unit R-SIG the one reader's codes, with its reason as detail)
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC),
+    { ok: false, reason: "document_unavailable", detail: "commit_not_on_branch" });
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_sha256: "e".repeat(64) } }, DOC),
+    { ok: false, reason: "signature_invalid", detail: "document_sha256_mismatch" });
   // a key the CURRENT document does not list in its role, or lists revoked, does not hold
   assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY)))).reason, "signer_unlisted");
   assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" })))).reason,
@@ -310,23 +313,24 @@ test("R-N N1, N3: a refusal on a withdrawn case with the requester's own valid o
   assert.deepEqual(storedCase(c.id), record);
 });
 
-test("R-N N1: ONE SIGNATURE RULE: a case-role key never verifies a refusal receipt, and a reconcile-role key never verifies a reference row (publishedSignatureReason filters by role)", async () => {
+test("R-N N1: ONE SIGNATURE RULE: a case-role key never verifies a refusal receipt, and a reconcile-role key never verifies a reference row (since unit R-SIG the one reader, signedUnderReason, filters by role)", async () => {
   const at = C.utcSeconds(REVEAL_AT);
-  const signedUnder = KD.signedUnder(gh, DOC, at);
+  const signedUnder = KD.signedUnder(gh, DOC);
   const byCase = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.equal(byCase.signed_by, KD.keyIdOf(CASE_KEY));
-  assert.equal((await S.verifyRefusalReceipt(byCase, DOC)).reason, "signer_unpublished", "a case key is not a reconcile key");
-  const row = S.referenceRow({ caseId: "c".repeat(64), seq: 1, crossReference: XREF, recordedAt: at, appendedBy: "operator" },
+  assert.deepEqual(await S.verifyRefusalReceipt(byCase, DOC), { ok: false, reason: "signature_invalid", detail: "signer_unpublished" }, "a case key is not a reconcile key");
+  const row = S.referenceRow({ caseId: "c".repeat(64), seq: 1, crossReference: XREF, recordedAt: at, appendedBy: "operator", signedUnder },
     S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
   assert.equal(row.signed_by, KD.keyIdOf(RECEIPT_KEY));
-  assert.equal(S.publishedSignatureReason(row, DOC), "signer_unpublished", "a reconcile key is not a case key");
-  assert.equal(S.publishedSignatureReason(row, DOC, "reconcile"), null, "control: in its own role it verifies");
+  const asCase = await S.signedUnderReason(row, "case", DOC);
+  assert.deepEqual([asCase.code, asCase.reason], ["signature_invalid", "signer_unpublished"], "a reconcile key is not a case key");
+  assert.equal((await S.signedUnderReason(row, "reconcile", DOC)).code, "valid_under_document", "control: in its own role it verifies");
   const p = C.referencePath("c".repeat(64), 1);
-  assert.equal(S.judgeReferenceRow({ json: row }, { path: p, caseId: "c".repeat(64), seq: 1, sealed: null, keyDocument: DOC }).reason,
-    "reference_signature_signer_unpublished");
+  const judged = await S.judgeReferenceRow({ json: row }, { path: p, caseId: "c".repeat(64), seq: 1, sealed: null, keyDocument: DOC });
+  assert.deepEqual([judged.reason, judged.detail], ["signature_invalid", "signer_unpublished"]);
 });
 
-test("R-N N1: an unsigned reference row is not a record: the reference refuses 503 signer_unavailable rather than write one (no row, no quota), and a stored unsigned row is not counted and not shown as a record", async () => {
+test("R-N N1: an unsigned reference row is not a record: the reference refuses 503 signer_unavailable rather than write one (no row, no quota), and (since unit R-SIG) a stored row with sig null is malformed_field, not counted and not shown as a record", async () => {
   const c = await sealedCase("RN unsigned row");
   await sealerRun();
   const r = await reference(c, { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer } });
@@ -334,16 +338,17 @@ test("R-N N1: an unsigned reference row is not a record: the reference refuses 5
   assert.doesNotMatch(JSON.stringify(r.body), /WITNESS_|is not set/);
   assert.equal(gh.has(PINS, C.referencePath(c.id, 1)), false, "no row");
   assert.equal(gh.has(USAGE, H._internal.referenceQuotaPath(c.id, "a")), false, "no unit of the quota spent");
-  // a row stored unsigned (planted: written by an earlier build)
-  const unsigned = S.referenceRow({ caseId: c.id, seq: 1, crossReference: XREF, recordedAt: C.utcSeconds(REVEAL_AT + 1800000), appendedBy: "role:a" },
-    S.loadCaseSigner({}, { keyDocument: DOC }));
-  assert.equal(unsigned.sig, null, "fixture: unsigned");
+  // a row stored unsigned (planted): since unit R-SIG none is built (the
+  // seal module throws), and the schema refuses one with sig null
+  const signed = S.referenceRow({ caseId: c.id, seq: 1, crossReference: XREF, recordedAt: C.utcSeconds(REVEAL_AT + 1800000), appendedBy: "preimage:a",
+    signedUnder: KD.signedUnder(gh, DOC) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  const unsigned = { ...signed, sig: null, signed_by: null, sig_reason: "not signed" };
   gh.seed(PINS, C.referencePath(c.id, 1), unsigned);
   const p = C.referencePath(c.id, 1);
-  assert.equal(S.judgeReferenceRow({ json: unsigned }, { path: p, caseId: c.id, seq: 1, sealed: storedCase(c.id), keyDocument: DOC }).reason, "row_unsigned");
+  assert.equal((await S.judgeReferenceRow({ json: unsigned }, { path: p, caseId: c.id, seq: 1, sealed: storedCase(c.id), keyDocument: DOC })).reason, "reference_malformed_field");
   const live = await S.liveRecords(storedCase(c.id), { keyDocument: DOC });
   assert.equal(live.records, 1, "not counted");
-  assert.deepEqual(live.invalid, [{ seq: 1, reason: "row_unsigned" }]);
+  assert.deepEqual(live.invalid, [{ seq: 1, reason: "reference_malformed_field" }]);
   const page = await casePage(c.id);
   assert.ok(!page.html.includes("two records"), "never two records for it");
   assert.match(page.html, /one record/);
@@ -538,7 +543,7 @@ test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a 
   assert.deepEqual(await S.verifyRefusalReceipt(withReason, DOC), { ok: false, reason: "malformed_field" });
   const revoked = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" }));
   const underRevoked = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder: KD.signedUnder(gh, revoked, at) }, signer);
-  assert.deepEqual(await S.verifyRefusalReceipt(underRevoked, DOC), { ok: false, reason: "signer_not_active" });
+  assert.deepEqual(await S.verifyRefusalReceipt(underRevoked, DOC), { ok: false, reason: "signature_invalid", detail: "signer_not_active" });
 });
 
 test("MUST-FAIL GAP (C03, C04, C06): a refusal names role a or b and carries exactly its opening's two fields; a joint reveal's role is a or b", async () => {
@@ -589,7 +594,7 @@ test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape h
   const res = makeRes();
   const other = sha("another tape");
   const commits = gh._commitsOf(PINS).length;
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KEYS, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [409, "case_withdrawn"]);
   assert.equal(gh._commitsOf(PINS).length, commits, "nothing written to the pins repository");
 });

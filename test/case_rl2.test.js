@@ -141,7 +141,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope, keys = {}) {
@@ -177,7 +177,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -279,7 +279,7 @@ test("R-L2 M3: a case holds at most 500 reference rows: the 500th is written, th
 test("R-L2 L4 (since unit R-RV no reveal attempt): a withdrawal that loses to another withdrawal writes nothing to the pins repository and removes nothing", async () => {
   for (const [scope, code, seedWith] of [
     ["RL2 L4 lost to a withdrawal", "case_withdrawn",
-      (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }))],
+      (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt, signedUnder: KD.signedUnder(gh, DOC) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }))],
   ]) {
     const c = await committedCase(scope);
     let before;

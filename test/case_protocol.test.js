@@ -64,6 +64,11 @@ const STAMPS = process.env.STAMP_REPO;
 const NOW = Date.parse("2026-10-10T08:00:00Z");
 const DEADLINE = "2026-10-10T20:00:00Z";
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+// A planted signed record's signature fields (since unit R-SIG every signed
+// record is signed and names its key document; the schema does not check
+// the signature itself).
+const SIGNED_PLANT = Object.freeze({ signed_by: "case-test+0123abcd", sig: "c2ln", sig_reason: null,
+  signed_under: Object.freeze({ document_sha256: crypto.createHash("sha256").update("a key document").digest("hex"), document_commit: "d".repeat(40) }) });
 // The bearer key ?op=case-open requires (item 2b); case-commit takes none.
 const OPEN_AUTH = Object.freeze({ authorization: "Bearer case-test-open-key-0001" });
 
@@ -599,13 +604,13 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
     key_id: REG.keyIdOf(REG.KEYS[r]), registration_sha256: sha(`registration file ${r}`), claim_sha256: sha(`claim ${r}`) });
   const reveal = { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T08:10:00Z" };
   const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1"), "a"), b: entry(sha("2"), "b") }, reveals: { a: reveal, b: reveal },
-    verdict: { kind: "arcaeon-reconcile-receipt" }, status: "VERDICT" };
+    verdict: { kind: "arcaeon-reconcile-receipt", sig: "c2ln" }, status: "VERDICT", ...SIGNED_PLANT };
   assert.deepEqual(C.validateCase(verdictCase), { ok: true }, "fixture: the planted VERDICT case is a valid record");
   gh.seed(PINS, C.casePath(vid), verdictCase);
   const wid = C.deriveCaseId(C.validateOpening(opening({ scope_digest: sha("withdrawn case") })).opening);
   const withdrawn = { v: 1, case_id: wid, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
     commitments: { a: null, b: entry(sha("w"), "b") },
-    withdrawal: { by_role: "b", at: "2026-10-10T07:55:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "unsigned in this test" };
+    withdrawal: { by_role: "b", at: "2026-10-10T07:55:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), ...SIGNED_PLANT };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: the planted WITHDRAWN record is valid");
   gh.seed(PINS, C.casePath(wid), withdrawn);
   for (const [cid, status] of [[vid, "VERDICT"], [wid, "WITHDRAWN"]]) {
@@ -1220,7 +1225,7 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
     stamped_at: "2026-10-10T07:49:00.000Z", key_id: REG.keyIdOf(REG.KEYS.b), registration_sha256: sha("registration file b"), claim_sha256: sha("claim b") };
   const withdrawn = { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
     commitments: { a: null, b: bEntry },
-    withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "withdrawn in this test" };
+    withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), ...SIGNED_PLANT };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true }, "fixture: a valid redacted record");
   const viaMock = global.fetch;
   let landed = false;
@@ -1314,7 +1319,7 @@ test("SCHEMA: an unknown field, an altered limit, a stored EXPIRED, a wrong id, 
     stamped_at: "2026-10-10T07:34:00.000Z", key_id: REG.keyIdOf(REG.KEYS.a), registration_sha256: sha("registration file a"), claim_sha256: sha("claim a") };
   const withdrawn = { v: 1, case_id: good.case_id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: good.opened_at,
     commitments: { a: aEntry, b: null },
-    withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "x" };
+    withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), ...SIGNED_PLANT };
   assert.deepEqual(C.validateCase(withdrawn), { ok: true });
   assert.equal(C.validateCase({ ...withdrawn, party_a: good.party_a }).code, "unknown_field");
   const bare = { ...withdrawn };

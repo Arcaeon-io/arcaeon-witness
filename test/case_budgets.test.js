@@ -203,7 +203,7 @@ async function sealedCase(scope) {
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
 async function reference(body, { env = SIGNED, headers = {}, ip = freshIp(), now = REVEAL_AT + 3600000 } = {}) {
   const res = makeRes();
-  await H.handleCaseReference(makeReq({ method: "POST", query: { op: "case-reference" }, headers: { "content-type": "application/json", "x-forwarded-for": ip, ...headers }, body }), res, { now, env, keyDocument: KEYS_DOC });
+  await H.handleCaseReference(makeReq({ method: "POST", query: { op: "case-reference" }, headers: { "content-type": "application/json", "x-forwarded-for": ip, ...headers }, body }), res, { now, env: KD.deployedFor(gh, env, KEYS_DOC), keyDocument: KEYS_DOC });
   return res;
 }
 const xref = (n) => ({ ...XREF, reference: `ref-${n}` });

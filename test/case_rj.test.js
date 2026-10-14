@@ -194,7 +194,7 @@ async function reference(c, role = "a", ref = "row") {
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 const rowPath = (id, n) => C.referencePath(id, n);
@@ -219,20 +219,20 @@ const V3_NOTE = "This row has no pin of its own. It is recorded by the pins-repo
 // since unit R-PIN: version 4
 const V4_NOTE = "This row has no pin of its own. It is recorded by the pins-repository commit that writes it, and no anchoring is asserted here.";
 
-test("J1 (version 4 since unit R-PIN): REFERENCE_ANCHOR_NOTE is the current version and rows carry its note_version; the judge accepts it and rejects a v1 row with reason row_note_v1 and a v3 row with row_note_v3", async () => {
+test("J1 (version 4 since unit R-PIN): REFERENCE_ANCHOR_NOTE is the current version and rows carry its note_version; the judge accepts it, and (since unit R-SIG) rejects a row with no version as malformed_field and a v3 row with row_note_v3", async () => {
   assert.equal(C.REFERENCE_ANCHOR_NOTE, V4_NOTE);
   assert.ok(C.REFERENCE_FIELDS.includes("note_version"));
   const { id } = await sealedCase("RJ J1 judge");
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
+  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, DOC) }, signer);
   assert.deepEqual([good.note_version, good.anchor_note], [4, V4_NOTE]);
   assert.equal(C.validateReferenceRow(good).ok, true);
   const { note_version: _v, ...v1 } = { ...good, anchor_note: V1_NOTE };
-  assert.equal(C.validateReferenceRow(v1).code, "row_note_v1");
+  assert.equal(C.validateReferenceRow(v1).code, "malformed_field");
   assert.equal(C.validateReferenceRow({ ...good, anchor_note: V3_NOTE, note_version: 3 }).code, "row_note_v3");
   gh.seed(PINS, rowPath(id, 1), v1);
   const live = await S.liveRecords(storedCase(id), { keyDocument: DOC });
-  assert.deepEqual([live.records, live.invalid], [1, [{ seq: 1, reason: "row_note_v1" }]]);
+  assert.deepEqual([live.records, live.invalid], [1, [{ seq: 1, reason: "reference_malformed_field" }]]);
   gh.seed(PINS, rowPath(id, 1), good);
   assert.equal((await S.liveRecords(storedCase(id), { keyDocument: DOC })).records, 2, "the v4 row is a record");
 });
@@ -355,11 +355,11 @@ test("J8: case_not_anchored, and since unit R-PIN the error codes case_not_pinne
 // left alive, each caught here
 // =============================================================================
 
-test("MUST-FAIL GAP (A03): a row whose note_version is not 4 is refused by name", async () => {
+test("MUST-FAIL GAP (A03): a row whose note_version is not 4 is refused (since unit R-SIG malformed_field)", async () => {
   const { id } = await sealedCase("RJ gap note version");
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
-  for (const v of [1, 5, "4"]) assert.equal(C.validateReferenceRow({ ...good, note_version: v }).code, "unknown_version", String(v));
+  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, DOC) }, signer);
+  for (const v of [1, 5, "4"]) assert.equal(C.validateReferenceRow({ ...good, note_version: v }).code, "malformed_field", String(v));
 });
 
 test("MUST-FAIL GAP (B06, B07): a commit's existence is read once and kept", async () => {

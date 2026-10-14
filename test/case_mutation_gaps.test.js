@@ -105,6 +105,10 @@ const project = (k, r) => C.applyRegistration(k, r, fileSha(r));
 const WITH_A = project(OPEN_CASE, reg("a", sha("commitment a")));
 const COMMITTED = project(WITH_A, reg("b", sha("commitment b")));
 const REVEALED_AT = "2026-10-10T09:00:00Z";
+// Since unit R-SIG every signed record is signed (the schema does not check
+// the signature itself) and names the key document it was signed under.
+const SIGNED = Object.freeze({ signed_by: "case-test+0123abcd", sig: "c2lnbmF0dXJl", sig_reason: null });
+const SIGNED_UNDER = Object.freeze({ document_sha256: sha("a key document"), document_commit: "d".repeat(40) });
 const VERDICT = Object.freeze({
   ...COMMITTED,
   status: "VERDICT",
@@ -112,14 +116,16 @@ const VERDICT = Object.freeze({
     a: { tape_sha256: sha("tape a"), salt_sha256: sha("salt a"), revealed_at: REVEALED_AT },
     b: { tape_sha256: sha("tape b"), salt_sha256: sha("salt b"), revealed_at: REVEALED_AT },
   },
-  verdict: { planted: "the schema asks only for an object here; the receipt has its own check" },
+  verdict: { planted: "the schema asks only for an object and its signature here; the receipt has its own check", sig: "c2lnbmF0dXJl" },
+  ...SIGNED,
+  signed_under: SIGNED_UNDER,
 });
 const WITHDRAWN = Object.freeze({
   v: 1, case_id: ID, protocol_version: "case/1", status: "WITHDRAWN", opened_at: OPENING.opened_at,
   // since unit R-L5 the record keeps the root's projection as it stood
   commitments: COMMITTED.commitments,
   withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("salt a") },
-  limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "withdrawn in this test",
+  limits: C.LIMITS.slice(), signed_under: SIGNED_UNDER, ...SIGNED,
 });
 
 function refusedWith(rec, code, field) {
@@ -356,13 +362,13 @@ test("H57 (operatorBearer): a bearer of the operator key's length that is not th
   const body = { case_id: ID, cross_reference: { operator: "second-operator.example", reference: "ref-1", url: "https://second-operator.example/r/1" } };
   const reads = gh.getLog.length;
   const res = makeRes();
-  await H.handleCaseReference(post("case-reference", body, { authorization: `Bearer ${wrong}` }), res, { now: NOW, env });
+  await H.handleCaseReference(post("case-reference", body, { authorization: `Bearer ${wrong}` }), res, { now: NOW, env: KD.deployedFor(gh, env, S.PUBLISHED_KEYS) });
   assert.equal(res._status, 401, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "reference_unauthorized");
   assert.equal(gh.getLog.length, reads, "nothing read");
   // control: the key itself passes the bearer check (and then finds no case)
   const ok = makeRes();
-  await H.handleCaseReference(post("case-reference", body, { authorization: `Bearer ${want}` }), ok, { now: NOW, env });
+  await H.handleCaseReference(post("case-reference", body, { authorization: `Bearer ${want}` }), ok, { now: NOW, env: KD.deployedFor(gh, env, S.PUBLISHED_KEYS) });
   assert.equal(ok._status, 404, JSON.stringify(ok._body));
 });
 
@@ -431,13 +437,13 @@ test("S55 (referenceSeqs): a references listing that cannot be read is never rea
   const writes = gh.putLog.length;
   const res = makeRes();
   await withListingFailure(C.referencesDir(ID), () => H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV, keyDocument: RECEIPT_DOC }));
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "op.example", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: KD.deployedFor(gh, RECEIPT_ENV, RECEIPT_DOC), keyDocument: RECEIPT_DOC }));
   assert.equal(res._status, 503, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "store_unreachable");
   assert.equal(gh.putLog.length, writes, "nothing written");
 });
 
-test("P07 (signedByHtml): a WITHDRAWN record signed by a key the key document does not list says its signature cannot be confirmed, never that it verifies", async () => {
+test("P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list says its signature is not confirmed, never that it verifies", async () => {
   const p = await committedCase();
   const caseKey = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
   const env = {
@@ -448,15 +454,15 @@ test("P07 (signedByHtml): a WITHDRAWN record signed by a key the key document do
   const keyId = caseKey.verifier.split("+").slice(0, 2).join("+");
   const listing = { ...S.PUBLISHED_KEYS, keys: [{ key_id: keyId, verifier: caseKey.verifier, since: "2026-10-10", note: "a test key", status: "active" }] };
   const res = makeRes();
-  await H.handleCaseWithdraw(post("case-withdraw", { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt }), res, { now: REVEAL_AT, env, keyDocument: listing });
+  await H.handleCaseWithdraw(post("case-withdraw", { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt }), res, { now: REVEAL_AT, env: KD.deployedFor(gh, env, listing), keyDocument: listing });
   assert.equal(res._status, 201, JSON.stringify(res._body));
   assert.equal(gh.read(PINS, C.casePath(ID)).signed_by, keyId, "fixture: signed");
   const listed = await page(ID, listing);
-  assert.match(listed.html, /the signature verifies under the published verifier/, "control");
+  assert.match(listed.html, /the signature verified under the key document this record names/, "control");
   const unlisted = await page(ID, S.PUBLISHED_KEYS);
   assert.equal(unlisted.status, 200);
-  assert.match(unlisted.html, /the signature cannot be confirmed by the key document \(signer_unpublished\)/);
-  assert.ok(!unlisted.html.includes("the signature verifies under the published verifier"));
+  assert.match(unlisted.html, /its signature is not confirmed: signer_unlisted \(case_key_not_listed\)/);
+  assert.ok(!unlisted.html.includes("the signature verified"));
 });
 
 test("P08 (pinnedHtml): a pin file holding another chain reads as a conflict on the page, never as pinned", async () => {
@@ -474,7 +480,7 @@ test("P10 (crossRows): a reference row's operator is escaped on the page", async
   const p = await sealedCase();
   const res = makeRes();
   await H.handleCaseReference(post("case-reference",
-    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: RECEIPT_ENV, keyDocument: RECEIPT_DOC });
+    { case_id: ID, role: "a", tape_sha256: p.a.tape_sha256, salt: p.a.salt, cross_reference: { operator: "<i>op</i>", reference: "r-1", url: "https://op.example/r/1" } }), res, { now: REVEAL_AT + 3600000, env: KD.deployedFor(gh, RECEIPT_ENV, RECEIPT_DOC), keyDocument: RECEIPT_DOC });
   assert.equal(res._status, 201, JSON.stringify(res._body));
   const pg = await page();
   assert.ok(pg.html.includes("&lt;i&gt;op&lt;/i&gt;"), "escaped");

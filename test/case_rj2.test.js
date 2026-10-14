@@ -187,7 +187,7 @@ async function reference(c, role = "a", ref = "row") {
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 const rowPath = (id, n) => C.referencePath(id, n);
@@ -215,7 +215,7 @@ test("B2 (version 4 since unit R-PIN): the signed row carries the version-4 sent
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
   const stored = gh.read(PINS, rowPath(c.id, 1));
   assert.deepEqual([stored.anchor_note, stored.note_version], [V4_NOTE, 4]);
-  assert.equal(S.publishedSignatureReason(stored, DOC), null, "the sentence is under the signature");
+  assert.equal((await S.signedUnderReason(stored, "case", DOC)).code, "valid_under_document", "the sentence is under the signature");
   assert.equal(r.body.anchor_note, V4_NOTE);
   assert.equal(Object.prototype.hasOwnProperty.call(r.body, "row_commit_note"), false);
   const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8").replace(/\s+/g, " ");
@@ -224,20 +224,21 @@ test("B2 (version 4 since unit R-PIN): the signed row carries the version-4 sent
   assert.ok(!readme.includes(V3_NOTE));
 });
 
-test("B2: a row carrying version 2 or 3, or no version, reads as its own reason (row_note_v2, row_note_v3, row_note_v1) and is not counted; the v1 reason names what the row lacks", async () => {
+// The architect's ruling on unit R-SIG: note_version must equal 4; a row at
+// version 3 keeps its own reading, and any other, or none, is malformed.
+test("B2 (since unit R-SIG): a row carrying version 3 reads as row_note_v3; one carrying version 2, or no version, is malformed_field; none is counted", async () => {
   const { id } = await sealedCase("RJ2 B2 versions");
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
+  const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, DOC) }, signer);
   const v2 = { ...good, note_version: 2, anchor_note: V2_NOTE };
   const v3 = { ...good, note_version: 3, anchor_note: V3_NOTE };
   const { note_version: _n, ...none } = good;
   const v1 = C.validateReferenceRow(none);
-  assert.equal(v1.code, "row_note_v1");
-  assert.match(v1.error, /no note_version/);
-  assert.doesNotMatch(v1.error, /first/);
-  assert.equal(C.validateReferenceRow(v2).code, "row_note_v2");
+  assert.equal(v1.code, "malformed_field");
+  assert.match(v1.error, /note_version must be 4/);
+  assert.equal(C.validateReferenceRow(v2).code, "malformed_field");
   assert.equal(C.validateReferenceRow(v3).code, "row_note_v3");
-  for (const [row, reason] of [[v2, "row_note_v2"], [v3, "row_note_v3"], [none, "row_note_v1"]]) {
+  for (const [row, reason] of [[v2, "reference_malformed_field"], [v3, "row_note_v3"], [none, "reference_malformed_field"]]) {
     gh.seed(PINS, rowPath(id, 1), row);
     const live = await S.liveRecords(storedCase(id), { keyDocument: DOC });
     assert.deepEqual([live.records, live.invalid], [1, [{ seq: 1, reason }]], reason);

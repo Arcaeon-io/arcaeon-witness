@@ -128,7 +128,7 @@ async function register(id, p) {
 async function withdraw(id, p, { now = NOW + 2000, reason } = {}) {
   const res = makeRes();
   const body = { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt, ...(reason === undefined ? {} : { reason }) };
-  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env: KEYS, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 // Run `inner` when the first request matching `match` goes out, then let
@@ -260,7 +260,7 @@ async function reference(c, role = "a", ref = "row") {
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 
@@ -282,18 +282,19 @@ async function casePage(id, now = REVEAL_AT + 3600000) {
 // tapes are read; a signed refusal receipt
 // =============================================================================
 
-test("DESIGN N (1): a withdrawal records its reason code beside by_role and at: party_choice, deadline or other, from the request, party_choice by default; any other is 400 and nothing is withdrawn", async () => {
-  for (const [given, want] of [[undefined, "party_choice"], ["party_choice", "party_choice"], ["deadline", "deadline"], ["other", "other"]]) {
+test("DESIGN N (1): a withdrawal records its reason code beside by_role and at: party_choice, deadline or other, from the request; since unit R-SIG none when the request names none; any other is 400 and nothing is withdrawn", async () => {
+  for (const [given, want] of [[undefined, undefined], ["party_choice", "party_choice"], ["deadline", "deadline"], ["other", "other"]]) {
     const c = await committedCase(`N reason ${given}`);
     const w = await withdraw(c.id, c.a, { reason: given });
     assert.equal(w.status, 201, JSON.stringify(w.body));
     const rec = storedCase(c.id);
-    assert.deepEqual(Object.keys(rec.withdrawal).sort(), ["at", "by_role", "reason", "salt_sha256"]);
+    assert.deepEqual(Object.keys(rec.withdrawal).sort(), want === undefined ? ["at", "by_role", "salt_sha256"] : ["at", "by_role", "reason", "salt_sha256"]);
     assert.equal(rec.withdrawal.reason, want);
     assert.equal(rec.withdrawal.by_role, "a");
     assert.deepEqual(C.validateCase(rec), { ok: true });
     assert.equal(S.signatureReason(rec, CASE_KEY.verifier), null, "the reason is inside the signed bytes");
-    assert.ok((await casePage(c.id)).html.includes(`<th>reason</th><td><code>${want}</code></td>`), "the withdrawn page shows the code");
+    assert.ok((await casePage(c.id)).html.includes(want === undefined ? "<th>reason</th><td>No reason was given.</td>" : `<th>reason</th><td><code>${want}</code></td>`),
+      "the withdrawn page shows the code, or that none was given");
     assert.notEqual(S.signatureReason({ ...rec, withdrawal: { ...rec.withdrawal, reason: "other" === want ? "deadline" : "other" } }, CASE_KEY.verifier), null);
   }
   const c = await committedCase("N reason bad");
@@ -332,7 +333,7 @@ test("DESIGN N (2): a joint reveal after a withdrawal is refused 409 case_withdr
   assert.deepEqual(gh.putLog.slice(writes), [], "nothing stored");
 });
 
-test("DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: consent_not_jointly_held, role, commitment_sha256, signed_under}, signed by the reconcile key under the key document the deployment carries, which anyone can verify; the public case record and page do not change; with no reconcile signer there is no receipt and no 409", async () => {
+test("DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), role, commitment_sha256, signed_under}, signed by the reconcile key under the key document the deployment carries, which anyone can verify; the public case record and page do not change; with no reconcile signer there is no receipt and no 409", async () => {
   const c = await committedCase("N receipt");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const record = storedCase(c.id);
@@ -342,12 +343,12 @@ test("DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal recei
   assert.equal(r.status, 409);
   const rr = r.body.refusal_receipt;
   assert.deepEqual([rr.kind, rr.v, rr.case_id, rr.at, rr.reason, rr.role, rr.commitment_sha256],
-    ["comparison_refused", 1, c.id, C.utcSeconds(REVEAL_AT), "consent_not_jointly_held", "a", c.a.commitment_sha256]);
+    ["comparison_refused", 1, c.id, C.utcSeconds(REVEAL_AT), "case_withdrawn", "a", c.a.commitment_sha256]);
   assert.equal(rr.signed_by, KD.keyIdOf(RECEIPT_KEY));
   assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: true });
   // what anyone holding it can check: a changed field, another case, a document that does not list the key
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, at: C.utcSeconds(REVEAL_AT + 1000) }, DOC)).reason, "bad_signature");
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, case_id: "f".repeat(64) }, DOC)).reason, "bad_signature");
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, at: C.utcSeconds(REVEAL_AT + 1000) }, DOC), { ok: false, reason: "signature_invalid", detail: "bad_signature" });
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, case_id: "f".repeat(64) }, DOC), { ok: false, reason: "signature_invalid", detail: "bad_signature" });
   assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY)))).reason, "signer_unlisted");
   assert.equal((await S.verifyRefusalReceipt({ ...rr, reason: "other" }, DOC)).reason, "malformed_field");
   assert.equal((await S.verifyRefusalReceipt({ ...rr, extra: 1 }, DOC)).reason, "unknown_field");
@@ -377,7 +378,7 @@ async function handSealed(scope, caseSigner) {
   assert.equal(st.ok, true);
   const sealed = S.sealCase(storedCase(c.id), {
     reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, DOC, C.utcSeconds(REVEAL_AT)),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, DOC),
   }, caseSigner);
   gh.seed(PINS, C.casePath(c.id), sealed);
   return { ...c, sealed };
@@ -400,23 +401,21 @@ test("ONE SIGNATURE RULE: verifyCase is deleted (no caller outside the tests); n
   assert.deepEqual(files.filter((f) => /\bverifyCase\s*[(,]|function\s+verifyCase\b/.test(fs.readFileSync(path.join(root, f), "utf8"))), []);
 });
 
-test("ONE SIGNATURE RULE: a seal with sig null reads case_signature_invalid (unsigned_seal), never valid_under_document: the sealer pins nothing, a reference is refused, the page shows no verdict", async () => {
+test("ONE SIGNATURE RULE (since unit R-SIG): a seal with sig null is not a valid record (malformed_field) and cannot be built: the sealer reads it unreadable and pins nothing, a reference is refused, the page answers from nothing in it", async () => {
   const signed = await handSealed("sig rule signed", S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.equal((await S.sealedRecordReason(signed.sealed, DOC)).code, "valid_under_document", "control: the same seal, signed");
-  const u = await handSealed("sig rule unsigned", S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { keyDocument: DOC }));
-  assert.equal(u.sealed.sig, null, "fixture: unsigned");
-  assert.deepEqual(await S.sealedRecordReason(u.sealed, DOC), { code: "case_signature_invalid", reason: "unsigned_seal" });
-  assert.equal(S.sealHolds(await S.sealedRecordReason(u.sealed, DOC)), false);
-  // under any document, the current one included
-  assert.equal((await S.sealedRecordReason(u.sealed, KD.docWith(KD.reconcileEntry(RECEIPT_KEY)))).reason, "unsigned_seal");
-  const one = await S.anchorCase(u.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
-  assert.deepEqual([one.ok, one.code, one.reason], [false, "case_signature_invalid", "unsigned_seal"]);
-  assert.equal(gh.has(PINS, S.pinPaths(u.id).seq), false, "never pinned");
-  const r = await reference(u);
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "case_signature_invalid", "unsigned_seal"]);
-  const page = (await casePage(u.id)).html;
-  assert.match(page, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
-  assert.ok(page.includes("<code>unsigned_seal</code>"));
+  assert.throws(() => S.signCase({ kind: "a seal" }, null), /no signer/, "no seal is built unsigned");
+  const unsigned = { ...signed.sealed, sig: null, signed_by: null, sig_reason: "This case is sealed and not signed." };
+  assert.deepEqual([C.validateCase(unsigned).code, C.validateCase(unsigned).field], ["malformed_field", "sig"]);
+  gh.seed(PINS, C.casePath(signed.id), unsigned);
+  const one = await S.anchorCase(signed.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual([one.ok, one.code, one.reason], [false, "case_record_unreadable", "case_malformed_field"]);
+  assert.equal(gh.has(PINS, S.pinPaths(signed.id).seq), false, "never pinned");
+  const r = await reference(signed);
+  assert.deepEqual([r.status, r.body.error_code], [503, "case_record_unreadable"]);
+  const page = await casePage(signed.id);
+  assert.ok(page.html.includes("cannot be read as a valid arcaeon-case/1 record (case_malformed_field)"));
+  assert.doesNotMatch(page.html, /MATCHED/);
 });
 
 test("ONE SIGNATURE RULE: the reveal seals only signed; without a case key the current document lists, it is 503 case_signer_unavailable before anything is written or compared", async (t) => {
@@ -462,10 +461,12 @@ test("MUST-FAIL GAP (L04, L05, L06): a case lock record that names a held lease 
   assert.equal((await commit(id, a)).status, 201);
 });
 
-test("MUST-FAIL GAP (R04): an unsigned seal reads case_signature_invalid (unsigned_seal) even when the document it names cannot be fetched: the rule needs no document, so it never reads could-not-look", async () => {
-  const u = await handSealed("gap unsigned unfetchable", S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }, { keyDocument: DOC }));
-  const elsewhere = { ...u.sealed, signed_under: { ...u.sealed.signed_under, document_commit: "f".repeat(40) } };
-  assert.deepEqual(await S.sealedRecordReason(elsewhere, DOC), { code: "case_signature_invalid", reason: "unsigned_seal" });
+test("MUST-FAIL GAP (R04; since unit R-SIG the schema's rule): an unsigned seal is malformed_field even when the document it names cannot be fetched: the rule needs no document, so it never reads could-not-look", async () => {
+  const s1 = await handSealed("gap unsigned unfetchable", S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  const elsewhere = { ...s1.sealed, signed_under: { ...s1.sealed.signed_under, document_commit: "f".repeat(40) }, sig: null, signed_by: null, sig_reason: "not signed" };
+  const reads = gh.rawLog.length + gh.compareLog.length;
+  assert.equal(C.validateCase(elsewhere).code, "malformed_field");
+  assert.equal(gh.rawLog.length + gh.compareLog.length, reads, "no document read");
   // control: a signed seal naming that commit could not be looked at
   const signed = await handSealed("gap signed unfetchable", S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   const s2 = S.signCase({ ...signed.sealed, signed_under: { ...signed.sealed.signed_under, document_commit: "f".repeat(40) }, sig: null, sig_reason: null, signed_by: null },
@@ -582,34 +583,33 @@ test("MUST-FAIL GAP (E05; since unit R-RV the reveal's one write is the seal): a
   assert.equal(storedCase(c.id).status, "VERDICT");
 });
 
-test("MUST-FAIL GAP (N15, N17, N19, N20, N22, N23, N24; since unit R-N): the refusal receipt's checker names each defect, and a withdrawal record built without a reason gets party_choice", async () => {
+test("MUST-FAIL GAP (N15, N17, N19, N20, N22, N23, N24; since unit R-N): the refusal receipt's checker names each defect, and (since unit R-SIG) a withdrawal record built without a reason records none", async () => {
   const at = C.utcSeconds(REVEAL_AT);
   const signer = S.loadReconcileSigner(KEYS, { keyDocument: DOC });
-  const signedUnder = KD.signedUnder(gh, DOC, at);
+  const signedUnder = KD.signedUnder(gh, DOC);
   const fields = { caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder };
   const rr = S.refusalReceipt(fields, signer);
   assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: true });
   const { sig_reason: _gone, ...missing } = rr; // eslint-disable-line no-unused-vars
-  const resigned = (over) => S.signRecord({ ...S.refusalReceipt(fields, signer), sig: null, sig_reason: null, signed_by: null, ...over },
-    signer, "This refusal receipt is not signed");
-  for (const [name, rec, doc, want] of [
+  const resigned = (over) => S.signRecord({ ...S.refusalReceipt(fields, signer), sig: null, sig_reason: null, signed_by: null, ...over }, signer);
+  for (const [name, rec, doc, want, detail] of [
     ["a field missing", missing, DOC, "missing_field"],
     ["a case id that is not one", resigned({ case_id: "C".repeat(64) }), DOC, "malformed_field"],
     ["a time that is not one", resigned({ at: "2026-10-10 09:00:00" }), DOC, "malformed_field"],
     ["another version", resigned({ v: 2 }), DOC, "malformed_field"],
     ["a role that is not one", resigned({ role: "c" }), DOC, "malformed_field"],
     ["a commitment that is not one", resigned({ commitment_sha256: "D".repeat(64) }), DOC, "malformed_field"],
-    ["signed_under with a field more", resigned({ signed_under: { ...signedUnder, extra: 1 } }), DOC, "malformed_field"],
-    ["a current document that does not read", rr, { not: "a key document" }, "current_document_unreadable"],
-    ["the reconcile key revoked", rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" })), "signer_revoked"],
-    ["signed by the case key", S.refusalReceipt(fields, S.loadCaseSigner(KEYS, { keyDocument: DOC })), DOC, "signer_unpublished"],
+    ["signed_under with a field more", resigned({ signed_under: { ...signedUnder, extra: 1 } }), DOC, "unknown_field"],
+    ["a current document that does not read", rr, { not: "a key document" }, "document_unavailable", "current_document_unreadable"],
+    ["the reconcile key revoked", rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" })), "signer_revoked", "key_revoked"],
+    ["signed by the case key", S.refusalReceipt(fields, S.loadCaseSigner(KEYS, { keyDocument: DOC })), DOC, "signature_invalid", "signer_unpublished"],
   ]) {
-    assert.deepEqual(await S.verifyRefusalReceipt(rec, doc), { ok: false, reason: want }, name);
+    assert.deepEqual(await S.verifyRefusalReceipt(rec, doc), { ok: false, reason: want, ...(detail === undefined ? {} : { detail }) }, name);
   }
-  // the record builder's own default
+  // the record builder: since unit R-SIG no default
   const c = await committedCase("gap withdrawn default");
-  const w = S.withdrawnRecord(storedCase(c.id), { role: "a", at: C.utcSeconds(NOW + 2000), salt: c.a.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
-  assert.equal(w.withdrawal.reason, "party_choice");
+  const w = S.withdrawnRecord(storedCase(c.id), { role: "a", at: C.utcSeconds(NOW + 2000), salt: c.a.salt, signedUnder }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.equal(Object.prototype.hasOwnProperty.call(w.withdrawal, "reason"), false);
 });
 
 test("MUST-FAIL GAP (L39): a case that reads under the lock but is not a valid case record (here: WITHDRAWN with no withdrawal) cannot say whether it was withdrawn: 503 case_record_unreadable, nothing registered", async () => {
@@ -637,16 +637,15 @@ test("MUST-FAIL GAP (L42): a withdrawal whose root write the store refuses relea
   assert.equal((await withdraw(c.id, c.a, { now: NOW + 3000 })).status, 201);
 });
 
-test("MUST-FAIL GAP (PG06): a withdrawal record from before the reason existed reads, and its page says none was recorded rather than naming one", async () => {
+test("MUST-FAIL GAP (PG06): a withdrawal record with no reason reads, and its page says none was given (since unit R-SIG, \"No reason was given.\") rather than naming one", async () => {
   const c = await committedCase("gap legacy withdrawal");
   assert.equal((await withdraw(c.id, c.a)).status, 201);
   const rec = storedCase(c.id);
   const { reason: _r, ...legacyWithdrawal } = rec.withdrawal; // eslint-disable-line no-unused-vars
-  const legacy = S.signRecord({ ...rec, withdrawal: legacyWithdrawal, sig: null, sig_reason: null, signed_by: null },
-    S.loadCaseSigner(KEYS, { keyDocument: DOC }), "This case is withdrawn and not signed");
+  const legacy = S.signRecord({ ...rec, withdrawal: legacyWithdrawal, sig: null, sig_reason: null, signed_by: null }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.deepEqual(C.validateCase(legacy), { ok: true });
   gh.seed(PINS, C.casePath(c.id), legacy);
   const html = (await casePage(c.id)).html;
-  assert.ok(html.includes('<th>reason</th><td><span class="muted">none recorded</span></td>'));
+  assert.ok(html.includes("<th>reason</th><td>No reason was given.</td>"));
   assert.ok(!/<th>reason<\/th><td><code>/.test(html), "no reason is made up");
 });

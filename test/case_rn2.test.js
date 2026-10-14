@@ -164,7 +164,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope) {
@@ -200,7 +200,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -316,10 +316,12 @@ test("R-N2 m6: a receipt naming a commit definitely off the published branch has
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const rr = (await reveal(c, { body: ownOpening(c, "a") })).body.refusal_receipt;
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
-  assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC)).reason, "document_not_on_branch");
+  // since unit R-SIG the one reader's code, with its reason as detail
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC),
+    { ok: false, reason: "document_unavailable", detail: "commit_not_on_branch" });
   S._internal.clearDocumentCache();
   gh.forceCompareFailure(1, 503, S.KEY_DOCUMENT_REPO);
-  assert.equal((await S.verifyRefusalReceipt(rr, DOC)).reason, "document_unavailable");
+  assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: false, reason: "document_unavailable", detail: "compare_http_503" });
   assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: true });
 });
 
@@ -351,19 +353,21 @@ test("R-N2 m6: the README has a section on checking a refusal receipt, and tools
   assert.deepEqual([other.signature_ok, other.signature_reason], [false, "document_sha256_mismatch"], "another document (unit R-N4, R4)");
 });
 
-test("R-N2 m7: an unsigned withdrawal record is labelled 'withdrawal record, unsigned: not a record' and its sig_reason is never printed; the case still reads WITHDRAWN and the refusal does not depend on the signature", async () => {
+test("R-N2 m7 (since unit R-SIG): an unsigned withdrawal record is never built, and one found in the store is not a valid record: the page answers from nothing in it and never prints its sig_reason", async () => {
   const c = await committedCase("RN2 unsigned withdrawal");
-  const rec = S.withdrawnRecord(storedCase(c.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: c.b.salt },
-    { ok: false, code: "case_key_unset", reason: "no case signing key is configured (WITNESS_CASE_SIGNER_KEY is not set)" });
-  assert.equal(rec.sig, null, "fixture: unsigned, as an earlier build wrote one");
+  assert.throws(() => S.withdrawnRecord(storedCase(c.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: c.b.salt, signedUnder: KD.signedUnder(gh, DOC) },
+    { ok: false, code: "case_key_unset", reason: "no case signing key is configured (WITNESS_CASE_SIGNER_KEY is not set)" }), /no signer/);
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const sigReason = "This withdrawal record is not signed (case_key_unset): WITNESS_CASE_SIGNER_KEY is not set.";
+  const rec = { ...storedCase(c.id), sig: null, signed_by: null, sig_reason: sigReason };
+  assert.equal(C.validateCase(rec).code, "malformed_field");
   gh.seed(PINS, C.casePath(c.id), rec, { keepHistory: true });
   const p = await casePage(c.id);
-  assert.equal(p.status, 200);
-  assert.match(p.html, /WITHDRAWN/);
-  assert.ok(p.html.includes("withdrawal record, unsigned: not a record"));
-  assert.ok(!p.html.includes("WITNESS_CASE_SIGNER_KEY") && !p.html.includes(rec.sig_reason), "never the sig_reason");
+  assert.equal(p.status, 503);
+  assert.ok(p.html.includes("cannot be read as a valid arcaeon-case/1 record (case_malformed_field)"));
+  assert.ok(!p.html.includes("WITNESS_CASE_SIGNER_KEY") && !p.html.includes(sigReason), "never the sig_reason");
   const r = await reveal(c, { body: ownOpening(c, "a") });
-  assert.deepEqual([r.status, r.body.error_code], [409, "case_withdrawn"]);
+  assert.deepEqual([r.status, r.body.error_code], [503, "case_record_unreadable"]);
 });
 
 test("R-N2 m10 (since unit R-L4, the root's projection): registration_recorded on the projection path and on the abandoned branch", async () => {
@@ -463,15 +467,16 @@ test("MUST-FAIL GAP (R10, R11, R13, R15): the offline checker holds the receipt 
   const offline = require("../tools/check_refusal_receipt.js").offline;
   const at = C.utcSeconds(REVEAL_AT);
   const fields = { caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64) };
-  const good = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  // unit R-N4 (R4): {signature_ok, reason}, never a key named ok
-  assert.deepEqual(offline(good, DOC), { signature_ok: true, reason: null }, "the signature holds against the document supplied");
-  assert.deepEqual(offline({ ...good, v: 2 }, DOC), { signature_ok: false, reason: "malformed_field" });
-  const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(byCase, DOC), { signature_ok: false, reason: "signer_unpublished" });
+  const good = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
+  // unit R-N4 (R4): {signature_ok, reason}, never a key named ok; since unit
+  // R-SIG through the one reader, so asynchronous
+  assert.deepEqual(await offline(good, DOC), { signature_ok: true, reason: null }, "the signature holds against the document supplied");
+  assert.deepEqual(await offline({ ...good, v: 2 }, DOC), { signature_ok: false, reason: "malformed_field" });
+  const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(await offline(byCase, DOC), { signature_ok: false, reason: "signer_unpublished" });
   const revoked = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" }));
-  const underRevoked = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, revoked, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(underRevoked, revoked), { signature_ok: false, reason: "signer_not_active" });
+  const underRevoked = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, revoked) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(await offline(underRevoked, revoked), { signature_ok: false, reason: "signer_not_active" });
 });
 
 

@@ -7,7 +7,7 @@
 //
 //   FIX 1  anchorCase verifies the stored case's own signature under the
 //          verifier its signed_by names in the key document: a replaced sig
-//          is case_signature_invalid, no pin (GPT's planted test).
+//          is signature_invalid (since unit R-SIG), no pin (GPT's planted test).
 //   FIX 2  signing fails closed unless the key is an ACTIVE entry of the
 //          committed key document: three valid distinct keys, a document
 //          without the case key, and the seal is unsigned, key_unpublished
@@ -215,7 +215,7 @@ function pinFilesOf(id) {
 // FIX 1: anchorCase verifies the stored case's own signature
 // =============================================================================
 
-test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its sig alone replaced, is refused case_signature_invalid by anchorCase and no pin is written", async () => {
+test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its sig alone replaced, is refused signature_invalid (since unit R-SIG) by anchorCase and no pin is written", async () => {
   const { id } = await sealedCase({ pinFails: true });
   const good = storedCase(id);
   assert.equal(typeof good.sig, "string", "fixture: the case is signed");
@@ -226,18 +226,18 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   const k = checkpoint.parseSignerKey(CASE_KEY.signer);
   const forged = { ...good, sig: crypto.sign(null, Buffer.from("other bytes"), k.privateKey).toString("base64") };
   assert.deepEqual(C.validateCase(forged), { ok: true }, "fixture: schema-valid");
-  assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null, "fixture: the receipt still binds");
+  assert.equal(S.checkSealedReceipt(forged), null, "fixture: the receipt still binds");
   gh.seed(PINS, C.casePath(id), forged);
   const writes = gh.putLog.length;
   const got = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
   assert.equal(got.ok, false);
-  assert.equal(got.code, "case_signature_invalid", JSON.stringify(got));
+  assert.equal(got.code, "signature_invalid", JSON.stringify(got));
   assert.equal(got.reason, "bad_signature");
   assert.equal(gh.putLog.length, writes, "no write");
   assert.deepEqual(pinFilesOf(id), [], "no pin");
   // and through the sealer's run: refused, reported, no pin
   const run = await sealer.sealOnce({ now: new Date(REVEAL_AT + 120000), keyDocument: KEYS_DOC });
-  assert.deepEqual(run.cases.refused, [{ case_id: id, code: "case_signature_invalid", reason: "bad_signature" }]);
+  assert.deepEqual(run.cases.refused, [{ case_id: id, code: "signature_invalid", reason: "bad_signature" }]);
   assert.deepEqual(pinFilesOf(id), []);
 
   // Since Design I the signer is held to the document the case NAMES; the
@@ -260,7 +260,7 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   assert.deepEqual(pinFilesOf(id), [], "not pinned when it could not look");
   // MUST-FAIL ARM: 2b's retry checked the receipt only, which passes the
   // forged case, so only the signature check stood between it and a pin.
-  assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null);
+  assert.equal(S.checkSealedReceipt(forged), null);
   // control: the case as sealed anchors, under a rotated-out key too (since
   // unit R-REV it stays listed active, with a note that it no longer signs;
   // since unit R-I the current document lists the reconcile key too)
@@ -270,7 +270,7 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   assert.equal(rotated.chain, S.caseChain(good));
 });
 
-test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the reveal will not make one, and the sealer refuses one it finds (case_signature_invalid, unsigned_seal) and pins nothing", async () => {
+test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the reveal will not make one, and since unit R-SIG one found in the store is not a valid record (malformed_field): the sealer reads it unreadable and pins nothing", async () => {
   const c = await committedCase({ over: { scope_digest: sha("unsigned refused") } });
   const refused = await reveal(revealBody(c.id, c.a, c.b), { env: { [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, [LOG_ENV]: LOG_KEY.signer } });
   assert.deepEqual([refused.status, refused.body.error_code, refused.body.reason], [503, "case_signer_unavailable", "case_key_unset"]);
@@ -278,10 +278,11 @@ test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the
   // one found in the store (built the seal module's way, unsigned)
   const { id } = await sealedCase({ pinFails: true });
   const k = storedCase(id);
-  gh.seed(PINS, C.casePath(id), S.signRecord({ ...k, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed"));
+  assert.throws(() => S.signRecord({ ...k, signed_by: null, sig: null }, S.loadCaseSigner({})), /no signer/);
+  gh.seed(PINS, C.casePath(id), { ...k, signed_by: null, sig: null, sig_reason: "This case is sealed and not signed." });
   assert.equal(storedCase(id).sig, null);
   const r = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
-  assert.deepEqual([r.ok, r.code, r.reason], [false, "case_signature_invalid", "unsigned_seal"]);
+  assert.deepEqual([r.ok, r.code, r.reason], [false, "case_record_unreadable", "case_malformed_field"]);
   assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "never pinned");
 });
 
@@ -337,7 +338,7 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   assert.deepEqual(ok.entry, ENTRY);
   const signed = await sealedCase({ over: { scope_digest: sha("published") } });
   assert.equal(storedCase(signed.id).signed_by, CASE_KEY_ID);
-  assert.equal(S.publishedSignatureReason(storedCase(signed.id), KEYS_DOC), null, "and the document confirms the signature");
+  assert.equal((await S.sealedRecordReason(storedCase(signed.id), KEYS_DOC)).code, "valid_under_document", "and the document confirms the signature");
 });
 
 test("FIX 2: the committed key document is loaded with require() at module load, frozen, and is the default", () => {
@@ -471,9 +472,9 @@ test("FIX 6: a case with the withdrawn marker is not considered for a pin (its c
   assert.equal((await S.anchorCase(e.id, { now: after })).code, "terminal");
   // (c) a WITHDRAWN root whose marker is missing: read once, terminal
   const x = await committedCase({ over: { scope_digest: sha("withdrawn root") } });
-  gh.seed(PINS, C.casePath(x.id), { v: 1, case_id: x.id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
-    commitments: storedCase(x.id).commitments,
-    withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), signed_by: null, sig: null, sig_reason: "unsigned in this test" });
+  // (since unit R-SIG a withdrawal record is signed under the document it names)
+  gh.seed(PINS, C.casePath(x.id), S.withdrawnRecord(storedCase(x.id), { role: "a", at: "2026-10-10T08:30:00Z", salt: C.newSalt(),
+    signedUnder: KD.signedUnder(gh, KEYS_DOC) }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC })));
   writes = gh.putLog.length;
   const r3 = await S.anchorPending({ now: REVEAL_AT, keyDocument: KEYS_DOC });
   assert.deepEqual(r3.terminal, [{ case_id: x.id, status: "WITHDRAWN" }]);
@@ -516,12 +517,12 @@ async function committedWith(over, tapeA, tapeB) {
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
 async function withdraw(body, { now = REVEAL_AT, env = SIGNED, keyDocument = KEYS_DOC } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env, keyDocument });
+  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env: KD.deployedFor(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 async function reference(body, { now = REVEAL_AT + 3600000, env = SIGNED, keyDocument = KEYS_DOC, headers = {} } = {}) {
   const res = makeRes();
-  await H.handleCaseReference(req("case-reference", body, headers), res, { now, env, keyDocument });
+  await H.handleCaseReference(req("case-reference", body, headers), res, { now, env: KD.deployedFor(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
@@ -552,8 +553,8 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.deepEqual(Object.keys(k).sort(), [...C.WITHDRAWN_FIELDS].sort());
   assert.deepEqual(C.validateCase(k), { ok: true });
   assert.equal(k.status, "WITHDRAWN");
-  // Design N: the reason code, party_choice when the request names none
-  assert.deepEqual(k.withdrawal, { by_role: "a", at: "2026-10-10T09:00:00Z", salt_sha256: C.saltSha256(a.salt), reason: "party_choice" });
+  // Design N: the reason code; since unit R-SIG none when the request names none
+  assert.deepEqual(k.withdrawal, { by_role: "a", at: "2026-10-10T09:00:00Z", salt_sha256: C.saltSha256(a.salt) });
   assert.deepEqual(k.limits, C.LIMITS.slice());
   // no labels; the commitments exactly as the root projected them (unit R-L5)
   const text = JSON.stringify(k);
@@ -564,7 +565,7 @@ test("TEST 10: a withdrawal before the joint reveal publishes only the redacted 
   assert.deepEqual(k.commitments, before.commitments, "the projection, exactly as it stood");
   // signed with the case key, confirmed by the document
   assert.equal(k.signed_by, CASE_KEY_ID);
-  assert.equal(S.publishedSignatureReason(k, KEYS_DOC), null);
+  assert.equal((await S.signedUnderReason(k, "case", KEYS_DOC)).code, "valid_under_document");
   // the marker, create-only, and the registrations left in place, said in words
   assert.equal(w.body.marker, "written");
   assert.equal(gh.read(PINS, C.withdrawnMarkerPath(id)).case_id, id);
@@ -759,7 +760,7 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   const r = await reference({ ...proofOf(id, a), cross_reference: XREF });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(r.body.seq, 1);
-  assert.equal(r.body.appended_by, "role:a");
+  assert.equal(r.body.appended_by, "preimage:a");
   assert.equal(r.body.records_sealed, 1);
   assert.equal(r.body.records_live, 2);
   const row = gh.read(PINS, C.referencePath(id, 1));
@@ -771,7 +772,7 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.deepEqual(row.cross_reference, XREF);
   assert.equal(row.recorded_at, "2026-10-10T10:00:00Z", "the service clock");
   assert.equal(row.signed_by, CASE_KEY_ID);
-  assert.equal(S.publishedSignatureReason(row, KEYS_DOC), null, "signed with the case key");
+  assert.equal((await S.signedUnderReason(row, "case", KEYS_DOC)).code, "valid_under_document", "signed with the case key");
   assert.match(row.anchor_note, /no pin of its own/);
   // unit R-PIN: the row's sentence, version 4 (version 3 was never issued)
   assert.equal(row.anchor_note, "This row has no pin of its own. It is recorded by the pins-repository commit that writes it, and no anchoring is asserted here.");
@@ -796,38 +797,36 @@ test("TEST 11: records is 2 only when a valid cross-reference row exists; an add
   assert.equal((await S.liveRecords(storedCase(x.id), { keyDocument: KEYS_DOC })).records, 2);
 });
 
-test("ADDENDUM: an invalid row is ignored by the count; since unit R-N (N1) an unsigned row is not a record either (row_unsigned)", async () => {
+test("ADDENDUM: an invalid row is ignored by the count; since unit R-SIG a row with sig null is malformed_field, and a signature that does not hold is the one reader's answer", async () => {
   const { id } = await sealedCase({ over: { scope_digest: sha("invalid rows") } });
   const sealed = storedCase(id);
   const signer = S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC });
-  const good = (seq, over = {}) => S.referenceRow({ caseId: id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", ...over }, signer);
+  const su = KD.signedUnder(gh, KEYS_DOC);
+  const good = (seq, over = {}) => S.referenceRow({ caseId: id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: su, ...over }, signer);
   const other = checkpoint.generateKey("arcaeon.io/case-other/2026-10-10");
   const otherSigner = S.loadCaseSigner({ ...SIGNED, [S.CASE_SIGNER_ENV]: other.signer }, { keyDocument: { ...KEYS_DOC, keys: [ENTRY, { ...ENTRY, key_id: other.verifier.split("+").slice(0, 2).join("+"), verifier: other.verifier }] } });
   assert.equal(otherSigner.ok, true, "fixture: a key the test document lists but KEYS_DOC does not");
-  const plants = {
-    reference_unknown_field: { ...good(1), extra: true },
-    reference_not_at_its_path: { ...good(1), case_id: "9".repeat(64) },
-    reference_bad_seq: good(2), // a seq-2 row filed at seq 1
-    reference_signature_bad_signature: { ...good(1), cross_reference: { ...XREF, reference: "altered after signing" } },
-    reference_before_seal: good(1, { recordedAt: "2026-10-10T08:59:59Z" }),
-    reference_signature_signer_unpublished: S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, otherSigner),
-    reference_malformed_field: { ...good(1), anchor_note: "anchored by a pin" },
-  };
-  for (const [name, row] of Object.entries(plants)) {
+  // [what, the row, its reason, its detail]
+  const plants = [
+    ["an unknown field", { ...good(1), extra: true }, "reference_unknown_field"],
+    ["another case", { ...good(1), case_id: "9".repeat(64) }, "reference_not_at_its_path"],
+    ["a seq-2 row filed at seq 1", good(2), "reference_not_at_its_path"],
+    ["altered after signing", { ...good(1), cross_reference: { ...XREF, reference: "altered after signing" } }, "signature_invalid", "bad_signature"],
+    ["before the seal", good(1, { recordedAt: "2026-10-10T08:59:59Z" }), "reference_before_seal"],
+    ["a key its document does not list", S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: su }, otherSigner),
+      "signature_invalid", "signer_unpublished"],
+    ["another anchor sentence", { ...good(1), anchor_note: "anchored by a pin" }, "reference_malformed_field"],
+    // unit R-SIG: a row with sig null is not a record, malformed_field
+    ["unsigned", { ...good(1), sig: null, signed_by: null, sig_reason: "not signed in this test" }, "reference_malformed_field"],
+  ];
+  for (const [name, row, reason, detail] of plants) {
     gh.seed(PINS, C.referencePath(id, 1), row);
     const live = await S.liveRecords(sealed, { keyDocument: KEYS_DOC });
     assert.equal(live.ok, true, name);
     assert.equal(live.records, 1, `${name}: an invalid row is not counted`);
     assert.equal(live.invalid.length, 1, name);
-    if (name !== "reference_bad_seq") assert.equal(live.invalid[0].reason, name, `${name}: ${live.invalid[0].reason}`);
-    else assert.equal(live.invalid[0].reason, "reference_not_at_its_path");
+    assert.deepEqual([live.invalid[0].reason, live.invalid[0].detail], [reason, detail], name);
   }
-  // an unsigned row, otherwise valid, is not a record (unit R-N, N1)
-  const unsigned = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "role:b" }, { ok: false, code: "key_unpublished", reason: "no key in this test" });
-  assert.equal(unsigned.sig, null);
-  gh.seed(PINS, C.referencePath(id, 1), unsigned);
-  const u = await S.liveRecords(sealed, { keyDocument: KEYS_DOC });
-  assert.deepEqual([u.records, u.invalid], [1, [{ seq: 1, reason: "row_unsigned" }]]);
   // control: the same row signed is a record
   gh.seed(PINS, C.referencePath(id, 1), good(1));
   assert.equal((await S.liveRecords(sealed, { keyDocument: KEYS_DOC })).records, 2);
@@ -870,11 +869,11 @@ test("ADDENDUM: rows are create-only: the second append takes seq 2; a row that 
   assert.equal((await reference({ ...proofOf(id, a), cross_reference: XREF })).body.seq, 1);
   const second = await reference({ ...proofOf(id, b), cross_reference: { ...XREF, reference: "second" } });
   assert.equal(second.body.seq, 2);
-  assert.equal(second.body.appended_by, "role:b");
+  assert.equal(second.body.appended_by, "preimage:b");
   const first = gh.read(PINS, C.referencePath(id, 1));
   // a row lands at seq 3 between this append's listing and its write
   const signer = S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC });
-  const squat = S.referenceRow({ caseId: id, seq: 3, crossReference: { ...XREF, reference: "landed first" }, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
+  const squat = S.referenceRow({ caseId: id, seq: 3, crossReference: { ...XREF, reference: "landed first" }, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, KEYS_DOC) }, signer);
   const p3 = C.referencePath(id, 3);
   const viaMock = global.fetch;
   let planted = false;
@@ -1025,16 +1024,15 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pd.includes("<code>signer_unlisted</code>"));
   assert.ok(!/<span class="word pass">MATCHED<\/span>/.test(pd));
   assert.ok(pd.includes(CASE_KEY_ID), "the key the record names");
-  // an unsigned seal, through the real dispatch: since the one signature rule
-  // it does not verify, and no verdict is shown
+  // an unsigned seal, through the real dispatch: since unit R-SIG it is not
+  // a valid record, so the page answers from nothing in it
   const u = await sealedCase({ over: { scope_digest: sha("page sealed unsigned") } });
   const uk = storedCase(u.id);
-  gh.seed(PINS, C.casePath(u.id), S.signRecord({ ...uk, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed"));
+  gh.seed(PINS, C.casePath(u.id), { ...uk, signed_by: null, sig: null, sig_reason: "This case is sealed and not signed." });
   const ru = makeRes();
   await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: u.id }, headers: { "x-forwarded-for": freshIp() } }), ru);
-  assert.equal(ru._status, 200);
-  assert.match(String(ru._body), /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
-  assert.ok(String(ru._body).includes("<code>unsigned_seal</code>"));
+  assert.equal(ru._status, 503);
+  assert.ok(String(ru._body).includes("cannot be read as a valid arcaeon-case/1 record (case_malformed_field)"), String(ru._body).slice(0, 400));
   assert.ok(!String(ru._body).includes(">MATCHED<"));
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });

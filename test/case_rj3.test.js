@@ -216,7 +216,7 @@ async function reference(c, role = "a", ref = "row", keyDocument = DOC) {
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 const rowPath = (id, n) => C.referencePath(id, n);
@@ -794,7 +794,7 @@ const REG_FIXTURES = {
     const c = await committedCase("RJ3 reg withdrawn");
     const res = makeRes();
     await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "a", tape_sha256: c.a.tape_sha256, salt: c.a.salt }), res,
-      { now: NOW + 2000, env: KEYS, keyDocument: DOC });
+      { now: NOW + 2000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
     assert.equal(res._status, 201, JSON.stringify(parsed(res)));
     return c.id;
   },

@@ -804,13 +804,25 @@ and ignored: no code reads or writes them.
 A joint reveal of a withdrawn case is refused 409 `case_withdrawn`, and a
 party that names its role and carries its own opening gets a refusal
 receipt: `{kind: "comparison_refused", v: 1, case_id, at, reason:
-"consent_not_jointly_held", role, commitment_sha256, signed_under,
-signed_by, sig, sig_reason: null}`, signed with the service's reconcile
-key under the key document `signed_under` names. It is checked the way a
-sealed case is (`lib/_case_seal.js` `verifyRefusalReceipt`): the named
-document's commit on the published branch, the document there the one
-named, `signed_by` an active reconcile key in it whose signature verifies,
-and that key still listed, not revoked, in the current document.
+"case_withdrawn", role, commitment_sha256, signed_under, signed_by, sig,
+sig_reason: null}`, signed with the service's reconcile key under the key
+document `signed_under` names.
+
+### One signature reader
+
+Every record the service signs carries `signed_under`, exactly
+`{document_sha256, document_commit}`: the sealed case, the withdrawal
+record, the reference row and the refusal receipt. Each writer confirms
+that document at its commit before it signs, as the reveal does, and
+writes nothing otherwise (503 `document_unavailable`). No record is
+unsigned. One function reads all four (`lib/_case_seal.js`
+`signedUnderReason`): the named document's commit on the published
+branch, the document there the one named, `signed_by` listed active in
+its role there (case for the first three, reconcile for the receipt), the
+signature, and the key still listed, not revoked, in the current document.
+It answers `valid_under_document`, `signature_invalid`, `signer_unlisted`,
+`signer_revoked` or `document_unavailable`. A refusal receipt is checked
+by its form and then by that function (`verifyRefusalReceipt`), and
 `tools/check_refusal_receipt.js` does the same from the command line:
 
     node tools/check_refusal_receipt.js receipt.json
@@ -836,7 +848,9 @@ commitment preimage, takes the case's lock, writes the signed withdrawal
 record over the OPEN or COMMITTED case, writes the withdrawn marker, and
 answers. A withdrawal that loses to a seal or the deadline writes nothing to
 the pins repository. A withdrawal request that wrote nothing says "This
-request wrote nothing."
+request wrote nothing." The record carries a reason only when the request
+names one (`party_choice`, `deadline` or `other`); otherwise it has none,
+and the case page says "No reason was given."
 
 The withdrawal record keeps the case root's `commitments` exactly as they
 stood when it was written, inside the signed record. Every reader of a
@@ -879,6 +893,11 @@ read instead. Files a preview pins repository may hold from before this
 release under a case's pin namespace (`latest.json`, and `0000000N.json`
 for N above 1) are left where they are and ignored, and no case code reads
 the daily anchor files under `anchors/`.
+
+A registration file is signed by the registering party over the case,
+role and commitment; its registered_at, stamp_commit and stamped_at are
+the service's unsigned arrival note until a seal copies them into signed
+bytes.
 
 A registration file is a claim, and it stands only once the case root
 projects it. Each claim has its own file,
@@ -923,9 +942,13 @@ A second operator's reference row is signed and create-only, and carries a
 fixed sentence about its anchoring, `anchor_note`, with `note_version: 4`:
 "This row has no pin of its own. It is recorded by the pins-repository
 commit that writes it, and no anchoring is asserted here." Versions 2 and 3
-of this sentence were never issued. A row carrying `note_version` 2 or 3
-reads `row_note_v2` or `row_note_v3`, and a row with no `note_version`
-reads `row_note_v1`; none of them is counted. A case holds at most 500
+of this sentence were never issued. A row carrying `note_version` 3 reads
+`row_note_v3`, and any other version but 4, or none, is `malformed_field`;
+neither is counted. A row's `appended_by` says what was presented:
+`preimage:a` or `preimage:b` (that role's commitment preimage, which both
+parties hold after the reveal) or `operator` (the operator's key); the
+page says "appended on presentation of role a's commitment preimage" or
+"appended with the operator key". A case holds at most 500
 reference rows; the 501st is refused 409 `row_limit`. A row is never
 refused for its case's pin or anchoring: no pin and no anchor is read for a
 row, and its answer names no commit. The case page shows each row with a

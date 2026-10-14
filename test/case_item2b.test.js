@@ -231,8 +231,12 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
     tape_a_digest: { ...good, verdict: { ...R, tapes: { ...R.tapes, tape_a: { ...R.tapes.tape_a, digest: `sha256:raw-bytes:v1:${"0".repeat(64)}` } } } },
     // the reveals name the other role's tape: the receipt no longer binds them
     reveals_swapped: { ...good, reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } },
-    // a signed receipt altered after signing (a count): bound, but its signature breaks
-    receipt_altered: { ...good, verdict: { ...R, verdict: { ...R.verdict, findings: R.verdict.findings + 1 } } },
+    // a signed receipt altered after signing (a count): bound, but its
+    // signature breaks (the case signed again over it: since unit R-SIG the
+    // case's own signature is read first, and a receipt changed under it
+    // reads signature_invalid)
+    receipt_altered: S.signCase((({ sig: _s, signed_by: _b, sig_reason: _r, ...rest }) => rest)({ ...good, verdict: { ...R, verdict: { ...R.verdict, findings: R.verdict.findings + 1 } } }), // eslint-disable-line no-unused-vars
+      S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC })),
   };
   const reasons = {};
   for (const [name, bad] of Object.entries(plants)) {
@@ -547,7 +551,7 @@ test("CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra f
 // SIGNED_BY and the published key document
 // =============================================================================
 
-test("SIGNED_BY: the reveal writes the case signer's key id inside the signed bytes; an unsigned record and an open case carry null; the schema refuses a mismatch", async () => {
+test("SIGNED_BY: the reveal writes the case signer's key id inside the signed bytes; an open case carries null and (since unit R-SIG) no record is built unsigned; the schema refuses a mismatch", async () => {
   const keyId = CASE_KEY.verifier.split("+").slice(0, 2).join("+");
   const vk = checkpoint.parseVerifierKey(CASE_KEY.verifier);
   assert.equal(keyId, `${vk.name}+${vk.hash}`, "fixture: lib/_checkpoint.js's key naming");
@@ -565,15 +569,12 @@ test("SIGNED_BY: the reveal writes the case signer's key id inside the signed by
   assert.equal(S.signatureReason({ ...k, signed_by: "arcaeon.io/other+12345678" }, CASE_KEY.verifier).reason, "bad_signature");
   const lying = S.signCase({ ...k, sig: null, sig_reason: null }, { ...S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }), keyId: "arcaeon.io/other+12345678" });
   assert.equal(S.signatureReason(lying, CASE_KEY.verifier).reason, "signer_mismatch");
-  // an unsigned record carries null (built the seal module's way: since the
-  // one signature rule the reveal itself never seals unsigned)
-  const unsigned = S.signRecord({ ...k, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }),
-    "This case is sealed and not signed");
-  assert.equal(unsigned.signed_by, null);
-  assert.match(unsigned.sig_reason, /\(case_key_unset\)/);
+  // since unit R-SIG no record is built unsigned: the seal module throws
+  assert.throws(() => S.signRecord({ ...k, signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer })),
+    /no signer \(case_key_unset\)/);
   // the schema: signed with no key id, a key id with no signature, a malformed key id
   assert.equal(C.validateCase({ ...k, signed_by: null }).code, "malformed_field");
-  assert.equal(C.validateCase({ ...unsigned, signed_by: keyId }).code, "malformed_field");
+  assert.equal(C.validateCase({ ...k, sig: null, sig_reason: "not signed", signed_by: keyId }).code, "malformed_field");
   for (const badId of ["no-plus-here", "name+1234567", "name+ABCDEF12", "two words+12345678", `${CASE_KEY.verifier}`]) {
     assert.equal(C.validateCase({ ...k, signed_by: badId }).field, "signed_by", badId);
   }

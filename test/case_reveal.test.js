@@ -404,10 +404,9 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
   // party's refusal request: 404 not_a_party, before any tape is read
   plant("withdrawn", 404, "not_a_party", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("withdrawn") } });
-    gh.seed(PINS, C.casePath(id), { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
-      commitments: storedCase(id).commitments,
-      withdrawal: { by_role: "a", at: "2026-10-10T08:30:00Z", salt_sha256: sha("the withdrawing salt") }, limits: C.LIMITS.slice(), signed_by: null, sig: null,
-      sig_reason: "withdrawn in this test" });
+    // (since unit R-SIG a withdrawal record is signed under the document it names)
+    gh.seed(PINS, C.casePath(id), S.withdrawnRecord(storedCase(id), { role: "a", at: "2026-10-10T08:30:00Z", salt: C.newSalt(),
+      signedUnder: KD.signedUnder(gh, KEYS_DOC) }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC })));
     return revealBody(id, a, b);
   });
   plant("unknown case", 404, "case_not_found", async () => {
@@ -639,13 +638,14 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
     assert.equal(got.ok, false, reason);
     assert.equal(got.reason, reason, `${reason}: got ${got.reason}`);
   }
-  // Since red-team fix B nothing unsigned seals: no signer, or an unsigned
-  // receipt, is receipt_unsigned, even when the two agree.
+  // Since red-team fix B nothing unsigned seals: no signer is
+  // receipt_unsigned; and since unit R-SIG an unsigned receipt is not a
+  // receipt a case holds at all (its unsigned_reason is no field of one).
   const unsignedSigner = receipts.loadSigner({});
   assert.equal(S.checkReceipt(receipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unsigned");
   const unsignedReceipt = receipts.signReceipt(receipts.buildReceipt({ bytesA: a.tape, bytesB: b.tape, result, now: REVEAL_AT }), unsignedSigner);
-  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result })).reason, "receipt_unsigned");
-  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unsigned", "unsigned and keyless no longer seal");
+  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result })).reason, "receipt_unknown_field");
+  assert.equal(S.checkReceipt(unsignedReceipt, ctx({ result, signer: unsignedSigner })).reason, "receipt_unknown_field", "unsigned and keyless no longer seal");
 
   // Through the endpoint: a receipt builder that binds the wrong tape. The
   // signature is good; the binding is not; nothing is sealed.
@@ -908,7 +908,7 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
   const unsignedWithExtra = { ...k, signed_by: null, sig: null, sig_reason: "unsigned in this test", anchor: "pending" };
   assert.equal(await verdictOf(unsignedWithExtra), "unknown_field");
   const { anchor, ...unsignedClean } = unsignedWithExtra; // eslint-disable-line no-unused-vars
-  assert.equal(await verdictOf(unsignedClean), "unsigned_seal", "control: without the field it is an unsigned seal, which never verifies");
+  assert.equal(await verdictOf(unsignedClean), "malformed_field", "control: without the field it is an unsigned seal, which since unit R-SIG the schema refuses");
 });
 
 test("TEST 9: with no usable case key nothing is sealed (the one signature rule: an unsigned seal never verifies) and the refusal says why; the log key, the receipt key or an unparseable key is never used to sign", async () => {

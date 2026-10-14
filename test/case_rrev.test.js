@@ -139,7 +139,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope, keys = {}) {
@@ -175,7 +175,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -381,7 +381,7 @@ test("R-REV 7: the reference refuses a revoked-key case 409 signer_revoked and w
   const res = makeRes();
   const before = gh.putLog.length;
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role: "a", tape_sha256: c.a.tape_sha256, salt: c.a.salt, cross_reference: XREF }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: docRevoking({ caseKey: "revoked" }) });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, docRevoking({ caseKey: "revoked" })), keyDocument: docRevoking({ caseKey: "revoked" }) });
   const body = parsed(res);
   assert.deepEqual([res._status, body.error_code, body.reason], [409, "signer_revoked", "key_revoked"], JSON.stringify(body).slice(0, 300));
   assert.doesNotMatch(body.error, /pins repository|written before|does not verify/);

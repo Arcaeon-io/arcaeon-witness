@@ -20,8 +20,8 @@
 //     case whose two commitments share one is single_party, never sealed.
 //   - GPT-5.6 §1.4 and §3.3, three claims (a later revocation, a later
 //     document listing a key, no document recorded): Design I. A sealed
-//     case records signed_under {document_sha256, document_commit,
-//     retrieved_at} and is held to the document it names, read at its
+//     case records signed_under {document_sha256, document_commit} (since
+//     unit R-SIG, no retrieval time) and is held to the document it names, read at its
 //     commit (lib/_case_seal.js THE SEALED CHECK). A later revocation was
 //     signer_since_revoked, still sealed, until unit R-REV (DECIDED, below).
 //   - GPT-5.6 §3.1, a verdict no comparison produced: red-team fix B, A
@@ -58,7 +58,7 @@
 //   - GPT-5.6 §2B, A's reveal refused 409 case_withdrawn after B's
 //     withdrawal: Design N (2026-10-12) keeps the refusal. It now comes
 //     before the tapes are read or hashed, and its answer carries a signed
-//     refusal receipt (comparison_refused, consent_not_jointly_held); the
+//     refusal receipt (comparison_refused; since unit R-SIG reason case_withdrawn); the
 //     public record does not change. The test's assertion asks for a seal,
 //     so it stays todo, and so does §2B's redacted-record test.
 //   - GPT-5.6 §1.2, a reference before the case anchor exists: unit R-PIN
@@ -270,12 +270,12 @@ async function sealedCase(over, { pinFails = false } = {}) {
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
 async function withdraw(body, { now = REVEAL_AT, env = SIGNED } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env, keyDocument: KEYS_DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", body), res, { now, env: KD.deployedFor(gh, env, KEYS_DOC), keyDocument: KEYS_DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function reference(body, { now = REVEAL_AT + 3600000 } = {}) {
   const res = makeRes();
-  await H.handleCaseReference(req("case-reference", body), res, { now, env: SIGNED, keyDocument: KEYS_DOC });
+  await H.handleCaseReference(req("case-reference", body), res, { now, env: KD.deployedFor(gh, SIGNED, KEYS_DOC), keyDocument: KEYS_DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
@@ -387,10 +387,10 @@ test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that
   const { id } = await sealedCase({ scope_digest: sha("1.4 later listing") });
   const rec = storedCase(id);
   const other = checkpoint.parseSignerKey(OTHER_KEY.signer);
-  const resigned = S.signRecord({ ...rec, signed_by: null, sig: null, sig_reason: null }, { ok: true, keyId: keyIdOf(OTHER_KEY), privateKey: other.privateKey }, "unused");
+  const resigned = S.signRecord({ ...rec, signed_by: null, sig: null, sig_reason: null }, { ok: true, keyId: keyIdOf(OTHER_KEY), privateKey: other.privateKey });
   assert.deepEqual(C.validateCase(resigned), { ok: true }, "fixture: schema-valid");
   const earlier = await S.sealedRecordReason(resigned, KEYS_DOC);
-  assert.deepEqual(earlier, { code: "case_signature_invalid", reason: "signer_unpublished" });
+  assert.deepEqual(earlier, { code: "signature_invalid", reason: "signer_unpublished" });
   const later = await S.sealedRecordReason(resigned, docWith(entry(CASE_KEY), entry(OTHER_KEY), KD.reconcileEntry(RECEIPT_KEY)));
   assert.deepEqual(later, earlier, "the verdict on stored bytes does not change with the document alone");
 });
@@ -404,7 +404,9 @@ test('GPT-5.6 §1.4 / §3.3: "No sealed case records the key-document hash, Git 
   assert.ok(digests.some((d) => text.includes(d)), "the sealed case names the key document it was signed under");
   assert.equal(k.signed_under.document_sha256, sha(canonicalBytes(KEYS_DOC)));
   assert.equal(k.signed_under.document_commit, KD.commitOf(KEYS_DOC), "and the Git commit");
-  assert.equal(k.signed_under.retrieved_at, C.utcSeconds(REVEAL_AT), "and the retrieval time (the service clock)");
+  // DECIDED (unit R-SIG): no retrieval time: the service's clock is not a
+  // time any reader can use, and the commit's time is the public bound
+  assert.deepEqual(Object.keys(k.signed_under).sort(), ["document_commit", "document_sha256"]);
 });
 
 test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption): "admit() runs ratelimit.check(req) before openKey() ... The victim is blocked before their valid bearer key is even checked"', async () => {
@@ -714,21 +716,24 @@ test('GPT-5.6 §3.1 / §5 / §6.3: "Fabricate a case verdict without actually ru
   const receipt = receipts.signReceipt(receipts.buildReceipt({ bytesA: AGENT_TAPE, bytesB: TOOL_TAPE, result, now: REVEAL_AT }), { ok: false, reason: "no signer" });
   const st = S.storableReceipt(receipt);
   assert.equal(st.ok, true);
-  const fabricated = S.sealCase(storedCase(id), {
-    reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
-  }, { ok: false, code: "case_key_unset", reason: "no case signing key is configured" });
+  // since unit R-SIG the seal module will not build one with an unsigned
+  // receipt, and a stored one is not a valid case record (malformed_field)
+  const reveals = { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } };
+  assert.throws(() => S.sealCase(storedCase(id), { reveals, receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    signedUnder: KD.signedUnder(gh, KEYS_DOC) }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC })), (e) => e.code === "malformed_field");
+  const entry = (r) => ({ tape_sha256: reveals[r].tape_sha256, salt_sha256: C.saltSha256(reveals[r].salt), revealed_at: C.utcSeconds(REVEAL_AT) });
+  const fabricated = S.signCase({ ...storedCase(id), status: "VERDICT", reveals: { a: entry("a"), b: entry("b") }, verdict: st.receipt, records: 1,
+    cross_reference: null, signed_under: KD.signedUnder(gh, KEYS_DOC) }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
+  assert.equal(C.validateCase(fabricated).code, "malformed_field");
   gh.seed(PINS, C.casePath(id), fabricated);
   const page = await casePage(id);
   assert.equal(compare.mock.callCount(), 0, "reconcile never ran");
-  assert.match(page.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
-  assert.ok(page.html.includes("receipt_unsigned"));
+  assert.equal(page.status, 503);
+  assert.ok(page.html.includes("cannot be read as a valid arcaeon-case/1 record (case_malformed_field)"));
   assert.doesNotMatch(page.html, /<span class="word pass">MATCHED<\/span>/);
   assert.doesNotMatch(page.html, /The service ran its recorded comparison once/);
-  assert.equal(S.checkStoredReceipt(fabricated), "receipt_unsigned");
-  assert.deepEqual(await S.sealedRecordReason(fabricated, KEYS_DOC), { code: "receipt_unsigned", reason: "unsigned" });
-  // the named assertion, for the async check (Design I): it does not hold
-  assert.equal(S.sealHolds(await S.sealedRecordReason(fabricated, KEYS_DOC)), false, "a verdict no comparison produced does not pass the sealed check");
+  // the named assertion: the sealer does not take it as sealed either
+  assert.equal((await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC })).code, "case_record_unreadable", "a verdict no comparison produced is never sealed");
 });
 
 // -----------------------------------------------------------------------------
@@ -803,7 +808,7 @@ async function wronglySignedCase(scope, named = KEYS_DOC) {
 
 test("FIX B: a receipt signed by another key than the service's reconcile signer is receipt_unsigned: the sealed check, the page, the sealer and the reference all refuse it", async () => {
   const { id, a, sealed } = await wronglySignedCase("B wrong key");
-  assert.equal(S.checkStoredReceipt(sealed), "receipt_unsigned");
+  assert.equal(S.checkSealedReceipt(sealed), null, "fixture: bound; its signer is what fails");
   assert.deepEqual(await S.sealedRecordReason(sealed, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
   const page = await casePage(id);
   assert.match(page.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
@@ -838,9 +843,8 @@ test("FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the c
   // no verifier is set anywhere in this process, and it still holds: the named document publishes it
   assert.equal(process.env[receipts.VERIFIER_ENV], undefined, "fixture");
   assert.equal(process.env[receipts.SIGNER_ENV], undefined, "fixture");
-  // checkStoredReceipt holds a receipt to a GIVEN verifier only, and refuses without one
-  assert.equal(S.checkStoredReceipt(k, { receiptVerifier: RECEIPT_KEY.verifier }), null);
-  assert.equal(S.checkStoredReceipt(k), "receipt_unsigned");
+  // since unit R-SIG there is no second stored-receipt reader: sealedRecordReason is the one
+  assert.equal(S.checkStoredReceipt, undefined);
   // the pointer, as the operator's tools read it
   assert.equal(receipts.expectedVerifier({}), null);
   assert.equal(receipts.expectedVerifier({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer }), RECEIPT_KEY.verifier);

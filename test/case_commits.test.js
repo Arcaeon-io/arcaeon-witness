@@ -437,7 +437,7 @@ async function reference(c, role = "a", ref = "row") {
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { ...XREF, reference: ref } }),
-    res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: DOC });
+    res, { now: REVEAL_AT + 1800000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 // The row's line on the page, from its label to the end of its table row.

@@ -66,10 +66,18 @@ function deployed(gh, env, doc) {
   return { ...env, [S.DEPLOY_COMMIT_ENV]: serve(gh, doc) };
 }
 
-// signed_under for a seal built by hand (lib/_case_seal.js sealCase), with
-// `doc` served at its commit.
-function signedUnder(gh, doc, retrievedAt) {
-  return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc), retrieved_at: retrievedAt };
+// deployed(), unless `env` already names a deployment commit (a test that
+// plants a commit of its own keeps it). Since unit R-SIG the withdrawal and
+// the reference confirm the document they sign under, as the reveal does.
+function deployedFor(gh, env, doc) {
+  return env && env[S.DEPLOY_COMMIT_ENV] !== undefined ? env : deployed(gh, env || {}, doc);
 }
 
-module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, serveOffBranch, deployed, signedUnder, sha256 };
+// signed_under for a record built by hand (lib/_case_seal.js sealCase), with
+// `doc` served at its commit: exactly {document_sha256, document_commit}
+// since unit R-SIG.
+function signedUnder(gh, doc) {
+  return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc) };
+}
+
+module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, serveOffBranch, deployed, deployedFor, signedUnder, sha256 };

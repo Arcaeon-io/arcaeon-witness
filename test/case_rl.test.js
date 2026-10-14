@@ -143,7 +143,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope, keys = {}) {
@@ -179,7 +179,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -248,7 +248,7 @@ test("R-L L1: a withdrawal proves the role, takes the lock, writes the signed re
   assert.equal(w.status, 201, JSON.stringify(w.body));
   assert.deepEqual(pinsPaths().filter((p) => !before.includes(p)), [C.withdrawnMarkerPath(c.id)], "the marker is the one new file");
   assert.equal(storedCase(c.id).status, "WITHDRAWN");
-  assert.equal(S.publishedSignatureReason(storedCase(c.id), DOC), null, "the withdrawal record is signed");
+  assert.equal((await S.signedUnderReason(storedCase(c.id), "case", DOC)).code, "valid_under_document", "the withdrawal record is signed");
   for (const k of ["withdrawn_commitment", "withdrawn_commitment_note"]) assert.equal(has(w.body, k), false, k);
   assert.doesNotMatch(JSON.stringify(w.body), /listed|listing|consent_withdrawn|withdrawn_commitments|tape digest/);
   assert.equal(lockOf(c.id).state, "released");

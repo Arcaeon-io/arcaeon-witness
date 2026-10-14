@@ -147,7 +147,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope, keys = {}) {
@@ -183,7 +183,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -632,7 +632,7 @@ test("MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root
     const onCase = String(url).includes(`/repos/${PINS}/contents/${cpath}`);
     if (onCase && method === "PUT" && !armed) {
       armed = true;
-      gh.seed(PINS, cpath, S.withdrawnRecord(storedCase(d), { role: "b", at: C.utcSeconds(NOW + 500), salt: C.newSalt() },
+      gh.seed(PINS, cpath, S.withdrawnRecord(storedCase(d), { role: "b", at: C.utcSeconds(NOW + 500), salt: C.newSalt(), signedUnder: KD.signedUnder(gh, DOC) },
         S.loadCaseSigner(KEYS, { keyDocument: DOC })), { keepHistory: true });
     } else if (onCase && method === "GET" && armed && (gets += 1) === 2) {
       return { ok: false, status: 503, json: async () => ({}), text: async () => "" };

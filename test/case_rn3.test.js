@@ -178,7 +178,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope) {
@@ -214,7 +214,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -352,15 +352,18 @@ test("R-N3 N6: the sealer's window cannot read one slice forever under a fixed r
   assert.match(src, /THE WINDOW'S START \(unit R-N3, N6\)/);
 });
 
+// Since unit R-SIG no withdrawal record is unsigned (the seal module throws
+// without a signer), so a stored sig_reason is always null; the answer still
+// carries none.
 test("R-N3 N8: a retried withdrawal's 200 never carries a stored sig_reason", async () => {
   const c = await committedCase("RN3 retry sig_reason");
-  const rec = S.withdrawnRecord(storedCase(c.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: c.b.salt },
-    { ok: false, code: "case_key_unset", reason: "no case signing key is configured (WITNESS_CASE_SIGNER_KEY is not set)" });
-  gh.seed(PINS, C.casePath(c.id), rec, { keepHistory: true });
+  assert.throws(() => S.withdrawnRecord(storedCase(c.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: c.b.salt, signedUnder: KD.signedUnder(gh, DOC) },
+    { ok: false, code: "case_key_unset", reason: "no case signing key is configured (WITNESS_CASE_SIGNER_KEY is not set)" }), /no signer/);
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
   const r = await withdraw(c.id, c.b, { now: NOW + 5000 });
   assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 300));
   assert.doesNotMatch(JSON.stringify(r.body), /WITNESS_|is not set/);
-  assert.equal(has(r.body.case, "sig_reason"), false);
+  assert.deepEqual([r.body.case.sig_reason, r.body.case], [null, storedCase(c.id)], "signed, shown whole: its sig_reason is null");
 });
 
 // =============================================================================
@@ -384,7 +387,7 @@ async function lostRootWrite(scope, seedWith) {
 test("MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing; since unit R-RV no reveal attempt): a root write lost to another withdrawal or a deadline keeps the case's standing, says this request wrote nothing to the pins repository, and never says 'nothing was withdrawn'", async () => {
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const byA = await lostRootWrite("RN3 gap lost to a withdrawal",
-    (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
+    (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt, signedUnder: KD.signedUnder(gh, DOC) }, signer));
   assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id],
     [409, "case_withdrawn", "WITHDRAWN", byA.c.id], JSON.stringify(byA.w.body));
   assert.equal(byA.w.body.error, `the case is already withdrawn. ${WROTE_NO_PINS}`);

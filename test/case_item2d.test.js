@@ -178,7 +178,7 @@ function storedCase(id) {
 const proofOf = (id, p) => ({ case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt });
 async function reference(body, { now = REVEAL_AT + 3600000, env = SIGNED, keyDocument = KEYS_DOC, headers = {} } = {}) {
   const res = makeRes();
-  await H.handleCaseReference(req("case-reference", body, headers), res, { now, env, keyDocument });
+  await H.handleCaseReference(req("case-reference", body, headers), res, { now, env: KD.deployedFor(gh, env, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res), headers: res._headers };
 }
 async function casePage(id, { now = REVEAL_AT + 3600000, keyDocument = KEYS_DOC } = {}) {
@@ -210,7 +210,7 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
     // the receipt's compared_at is not the reveal time: the receipt no longer binds
     "an unbound receipt": [{ ...good, verdict: { ...good.verdict, compared_at: "2026-10-10T08:59:59Z" } }, "verdict_unbound", "receipt_time_mismatch"],
     // only sig replaced, by a well-formed signature of other bytes made with the right key
-    "a replaced sig": [{ ...good, sig: crypto.sign(null, Buffer.from("other bytes"), k.privateKey).toString("base64") }, "case_signature_invalid", "bad_signature"],
+    "a replaced sig": [{ ...good, sig: crypto.sign(null, Buffer.from("other bytes"), k.privateKey).toString("base64") }, "signature_invalid", "bad_signature"],
   };
   for (const [name, [bad, code, reason]] of Object.entries(plants)) {
     assert.deepEqual(C.validateCase(bad), { ok: true }, `${name}: fixture is schema-valid`);
@@ -249,17 +249,17 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
     // MUST-FAIL ARM: 2c checked the status alone, and both plants read VERDICT
     assert.equal(bad.status === "VERDICT" && C.validateCase(bad).ok, true, `${name}: 2c would have taken it as sealed`);
   }
-  // an unsigned seal whose receipt does not bind: the same state, naming no key
-  // (built the seal module's way: since the one signature rule the reveal
-  // never seals unsigned)
+  // an unsigned seal whose receipt does not bind: since unit R-SIG none is
+  // built (the seal module throws), and one found in the store is not a
+  // valid record, so neither the page nor the reference answers from it
   const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") } });
-  const ug = S.signRecord({ ...storedCase(u.id), signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed");
-  assert.equal(ug.sig, null, "fixture: unsigned");
+  assert.throws(() => S.signRecord({ ...storedCase(u.id), signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({})), /no signer/);
+  const ug = { ...storedCase(u.id), signed_by: null, sig: null, sig_reason: "not signed" };
   gh.seed(PINS, C.casePath(u.id), { ...ug, verdict: { ...ug.verdict, compared_at: "2026-10-10T08:59:59Z" } });
   const up = await casePage(u.id);
-  assert.match(up.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
-  assert.match(up.html, /no key: it is stored unsigned/);
-  assert.equal((await reference({ ...proofOf(u.id, u.a), cross_reference: XREF })).body.error_code, "verdict_unbound");
+  assert.equal(up.status, 503);
+  assert.ok(up.html.includes("cannot be read as a valid arcaeon-case/1 record (case_malformed_field)"));
+  assert.equal((await reference({ ...proofOf(u.id, u.a), cross_reference: XREF })).body.error_code, "case_record_unreadable");
   // control: the case as sealed takes a row and shows its verdict. The pin
   // names the commit that wrote the case file; re-seeding a path drops its
   // history in the mock, so the pin is pointed at the case file's commit as
@@ -285,7 +285,8 @@ test("FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecor
   assert.equal(sealed.cross_reference, null, "fixture: the seal carries no cross_reference");
   assert.equal(S.REFERENCE_ROW_READS, 20, "fixture: the window is twenty rows");
   const signer = S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC });
-  const row = (seq) => S.referenceRow({ caseId: id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer);
+  const su = KD.signedUnder(gh, KEYS_DOC);
+  const row = (seq) => S.referenceRow({ caseId: id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: su }, signer);
   for (let seq = 1; seq <= 20; seq += 1) gh.seed(PINS, C.referencePath(id, seq), { ...row(seq), extra: true }); // invalid: an unknown field
   gh.seed(PINS, C.referencePath(id, 21), row(21)); // valid, past the window
   const live = await S.liveRecords(sealed, { keyDocument: KEYS_DOC });
@@ -350,7 +351,7 @@ test("FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecor
   // a seal that carries its own cross_reference is two records whatever the window
   const x = await sealedCase({ over: { scope_digest: sha("fix 2 xref") }, extra: { cross_reference: XREF } });
   const xs = storedCase(x.id);
-  for (let seq = 1; seq <= 21; seq += 1) gh.seed(PINS, C.referencePath(x.id, seq), { ...S.referenceRow({ caseId: x.id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator" }, signer), extra: true });
+  for (let seq = 1; seq <= 21; seq += 1) gh.seed(PINS, C.referencePath(x.id, seq), { ...S.referenceRow({ caseId: x.id, seq, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, KEYS_DOC) }, signer), extra: true });
   const xl = await S.liveRecords(xs, { keyDocument: KEYS_DOC });
   assert.deepEqual([xl.records, xl.indeterminate, xl.partial], [2, false, true]);
 });
@@ -430,10 +431,9 @@ test("FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS
   const res = makeRes();
   await verifyHandler(req("case-reference", { case_id: un.id, cross_reference: XREF }, { authorization: `Bearer ${OPERATOR_KEY}` }), res);
   // the operator's bearer is accepted (not 401): the request reaches the
-  // signer, and since unit R-N (N1: an unsigned row is not a record) this
-  // environment, which carries no case key the committed document lists,
-  // writes no row
-  assert.deepEqual([res._status, parsed(res).error_code, parsed(res).reason], [503, "signer_unavailable", "case_key_unset"], JSON.stringify(parsed(res)));
+  // document it would sign under, and since unit R-SIG this process, which
+  // names no deployment commit, cannot confirm one, so it writes no row
+  assert.deepEqual([res._status, parsed(res).error_code, parsed(res).reason], [503, "document_unavailable", "deploy_commit_unknown"], JSON.stringify(parsed(res)));
   assert.equal(gh.has(PINS, C.referencePath(un.id, 1)), false);
   // the code reads no WITNESS_ADMIN_KEY: no property access and no string of it
   const fs = require("node:fs");

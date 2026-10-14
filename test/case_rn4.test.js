@@ -140,7 +140,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope) {
@@ -176,7 +176,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -308,7 +308,7 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   };
   const raw = async (request) => {
     const res = makeRes();
-    await H.handleCaseWithdraw(request, res, { now: NOW + 2000, env: KEYS, keyDocument: DOC });
+    await H.handleCaseWithdraw(request, res, { now: NOW + 2000, env: KD.deployedFor(gh, KEYS, DOC), keyDocument: DOC });
     return { status: res._status, body: parsed(res) };
   };
   const lockPath = (id) => H._internal.caseLockPath(id);
@@ -379,7 +379,7 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   const first = await sealedFirst("RN4 sweep sealed first");
   await drive("sealed first", "lost", 409, "case_sealed", async () => first.w);
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
-  const byA = await lostRootWrite("RN4 sweep lost to a", (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
+  const byA = await lostRootWrite("RN4 sweep lost to a", (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt, signedUnder: KD.signedUnder(gh, DOC) }, signer));
   await drive("lost to another", "lost", 409, "case_withdrawn", async () => byA.w);
   const lostLate = await lostRootWrite("RN4 sweep lost to deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
   await drive("lost to a deadline", "lost", 409, "expired", async () => lostLate.w);

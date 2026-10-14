@@ -142,7 +142,7 @@ async function register(id, p) {
 }
 async function withdraw(id, p, { now = NOW + 2000, env = KEYS, salt = p.salt } = {}) {
   const res = makeRes();
-  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env, keyDocument: DOC });
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt }), res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function committedCase(scope, keys = {}) {
@@ -178,7 +178,7 @@ async function reference(c, { role = "a", env = KEYS, now = REVEAL_AT + 1800000 
   const p = c[role];
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role, tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: XREF }),
-    res, { now, env, keyDocument: DOC });
+    res, { now, env: KD.deployedFor(gh, env, DOC), keyDocument: DOC });
   return { status: res._status, body: parsed(res) };
 }
 async function casePage(id, now = REVEAL_AT + 3600000) {
@@ -487,7 +487,8 @@ test("R-RV ruling c (since unit R-RVf, B1): compared_at is the clock read after 
   const after = C.utcSeconds(REVEAL_AT + 5000);
   const arrived = C.utcSeconds(REVEAL_AT);
   assert.equal(r.case.verdict.compared_at, after);
-  assert.deepEqual([r.case.reveals.a.revealed_at, r.case.reveals.b.revealed_at, r.case.signed_under.retrieved_at], [arrived, arrived, arrived]);
+  // (since unit R-SIG signed_under carries no service time)
+  assert.deepEqual([r.case.reveals.a.revealed_at, r.case.reveals.b.revealed_at], [arrived, arrived]);
   assert.equal(r.case.verdict.claim, receipts.CLAIM, "the signed sentence is unchanged");
   assert.equal((await S.sealedRecordReason(storedCase(c.id), DOC)).code, "valid_under_document");
 });

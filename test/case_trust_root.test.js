@@ -178,7 +178,7 @@ async function referenceAs(id, p, keyDocument) {
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: id, role: p.role, tape_sha256: p.tape_sha256, salt: p.salt,
     cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } }), res,
-  { now: REVEAL_AT + 3600000, env: KEYS, keyDocument });
+  { now: REVEAL_AT + 3600000, env: KD.deployedFor(gh, KEYS, keyDocument), keyDocument });
   return { status: res._status, body: parsed(res) };
 }
 async function pageOf(id, keyDocument) {
@@ -278,7 +278,7 @@ test("ANCESTRY: a sealed case naming a document commit that is not on the publis
   const k = S.sealCase(storedCase(c.id), {
     reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
     receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
-    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side, retrieved_at: C.utcSeconds(REVEAL_AT) },
+    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side },
   }, S.loadCaseSigner(KEYS, { keyDocument: named }));
   const got = await S.sealedRecordReason(k, DOC);
   assert.deepEqual(got, { code: "document_unavailable", reason: "commit_not_on_branch", document: "named", document_commit: side });
@@ -320,12 +320,12 @@ test("I3: a signer absent from the current document is signer_unlisted: no verdi
 // I5: the cache, the could-not-look page
 // =============================================================================
 
-test("I5: a fetched document is cached only after its hash matches: other bytes at the named commit are case_signature_invalid, and once the commit serves the named bytes the case verifies", async () => {
+test("I5: a fetched document is cached only after its hash matches: other bytes at the named commit are signature_invalid (since unit R-SIG), and once the commit serves the named bytes the case verifies", async () => {
   const c = await sealedCase("I5 cache");
   const commit = c.k.signed_under.document_commit;
   S._internal.clearDocumentCache(); // the reveal kept the matching read; start this instance afresh
   gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, JSON.stringify(KD.docWith(KD.entry(CASE_KEY))));
-  assert.deepEqual(await S.sealedRecordReason(c.k, DOC), { code: "case_signature_invalid", reason: "document_sha256_mismatch" });
+  assert.deepEqual(await S.sealedRecordReason(c.k, DOC), { code: "signature_invalid", reason: "document_sha256_mismatch" });
   gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, JSON.stringify(DOC));
   assert.equal((await S.sealedRecordReason(c.k, DOC)).code, "valid_under_document", "the mismatch was not cached");
   const reads = gh.rawLog.length;
@@ -449,7 +449,8 @@ test("MUST-FAIL GAP (H03, H04, G04, G05): the reference and the page say signer_
   // since unit R-REV: revoked, whenever it signed; the page's one sentence
   const r = await referenceAs(c.id, c.a, CASE_REVOKED);
   assert.deepEqual([r.status, r.body.error_code, r.body.reason, r.body.key_id], [409, "signer_revoked", "key_revoked", KD.keyIdOf(CASE_KEY)]);
-  assert.match(r.body.error, /^One of the keys this case is signed with \(.+\) is listed as revoked in the key document this service carries \(commit not known to this deployment\), so this case takes no reference row, whenever it was signed; no row was written\.$/);
+  // (since unit R-SIG the reference's deployment names its commit: it confirms its document first)
+  assert.match(r.body.error, /^One of the keys this case is signed with \(.+\) is listed as revoked in the key document this service carries \(commit [0-9a-f]{40}\), so this case takes no reference row, whenever it was signed; no row was written\.$/);
   assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes(`One of the keys this case is signed with (<code>${KD.keyIdOf(CASE_KEY)}</code>) is listed as revoked ` +
     "in the key document this service carries (commit not known to this deployment), so this page does not show its verdict, whenever it was signed."));
 });
@@ -509,7 +510,7 @@ test("R-I2 m4: a compare 404 is off only on a branch that exists: a branch that 
   const k = S.sealCase(storedCase(c.id), {
     reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
     receipt: S.storableReceipt(compared.receipt).receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
-    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side, retrieved_at: C.utcSeconds(REVEAL_AT) },
+    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side },
   }, S.loadCaseSigner(KEYS, { keyDocument: named }));
   gh.seed(PINS, C.casePath(c.id), k);
   const p = await pageOf(c.id, DOC);
@@ -547,7 +548,7 @@ test("R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off t
   gh.seed(PINS, C.casePath(d.id), S.sealCase(storedCase(d.id), {
     reveals: { a: { tape_sha256: d.a.tape_sha256, salt: d.a.salt }, b: { tape_sha256: d.b.tape_sha256, salt: d.b.salt } },
     receipt: S.storableReceipt(compared.receipt).receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
-    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side, retrieved_at: C.utcSeconds(REVEAL_AT) },
+    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side },
   }, S.loadCaseSigner(KEYS, { keyDocument: named })));
   const off = await pageOf(d.id, DOC);
   assert.ok(off.html.includes("<h2>The key document this case names is not on the published branch</h2>"));

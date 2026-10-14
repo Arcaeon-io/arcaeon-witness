@@ -365,12 +365,14 @@ test("H07 (reference, the words for single_party): the refusal says one key regi
   const { id } = await racedSingleParty("H07");
   const k = gh.read(PINS, C.casePath(id));
   // the stored record as a VERDICT (a forger's, or a build before fix A)
-  const verdictLike = { ...k, status: "VERDICT", reveals: { a: { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T09:00:00Z" }, b: { tape_sha256: sha("u"), salt_sha256: sha("s2"), revealed_at: "2026-10-10T09:00:00Z" } }, verdict: { kind: "x" } };
+  // (since unit R-SIG a VERDICT the schema reads is signed, names its document, and carries a signed receipt)
+  const verdictLike = { ...k, status: "VERDICT", reveals: { a: { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T09:00:00Z" }, b: { tape_sha256: sha("u"), salt_sha256: sha("s2"), revealed_at: "2026-10-10T09:00:00Z" } }, verdict: { kind: "x", sig: "c2ln" },
+    signed_by: "case-test+0123abcd", sig: "c2ln", sig_reason: null, signed_under: { document_sha256: sha("a document"), document_commit: "d".repeat(40) } };
   assert.deepEqual(C.validateCase(verdictLike), { ok: true });
   gh.seed(PINS, C.casePath(id), verdictLike);
   const res = makeRes();
   await H.handleCaseReference(req("case-reference", { case_id: id, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } },
-    { authorization: "Bearer case-test-operator-key-0031" }), res, { now: REVEAL_AT, env: { [H.OPERATOR_KEY_ENV]: "case-test-operator-key-0031" }, keyDocument: KEYS_DOC });
+    { authorization: "Bearer case-test-operator-key-0031" }), res, { now: REVEAL_AT, env: KD.deployedFor(gh, { [H.OPERATOR_KEY_ENV]: "case-test-operator-key-0031" }, KEYS_DOC), keyDocument: KEYS_DOC });
   assert.equal(res._status, 409, JSON.stringify(res._body));
   assert.equal(res._body.error_code, "single_party");
   assert.match(res._body.error, /one key registered both of its roles/);
@@ -428,27 +430,33 @@ async function sealedWith(scope, receiptKey = RECEIPT_KEY) {
   assert.equal(st.ok, true);
   const sealed = S.sealCase(gh.read(PINS, C.casePath(id)), {
     reveals: { a: { tape_sha256: a.tape_sha256, salt: a.salt }, b: { tape_sha256: b.tape_sha256, salt: b.salt } },
-    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC, C.utcSeconds(REVEAL_AT)),
+    receipt: st.receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT), signedUnder: KD.signedUnder(gh, KEYS_DOC),
   }, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
   gh.seed(PINS, C.casePath(id), sealed);
   return { id, a, b, sealed };
 }
 const withReceipt = (k, over) => ({ ...k, verdict: { ...k.verdict, ...over } });
+// The case signed again over what it now holds: since unit R-SIG the sealed
+// check reads the case's own signature before its receipt's, so a receipt
+// changed without this reads signature_invalid first.
+function resealed(k) {
+  const { sig: _s, signed_by: _b, sig_reason: _r, ...rest } = k; // eslint-disable-line no-unused-vars
+  return S.signCase(rest, S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
+}
 
-test("S10 (receiptSignerReason, the carried verifier first): a receipt naming a verifier that is not one is receipt_unsigned, unknown_signer, never read as malformed", async () => {
+test("S10 (since unit R-SIG through sealedRecordReason, the one stored-receipt reader): a receipt naming a verifier that is not one is receipt_unsigned, unknown_signer, never read as malformed", async () => {
   const { sealed } = await sealedWith("S10");
-  const odd = withReceipt(sealed, { signer: { ...sealed.verdict.signer, verifier: "not-a-verifier" } });
+  const odd = resealed(withReceipt(sealed, { signer: { ...sealed.verdict.signer, verifier: "not-a-verifier" } }));
   assert.equal(S.checkSealedReceipt(odd), null, "fixture: still bound");
   assert.deepEqual(await S.sealedRecordReason(odd, KEYS_DOC), { code: "receipt_unsigned", reason: "unknown_signer" });
-  assert.equal(S.checkStoredReceipt(odd, { receiptVerifier: RECEIPT_KEY.verifier }), "receipt_unsigned");
+  // not signed again, the case's own signature fails first
+  assert.equal((await S.sealedRecordReason(withReceipt(sealed, { signer: { ...sealed.verdict.signer, verifier: "not-a-verifier" } }), KEYS_DOC)).code, "signature_invalid");
 });
 
-test("S12 (checkStoredReceipt): a receipt the service's signer signed and someone altered after is receipt_bad_signature, not receipt_unsigned", async () => {
+test("S12 (since unit R-SIG through sealedRecordReason): a receipt the service's signer signed and someone altered after is receipt_bad_signature, not receipt_unsigned", async () => {
   const { sealed } = await sealedWith("S12");
-  const given = { receiptVerifier: RECEIPT_KEY.verifier };
-  assert.equal(S.checkStoredReceipt(sealed, given), null, "control: as sealed");
-  const altered = withReceipt(sealed, { verdict: { ...sealed.verdict.verdict, findings: sealed.verdict.verdict.findings + 1 } });
-  assert.equal(S.checkStoredReceipt(altered, given), "receipt_bad_signature");
+  assert.equal((await S.sealedRecordReason(sealed, KEYS_DOC)).code, "valid_under_document", "control: as sealed");
+  const altered = resealed(withReceipt(sealed, { verdict: { ...sealed.verdict.verdict, findings: sealed.verdict.verdict.findings + 1 } }));
   assert.deepEqual(await S.sealedRecordReason(altered, KEYS_DOC), { code: "verdict_unbound", reason: "receipt_bad_signature" });
 });
 
@@ -456,7 +464,7 @@ test("H13 (reference, the words for receipt_unsigned); since Design I its enviro
   const at = (id, p, env) => {
     const res = makeRes();
     const body = { case_id: id, role: "a", tape_sha256: p.tape_sha256, salt: p.salt, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } };
-    return H.handleCaseReference(req("case-reference", body), res, { now: REVEAL_AT + 3600000, env, keyDocument: KEYS_DOC }).then(() => res);
+    return H.handleCaseReference(req("case-reference", body), res, { now: REVEAL_AT + 3600000, env: KD.deployedFor(gh, env, KEYS_DOC), keyDocument: KEYS_DOC }).then(() => res);
   };
   const wrong = await sealedWith("H13", checkpoint.generateKey("arcaeon.io/reconcile-test-other/2026-10-12"));
   const refused = await at(wrong.id, wrong.a, SIGNED);

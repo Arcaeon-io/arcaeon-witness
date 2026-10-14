@@ -400,7 +400,7 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   const arms = [
     ["signed_by missing", (j) => { delete j.case.signed_by; }, /the seal is unsigned \(signed_by missing, sig set\)/],
     ["sig missing", (j) => { delete j.case.sig; }, /the seal is unsigned \(signed_by set, sig missing\)/],
-    ["sig invalid", (j) => { j.case.sig = Buffer.alloc(64, 7).toString("base64"); }, /\(case_signature_invalid: bad_signature\)/],
+    ["sig invalid", (j) => { j.case.sig = Buffer.alloc(64, 7).toString("base64"); }, /\(signature_invalid: bad_signature\)/],
     ["chain not hex", (j) => { j.chain = "not-a-chain"; }, /its chain "not-a-chain" is not 64 hex/],
     ["chain missing", (j) => { delete j.chain; }, /its chain undefined is not 64 hex/],
     ["chain another", (j) => { j.chain = "0".repeat(64); }, /its chain 0{64} is not the sealed case's own \([0-9a-f]{64}\)/],
