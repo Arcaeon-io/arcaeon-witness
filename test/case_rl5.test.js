@@ -566,3 +566,34 @@ test("R-L5f B1: the README says a registration projected under a withdrawal make
   assert.ok(README().includes("A registration projected between a withdrawal's read of the case and its write makes the withdrawal write nothing " +
     "and answer 503 `store_error`; sent again, it keeps the new registration."));
 });
+
+test("MUST-FAIL GAP (F03): a projection for role a landing under role b's withdrawal is compared too: 503, nothing written", async () => {
+  const id = await openCase("RL5f gap F03");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, b);
+  const openRoot = storedCase(id);
+  assert.equal(openRoot.commitments.a, null, "fixture: OPEN, role a not projected");
+  await register(id, a);
+  const committedRoot = storedCase(id);
+  gh.seed(PINS, C.casePath(id), openRoot);
+  const { out: r, fired } = await during(lockPut(id), async () => gh.seed(PINS, C.casePath(id), committedRoot), () => withdraw(id, b));
+  assert.equal(fired, true);
+  assert.deepEqual([r.status, r.body.reason], [503, "case_kept_changing"], JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual(storedCase(id), committedRoot);
+});
+
+// No path of this service changes a projected entry once it is written
+// (THE PROJECTION is first-write-wins), so the root below is planted: an
+// entry that differs in any byte, its commitment the same, is a different
+// entry, and the built record is not written over it.
+test("MUST-FAIL GAP (F05, F06): an entry that differs from the one the built record carries in any field is a moved projection: 503, nothing written", async () => {
+  const c = await committedCase("RL5f gap F05");
+  const root = storedCase(c.id);
+  const moved = { ...root, commitments: { ...root.commitments, a: { ...root.commitments.a, stamped_at: "2026-10-10T07:45:00.124Z" } } };
+  assert.deepEqual(C.validateCase(moved), { ok: true }, "fixture: a valid root");
+  const { out: r, fired } = await during(lockPut(c.id), async () => gh.seed(PINS, C.casePath(c.id), moved), () => withdraw(c.id, c.b));
+  assert.equal(fired, true);
+  assert.deepEqual([r.status, r.body.reason], [503, "case_kept_changing"], JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual(storedCase(c.id), moved);
+});

@@ -1,5 +1,57 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-14: Unit R-L5f: the reader's blocker on R-L5 (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 2bc85f5 (tests, code, README) and this entry's commit (the gap tests, the change log).
+- **B1.** The withdrawal reads the case root before it takes the case lock, and its root write is a compare-and-swap on that read. Since R-L5 the record it builds keeps the root's `commitments`.
+  - When the compare-and-swap loses, the store reads the root again and hands that read to the withdrawal's rebuild hook (`lib/_store.js` `putFile`).
+  - The record is written again only when both roles' entries on that read are the ones the record carries: their json-c14n:v1 bytes equal (`sameEntry`), and a null equals only a null.
+  - Otherwise nothing is written, and the withdrawal answers the existing 503 `store_error` (`reason: case_kept_changing`), which a re-send finishes. The re-send reads the root as it then stands, and builds and signs the record from it.
+  - A seal, an expiry or another withdrawal found on the re-read is refused as before.
+  - The 503's sentence is now "the case changed while this request tried to write; nothing was written to the case record. Send it again." It said "kept changing", which one projection landing does not show. Its code is unchanged.
+  - The README's Withdrawal section gains one sentence: "A registration projected between a withdrawal's read of the case and its write makes the withdrawal write nothing and answer 503 `store_error`; sent again, it keeps the new registration."
+  - A fix of the same gap, found during R-SIG, rebuilt and re-signed the record inside the compare-and-swap. It was a local commit, never pushed, and was dropped for this ruling.
+- **M1.** Since R-L5 a withdrawal record must carry `commitments`. A record in the form written before R-L5 (and, before R-SIG, without `signed_under`) is refused by the schema: `missing_field` at `commitments`. Every reader then reads it as `case_record_unreadable`, reason `case_missing_field`, and never as a withdrawal. Nothing is deployed, so no such record exists. A test plants one, signed with the case key, and checks:
+  - the schema;
+  - a withdrawal sent again (503 `case_record_unreadable`);
+  - the refusal receipt (none is issued);
+  - the page (no withdrawn page; it names `case_missing_field`).
+
+  The test passes on the code before this unit: M1 asked for the test, not for a change.
+- **M2.** R-L5's entry carried its survivors and its UNSURE list. It now carries the full table of its 17 planted defects as well.
+- **The five minors.** Not folded in: the reader's report is not in this session. Please paste them; each that is one or two lines goes into the next commit.
+- **R-SIG's entry corrected.** `lib/_case_http.js` went from 2367 lines to 2378 in R-SIG, not 2387: the count was taken while the dropped local commit was in the tree.
+- **Tests** (`test/case_rl5.test.js`, 6 new):
+  - B1, the brief's test: a projection landing under the withdrawal. The withdrawal answers 503 and writes nothing (the root as the projection left it; no marker). The re-send answers 201 with b's entry kept and the record's signature verifying. Role b's own refusal receipt is then a 409 `case_withdrawn` naming b's commitment, and `verifyRefusalReceipt` holds. It fails on the code before this unit: 201, and the stale record with b's entry null.
+  - B1's control: a root that moved with both entries unchanged takes the built record.
+  - M1 (above).
+  - The README sentence.
+  - Gap tests F03 and F05/F06 (below).
+  - Rewritten:
+    - `case_item2c` WITHDRAWAL RACE (3), which asserted the old behaviour (201 over the moved projection). It now asserts 503, nothing written, and the re-send keeping b's entry.
+    - `case_rl2` M2's sentence.
+- **The must-fail pass.** 8 defects were planted over the lines R-L5f changed (`lib/_case_http.js` 7, the README 1), each alone with the whole suite run. 5 were caught, among them F01, the defect the reader named (the stale record written): it fails the B1 test and `case_item2c`'s race. The 3 that survived are each caught by a gap test in `test/case_rl5.test.js`:
+  - F03: only role b's entry compared. The gap test projects role a under role b's withdrawal.
+  - F05 and F06: two non-null entries always the same, or compared by their commitment only. No path of this service changes a projected entry once it is written, so the gap test plants a root whose entry differs in `stamped_at` alone.
+
+  | id | file | planted defect | result |
+  |---|---|---|---|
+  | F01 | `lib/_case_http.js` | B1 as reported: the stale record is written over a moved projection | caught (4 failing) |
+  | F02 | `lib/_case_http.js` | only role a's entry compared | caught (4 failing) |
+  | F03 | `lib/_case_http.js` | only role b's entry compared | survived; caught by the gap test (F03) |
+  | F04 | `lib/_case_http.js` | a null entry matches anything | caught (4 failing) |
+  | F05 | `lib/_case_http.js` | two entries always match | survived; caught by the gap test (F05, F06) |
+  | F06 | `lib/_case_http.js` | entries compared by commitment only | survived; caught by the gap test (F05, F06) |
+  | F07 | `lib/_case_http.js` | the 503's sentence says kept changing | caught (4 failing) |
+  | F08 | README | the README sentence | caught (2 failing) |
+
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1460 tests, 1453 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1454 pass, 1 skipped.
+- **UNSURE.**
+  - "Re-read once": the comparison runs on the store's own read after the lost write. When it refuses, the handler reads the root once more to say what the case now is (R-L2 M2's existing path), so a refused withdrawal reads the root twice after its write.
+  - The 503 keeps its code, `case_kept_changing`; only its sentence changed.
+  - The README sentence was not asked for; it says only what the code does.
+  - Entries are compared whole, not by commitment alone; see F05/F06.
+
 ## 2026-10-14: Unit R-SIG: signed_under on every signed record; one reader; no unsigned records (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 490aa02 (the unit: tests, code, README, key document) and this entry's commit (the gap tests, the change log, and a test temp-file fix, below).
@@ -52,7 +104,7 @@
     - the `document_unrecorded` answer;
     - `row_note_v1`/`row_note_v2` handling;
     - `retrieved_at` in every writer.
-  - `lib/_case_http.js`, 2367 to 2387. It grows by `signingDocument` and the two confirmations. Removed:
+  - `lib/_case_http.js`, 2367 to 2378. It grows by `signingDocument` and the two confirmations. Removed:
     - its own `judgeCase` (8);
     - `withoutSigReason` (4) and the "stored unsigned" note;
     - `UNSEALED_WORDS.document_unrecorded`;
@@ -248,6 +300,29 @@ R-L5's first commit precedes unit R-RVf on the branch: the architect's R-RVf rul
   - L10: one commitment in both roles;
   - L11: a withdrawn record whose two entries name one key read as single party;
   - L17: the README's paragraph.
+
+  The table (added by unit R-L5f, M2):
+
+  | id | file | planted defect | result |
+  |---|---|---|---|
+  | L01 | `lib/_case.js` | rule 1: commitments not a WITHDRAWN field | caught (83 failing) |
+  | L02 | `lib/_case_seal.js` | rule 1: the withdrawal record drops the projection | caught (75 failing) |
+  | L03 | `lib/_case_seal.js` | rule 1: only the withdrawer's entry kept | caught (19 failing) |
+  | L04 | `lib/_case.js` | schema: no object check | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L05 | `lib/_case.js` | schema: extra keys in commitments accepted | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L06 | `lib/_case.js` | schema: a role missing from commitments | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L07 | `lib/_case.js` | schema: entries not checked | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L08 | `lib/_case.js` | schema: the projection's sha256 and claim not checked | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L09 | `lib/_case.js` | schema: the withdrawer's entry may be null | caught (2 failing) |
+  | L10 | `lib/_case.js` | schema: one commitment in both roles | survived; caught by the gap test (L04, L05, L06, L07, L08, L10) |
+  | L11 | `lib/_case.js` | a withdrawn record read as single party | survived; caught by the gap test (L11) |
+  | L12 | `lib/_case_http.js` | rule 2: the receipt reads the other role's entry | caught (18 failing) |
+  | L13 | `lib/_case_http.js` | rule 2: no entry is not not-a-party | caught (4 failing) |
+  | L14 | `lib/_case_http.js` | rule 2: the retry proves against nothing | caught (10 failing) |
+  | L15 | `lib/_case_http.js` | rule 2: the retry proves nothing beyond the salt | caught (2 failing) |
+  | L16 | `lib/_case_seal.js` | the note's sentence | caught (2 failing) |
+  | L17 | README | the README's paragraph | survived; caught by the gap test (L17) |
+
 - Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1427 tests, 1420 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1421 pass, 1 skipped. The counts include R-RVf.
 - **UNSURE.**
   - The page's "written, never confirmed" line (the brief's rule 2 and test 4) is not printed, for the reasons above; the note states the rule instead.
