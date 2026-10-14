@@ -684,3 +684,138 @@ test("MUST-FAIL GAP (V09): the does-not-verify page names the failed check in wo
 test("MUST-FAIL GAP (R03): the README says the page reads \"No reason was given.\" when a withdrawal names none", () => {
   assert.ok(README().includes("otherwise it has none, and the case page says \"No reason was given.\""));
 });
+
+// =============================================================================
+// UNIT R-RVf3 (the R-SIG reader's items)
+// =============================================================================
+
+// 2 (T12). One key id under two verifiers: a 32-bit birthday search, found
+// once offline and kept with how it was found (test/fixtures/
+// key_id_collision.js). The current document's entry must carry the same
+// verifier as the named one's, not only the same id.
+const COLLISION = require("./fixtures/key_id_collision.json");
+const COLLISION_SEARCH = require("./fixtures/key_id_collision.js");
+
+test("R-RVf3 2 (T12): two keys sharing one key id are told apart by the full verifier: a record the first signed, under a document listing it, is signer_unlisted when the current document lists the second under that id", async () => {
+  const [k1, k2] = COLLISION.keys;
+  for (const k of COLLISION.keys) {
+    const again = COLLISION_SEARCH.keyOf(k.counter);
+    assert.deepEqual([again.signer, again.verifier], [k.signer, k.verifier], "the fixture is the search's own output");
+    assert.equal(checkpoint.parseVerifierKey(k.verifier).ok, true);
+  }
+  assert.equal(KD.keyIdOf(k1), COLLISION.key_id);
+  assert.equal(KD.keyIdOf(k2), COLLISION.key_id, "one key id");
+  assert.notEqual(k1.verifier, k2.verifier, "two verifiers");
+  const first = KD.docWith(KD.entry(k1), KD.reconcileEntry(RECEIPT_KEY));
+  const second = KD.docWith(KD.entry(k2), KD.reconcileEntry(RECEIPT_KEY));
+  assert.equal(S.checkKeyDocument(first).ok, true);
+  assert.equal(S.checkKeyDocument(second).ok, true);
+  const f = await fourRecords("RRVf3 T12");
+  const signerOf = (k) => {
+    const p = checkpoint.parseSignerKey(k.signer);
+    return { keyId: `${p.name}+${p.hash}`, privateKey: p.privateKey };
+  };
+  const by1 = signByHand({ ...withoutSig(f.row), signed_under: suOf(first) }, signerOf(k1));
+  const by2 = signByHand({ ...withoutSig(f.row), signed_under: suOf(second) }, signerOf(k2));
+  assert.equal(by1.signed_by, by2.signed_by);
+  assert.equal((await S.signedUnderReason(by1, "case", first)).code, "valid_under_document", "control");
+  assert.equal((await S.signedUnderReason(by2, "case", second)).code, "valid_under_document", "control");
+  assert.deepEqual(await S.signedUnderReason(by1, "case", second), { code: "signer_unlisted", reason: "case_key_not_listed", key_id: COLLISION.key_id });
+  assert.deepEqual(await S.signedUnderReason(by2, "case", first), { code: "signer_unlisted", reason: "case_key_not_listed", key_id: COLLISION.key_id });
+});
+
+// 5a. A WITHDRAWN ROOT IS ACTED ON ONLY WHEN IT VERIFIES (the architect's
+// ruling: fail closed): before a refusal receipt is signed or a retried
+// withdrawal is answered, the withdrawal record goes through the one reader.
+const caseSigner = () => S.loadCaseSigner(KEYS, { keyDocument: DOC });
+// The withdrawal record re-signed naming a document commit no one serves:
+// its named document cannot be read (could-not-look).
+const namingNoDocument = (w) => signByHand({ ...withoutSig(w), signed_under: { ...w.signed_under, document_commit: "0".repeat(40) } }, caseSigner());
+async function withdrawnBy(scope, role) {
+  const c = await committedCase(scope);
+  assert.equal((await withdraw(c.id, c[role])).status, 201);
+  return c;
+}
+
+test("R-RVf3 5a: a refusal receipt is signed only from a withdrawal record that verifies: one whose signature does not verify is 409 signature_invalid, one whose named document cannot be read is 503 document_unavailable; neither carries a receipt", async () => {
+  const bad = await withdrawnBy("RRVf3 5a receipt invalid", "b");
+  gh.seed(PINS, C.casePath(bad.id), flipSig(storedCase(bad.id)));
+  const r = await reveal(bad, { body: ownOpening(bad, "a") });
+  assert.deepEqual([r.status, r.body.error_code, r.body.status], [409, "signature_invalid", "WITHDRAWN"], JSON.stringify(r.body).slice(0, 400));
+  assert.equal(has(r.body, "refusal_receipt"), false);
+  const away = await withdrawnBy("RRVf3 5a receipt unavailable", "b");
+  gh.seed(PINS, C.casePath(away.id), namingNoDocument(storedCase(away.id)));
+  const u = await reveal(away, { body: ownOpening(away, "a") });
+  assert.deepEqual([u.status, u.body.error_code], [503, "document_unavailable"], JSON.stringify(u.body).slice(0, 400));
+  assert.equal(has(u.body, "refusal_receipt"), false);
+  // control: the record as written gives the receipt
+  const good = await withdrawnBy("RRVf3 5a receipt control", "b");
+  const g = await reveal(good, { body: ownOpening(good, "a") });
+  assert.deepEqual([g.status, g.body.error_code, has(g.body, "refusal_receipt")], [409, "case_withdrawn", true]);
+});
+
+test("R-RVf3 5a: a retried withdrawal is answered only from a withdrawal record that verifies: 409 signature_invalid, or 503 document_unavailable; no marker is written and no record is answered", async () => {
+  for (const [scope, plant, status, code] of [["invalid", flipSig, 409, "signature_invalid"], ["unavailable", namingNoDocument, 503, "document_unavailable"]]) {
+    const c = await withdrawnBy(`RRVf3 5a retried ${scope}`, "b");
+    gh.seed(PINS, C.casePath(c.id), plant(storedCase(c.id)));
+    // the marker taken away: a retried withdrawal that is answered writes it again
+    gh._repoMap(PINS).delete(C.withdrawnMarkerPath(c.id));
+    const puts = gh.putLog.length;
+    const r = await withdraw(c.id, c.b);
+    assert.deepEqual([r.status, r.body.error_code], [status, code], `${scope}: ${JSON.stringify(r.body).slice(0, 400)}`);
+    assert.equal(has(r.body, "case"), false, scope);
+    assert.equal(gh.has(PINS, C.withdrawnMarkerPath(c.id)), false, `${scope}: no marker`);
+    assert.equal(gh.putLog.length, puts, `${scope}: nothing written`);
+  }
+  // control: the record as written is answered 200, and the marker written again
+  const ok = await withdrawnBy("RRVf3 5a retried control", "b");
+  gh._repoMap(PINS).delete(C.withdrawnMarkerPath(ok.id));
+  const again = await withdraw(ok.id, ok.b);
+  assert.deepEqual([again.status, again.body.existing], [200, true]);
+  assert.equal(gh.has(PINS, C.withdrawnMarkerPath(ok.id)), true);
+});
+
+// 5b. The reference's own judge of the row it built reads the row's named
+// document; when that read cannot be made, the answer is the retry-safe 503
+// with codes only, never the 500 that says the service built a bad row.
+test("R-RVf3 5b: the reference's pre-write judge that cannot read the row's named document answers 503 document_unavailable, codes only; nothing is written", async () => {
+  const s = await sealedCase("RRVf3 5b");
+  const listing = (u, m) => m === "GET" && decodeURIComponent(u).includes(`/repos/${PINS}/contents/${C.referencesDir(s.id)}`);
+  const puts = gh.putLog.length;
+  let r;
+  let fired;
+  try {
+    ({ out: r, fired } = await during(listing, async () => {
+      S._internal.clearDocumentCache();
+      gh.forceRawFailure(1000, 503);
+    }, () => reference(s)));
+  } finally {
+    gh.forceRawFailure(0);
+  }
+  assert.equal(fired, true, "fixture: the document went away after the sealed check");
+  assert.deepEqual([r.status, r.body.error_code], [503, "document_unavailable"], JSON.stringify(r.body).slice(0, 400));
+  assert.equal(has(r.body, "error"), false, "codes only");
+  assert.doesNotMatch(JSON.stringify(r.body), /its own judge refuses|internal_error/);
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  assert.equal(gh.has(PINS, C.referencePath(s.id, 1)), false);
+  // sent again with the document back, the row is written
+  assert.equal((await reference(s)).status, 201);
+});
+
+// 5c. A ROW AT VERSION 3 (the architect's ruling): read with its own
+// reading, row_note_v3, and its signature verified; one whose signature
+// does not verify reads signature_invalid. Neither is counted.
+const V3_ANCHOR_NOTE = "This row has no pin of its own. It is recorded by the pins-repository commit that writes it. A later pin of the case " +
+  "may list that commit. This row is anchored only if a pin that lists it is, and no anchoring is asserted here.";
+
+test("R-RVf3 5c: a row at note_version 3 reads row_note_v3 only when its signature verifies; one whose signature does not verify reads signature_invalid; neither is counted", async () => {
+  const f = await fourRecords("RRVf3 5c");
+  const v3 = signByHand({ ...withoutSig(f.row), note_version: 3, anchor_note: V3_ANCHOR_NOTE }, caseSigner());
+  assert.equal(C.validateReferenceRow(v3).code, "row_note_v3");
+  const at = C.referencePath(f.s.id, 1);
+  for (const [row, reason] of [[v3, "row_note_v3"], [flipSig(v3), "signature_invalid"]]) {
+    gh.seed(PINS, at, row);
+    const live = await S.liveRecords(f.seal, { keyDocument: DOC });
+    assert.deepEqual([live.records, live.invalid.map((x) => ({ seq: x.seq, reason: x.reason }))], [1, [{ seq: 1, reason }]], `${reason}: ${JSON.stringify(live)}`);
+  }
+});

@@ -610,3 +610,91 @@ test("R-RVf2: the old sentence appears nowhere in lib/, tools/ or the README", (
     assert.ok(!read(file).includes(OLD_EXPIRED_SENTENCE), file);
   }
 });
+
+// =============================================================================
+// UNIT R-RVf3
+// =============================================================================
+
+// 1. THE EXPIRED PAGE FOR AN OPEN ROOT (the architect's ruling): the reveal
+// refuses any root that is not COMMITTED, and a root never moves back from
+// COMMITTED to OPEN, so for an OPEN root the page has no pending reveal to
+// be unable to see. It prints the first sentence only.
+const EXPIRED_FIRST = "No joint reveal is sealed to this case, and the deadline has passed by this service's clock.";
+const EXPIRED_PENDING = "A reveal that arrived before the deadline still seals the case whenever its sealing lands, and this page cannot tell " +
+  "whether one is pending.";
+
+test("R-RVf3 1: an OPEN case past its deadline prints the first sentence only, under EXPIRED; the second appears nowhere; a COMMITTED one keeps both", async () => {
+  assert.equal(EXPIRED_SENTENCE, `${EXPIRED_FIRST} ${EXPIRED_PENDING}`, "the COMMITTED text as built");
+  const id = await openCase("RRVf3 1 open");
+  await register(id, party(id, "a", AGENT_TAPE));
+  assert.equal(storedCase(id).status, "OPEN");
+  const puts = gh.putLog.length;
+  const p = await casePage(id, DEADLINE_MS + 1000);
+  assert.equal(gh.putLog.length, puts, "the page read writes nothing");
+  assert.equal(p.status, 200);
+  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  assert.ok(p.html.includes(`<p class="muted">${esc(EXPIRED_FIRST)} Expiry is read, not written, and implies no actor.</p>`), p.html.slice(0, 2000));
+  assert.ok(!p.html.includes(esc(EXPIRED_PENDING)));
+  assert.doesNotMatch(p.html, /cannot tell whether one is pending/);
+  // the COMMITTED case, unchanged
+  const c = await committedCase("RRVf3 1 committed");
+  assert.ok((await casePage(c.id, DEADLINE_MS + 1000)).html.includes(`<p class="muted">${esc(EXPIRED_SENTENCE)} Expiry is read`));
+});
+
+// 4a. THE STAMP AT ITS OLDEST COMMIT (the architect's ruling on the reader's
+// minor): a read there that finds no file says no more than was read.
+const REWRITTEN = "the stamp for this hash is not the bytes recorded at the oldest commit that touched it, or is absent there, and is not " +
+  "taken as this commitment's stamp.";
+
+test("R-RVf3 4a: stamp_rewritten says the stamp is not the bytes recorded at its oldest commit, or is absent there, both when the bytes differ and when no file is there", async (t) => {
+  const id = await openCase("RRVf3 4a");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  gh.seed(STAMPS, spath, { ...gh.read(STAMPS, spath), stamped_at: "2026-10-10T07:40:00.000Z" }, { keepHistory: true });
+  const differ = await commit(id, a);
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(b.commitment_sha256);
+  stampReadAt(t, async () => ({ ok: false, status: 404, headers: { get: () => null }, json: async () => ({ message: "Not Found" }), text: async () => "" }));
+  const absent = await commit(id, b);
+  for (const r of [differ, absent]) {
+    assert.deepEqual([r.status, r.body.error_code], [409, "stamp_rewritten"], JSON.stringify(r.body));
+    assert.equal(r.body.error, `${REWRITTEN} ${ADVICE}`);
+    assert.doesNotMatch(r.body.error, /changed after it was written/);
+  }
+});
+
+// 4b. THE ORDER OF REGISTRATION AND REVEAL (the architect's ruling) is
+// judged on the root the reveal read, COMMITTED, not on registered_at and
+// revealed_at: a registration that arrives after the reveal and is projected
+// before the reveal reads the case seals normally.
+test("R-RVf3 4b: a registration projected between the reveal's arrival and its read of the case seals normally, its registered_at later than revealed_at", async (t) => {
+  const id = await openCase("RRVf3 4b");
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  plantStamp(b.commitment_sha256);
+  const arrival = REVEAL_AT;
+  // one clock: the reveal arrives at `arrival`, b's registration 2 s later,
+  // and the comparison returns 5 s after the reveal arrived
+  let ms = arrival;
+  const real = TAPES.reconcileTapes;
+  t.mock.method(TAPES, "reconcileTapes", (...args) => {
+    ms = arrival + 5000;
+    return real(...args);
+  });
+  const rootRead = (u, m) => m === "GET" && decodeURIComponent(u).includes(`/repos/${PINS}/contents/${C.casePath(id)}`);
+  const res = makeRes();
+  const { inner: reg, fired } = await during(rootRead, () => commit(id, b, arrival + 2000),
+    () => H.handleCaseReveal(req("case-reveal", revealBody(id, a, b)), res, { clock: () => ms, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC }));
+  TAPES.reconcileTapes.mock.restore();
+  assert.equal(fired, true, "fixture: b was projected under the reveal");
+  assert.equal(reg.status, 201, JSON.stringify(reg.body));
+  assert.equal(res._status, 201, JSON.stringify(parsed(res)).slice(0, 400));
+  const k = storedCase(id);
+  assert.equal(k.status, "VERDICT");
+  assert.deepEqual([k.reveals.a.revealed_at, k.commitments.b.registered_at, k.verdict.compared_at],
+    [C.utcSeconds(arrival), C.utcSeconds(arrival + 2000), C.utcSeconds(arrival + 5000)]);
+  assert.deepEqual(C.validateCase(k), { ok: true });
+  assert.equal((await S.sealedRecordReason(k, DOC)).code, "valid_under_document");
+});

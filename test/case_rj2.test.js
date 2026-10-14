@@ -231,7 +231,10 @@ test("B2 (since unit R-SIG): a row carrying version 3 reads as row_note_v3; one 
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const good = S.referenceRow({ caseId: id, seq: 1, crossReference: XREF, recordedAt: "2026-10-10T10:00:00Z", appendedBy: "operator", signedUnder: KD.signedUnder(gh, DOC) }, signer);
   const v2 = { ...good, note_version: 2, anchor_note: V2_NOTE };
-  const v3 = { ...good, note_version: 3, anchor_note: V3_NOTE };
+  // signed as written (since unit R-RVf3, 5c, a version-3 row reads
+  // row_note_v3 only when its signature verifies)
+  const { sig: _s, signed_by: _b, sig_reason: _r, ...v3body } = { ...good, note_version: 3, anchor_note: V3_NOTE }; // eslint-disable-line no-unused-vars
+  const v3 = S.signRecord(v3body, signer);
   const { note_version: _n, ...none } = good;
   const v1 = C.validateReferenceRow(none);
   assert.equal(v1.code, "malformed_field");

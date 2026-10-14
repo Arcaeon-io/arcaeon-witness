@@ -214,9 +214,13 @@ test("C37 (checkFull, VERDICT): a joint reveal dated exactly at the deadline is 
   assert.deepEqual(C.validateCase(at("2026-10-10T19:59:59Z")), { ok: true });
 });
 
-test("C38 (checkFull, VERDICT): a joint reveal dated before a role's registration is refused", () => {
+// Since unit R-RVf3 (4b, the architect's ruling) the order of registration
+// and reveal is judged on the root the reveal read, not on registered_at and
+// revealed_at: the schema no longer refuses a reveal dated before a
+// registration (test/case_rrvf.test.js, R-RVf3 4b, drives it).
+test("C38 (checkFull, VERDICT; since unit R-RVf3, 4b): a joint reveal dated before a role's registration is not refused by the schema", () => {
   const t = "2026-10-10T07:59:59Z"; // after opened_at, before both registrations (08:00:00)
-  refusedWith({ ...VERDICT, reveals: { a: { ...VERDICT.reveals.a, revealed_at: t }, b: { ...VERDICT.reveals.b, revealed_at: t } } }, "status_inconsistent", "status");
+  assert.deepEqual(C.validateCase({ ...VERDICT, reveals: { a: { ...VERDICT.reveals.a, revealed_at: t }, b: { ...VERDICT.reveals.b, revealed_at: t } } }), { ok: true });
 });
 
 // =============================================================================
