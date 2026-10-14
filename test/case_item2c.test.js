@@ -722,12 +722,14 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   assert.ok(gh._commitsOf(PINS).slice(pinsBefore).every((cm) => cm.path === C.casePath(c2.id) || cm.path.startsWith(`pins/case/${c2.id}/`)),
     "only the reveal's writes");
 
-  // (3) a registration projected between the withdrawal's read and write is
-  // no race to lose: the redacted record goes over the fresh case, and the
-  // new registration file stays where it is. Since red-team fix C the
-  // withdrawal's root write is under THE CASE LOCK, so a registration
-  // between its read and its write lands before it takes the lock: it runs
-  // as the withdrawal's lock write goes out
+  // (3) a registration projected between the withdrawal's read and write.
+  // Since red-team fix C the withdrawal's root write is under THE CASE LOCK,
+  // so a registration between its read and its write lands before it takes
+  // the lock: it runs as the withdrawal's lock write goes out. Since unit
+  // R-L5f (B1) the record the withdrawal built carries the projection it
+  // read, so it is not written over the fresh case: 503, nothing written,
+  // and the re-send withdraws with the new entry. The new registration
+  // file stays where it is.
   const o = await openCase({ scope_digest: sha("race registration") });
   const pa = party(o, "a", AGENT_TAPE);
   const pb = party(o, "b", TOOL_TAPE);
@@ -736,8 +738,13 @@ test("WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS 
   const r3 = await interleave(H._internal.caseLockPath(o), () => withdraw(proofOf(o, pa)),
     () => call(H.handleCaseCommit, "case-commit", REG.signedBody({ case_id: o, role: "b", commitment_sha256: pb.commitment_sha256 }), NOW));
   assert.equal(r3.inner._status, 201, JSON.stringify(r3.inner._body));
-  assert.equal(r3.outer.status, 201, JSON.stringify(r3.outer.body));
+  assert.deepEqual([r3.outer.status, r3.outer.body.error_code, r3.outer.body.reason], [503, "store_error", "case_kept_changing"],
+    JSON.stringify(r3.outer.body));
+  assert.equal(storedCase(o).status, "COMMITTED", "nothing written");
+  const again = await withdraw(proofOf(o, pa));
+  assert.equal(again.status, 201, JSON.stringify(again.body));
   assert.equal(storedCase(o).status, "WITHDRAWN");
+  assert.equal(storedCase(o).commitments.b.commitment_sha256, pb.commitment_sha256, "the record keeps b's entry");
   assert.equal(gh.read(PINS, REG.pathOf(gh, o, "b")).commitment_sha256, pb.commitment_sha256, "b's registration file stands");
   // MUST-FAIL ARM: without the CAS (a blind write over whatever is there)
   // the loser of race (2) would have overwritten the sealed case; the

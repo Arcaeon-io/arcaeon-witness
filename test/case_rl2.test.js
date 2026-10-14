@@ -222,13 +222,13 @@ const README = () => read("README.md").replace(/\s+/g, " ");
 // M2: the withdrawal's 503 after a lost write
 // =============================================================================
 
-test("R-L2 M2: a withdrawal whose root write kept losing while the case read fine says the case kept changing; one whose read after the write failed says what the case is now could not be read", async () => {
+test("R-L2 M2: a withdrawal whose root write kept losing while the case read fine says the case changed (since unit R-L5f); one whose read after the write failed says what the case is now could not be read", async () => {
   const c = await committedCase("RL2 M2 kept changing");
   gh.forceConflict(PINS, C.casePath(c.id), 4);
   const w = await withdraw(c.id, c.b);
   assert.deepEqual([w.status, w.body.error_code, w.body.reason, w.body.error, w.body.case_id],
     // (since unit R-L3, d: the lock record was written, so the sentence names what was not)
-    [503, "store_error", "case_kept_changing", "the case kept changing while this request tried to write; nothing was written to the case record. Send it again.", c.id],
+    [503, "store_error", "case_kept_changing", "the case changed while this request tried to write; nothing was written to the case record. Send it again.", c.id],
     JSON.stringify(w.body));
   assert.equal(storedCase(c.id).status, "COMMITTED");
   const d = await committedCase("RL2 M2 read fails");

@@ -847,7 +847,9 @@ A withdrawal (`?op=case-withdraw`) proves the requesting role by its
 commitment preimage, takes the case's lock, writes the signed withdrawal
 record over the OPEN or COMMITTED case, writes the withdrawn marker, and
 answers. A withdrawal that loses to a seal or the deadline writes nothing to
-the pins repository. A withdrawal request that wrote nothing says "This
+the pins repository. A registration projected between a withdrawal's read
+of the case and its write makes the withdrawal write nothing and answer
+503 `store_error`; sent again, it keeps the new registration. A withdrawal request that wrote nothing says "This
 request wrote nothing." The record carries a reason only when the request
 names one (`party_choice`, `deadline` or `other`); otherwise it has none,
 and the case page says "No reason was given."

@@ -463,3 +463,106 @@ test("MUST-FAIL GAP (L17): the README says the withdrawal record keeps the root'
     "Every reader of a withdrawn case takes a role's standing from them: the refusal receipt, a withdrawal sent again, and the case page. None of them " +
     "reads a registration file or the root's history to decide it, and a registration file the record does not project does not stand."));
 });
+
+// =============================================================================
+// UNIT R-L5f (the reader's blocker B1, and M1)
+// =============================================================================
+
+// B1: the root write is a compare-and-swap on the root as read before the
+// case lock was taken, and a registration may be projected in between. The
+// built record carries the projection it was built from, so it is written
+// only over a root whose two entries are the ones it carries; otherwise
+// nothing is written, and the re-send builds and signs it again from the
+// root as it then stands.
+const lockPut = (id) => (u, m) => m === "PUT" && decodeURIComponent(u).includes(`/repos/${USAGE}/contents/${H._internal.caseLockPath(id)}`);
+async function projectedUnderWithdrawal(scope) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE);
+  const b = party(id, "b", TOOL_TAPE);
+  await register(id, a);
+  const openRoot = storedCase(id);
+  assert.equal(openRoot.commitments.b, null, "fixture: OPEN, role b not projected");
+  await register(id, b);
+  const committedRoot = storedCase(id);
+  assert.equal(committedRoot.status, "COMMITTED");
+  // the withdrawal reads the root before b's projection lands; it lands
+  // while the withdrawal takes the case lock
+  gh.seed(PINS, C.casePath(id), openRoot);
+  return { id, a, b, committedRoot };
+}
+
+test("R-L5f B1: a registration projected between the withdrawal's read and its write: 503, nothing written; the re-send withdraws with the projected entry, and that role's refusal receipt answers", async () => {
+  const c = await projectedUnderWithdrawal("RL5f B1");
+  const before = pinsPaths().sort();
+  const { out: r, fired } = await during(lockPut(c.id), async () => gh.seed(PINS, C.casePath(c.id), c.committedRoot), () => withdraw(c.id, c.a));
+  assert.equal(fired, true, "fixture: the projection landed under the withdrawal");
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason, r.body.error, r.body.case_id],
+    [503, "store_error", "case_kept_changing", "the case changed while this request tried to write; nothing was written to the case record. Send it again.", c.id],
+    JSON.stringify(r.body).slice(0, 400));
+  assert.deepEqual(storedCase(c.id), c.committedRoot, "the root is as the projection left it");
+  assert.deepEqual(pinsPaths().sort(), before, "no marker and no other file");
+  // the re-send builds and signs the record from the root as it now stands
+  const again = await withdraw(c.id, c.a);
+  assert.equal(again.status, 201, JSON.stringify(again.body).slice(0, 300));
+  const w = storedCase(c.id);
+  assert.equal(w.status, "WITHDRAWN");
+  assert.deepEqual(w.commitments, c.committedRoot.commitments);
+  assert.equal(S.signatureReason(w, CASE_KEY.verifier), null);
+  assert.deepEqual(again.body.case, w);
+  // role b, projected under the first withdrawal, is a party of the withdrawn case
+  const rb = await reveal(c, { body: ownOpening(c, "b") });
+  assert.equal(rb.status, 409, JSON.stringify(rb.body).slice(0, 300));
+  assert.equal(rb.body.error_code, "case_withdrawn");
+  const receipt = rb.body.refusal_receipt;
+  assert.equal(receipt.role, "b");
+  assert.equal(receipt.commitment_sha256, c.b.commitment_sha256);
+  assert.deepEqual(await S.verifyRefusalReceipt(receipt, DOC), { ok: true });
+});
+
+test("R-L5f B1: when the root moved and both entries are the ones the built record carries, the built record is written", async () => {
+  const c = await committedCase("RL5f B1 unchanged");
+  const root = storedCase(c.id);
+  // the root is written again with the same projection (a new blob sha)
+  const { out: r, fired } = await during(lockPut(c.id), async () => gh.seed(PINS, C.casePath(c.id), { ...root }), () => withdraw(c.id, c.a));
+  assert.equal(fired, true);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  const w = storedCase(c.id);
+  assert.deepEqual(w.commitments, root.commitments);
+  assert.deepEqual(r.body.case, w);
+});
+
+// M1: since unit R-L5 a withdrawal record carries `commitments`. A record
+// in the form written before it (no commitments; and, before unit R-SIG, no
+// signed_under) is refused by its schema with a named reason. Nothing is
+// deployed, so no such record exists.
+test("R-L5f M1: an old-form withdrawal record (no commitments, no signed_under) is refused as missing_field and never read as a valid withdrawal", async () => {
+  const c = await committedCase("RL5f M1");
+  const root = storedCase(c.id);
+  const old = S.signCase({
+    v: C.CASE_VERSION, case_id: c.id, protocol_version: root.protocol_version, status: "WITHDRAWN", opened_at: root.opened_at,
+    withdrawal: { by_role: "a", at: "2026-10-10T08:00:02Z", salt_sha256: C.saltSha256(c.a.salt), reason: "party_choice" },
+    limits: C.LIMITS.slice(),
+  }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual([C.validateCase(old).code, C.validateCase(old).field], ["missing_field", "commitments"]);
+  const judged = S.judgeCase({ json: old }, c.id);
+  assert.deepEqual([judged.ok, judged.reason], [false, "case_missing_field"]);
+  gh.seed(PINS, C.casePath(c.id), old);
+  // the withdrawal sent again: the record is not read as a withdrawal
+  const w = await withdraw(c.id, c.a);
+  assert.deepEqual([w.status, w.body.error_code, w.body.reason], [503, "case_record_unreadable", "case_missing_field"], JSON.stringify(w.body));
+  // the refusal receipt: none is issued from it
+  const rr = await reveal(c, { body: ownOpening(c, "a") });
+  assert.equal(rr.status, 503, JSON.stringify(rr.body).slice(0, 300));
+  assert.equal(rr.body.error_code, "case_record_unreadable");
+  assert.equal(has(rr.body, "refusal_receipt"), false);
+  // the page does not show a withdrawn case
+  const p = await casePage(c.id);
+  assert.doesNotMatch(p.html, /<h1>Case: WITHDRAWN<\/h1>/);
+  assert.match(p.html, /case_missing_field/);
+  assert.deepEqual(storedCase(c.id), old, "nothing rewritten");
+});
+
+test("R-L5f B1: the README says a registration projected under a withdrawal makes it write nothing and answer 503, and the re-send keeps it", () => {
+  assert.ok(README().includes("A registration projected between a withdrawal's read of the case and its write makes the withdrawal write nothing " +
+    "and answer 503 `store_error`; sent again, it keeps the new registration."));
+});
