@@ -1,0 +1,191 @@
+[
+ {
+  "id": "K01",
+  "file": "lib/_case.js",
+  "find": "const CASE_ENTRY_FIELDS = Object.freeze([...COMMITMENT_ENTRY_FIELDS, \"key_fp\", \"registration_sha256\", \"claim_sha256\"]);",
+  "replace": "const CASE_ENTRY_FIELDS = Object.freeze([...COMMITMENT_ENTRY_FIELDS, \"registration_sha256\", \"claim_sha256\"]);",
+  "what": "1: key_fp not an entry field"
+ },
+ {
+  "id": "K02",
+  "file": "lib/_case.js",
+  "find": "  if (fields.includes(\"key_fp\")) checkHex64(e.key_fp, `${field}.key_fp`);\n",
+  "replace": "",
+  "what": "1: key_fp's form not checked"
+ },
+ {
+  "id": "K03",
+  "file": "lib/_case.js",
+  "find": "  return vk.ok ? sha256hex(vk.pub) : null;",
+  "replace": "  return vk.ok ? sha256hex(Buffer.from(verifier, \"utf8\")) : null;",
+  "what": "1: key_fp over the verifier string, not the public key"
+ },
+ {
+  "id": "K04",
+  "file": "lib/_case.js",
+  "find": "  return vk.ok ? sha256hex(vk.pub) : null;",
+  "replace": "  return vk.ok ? sha256hex(Buffer.concat([Buffer.from(vk.name, \"utf8\"), vk.pub])) : null;",
+  "what": "2: key_fp over the name and the public key"
+ },
+ {
+  "id": "K05",
+  "file": "lib/_case.js",
+  "find": "  return { ...commitmentEntry(reg), key_fp: keyFpOf(reg.verifier), registration_sha256",
+  "replace": "  return { ...commitmentEntry(reg), key_fp: sha256hex(Buffer.from(reg.key_id, \"utf8\")), registration_sha256",
+  "what": "1: the entry's key_fp from the key id"
+ },
+ {
+  "id": "K06",
+  "file": "lib/_case.js",
+  "find": "typeof c.a.key_fp === \"string\" && c.a.key_fp === c.b.key_fp;",
+  "replace": "c.a.key_id === c.b.key_id;",
+  "what": "2: single party by key id (the reader's defect)"
+ },
+ {
+  "id": "K07",
+  "file": "lib/_case.js",
+  "find": "typeof c.a.key_fp === \"string\" && c.a.key_fp === c.b.key_fp;",
+  "replace": "c.a.key_fp === c.b.key_fp;",
+  "what": "2: two entries without key_fp read as one key"
+ },
+ {
+  "id": "K08",
+  "file": "lib/_case.js",
+  "find": "const c = isPlainObject(caseObj) && caseObj.status !== \"WITHDRAWN\" ? caseObj.commitments : null;",
+  "replace": "const c = isPlainObject(caseObj) ? caseObj.commitments : null;",
+  "what": "5: a WITHDRAWN record read as single party"
+ },
+ {
+  "id": "H01",
+  "file": "lib/_case_http.js",
+  "find": "  if (theirs && theirs.key_fp === C.keyFpOf(record.verifier)) {",
+  "replace": "  if (theirs && theirs.key_id === record.key_id) {",
+  "what": "2: registration compares key ids (the reader's defect)"
+ },
+ {
+  "id": "H02",
+  "file": "lib/_case_http.js",
+  "find": "    return new Refusal(409, \"same_key_both_roles\", \"\", { case_id: kase.case_id, role, other_role: other });",
+  "replace": "    return new Refusal(409, \"same_key_both_roles\", `role ${other} of this case is registered under this key; nothing was registered`, { case_id: kase.case_id, role, other_role: other });",
+  "what": "3: same_key_both_roles with a sentence"
+ },
+ {
+  "id": "H03",
+  "file": "lib/_case_http.js",
+  "find": "    return new Refusal(409, \"same_key_both_roles\", \"\", { case_id: kase.case_id, role, other_role: other });",
+  "replace": "    return new Refusal(409, \"same_key_both_roles\", \"\", { case_id: kase.case_id, role, other_role: other, key_id: record.key_id });",
+  "what": "3: same_key_both_roles names the requester's key id"
+ },
+ {
+  "id": "H04",
+  "file": "lib/_case_http.js",
+  "find": "  const bar = projectionBar(kase, { role, commitment_sha256, key_id, verifier: asked.verifier });",
+  "replace": "  const bar = projectionBar(kase, { role, commitment_sha256, key_id });",
+  "what": "2: the pre-write check without the verifier"
+ },
+ {
+  "id": "H05",
+  "file": "lib/_case_http.js",
+  "find": "  if (C.singleParty(kase)) return refuse(res, new Refusal(409, \"single_party\", \"\", { case_id }));",
+  "replace": "  if (C.singleParty(kase)) return refuse(res, new Refusal(409, \"single_party\", \"\", { case_id, key_id: kase.commitments.a.key_id }));",
+  "what": "3: the reveal's single_party names a key id"
+ },
+ {
+  "id": "H06",
+  "file": "lib/_case_http.js",
+  "find": "  signer_revoked: \"one of the keys it is signed with is listed as revoked in the key document this service carries\",\n",
+  "replace": "",
+  "what": "m1: no words for signer_revoked"
+ },
+ {
+  "id": "H07",
+  "file": "lib/_case_http.js",
+  "find": "    return refuse(res, new Refusal(503, \"document_unavailable\", \"\", { case_id, reason: answer.reason }));",
+  "replace": "    return refuse(res, new Refusal(409, \"document_unavailable\", \"\", { case_id, reason: answer.reason }));",
+  "what": "(b): the reference's could-not-look answered 409"
+ },
+ {
+  "id": "H08",
+  "file": "lib/_case_http.js",
+  "find": "    return refuse(res, new Refusal(503, \"document_unavailable\", \"\", { case_id, reason: answer.reason }));",
+  "replace": "    return refuse(res, new Refusal(503, \"document_unavailable\", \"the key document the seal names could not be read; no row was written\", { case_id, reason: answer.reason }));",
+  "what": "(b): the 503 with a sentence"
+ },
+ {
+  "id": "H09",
+  "file": "lib/_case_http.js",
+  "find": "  if (answer.code === \"document_unavailable\") {\n    console.error(`[case] reference: the key document the seal names could not be read",
+  "replace": "  if (false) {\n    console.error(`[case] reference: the key document the seal names could not be read",
+  "what": "(b): the could-not-look branch gone (the 409 as before)"
+ },
+ {
+  "id": "S01",
+  "file": "lib/_case_seal.js",
+  "find": " || C.keyFpOf(held.verifier) !== entries[r].key_fp) {",
+  "replace": ") {",
+  "what": "1: the projection reader does not check key_fp against the file"
+ },
+ {
+  "id": "S02",
+  "file": "lib/_case_seal.js",
+  "find": "  const v = await signedUnderReason(got.json, \"case\", keyDocument);\n  if (!sealHolds(v)) {",
+  "replace": "  const v = await signedUnderReason(got.json, \"case\", keyDocument);\n  if (false) {",
+  "what": "(a): the marker repaired without the record verifying"
+ },
+ {
+  "id": "S03",
+  "file": "lib/_case_seal.js",
+  "find": "  if (!sealHolds(v)) {\n    console.error(`[sealer] withdrawn case",
+  "replace": "  if (v.code === \"signature_invalid\") {\n    console.error(`[sealer] withdrawn case",
+  "what": "(a): a could-not-look repaired"
+ },
+ {
+  "id": "S04",
+  "file": "lib/_case_seal.js",
+  "find": "const fixed = await repairWithdrawn(id, keyDocument === undefined ? PUBLISHED_KEYS : keyDocument);",
+  "replace": "const fixed = await repairWithdrawn(id);",
+  "what": "(a): the sealer's key document not handed to the repair"
+ },
+ {
+  "id": "S05",
+  "file": "lib/_case_seal.js",
+  "find": "    console.error(`[sealer] withdrawn case ${caseId}: its withdrawal record is not confirmed (${v.code}: ${v.reason}); its marker is not written`);\n",
+  "replace": "",
+  "what": "(a): the refusal not logged"
+ },
+ {
+  "id": "P01",
+  "file": "lib/_case_page.js",
+  "find": "    `  <section class=\"panel\"><p class=\"notice\">${esc(SINGLE_PARTY_SENTENCE)}</p><p class=\"muted\"><code>single_party</code> &middot; ` +",
+  "replace": "    `  <section class=\"panel\"><p class=\"notice\">${esc(SINGLE_PARTY_SENTENCE)} The one key is ${esc(kase.commitments.a.key_id)}.</p><p class=\"muted\"><code>single_party</code> &middot; ` +",
+  "what": "6: the page names a key id"
+ },
+ {
+  "id": "P02",
+  "file": "lib/_case_page.js",
+  "find": "const SINGLE_PARTY_SENTENCE = \"One key signs the registrations of both roles of this case; this page shows nothing else from it.\";",
+  "replace": "const SINGLE_PARTY_SENTENCE = \"One party holds the key that signs the registrations of both roles of this case.\";",
+  "what": "6: the sentence claims who holds the key"
+ },
+ {
+  "id": "P03",
+  "file": "lib/_case_page.js",
+  "find": "  if (C.singleParty(kase)) return { status: 200, html: singlePartyPage(kase, head) };",
+  "replace": "  if (C.singleParty(kase)) return { status: 503, html: singlePartyPage(kase, head) };",
+  "what": "6: the page at 503"
+ },
+ {
+  "id": "P04",
+  "file": "lib/_case_page.js",
+  "find": "<p class=\"muted\"><code>single_party</code> &middot; ` +",
+  "replace": "<p class=\"muted\">` +",
+  "what": "6: no single_party code"
+ },
+ {
+  "id": "P05",
+  "file": "lib/_case_page.js",
+  "find": "  if (C.singleParty(kase)) return { status: 200, html: singlePartyPage(kase, head) };\n",
+  "replace": "",
+  "what": "6: the single-party page not shown (the case read on)"
+ }
+]

@@ -1,0 +1,376 @@
+{
+  "K01": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 517,
+        "first_failing": [
+          "FIX G: one role appends REFERENCE_QUOTA_PER_ROLE (20, the open quota's constant) rows to a case; its next is 409 reference_quota with the count, and nothing is ",
+          "FIX G: only a role that proved itself on a sealed case spends its count",
+          "FIX G: the count is read from the store, per case: a counter planted past the quota refuses with its count, one at 19 admits one row, another case's counter is "
+        ]
+      }
+    ]
+  },
+  "K02": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB 1: an entry without key_fp fails the schema, missing_field at commitments.<role>.key_fp, in a COMMITTED root and a WITHDRAWN record; one not 64 lowercase h",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "K03": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 9,
+        "first_failing": [
+          "R-AB 1: a projected entry carries key_fp, the sha256 of the registering key's 32-byte public key, from its registration file's verifier; the file carries none",
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; "
+        ]
+      }
+    ]
+  },
+  "K04": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 9,
+        "first_failing": [
+          "R-AB 1: a projected entry carries key_fp, the sha256 of the registering key's 32-byte public key, from its registration file's verifier; the file carries none",
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; "
+        ]
+      }
+    ]
+  },
+  "K05": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 472,
+        "first_failing": [
+          "FIX G: one role appends REFERENCE_QUOTA_PER_ROLE (20, the open quota's constant) rows to a case; its next is 409 reference_quota with the count, and nothing is ",
+          "FIX G: only a role that proved itself on a sealed case spends its count",
+          "FIX G: the count is read from the store, per case: a counter planted past the quota refuses with its count, one at 19 admits one row, another case's counter is "
+        ]
+      }
+    ]
+  },
+  "K06": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 8,
+        "first_failing": [
+          "R-AB 2: two public keys that share a key id (test/fixtures/key_id_collision.json) are two keys: both roles register, the case is not single party, and the revea",
+          "R-AB 2: a stored case whose two entries share a key_fp under two key ids is single party wherever it is read: the reveal (409 single_party, nothing written), th",
+          "R-AB 2: the seal refuses a COMMITTED case whose entries share a key_fp under two key ids"
+        ]
+      }
+    ]
+  },
+  "K07": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": false,
+        "failing": 0,
+        "first_failing": []
+      },
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "MUST-FAIL GAP (K07): singleParty reads one key only from two key_fp values that are one: entries in the form before unit R-AB (no key_fp, two key ids) are not o",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "K08": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB 5: a WITHDRAWN record whose entries share a key_fp is never single party: the withdrawal of such a case is written, and its page is the withdrawn page",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "H01": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 9,
+        "first_failing": [
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; ",
+          "R-AB 2: two public keys that share a key id (test/fixtures/key_id_collision.json) are two keys: both roles register, the case is not single party, and the revea"
+        ]
+      }
+    ]
+  },
+  "H02": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 6,
+        "first_failing": [
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: one key under one name in both roles is 409 same_key_both_roles, codes only: the body names no key id, the requester's or any other",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; "
+        ]
+      }
+    ]
+  },
+  "H03": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 6,
+        "first_failing": [
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: one key under one name in both roles is 409 same_key_both_roles, codes only: the body names no key id, the requester's or any other",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; "
+        ]
+      }
+    ]
+  },
+  "H04": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 4,
+        "first_failing": [
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "GPT-5.6 §2A (NARROWED by unit R-AB to one public key): \"Create a seemingly bilateral case using an honest party's label\": one key holder opens, registers both r",
+          "FIX A (by public key since unit R-AB): the refusal is symmetric and writes nothing: role a under the public key role b registered with is 409 same_key_both_role"
+        ]
+      }
+    ]
+  },
+  "H05": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "FIX A: a case whose two entries share a public key (key_fp; since unit R-AB) never reaches sealed: the joint reveal is 409 single_party, codes only, and writes ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "H06": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB m1: a withdrawal record whose key the current document lists revoked is refused with the revoked-key words, never the bare code",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "H07": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 5,
+        "first_failing": [
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again once it ",
+          "DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, th",
+          "H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence"
+        ]
+      }
+    ]
+  },
+  "H08": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 5,
+        "first_failing": [
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again once it ",
+          "DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, th",
+          "H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence"
+        ]
+      }
+    ]
+  },
+  "H09": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 5,
+        "first_failing": [
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again once it ",
+          "DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, th",
+          "H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence"
+        ]
+      }
+    ]
+  },
+  "S01": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB 1: a root whose key_fp is not its registration file's verifier's does not agree with itself: the page is the inconsistent page, and the withdrawal answers ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "S02": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB (a): the sealer writes a withdrawn case's missing marker only when the withdrawal record verifies; one whose signature does not verify, or whose named docu",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "S03": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB (a): the sealer writes a withdrawn case's missing marker only when the withdrawal record verifies; one whose signature does not verify, or whose named docu",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "S04": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 7,
+        "first_failing": [
+          "FIX 6: a case with the withdrawn marker is not considered for a pin (its case file is read only by the withdrawn path, unit R-N C1); a root read as expired or w",
+          "R-AB (a): the sealer writes a withdrawn case's missing marker only when the withdrawal record verifies; one whose signature does not verify, or whose named docu",
+          "R-L5 6 (a guard): a withdrawn root without its marker gets one from the sealer's terminal branch, and no other window runs"
+        ]
+      }
+    ]
+  },
+  "S05": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB (a): the sealer writes a withdrawn case's missing marker only when the withdrawal record verifies; one whose signature does not verify, or whose named docu",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "P01": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 3,
+        "first_failing": [
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "P02": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 2,
+        "first_failing": [
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "P03": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 6,
+        "first_failing": [
+          "P03, P04 (the single-party page past the deadline; since unit R-AB the one-sentence page): still SINGLE PARTY, never the EXPIRED page with its labels, the same ",
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)"
+        ]
+      }
+    ]
+  },
+  "P04": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 3,
+        "first_failing": [
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "P05": {
+    "runs": [
+      {
+        "date": "2026-10-14",
+        "caught": true,
+        "failing": 9,
+        "first_failing": [
+          "P03, P04 (the single-party page past the deadline; since unit R-AB the one-sentence page): still SINGLE PARTY, never the EXPIRED page with its labels, the same ",
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)"
+        ]
+      }
+    ]
+  }
+}

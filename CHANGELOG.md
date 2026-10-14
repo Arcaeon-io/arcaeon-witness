@@ -1,5 +1,97 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-14: Unit R-AB: parties are told apart by public key (key_fp), never by key id (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 851e77b (tests, code, red-team record) and this entry's commit (the runner, the defect list and its ledger, the gap test, the change log).
+- **The brief.** Built from the architect's message (v2, against c5770ce); `unit_R_AB.txt`, which it names for the original intent, is not in this session, and the message overrides it where they differ.
+- **1. key_fp.** A case root's per-role entry carries `key_fp`: the lowercase hex sha256 of the 32 raw Ed25519 public-key bytes the registration file's verifier carries (`lib/_case.js` `keyFpOf`).
+  - It is computed when the root projects the file (`caseEntry`). The registration file carries none, and the claim is unchanged.
+  - It is in `CASE_ENTRY_FIELDS` only, so it is required in a COMMITTED or VERDICT root and in a withdrawal record's kept projection. An entry without it is `missing_field` at `commitments.<role>.key_fp` (the readers' `case_missing_field`); one not 64 lowercase hex is `malformed_field`.
+  - The projection reader (`projectedRegistrations`) checks it against the projected file's verifier. A root whose `key_fp` is not the file's does not agree with itself: `projection_differs_from_file`, `case_record_inconsistent`.
+- **2. Every key comparison is by key_fp.**
+  - Registration (`projectionBar`): before the write, which now passes the verifier (it passed only the key id), and at the projection.
+  - `singleParty`, read by the reveal, the seal, the sealed check (`sealedRecordReason`'s first step), the sealer and the page.
+  - One public key under two names (two key ids) is one key. Two public keys that share a key id (the T12 pair, `test/fixtures/key_id_collision.json`) are two keys: they register both roles and seal.
+- **3. 409 `same_key_both_roles`, codes only.**
+  - Refused before the write, the body is exactly `{ok: false, error_code, case_id, role, other_role}`.
+  - Refused at the projection, after a race, it also carries the registration's own path, sha256, `received_at` and `registration_recorded`, the data the projection refusals already carry.
+  - Neither names a key id. `single_party` is only the reading of a stored case.
+- **4.** A re-send under the same public key in another name stays 409 `role_already_committed`. The claim hash is the party-supplied fields' as before.
+- **5.** A WITHDRAWN record is never single party, even when its kept projection shares a `key_fp`.
+- **6. The single-party page** is the one-sentence shape of the inconsistent page, at 200, under the heading SINGLE PARTY. It shows the sentence "One key signs the registrations of both roles of this case; this page shows nothing else from it.", then `<code>single_party</code>` and the case file's two links. It shows no key id, label, status, time, verdict, registration or limits, before or after the deadline.
+- **7.** The sealed page gets no new copy. A test asserts it makes no claim about key identity, and that no library file says "two keys, never two parties".
+- **8. The record.**
+  - `test/case_redteam.test.js`'s header marks §2A NARROWED.
+  - The §2A test's name now says so. The "A + B DECISION" test is rewritten to the new page. Five FIX A tests whose names said "key id" (or named the one key id) are renamed, and the forged VERDICT shares a `key_fp`.
+  - Comments corrected: `lib/_case.js` ONE KEY PER ROLE ("one key id is one key" is gone); `lib/_case_http.js` ONE KEY PER ROLE, the reveal's step 2, THE REFERENCE ROW, and the registration's "a withdrawn root holds no projection" (untrue since R-L5); `lib/_case_seal.js` SINGLE PARTY and the seal's message; `lib/_case_page.js` SINGLE PARTY.
+- **Carry-over (a).** The sealer's withdrawn-marker repair (`repairWithdrawn`, handed the sealer's key document) reads the withdrawal record through `signedUnderReason`. A record that does not verify, or whose named document cannot be read, is logged and left with nothing written. The next pass reads it again; the report lists it under `terminal` as before, with no new state.
+- **Carry-over (b).** The reference answers a sealed case whose named document cannot be read with 503 `document_unavailable`, codes only (`case_id`, `reason`). A document that reads and refuses the record stays 409 (`signature_invalid`, `signer_unlisted`, `signer_revoked` and the rest).
+- **The R-RVf3 reader's small items.**
+  - **m1.** `UNSEALED_WORDS.signer_revoked` holds R-REVf's words, "one of the keys it is signed with is listed as revoked in the key document this service carries", so the 5a answer no longer prints the bare code.
+  - **m2.** A test drives the refusal receipt and the retried withdrawal through a moment the document cannot be read (`forceRawFailure`): both answer 503, and both re-sends finish.
+  - **m3.** A test drives a version-3 row whose named document cannot be read: unreadable, neither counted nor invalid.
+  - **m4.** R-RVf3's planted-defect sentence is corrected.
+  - **m5.** A test re-signs the case over a receipt alteration the binding sees: `verdict_unbound`, `receipt_time_mismatch`, as without. The R-SIG and R-RVf3 lines cite it.
+- **The runner and the date column** (the new standing line). The planted-defect runner is now in the repository, `test/must_fail/run.js`.
+  - A defects file (`test/must_fail/r_ab.json`) lists each defect as `{id, file, find, replace, what}`. The runner plants each alone in a copy of the tree under the system's temporary directory, runs the whole suite, and removes the copies.
+  - It records every run, with its UTC date, in the file's ledger (`test/must_fail/r_ab.ledger.json`).
+  - `--table` prints the must-fail table from the ledger. The column "last re-seeded and caught" is the date of the latest run that caught the defect, or "never". A defect that survived its first run and was caught after its gap test shows that re-run's date.
+  - A survivor is re-seeded against the whole suite, not against its gap test alone.
+- **Line counts.** `lib/_case.js` 1466 to 1489, `lib/_case_http.js` 2420 to 2432, `lib/_case_page.js` 733 to 723, `lib/_case_seal.js` 2302 to 2313.
+- **Tests.**
+  - New, `test/case_rab.test.js` (21: 20 and a gap test). On e06fa88 (this unit's parent), 15 fail as they should; 5 pass by design: 4 (a behaviour kept), 7 (no new copy), m2 and m3 (R-RVf3's code; the tests were missing), and m5 (a citation). On c5770ce, 17 fail and 3 pass: 4, 7 and m5.
+  - Rewritten for the rule:
+    - `case_redteam`: the FIX A tests and A + B DECISION;
+    - `case_fix_mutation_gaps` P03/P04, `case_rj2` P31 and `case_rl4c` P06 (each asserted the old page's status, deadline or registration links);
+    - `case_signed_under` DOCUMENT UNAVAILABLE and H09 (the reference's 409 is now 503, codes only).
+  - Fixtures that build entries by hand, or compare a root's entry with the file's, gain `key_fp` (`case_protocol`, `case_rl4`, `case_rl4c`).
+- **The must-fail pass.** 27 defects were planted over the lines R-AB changed, each alone with the whole suite run: `lib/_case.js` 8, `lib/_case_http.js` 9, `lib/_case_seal.js` 5, `lib/_case_page.js` 5.
+  - The reader's own defects were among them: K06 (single party by key id), H01 (registration by key id), H07 and H09 (the reference's 409).
+  - 26 were caught. K07, the guard that two entries without `key_fp` are not one key, survived. No reader reaches it, since every reader validates the record first, but `singleParty` is exported; a gap test catches it, re-seeded the same day.
+  - "N failing" counts distinct failing test names (the body-audit test, which runs the case suites again, counts once). Earlier tables counted output lines.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | K01 | `lib/_case.js` | 1: key_fp not an entry field | caught (517 failing) | 2026-10-14 |
+  | K02 | `lib/_case.js` | 1: key_fp's form not checked | caught (2 failing) | 2026-10-14 |
+  | K03 | `lib/_case.js` | 1: key_fp over the verifier string, not the public key | caught (9 failing) | 2026-10-14 |
+  | K04 | `lib/_case.js` | 2: key_fp over the name and the public key | caught (9 failing) | 2026-10-14 |
+  | K05 | `lib/_case.js` | 1: the entry's key_fp from the key id | caught (472 failing) | 2026-10-14 |
+  | K06 | `lib/_case.js` | 2: single party by key id (the reader's defect) | caught (8 failing) | 2026-10-14 |
+  | K07 | `lib/_case.js` | 2: two entries without key_fp read as one key | survived; caught by the gap test MUST-FAIL GAP (K07) | 2026-10-14 |
+  | K08 | `lib/_case.js` | 5: a WITHDRAWN record read as single party | caught (2 failing) | 2026-10-14 |
+  | H01 | `lib/_case_http.js` | 2: registration compares key ids (the reader's defect) | caught (9 failing) | 2026-10-14 |
+  | H02 | `lib/_case_http.js` | 3: same_key_both_roles with a sentence | caught (6 failing) | 2026-10-14 |
+  | H03 | `lib/_case_http.js` | 3: same_key_both_roles names the requester's key id | caught (6 failing) | 2026-10-14 |
+  | H04 | `lib/_case_http.js` | 2: the pre-write check without the verifier | caught (4 failing) | 2026-10-14 |
+  | H05 | `lib/_case_http.js` | 3: the reveal's single_party names a key id | caught (2 failing) | 2026-10-14 |
+  | H06 | `lib/_case_http.js` | m1: no words for signer_revoked | caught (2 failing) | 2026-10-14 |
+  | H07 | `lib/_case_http.js` | (b): the reference's could-not-look answered 409 | caught (5 failing) | 2026-10-14 |
+  | H08 | `lib/_case_http.js` | (b): the 503 with a sentence | caught (5 failing) | 2026-10-14 |
+  | H09 | `lib/_case_http.js` | (b): the could-not-look branch gone (the 409 as before) | caught (5 failing) | 2026-10-14 |
+  | S01 | `lib/_case_seal.js` | 1: the projection reader does not check key_fp against the file | caught (2 failing) | 2026-10-14 |
+  | S02 | `lib/_case_seal.js` | (a): the marker repaired without the record verifying | caught (2 failing) | 2026-10-14 |
+  | S03 | `lib/_case_seal.js` | (a): a could-not-look repaired | caught (2 failing) | 2026-10-14 |
+  | S04 | `lib/_case_seal.js` | (a): the sealer's key document not handed to the repair | caught (7 failing) | 2026-10-14 |
+  | S05 | `lib/_case_seal.js` | (a): the refusal not logged | caught (2 failing) | 2026-10-14 |
+  | P01 | `lib/_case_page.js` | 6: the page names a key id | caught (3 failing) | 2026-10-14 |
+  | P02 | `lib/_case_page.js` | 6: the sentence claims who holds the key | caught (2 failing) | 2026-10-14 |
+  | P03 | `lib/_case_page.js` | 6: the page at 503 | caught (6 failing) | 2026-10-14 |
+  | P04 | `lib/_case_page.js` | 6: no single_party code | caught (3 failing) | 2026-10-14 |
+  | P05 | `lib/_case_page.js` | 6: the single-party page not shown (the case read on) | caught (9 failing) | 2026-10-14 |
+
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1496 tests, 1489 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1490 pass, 1 skipped.
+- **UNSURE.**
+  - `key_fp` is the sha256 of the 32 raw public-key bytes, not of the verifier string or of `0x01 || public key`.
+  - "Fails the schema (named reason)" is read as `missing_field` naming `commitments.<role>.key_fp`; no new code.
+  - The projection reader's `key_fp` check against the file was not asked for. It follows from "computed from the registration file's verifier", and it is what makes a forged `key_fp` a record that does not agree with itself.
+  - Two public keys that share a key id now register and seal as two keys. A reader of the record sees the same key id under both roles.
+  - The reveal's 409 `single_party` is codes only too (it named role a's key id as "the one key"); the brief names only `same_key_both_roles`.
+  - Item 6: "codes-only body" is read as the page's panel carrying only the code and the links, as the inconsistent page does. The heading stays SINGLE PARTY: it is a reading, at 200, not a could-not-look. The sentence's wording is mine.
+  - Item 8: "rename the moved tests (:447-448, :576-588)" is read as the §2A test and the A + B DECISION test. Five more FIX A tests whose names said "key id" are renamed too.
+  - The standing line asks for each test to fail on c5770ce. Items 4 and 7 keep a behaviour and m5 cites one, so those three cannot fail there; they are listed above.
+  - The runner is in `test/must_fail/`, not `tools/`, whose files the suite scans for words a test harness uses. Earlier units' defect lists were never in the repository, and their tables carry no date column; the standing line reads "from here".
+
 ## 2026-10-14: Unit R-RVf3: the OPEN expiry sentence, T12, the readers' minors, fail-closed withdrawn roots (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 5d4774e (tests, code, fixture) and this entry's commit (the gap tests, the change log).
@@ -13,7 +105,7 @@
   - R-SIG's table row and summary are corrected in place.
 - **3. R-SIG's UNSURE line on an altered receipt was wrong** and is corrected in place, with the Tests bullet that said the same. What the code does:
   - The sealed check reads the receipt's binding first (`checkSealedReceipt`).
-  - An alteration the binding sees reads `verdict_unbound`, re-signed or not (`case_item2d` "FIX 1 (planted)").
+  - An alteration the binding sees reads `verdict_unbound`, re-signed or not (`case_item2d` "FIX 1 (planted)", not re-signed; unit R-AB's test m5 drives both).
   - An alteration it does not see, with the case not re-signed, reads `signature_invalid` (`case_fix_mutation_gaps` S10).
   - With the case re-signed, it reads `verdict_unbound`, `receipt_bad_signature` (S12).
 
@@ -31,7 +123,7 @@
     - The sentence is "the case reads WITHDRAWN, but its withdrawal record is not confirmed (REASON): " followed by the reference's existing words for that code, and the request's tail. The body carries `status: "WITHDRAWN"` and `reason`.
     - The check comes after the role's proof, so a non-party is still 404 `not_a_party`, and nothing is signed or written before it.
   - **b.** The reference's pre-write judge (`judgeReferenceRow` on the row it built) that could not read the row's named document now answers 503 `document_unavailable` with codes only (`error_code`, `case_id`, `reason`; no sentence, as R-L4e's code-only body). Any other refusal of that judge stays 500 `internal_error` with its sentence.
-  - **c.** A `note_version` 3 row is checked as a row, its own sentence aside, and gets its `row_note_v3` reading last, so that `judgeReferenceRow` can verify its signature. One that verifies reads `row_note_v3`; one that does not reads `signature_invalid`; one whose named document cannot be read is unreadable. None is counted. A version-3 row whose other fields do not read as a row's reads by its form (`reference_missing_field`, say).
+  - **c.** A `note_version` 3 row is checked as a row, its own sentence aside, and gets its `row_note_v3` reading last, so that `judgeReferenceRow` can verify its signature. One that verifies reads `row_note_v3`; one that does not reads `signature_invalid`; one whose named document cannot be read is unreadable (no test drove this until unit R-AB's m3). None is counted. A version-3 row whose other fields do not read as a row's reads by its form (`reference_missing_field`, say).
 - **Line counts.** `lib/_case.js` 1461 to 1466, `lib/_case_http.js` 2393 to 2420, `lib/_case_page.js` 726 to 733, `lib/_case_seal.js` 2299 to 2302.
 - **Tests.**
   - New, `test/case_rrvf.test.js` (3):
@@ -49,7 +141,7 @@
   - Rewritten:
     - `case_mutation_gaps` C38, which asserted the dropped ordering check;
     - `case_rj2` B2, whose version-3 row was not signed for its own bytes and is now signed.
-- **The must-fail pass.** 30 defects were planted over the lines R-RVf3 changed, each alone with the whole suite run: `lib/_case_page.js` 5, `lib/_case_http.js` 18, `lib/_case.js` 5, `lib/_case_seal.js` 3 (T12 again, against its new test). Among them were the reader's own: R01 (4b's old check restored) and B01 (5b's 500). 27 were caught, and the 3 that survived are each caught by a gap test in `test/case_rsig.test.js`:
+- **The must-fail pass.** 30 defects were planted, each alone with the whole suite run: 29 over the lines R-RVf3 changed (`lib/_case_page.js` 5, `lib/_case_http.js` 17, `lib/_case.js` 5, `lib/_case_seal.js` 2), and T12, on a line R-SIG changed, planted again against its new test. (Corrected by unit R-AB: this sentence said `lib/_case_http.js` 18, which summed to 31, and counted T12 among R-RVf3's lines.) Among them were the reader's own: R01 (4b's old check restored) and B01 (5b's 500). 27 were caught, and the 3 that survived are each caught by a gap test in `test/case_rsig.test.js`:
   - W11: the 5a bodies without `reason`;
   - B05: every refusal of the pre-write judge answered 503. The gap test drives a row dated before the seal, which must stay 500;
   - V01: a version-3 row's reading given before its other fields, so that a version-3 row with no `signed_under` read `row_note_v3`. The gap test asserts `reference_missing_field`.
@@ -92,10 +184,10 @@
   - 4b: no ordering check stays. `registered_at` and `compared_at` come from two requests' clocks, possibly on two instances, so a `registered_at <= compared_at` check could fail the seal build under clock skew as the old one did.
   - 4a: one sentence serves both cases, since the ruling's words ("or is absent there") cover both.
   - 5a: a WITHDRAWN root whose signer the current document does not list, or lists revoked, answers 409 `signer_unlisted` or `signer_revoked`, the reader's own codes, not `signature_invalid`. Each fails closed.
-  - 5a: the sealer's marker repair (`lib/_case_seal.js` `repairWithdrawn`) still acts on a WITHDRAWN root after `judgeCase` only. The ruling names the refusal receipt and the retried withdrawal, so it is not changed here.
+  - 5a: the sealer's marker repair (`lib/_case_seal.js` `repairWithdrawn`) still acts on a WITHDRAWN root after `judgeCase` only. The ruling names the refusal receipt and the retried withdrawal, so it is not changed here. (Built by unit R-AB, carry-over (a).)
   - 5b: "codes only" is read as R-L4e's code-only body, with no sentence.
   - 5c: a version-3 row's `anchor_note` is not checked against any sentence; only its presence is required, as for every row field.
-  - Seen, not changed: the reference answers a sealed case whose named document cannot be read with 409 `document_unavailable` (`lib/_case_http.js`, the sealed check), not a 503.
+  - Seen, not changed: the reference answers a sealed case whose named document cannot be read with 409 `document_unavailable` (`lib/_case_http.js`, the sealed check), not a 503. (Changed by unit R-AB, carry-over (b): 503, codes only.)
 
 ## 2026-10-14: Unit R-RVf2: the EXPIRED page's sentence, as ruled (branch `case-protocol-2026-10-10`, NOT deployed)
 
@@ -359,7 +451,7 @@
 - **UNSURE.**
   - `sig_reason` stays on signed records as null, not removed, so that every record has one field list and the form check is one rule.
   - A key that the named document lists but not as active reads `signature_invalid` with reason `signer_not_active`. The revoked answer (`signer_revoked`, `key_revoked`) is the current document's, as R-REV built it.
-  - (Corrected by unit R-RVf3; this line said the case signature is checked first, so that an altered receipt reads `signature_invalid`, not `verdict_unbound`. That is wrong.) The sealed check reads the receipt's binding first (`checkSealedReceipt`, its form and its binding to the case; it verifies no signature). An alteration the binding sees reads `verdict_unbound` with the binding's reason, whether or not the case was re-signed (`case_item2d` "FIX 1 (planted)": `compared_at` altered, `receipt_time_mismatch`). An alteration it does not see, with the case not re-signed, reads `signature_invalid`, the case's own signature being checked next (`case_fix_mutation_gaps` S10). With the case re-signed, the receipt's own signature is checked last and reads `verdict_unbound`, `receipt_bad_signature` (S12).
+  - (Corrected by unit R-RVf3; this line said the case signature is checked first, so that an altered receipt reads `signature_invalid`, not `verdict_unbound`. That is wrong.) The sealed check reads the receipt's binding first (`checkSealedReceipt`, its form and its binding to the case; it verifies no signature). An alteration the binding sees reads `verdict_unbound` with the binding's reason, whether or not the case was re-signed (`case_item2d` "FIX 1 (planted)": `compared_at` altered, `receipt_time_mismatch`, not re-signed; unit R-AB's test m5 drives both). An alteration it does not see, with the case not re-signed, reads `signature_invalid`, the case's own signature being checked next (`case_fix_mutation_gaps` S10). With the case re-signed, the receipt's own signature is checked last and reads `verdict_unbound`, `receipt_bad_signature` (S12).
   - `receipt_unsigned` is kept as the seal's code for a receipt signer the named document does not list as an active reconcile key (`unknown_signer`, `signer_not_active`).
   - A named commit that is not on the published branch is `document_unavailable` with reason `commit_not_on_branch` (could-not-look), as the seal read it before. It is not a separate code.
   - The reference confirms its document before its sealed check, so a raw host that is down answers 503 `document_unavailable`, not 409. The withdrawal confirms its document after the role's proof and before its signer.

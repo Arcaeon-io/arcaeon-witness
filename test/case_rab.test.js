@@ -741,3 +741,16 @@ test("R-AB m5: a receipt alteration the binding sees reads verdict_unbound with 
     assert.deepEqual(await S.sealedRecordReason(rec, DOC), { code: "verdict_unbound", reason: "receipt_time_mismatch" });
   }
 });
+
+// R-AB's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (K07): singleParty reads one key only from two key_fp values that are one: entries in the form before unit R-AB (no key_fp, two key ids) are not one key", async () => {
+  const c = await committedCase("RAB gap K07");
+  const k = storedCase(c.id);
+  const bare = (e) => {
+    const { key_fp: _f, ...rest } = e; // eslint-disable-line no-unused-vars
+    return rest;
+  };
+  assert.notEqual(k.commitments.a.key_id, k.commitments.b.key_id, "fixture: two keys");
+  assert.equal(C.singleParty({ ...k, commitments: { a: bare(k.commitments.a), b: bare(k.commitments.b) } }), false);
+  assert.equal(C.singleParty(k), false, "control: the stored form");
+});
