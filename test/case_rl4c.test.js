@@ -298,7 +298,7 @@ const D = Date.parse(DEADLINE);
 const clockOverWrite = (id, before, after) => () => (C.ROLES.some((r) => regFiles(id, r).length) ? after : before);
 
 // THE WORDS, exactly
-const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was never confirmed; it has no standing";
+const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was not confirmed when this request read the case";
 const PROPERTY = "No file that belongs to a case is ever deleted. A case's registration files, reference rows, withdrawal record and seal " +
   "are written once and never changed. The case root is the one case file that is updated, and only by a compare-and-swap that every " +
   "reader can follow in the repository's history.";
@@ -497,6 +497,7 @@ test("R-L4c c4: no registration_exists: a different claim for a role whose file 
   // the first claim's re-send loses its compare-and-swap to the second claim
   const r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(u.id)}`),
     () => commit(u.id, other, NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000), () => commit(u.id, u.a, NOW + 1000));
+  console.log("DBG", r.inner.status, JSON.stringify(r.inner.body).slice(0, 400), "OUT", r.out.status, r.out.body.existing, r.out.body.error_code);
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body).slice(0, 300));
   const winner = claimPathOf(u.id, other);
   assert.deepEqual(storedCase(u.id).commitments.a, projectionOf(winner));
@@ -633,4 +634,87 @@ test("MUST-FAIL GAP (P06): the single-party page links each registration file at
   assert.equal(C.singleParty(storedCase(id)), true, "fixture: single party");
   const html = (await casePage(id, NOW + 5000)).html;
   for (const p of [regFiles(id, "a")[0], bpath]) assert.ok(html.includes(`https://github.com/${PINS}/commits/main/${p}`), p);
+});
+
+// =============================================================================
+// UNIT R-L4d: the second reader's three follow-ups to R-L4c
+// =============================================================================
+
+test("R-L4d d1: two identical sends overlap and the one that found the other's file loses the compare-and-swap: it reads the root once more, finds that file's sha256 projected, and answers 200 existing:true", async () => {
+  const id = await openCase("RL4d d1 lost swap, same claim");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const cpath = C.casePath(id);
+  const isSwap = (url, o) => ((o && o.method) || "GET") === "PUT" && String(url).includes(`/repos/${PINS}/contents/${cpath}`);
+  // The first send writes the file and reaches its compare-and-swap. There
+  // the second send starts (once the first's lease has run out), finds that
+  // file and reaches its own compare-and-swap, which is held until the first
+  // send has answered: the first swap lands, the second loses.
+  let reached;
+  let answered;
+  const secondAtSwap = new Promise((r) => { reached = r; });
+  const firstAnswered = new Promise((r) => { answered = r; });
+  let second = null;
+  let swaps = 0;
+  let lost = false;
+  let rereads = 0;
+  const viaMock = global.fetch;
+  const viaStore = store.getFile;
+  global.fetch = async (url, o) => {
+    if (isSwap(url, o)) {
+      swaps += 1;
+      if (swaps === 1) {
+        second = commit(id, a, NOW + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000);
+        await secondAtSwap;
+      } else if (swaps === 2) {
+        reached();
+        await firstAnswered;
+        lost = true;
+      }
+    }
+    return viaMock(url, o);
+  };
+  // the second send's own reads of the root once its swap is sent (the
+  // store's re-read inside the compare-and-swap is not one of them)
+  store.getFile = async (p, ...rest) => {
+    if (lost && p === cpath) rereads += 1;
+    return viaStore(p, ...rest);
+  };
+  let first;
+  let out;
+  try {
+    first = await commit(id, a, NOW);
+    answered();
+    out = await second;
+  } finally {
+    global.fetch = viaMock;
+    store.getFile = viaStore;
+  }
+  assert.equal(swaps, 2, "fixture: both sends reached a compare-and-swap");
+  assert.deepEqual([first.status, first.body.existing, first.body.projected], [201, false, ["a"]], JSON.stringify(first.body).slice(0, 300));
+  const [rpath] = regFiles(id, "a");
+  assert.equal(regFiles(id, "a").length, 1, "one file, the claim's");
+  assert.deepEqual([out.status, out.body.existing, out.body.projected], [200, true, []], JSON.stringify(out.body).slice(0, 300));
+  assert.equal(rereads, 1, "the root, read once more");
+  assert.equal(storedCase(id).commitments.a.registration_sha256, sha(Buffer.from(fileText(rpath), "utf8")), "the root projects the file's own sha256");
+  assert.deepEqual(out.body.case.commitments.a, projectionOf(rpath));
+  assert.equal(out.body.registration_path, rpath);
+  assert.equal(projectionsOf(id, "a"), 1, "projected once");
+});
+
+test("R-L4d d2: the late refusal says the file was not confirmed when this request read the case, and claims nothing about its standing", async () => {
+  assert.equal(LATE_UNCONFIRMED, "the case's deadline has passed, and the registration file written for this request was not confirmed when this request read the case");
+  for (const f of ["lib/_case_http.js", "README.md"]) {
+    assert.ok(!read(f).includes("was never confirmed; it has no standing"), f);
+  }
+});
+
+test("R-L4d d3: the registrations panel states the rule, each role registers one commitment hash, on an open page and on a committed one; it never says a role registered one", async () => {
+  const id = await openCase("RL4d d3 open");
+  const c = await committedCase("RL4d d3 committed");
+  for (const k of [id, c.id]) {
+    const html = (await casePage(k, NOW + 1000)).html;
+    assert.ok(registrationsOf(html).includes("Each role registers one commitment hash, stamped first as a public, dated commit."), k);
+    assert.ok(!html.includes("registered one commitment hash"), k);
+  }
 });

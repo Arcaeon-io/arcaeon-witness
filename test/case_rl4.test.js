@@ -288,7 +288,7 @@ function registrationsOf(html) {
 const UNCONFIRMED = "the registration file is written and is not yet confirmed; send the same registration again";
 const WITHDRAWN_BEFORE_CONFIRMED = "the case was withdrawn before this registration was confirmed; the registration file is written and has no standing";
 // since unit R-L4c: no "cannot acquire it"
-const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was never confirmed; it has no standing";
+const LATE_UNCONFIRMED = "the case's deadline has passed, and the registration file written for this request was not confirmed when this request read the case";
 // since unit R-L4c (c4): the page lists no claim file; a role the root does
 // not project is said to have no confirmed registration, and the WITHDRAWN
 // and EXPIRED pages show no registration rows
