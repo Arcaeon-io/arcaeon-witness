@@ -254,10 +254,10 @@ test("THE WRITERS SAY PINNED: the reveal's answer, pinChain, the sealer's report
   assert.deepEqual(run2.newly_pinned, [p.id]);
   const tree = await store.getTree();
   const row = S.caseAnchorSummary(tree);
-  assert.equal(row.pinned, 2);
+  assert.equal(row.pin_files, 2);
   assert.equal(Object.prototype.hasOwnProperty.call(row, "anchored"), false);
   const data = await statusData.gatherStatusData();
-  assert.equal(data.caseAnchors.pinned, 2);
+  assert.equal(data.caseAnchors.pin_files, 2);
 });
 
 // =============================================================================

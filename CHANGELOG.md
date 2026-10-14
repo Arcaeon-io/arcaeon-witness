@@ -56,7 +56,7 @@
   - The test counts. R-PIN's entry gave this environment's counts, where both environment-dependent tests skip (R-L4d (a)); the reader's three runs, 1404 pass with 1 skipped, ran one of them. R-PIN's counts line now gives both.
 - **Tests.** In `test/case_rpin.test.js`: f1 (the reveal, and `pinChain` itself); the sentence in the pin's cell, once; a found pin held as the page holds it (`pin_commit_mismatch` with its commit, and `pinned` with the commit that wrote it); the status page's and the README's words; and one gap test. Updated: the state table's cell reader (`case_rj3`: the sentence is read from the pin cell), the status tests in `case_commits` (S01, S02) and `case_item2b`, and the note's words in `case_item2b`.
 - **The must-fail pass.** 12 defects were planted over the lines R-PINf changed in `lib/_case_seal.js`, `lib/_case_page.js` and `api/status.js`, each alone with the whole suite run. 10 were caught. F06 (a found pin's mismatch naming no commit) is caught by an assertion added to the found-pin test. F05 (a pin gone on the second read answering `not_pinned`) is caught by a new gap test whose second read of the pin file answers 404.
-- Counts, as `npm test` prints them here: 1422 tests, 1417 pass, 2 skipped, 0 fail, 3 todo, three runs.
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1422 tests, 1417 pass, 2 skipped, 0 fail, 3 todo, three runs. Where one of them runs (the reader's environment): 1418 pass, 1 skipped.
 
 ## 2026-10-14: Unit R-L4e: an inconsistent case record says one sentence, and its 503 carries only the code (branch `case-protocol-2026-10-10`, NOT deployed)
 

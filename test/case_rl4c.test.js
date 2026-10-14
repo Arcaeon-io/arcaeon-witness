@@ -497,7 +497,6 @@ test("R-L4c c4: no registration_exists: a different claim for a role whose file 
   // the first claim's re-send loses its compare-and-swap to the second claim
   const r = await during((url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(u.id)}`),
     () => commit(u.id, other, NOW + 1000 + (H.CASE_LOCK_TTL_SECONDS + 1) * 1000), () => commit(u.id, u.a, NOW + 1000));
-  console.log("DBG", r.inner.status, JSON.stringify(r.inner.body).slice(0, 400), "OUT", r.out.status, r.out.body.existing, r.out.body.error_code);
   assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body).slice(0, 300));
   const winner = claimPathOf(u.id, other);
   assert.deepEqual(storedCase(u.id).commitments.a, projectionOf(winner));

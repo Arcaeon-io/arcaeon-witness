@@ -377,7 +377,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   const before = await gatherStatusData();
   assert.equal(before.overallOk, true, `fixture: a healthy board (${JSON.stringify(verdictOf(before))})`);
   // item 2c (fix 3): the row is counted from the tree alone
-  assert.deepEqual(before.caseAnchors, { case_files: 0, pinned: 0, withdrawn: 0, partial: false });
+  assert.deepEqual(before.caseAnchors, { case_files: 0, pin_files: 0, withdrawal_markers: 0, partial: false });
 
   const one = await sealedCase();
   const withOne = await gatherStatusData();
@@ -385,7 +385,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   assert.deepEqual(withOne.namespaces, ["acme-prod"]);
   assert.ok(!withOne.rows.some((r) => r.ns === "case"), "no namespace row for pins/case");
   assert.equal(withOne.caseAnchors.case_files, 1);
-  assert.equal(withOne.caseAnchors.pinned, 1);
+  assert.equal(withOne.caseAnchors.pin_files, 1);
 
   // a second, pending case and a committed (unsealed) one
   await sealedCase({ over: { scope_digest: sha("pending one") }, pinFails: true });
@@ -393,11 +393,11 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   const withThree = await gatherStatusData();
   assert.deepEqual(verdictOf(withThree), verdictOf(before), "a pending anchor changes nothing in the verdict either");
   assert.equal(withThree.caseAnchors.case_files, 3);
-  assert.equal(withThree.caseAnchors.pinned, 1);
+  assert.equal(withThree.caseAnchors.pin_files, 1);
   // unit R-PIN: the tree alone cannot say what a case with no pin file is,
   // so it is counted as nothing (no pending count)
   assert.equal(Object.prototype.hasOwnProperty.call(withThree.caseAnchors, "pending"), false);
-  assert.equal(withThree.caseAnchors.withdrawn, 0);
+  assert.equal(withThree.caseAnchors.withdrawal_markers, 0);
 
   // the page and the JSON twin say the same
   const html = makeRes();
@@ -411,7 +411,10 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   await statusHandler(makeReq({ method: "GET", query: { format: "json" }, headers: { "x-forwarded-for": freshIp() } }), json);
   const j = parsed(json);
   assert.equal(j.status, "ok");
-  assert.deepEqual([j.case_anchors.case_files, j.case_anchors.pinned], [3, 1]);
+  assert.deepEqual([j.case_anchors.case_files, j.case_anchors.pin_files], [3, 1]);
+  // the minors from the small-three read: the keys name what is counted, pin files and withdrawal markers
+  assert.deepEqual(Object.keys(j.case_anchors).filter((k) => ["pinned", "withdrawn", "pin_files", "withdrawal_markers"].includes(k)).sort(),
+    ["pin_files", "withdrawal_markers"]);
   assert.equal(Object.prototype.hasOwnProperty.call(j.case_anchors, "pending"), false);
   assert.equal(j.case_anchors.feeds_status, false);
   assert.ok(!j.namespaces.some((n) => n.namespace === "case"));
@@ -439,7 +442,7 @@ test("STATUS: a damaged case file changes nothing in the case row, which reads n
   // item 2c (fix 3): the row never reads the case file, so the damage is not
   // seen here; by path the case is anchored (both registrations and a pin)
   assert.ok(!gh.getLog.slice(before).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case file or case pin read");
-  assert.equal(d.caseAnchors.pinned, 1);
+  assert.equal(d.caseAnchors.pin_files, 1);
   assert.deepEqual(verdictOf(d), base);
   // the tree unreadable: the conflicts are uncounted (indeterminate, as
   // before) and the case row says it was not counted, never zero

@@ -456,7 +456,7 @@ test("R-L4: the sealer's index and the status counts read no registration file: 
   assert.deepEqual(S.caseTreeIndex(bare).candidates, [id]);
   assert.deepEqual(S.caseTreeIndex(withFiles).candidates, [id]);
   assert.deepEqual(S.caseAnchorSummary(bare), S.caseAnchorSummary(withFiles));
-  assert.deepEqual(S.caseAnchorSummary(bare), { case_files: 1, pinned: 0, withdrawn: 0, partial: false }); // unit R-PIN: no pending
+  assert.deepEqual(S.caseAnchorSummary(bare), { case_files: 1, pin_files: 0, withdrawal_markers: 0, partial: false }); // unit R-PIN: no pending
 });
 
 // =============================================================================

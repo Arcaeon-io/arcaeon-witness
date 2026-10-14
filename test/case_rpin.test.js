@@ -374,7 +374,7 @@ test("R-PIN 8: the sealer's candidates are the case roots with no pin file; regi
 test("R-PIN 9: the status row has no pending count", () => {
   const sum = S.caseAnchorSummary([{ path: C.casePath("a".repeat(64)), type: "blob" }]);
   assert.equal("pending" in sum, false, JSON.stringify(sum));
-  assert.deepEqual(sum, { case_files: 1, pinned: 0, withdrawn: 0, partial: false });
+  assert.deepEqual(sum, { case_files: 1, pin_files: 0, withdrawal_markers: 0, partial: false });
 });
 
 test("R-PIN 10: two page requests read the store twice", async () => {
@@ -401,7 +401,7 @@ test("MUST-FAIL GAP (S02): only pins/case/<id>/00000001.json is a case's pin: a 
     { path: `pins/case/${id}/latest.json`, type: "blob" }, { path: `pins/case/${id}/00000002.json`, type: "blob" }];
   const idx = S.caseTreeIndex(entries);
   assert.deepEqual([idx.candidates, [...idx.pinned]], [[id], []]);
-  assert.equal(S.caseAnchorSummary(entries).pinned, 0);
+  assert.equal(S.caseAnchorSummary(entries).pin_files, 0);
 });
 
 test("MUST-FAIL GAP (S10): pinChain writes no pin for a case commit that is not 40 lowercase hex", async () => {
@@ -421,7 +421,7 @@ test("MUST-FAIL GAP (S24): the sealer's candidates are sorted, whatever order th
 test("MUST-FAIL GAP (S25, S29): a root with the withdrawn marker is counted withdrawn and never pinned, by the sealer's run and by the status row, a pin file beside it notwithstanding", async () => {
   const id = "e".repeat(64);
   const entries = [{ path: C.casePath(id), type: "blob" }, { path: pinFile(id), type: "blob" }, { path: C.withdrawnMarkerPath(id), type: "blob" }];
-  assert.deepEqual([S.caseAnchorSummary(entries).pinned, S.caseAnchorSummary(entries).withdrawn], [0, 1]);
+  assert.deepEqual([S.caseAnchorSummary(entries).pin_files, S.caseAnchorSummary(entries).withdrawal_markers], [0, 1]);
   for (const e of entries) gh.seed(PINS, e.path, { planted: e.path });
   const run = await sealerRun();
   assert.deepEqual([run.candidates, run.pinned, run.withdrawn_skipped], [0, 0, 1]);
@@ -502,8 +502,8 @@ test("R-PINf f2: the status page and the README claim no more than the tree show
   await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": nextIp() } }), res);
   const page = String(res._body).replace(/\s+/g, " ");
   assert.ok(page.includes("<thead><tr><th>where</th><th>case files</th><th>pin files</th><th>withdrawal markers</th></tr></thead>"), "the column heads");
-  assert.ok(page.includes("<em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists; " +
-    "whether a pin holds its case, only the case's own page reads."), "pin files");
+  assert.ok(page.includes("<em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists, " +
+    "and no withdrawal marker; whether a pin holds its case, only the case's own page reads."), "pin files (the minors from the small-three read: and no withdrawal marker)");
   assert.ok(page.includes("<em>withdrawal markers</em> counts the case files whose withdrawal marker the tree lists."), "markers");
   for (const said of ["is pinned by its own pin", "<em>Pinned</em> means", "cases carry the withdrawal marker"]) assert.equal(page.includes(said), false, said);
   assert.equal(S.ANCHOR_NOTE, "A sealed case's pin, when it has one, is pins/case/<case_id>/00000001.json, written once by this service. It is its own " +
@@ -536,4 +536,10 @@ test("MUST-FAIL GAP (F05, unit R-PINf): a pin found, and not found when it is re
   }
   assert.equal(reads, 2, "fixture: found, then read again");
   assert.deepEqual(p, { pin: "commit_unrecorded", reason: "pin_not_found" });
+});
+
+test("THE MINORS FROM THE SMALL-THREE READ: the README says case_commit is, for the reveal, the commit its write answered with, and for the sealer's run the commit it read back", () => {
+  assert.ok(README().includes("It records `case_commit`: for the reveal, the commit its write of the sealed case file answered with; for the sealer's run, " +
+    "the commit it read back as the one that wrote the sealed case file."));
+  assert.ok(!README().includes("the commit its writer read back"));
 });

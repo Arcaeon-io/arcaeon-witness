@@ -376,7 +376,7 @@ test("FIX 3: the status row reads no case file and no pin; a truncated tree make
   const reads = gh.getLog.length;
   const d = await gatherStatusData();
   assert.ok(!gh.getLog.slice(reads).some((p) => p.startsWith("cases/") || p.startsWith("pins/case/")), "no case file, no case pin read");
-  assert.deepEqual(d.caseAnchors, { case_files: 3, pinned: 1, withdrawn: 1, partial: false }); // unit R-PIN: no pending
+  assert.deepEqual(d.caseAnchors, { case_files: 3, pin_files: 1, withdrawal_markers: 1, partial: false }); // unit R-PIN: no pending
 
   // the mock tree, marked truncated
   gh.treeTruncated = true;
