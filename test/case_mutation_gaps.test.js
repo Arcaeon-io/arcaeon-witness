@@ -346,30 +346,6 @@ async function reveal(p, { now = REVEAL_AT, env = RECEIPT_ENV } = {}) {
   return { status: res._status, body: typeof res._body === "string" ? JSON.parse(res._body) : res._body };
 }
 
-test("H41 (reveal step 2b): a stamp whose one public commit is no longer the commit its registration recorded is refused case_record_inconsistent; nothing is sealed", async () => {
-  const p = await committedCase();
-  const spath = stamp.stampPath(p.b.commitment_sha256);
-  const registered = gh.read(PINS, REG.pathOf(gh, ID, "b")).stamp_commit;
-  // the same stamp record, same stamped_at, now held by exactly one OTHER commit
-  gh.seed(STAMPS, spath, gh.read(STAMPS, spath));
-  const now = gh.commitsFor(STAMPS, spath);
-  assert.equal(now.length, 1, "fixture: one commit, so the history is not ambiguous");
-  assert.notEqual(now[0].sha, registered, "fixture: another commit");
-  const realError = console.error;
-  const lines = [];
-  console.error = (...a) => { lines.push(a.map(String).join(" ")); };
-  let r;
-  try {
-    r = await reveal(p);
-  } finally {
-    console.error = realError;
-  }
-  assert.equal(r.status, 503, JSON.stringify(r.body).slice(0, 300));
-  assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" }); // unit R-L4e: the reason goes to the operator log
-  assert.ok(lines.includes(`[case] case_record_inconsistent: case ${ID}, role b, stamp_differs_from_registration`), JSON.stringify(lines).slice(0, 300)); // MUST-FAIL GAP E09
-  assert.equal(gh.read(PINS, C.casePath(ID)).status, "COMMITTED", "nothing sealed");
-});
-
 test("H57 (operatorBearer): a bearer of the operator key's length that is not the key is refused 401 reference_unauthorized, before anything is read", async () => {
   const want = "case-test-case-operator-key-0001";
   const wrong = "case-test-case-operator-key-0002";

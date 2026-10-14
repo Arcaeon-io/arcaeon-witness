@@ -250,7 +250,8 @@ async function lostRace(scope) {
 }
 const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
-const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
+// the case log's former directory (unit R-RV removed the format): nothing writes there
+const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`cases/${id}/log/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 
@@ -414,30 +415,6 @@ test("R-N N3, C1: a registration written after the withdrawal does not stand: it
 });
 
 // =============================================================================
-// N4: the lease race says what is true and writes no hash and no log
-// =============================================================================
-
-test("R-N N4: a withdrawal that lands after the reveal hashed its tapes, before its attempt: refused in true words, no hash written, and no receipt", async (t) => {
-  const c = await committedCase("RN race");
-  const compare = t.mock.method(RECONCILE, "compare");
-  const r = await during(
-    (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`),
-    () => withdraw(c.id, c.b, { now: REVEAL_AT - 1000 }),
-    () => reveal(c),
-  );
-  assert.equal(r.inner.status, 201, JSON.stringify(r.inner.body));
-  assert.deepEqual([r.out.status, r.out.body.error_code], [409, "case_withdrawn"], JSON.stringify(r.out.body).slice(0, 300));
-  // unit R-N2 (m4): the words
-  assert.equal(r.out.body.error, "Refused. A withdrawal landed while this reveal was in progress. Nothing computed from the tapes is kept.");
-  assert.equal(has(r.out.body, "refusal_receipt"), false);
-  assert.equal(compare.mock.callCount(), 0, "nothing compared");
-  const input = C.revealInputSha256({ case_id: c.id, policy_version: C.SUPPORTED_POLICY_VERSION, tape_sha256: { a: c.a.tape_sha256, b: c.b.tape_sha256 } });
-  const text = pinsText();
-  for (const h of [c.a.tape_sha256, input]) assert.ok(!text.includes(h), "no hash written");
-  assert.equal(storedCase(c.id).status, "WITHDRAWN");
-});
-
-// =============================================================================
 // C1, C2: a registration never stands after a withdrawal, nor on an assumption
 // =============================================================================
 
@@ -497,76 +474,6 @@ test("R-N C3: a retried withdrawal (the same role and preimage) is idempotent 20
 });
 
 // =============================================================================
-// E1: reveal_attempts, append-only, in the sealed base
-// =============================================================================
-
-// A reveal whose seal write (the second PUT of the case file) fails.
-async function revealSealFails(c, now) {
-  let puts = 0;
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    if ((o && o.method) === "PUT" && String(url).includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`) && ++puts === 2) gh.forceFailure(PINS, C.casePath(c.id), 1, 502);
-    return viaMock(url, o);
-  };
-  try {
-    return await reveal(c, { now });
-  } finally {
-    global.fetch = viaMock;
-  }
-}
-
-test("R-N E1: reveal_attempts is append-only and part of the sealed base: two failed reveals then one that seals leave every attempt and every failure, in order, inside the sealed record's signature", async () => {
-  const c = await committedCase("RN attempts");
-  const T1 = REVEAL_AT;
-  const T2 = REVEAL_AT + 60000;
-  const T3 = REVEAL_AT + 120000;
-  const policy = storedCase(c.id).policy_version;
-  const attempt = (at) => ({ event: "attempt", commitments: { a: c.a.commitment_sha256, b: c.b.commitment_sha256 },
-    input_sha256: C.revealInputSha256({ case_id: c.id, policy_version: policy, tape_sha256: { a: c.a.tape_sha256, b: c.b.tape_sha256 } }), at: C.utcSeconds(at) });
-  const failure = (at) => ({ event: "failure", reason: "case_seal_failed", at: C.utcSeconds(at) });
-  assert.equal((await revealSealFails(c, T1)).status, 503);
-  assert.deepEqual(storedCase(c.id).reveal_attempts, [attempt(T1), failure(T1)]);
-  assert.equal(has(storedCase(c.id), "reveal_attempt") || has(storedCase(c.id), "reveal_failure"), false, "the old single fields are gone");
-  assert.equal((await revealSealFails(c, T2)).status, 503);
-  assert.deepEqual(storedCase(c.id).reveal_attempts, [attempt(T1), failure(T1), attempt(T2), failure(T2)], "nothing replaced");
-  const page = await casePage(c.id);
-  assert.match(page.html, /2 joint reveal attempts/);
-  const sealed = await reveal(c, { now: T3 });
-  assert.equal(sealed.status, 201, JSON.stringify(sealed.body).slice(0, 300));
-  const k = storedCase(c.id);
-  assert.equal(k.status, "VERDICT");
-  assert.deepEqual(k.reveal_attempts, [attempt(T1), failure(T1), attempt(T2), failure(T2), attempt(T3)]);
-  assert.equal((await S.sealedRecordReason(k, DOC)).code, "valid_under_document");
-  const trimmed = { ...k, reveal_attempts: k.reveal_attempts.slice(4) };
-  assert.deepEqual(C.validateCase(trimmed), { ok: true }, "fixture: still a valid record");
-  assert.deepEqual(await S.sealedRecordReason(trimmed, DOC), { code: "case_signature_invalid", reason: "bad_signature" }, "the attempts are signed");
-});
-
-test("R-N E1: the schema: reveal_attempts only on COMMITTED or VERDICT, entries an attempt or a failure, a failure only right after an attempt, an attempt's commitments the case's own, and a VERDICT's last entry the attempt that sealed it", async () => {
-  const c = await committedCase("RN attempts schema");
-  const k = storedCase(c.id);
-  const att = { event: "attempt", commitments: { a: c.a.commitment_sha256, b: c.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: "2026-10-10T09:00:00Z" };
-  const fail = { event: "failure", reason: "case_seal_failed", at: "2026-10-10T09:00:00Z" };
-  for (const list of [[att], [att, fail], [att, fail, att], [att, att]]) assert.deepEqual(C.validateCase({ ...k, reveal_attempts: list }), { ok: true });
-  const bad = [
-    [[], "malformed_field", "reveal_attempts"],
-    [[fail], "status_inconsistent", "reveal_attempts.0"],
-    [[att, fail, fail], "status_inconsistent", "reveal_attempts.2"],
-    [[{ ...att, event: "retry" }], "malformed_field", "reveal_attempts.0.event"],
-    [[{ ...att, commitments: { a: c.b.commitment_sha256, b: c.a.commitment_sha256 } }], "status_inconsistent", "reveal_attempts.0.commitments"],
-    [[{ ...att, extra: 1 }], "unknown_field", "reveal_attempts.0.extra"],
-    [[att, { ...fail, reason: "bad luck" }], "malformed_field", "reveal_attempts.1.reason"],
-  ];
-  for (const [list, code, field] of bad) {
-    const v = C.validateCase({ ...k, reveal_attempts: list });
-    assert.deepEqual([v.code, v.field], [code, field], JSON.stringify(v));
-  }
-  assert.equal(C.validateCase({ ...k, reveal_attempt: att }).code, "unknown_field", "the single field is gone");
-  const open = await openCase("RN attempts schema open");
-  assert.equal(C.validateCase({ ...storedCase(open), reveal_attempts: [att] }).code, "status_inconsistent");
-});
-
-// =============================================================================
 // D1: the reference runs the anchor-conflict check
 // =============================================================================
 
@@ -574,13 +481,14 @@ test("R-N E1: the schema: reveal_attempts only on COMMITTED or VERDICT, entries 
 // T1: the §2B todos are plain assertions now
 // =============================================================================
 
-test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing; since unit R-PIN §1.2 and §5 are todo again, decided; since unit R-REV §1.4's later revocation too)", () => {
+test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing; since unit R-PIN §1.2 and §5 are todo again, decided; since unit R-REV §1.4's later revocation too, and since unit R-RV §1.3's comparison trace)", () => {
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(todos.length, 4, JSON.stringify(todos));
+  assert.equal(todos.length, 5, JSON.stringify(todos));
   assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-PIN)")).length, 2, "§1.2 and §5");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-REV)")).length, 1, "§1.4's later revocation");
+  assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-RV)")).length, 1, "§1.3's comparison trace");
   assert.ok(!todos.some((t) => /2B/.test(t)));
 });
 
@@ -649,13 +557,6 @@ test("MUST-FAIL GAP (C03, C04, C06): a refusal names role a or b and carries exa
   assert.deepEqual([r.status, r.body.error_code, r.body.field], [400, "bad_role", "role"]);
 });
 
-test("MUST-FAIL GAP (C13): a sealed case whose list ends in a failure is refused at that entry", async () => {
-  const c = await sealedCase("RN gap sealed ends in failure");
-  const k = storedCase(c.id);
-  const v = C.validateCase({ ...k, reveal_attempts: [...k.reveal_attempts, { event: "failure", reason: "case_seal_failed", at: "2026-10-10T09:00:00Z" }] });
-  assert.deepEqual([v.code, v.field], ["status_inconsistent", "reveal_attempts.1"]);
-});
-
 test("MUST-FAIL GAP (H04): the lease is released at the lease clock's time", async () => {
   const id = await openCase("RN gap released at");
   const a = party(id, "a", AGENT_TAPE);
@@ -703,14 +604,6 @@ test("MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape h
   await H.handleCaseWithdraw(req("case-withdraw", { case_id: c.id, role: "b", tape_sha256: other, salt: c.b.salt }), res, { now: NOW + 5000, env: KEYS, keyDocument: DOC });
   assert.deepEqual([res._status, parsed(res).error_code], [409, "case_withdrawn"]);
   assert.equal(gh._commitsOf(PINS).length, commits, "nothing written to the pins repository");
-});
-
-test("MUST-FAIL GAP (P04): the page names the latest attempt", async () => {
-  const c = await committedCase("RN gap latest attempt");
-  await revealSealFails(c, REVEAL_AT);
-  await revealSealFails(c, REVEAL_AT + 60000);
-  const page = await casePage(c.id);
-  assert.match(page.html, /The latest: A joint reveal was attempted at 2026-10-10T09:01:00Z/);
 });
 
 test("MUST-FAIL GAP (S05): a next page that is not a page number is a list that cannot be read", async () => {

@@ -447,21 +447,7 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     gh.repos.get(PINS).delete(REG.pathOf(gh, id, "b"));
     return revealBody(id, a, b);
   });
-  plant("the stamp-size reveal path: role a's stamp now records a tape's size", 409, "stamp_size_mismatch", async () => {
-    const { id, a, b } = await committedCase({ over: { scope_digest: sha("stamp size") } });
-    gh.seed(STAMPS, stamp.stampPath(a.commitment_sha256), { kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size: a.tape.length, stamped_at: "2026-10-10T07:45:00.123Z" });
-    return revealBody(id, a, b);
-  });
-  plant("role b's stamp path touched by a second commit", 409, "stamp_history_ambiguous", async () => {
-    const { id, a, b } = await committedCase({ over: { scope_digest: sha("stamp history") } });
-    gh.addCommit(STAMPS, stamp.stampPath(b.commitment_sha256));
-    return revealBody(id, a, b);
-  });
-  plant("role a's stamp re-dated", 503, "case_record_inconsistent", async () => {
-    const { id, a, b } = await committedCase({ over: { scope_digest: sha("stamp redated") } });
-    plantStamp(a.commitment_sha256, "2026-10-10T07:46:00.000Z");
-    return revealBody(id, a, b);
-  });
+  // (since unit R-RV the reveal reads no stamp: its stamp plants are gone)
   plant("a side-named tape field", 400, "unknown_field", async () => {
     const { id, a, b } = await committedCase({ over: { scope_digest: sha("side names") } });
     const body = revealBody(id, a, b);
@@ -511,7 +497,8 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     assert.equal(gh.putLog.length, before.writes, `${p.name}: nothing written`);
     assert.equal(runs(), before.runs, `${p.name}: reconcile was never invoked`);
   }
-  assert.ok(plants.length >= 19);
+  // since unit R-RV the three stamp plants at the reveal are gone: 16
+  assert.ok(plants.length >= 16);
   // the method and the media type, typed too
   const get = makeRes();
   await H.handleCaseReveal(makeReq({ method: "GET", headers: { "x-forwarded-for": freshIp() } }), get, { now: REVEAL_AT, env: SIGNED });
@@ -671,14 +658,14 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
   const r = await reveal(revealBody(id, a, b));
   receipts.buildReceipt = realBuild;
   assert.equal(r.status, 500, JSON.stringify(r.body));
-  assert.equal(r.body.error_code, "internal_error");
+  assert.equal(r.body.error_code, "receipt_check_failed");
   assert.equal(r.body.reason, "receipt_tape_a_mismatch");
   assert.equal(r.body.verdict, undefined);
   assert.equal(runs(), 1, "the comparison ran; its receipt was refused");
-  // red-team fix E: the attempt, before the comparison, and its failure; nothing sealed, nothing pinned
-  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), [C.casePath(id), C.casePath(id)]);
+  // unit R-RV: a failure writes nothing; nothing sealed, nothing pinned
+  assert.deepEqual(gh.putLog.slice(writes).map((w) => w.path), []);
   assert.equal(storedCase(id).status, "COMMITTED");
-  assert.equal(storedCase(id).reveal_attempts.at(-1).reason, "receipt_check_failed");
+  assert.equal(Object.prototype.hasOwnProperty.call(storedCase(id), "reveal_attempts"), false);
   // control: the real builder seals
   assert.equal((await reveal(revealBody(id, a, b))).status, 201);
 });
@@ -741,8 +728,7 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT", "the case file stands");
   assert.deepEqual(C.validateCase(k), { ok: true });
-  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under", "reveal_attempts"].sort(),
-    "no anchor or pin field in the case (its reveal attempts are part of the sealed base: unit R-N, E1)");
+  assert.deepEqual(Object.keys(k).sort(), [...C.TOP_LEVEL_FIELDS, "signed_under"].sort(), "no anchor or pin field in the case");
   assert.equal(gh.has(PINS, paths.seq), false);
   assert.deepEqual(await S.pinState(id, r.body.chain), { pin: "not_pinned" }, "computed from the pin file's absence");
   // MUST-FAIL ARM: storing the state in the case is refused by the schema
@@ -753,11 +739,11 @@ test("TEST 8: a pin that fails after the case write leaves the sealed case stand
 test("TEST 8: a case write that fails leaves no pin and the case COMMITTED; the same reveal then seals", async (t) => {
   const runs = spyReconcile(t);
   const { id, a, b } = await committedCase();
-  // red-team fix E: the case file's second PUT is the seal's (its first is the reveal's attempt)
+  // unit R-RV: the case file's one PUT is the seal's
   let puts = 0;
   const viaMock = global.fetch;
   global.fetch = async (url, o) => {
-    if ((o && o.method) === "PUT" && String(url).includes(`/contents/${C.casePath(id)}`) && ++puts === 2) gh.forceFailure(PINS, C.casePath(id), 1, 500);
+    if ((o && o.method) === "PUT" && String(url).includes(`/contents/${C.casePath(id)}`) && ++puts === 1) gh.forceFailure(PINS, C.casePath(id), 1, 500);
     return viaMock(url, o);
   };
   let r;
@@ -904,12 +890,7 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
     // a relabelled party moves the case id, so the schema refuses it first
     case_id_mismatch: [{ ...k, party_b: { ...k.party_b, label: "tool-operator@example.net" } }],
     receipt_time_mismatch: [{ ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T09:00:01Z" } }],
-    // (the attempt that sealed it dropped: since unit R-N, E1, it binds the reveals too, and the schema refuses the change first)
-    receipt_tape_a_mismatch: [(() => {
-      const { reveal_attempts: _attempts, ...rest } = k; // eslint-disable-line no-unused-vars
-      return { ...rest, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } };
-    })()],
-    status_inconsistent: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
+    receipt_tape_a_mismatch: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
   };
   for (const [reason, recs] of Object.entries(plants)) {
     for (const rec of recs) assert.equal(await verdictOf(rec), reason);

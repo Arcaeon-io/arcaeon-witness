@@ -834,9 +834,15 @@ sign in the case that produced it.
 A withdrawal (`?op=case-withdraw`) proves the requesting role by its
 commitment preimage, takes the case's lock, writes the signed withdrawal
 record over the OPEN or COMMITTED case, writes the withdrawn marker, and
-answers. A withdrawal that loses to a seal, a reveal attempt or the deadline
-writes nothing to the pins repository. A withdrawal
-request that wrote nothing says "This request wrote nothing."
+answers. A withdrawal that loses to a seal or the deadline writes nothing to
+the pins repository. A withdrawal request that wrote nothing says "This
+request wrote nothing."
+
+The joint reveal writes the case root once: the sealed case, by
+compare-and-swap over the COMMITTED root it read. A reveal that fails
+writes nothing, so the case stays COMMITTED as it was, and either role may
+send the same reveal again or withdraw. The reveal reads no stamp: a sealed
+case's stamp commits and stamp times are its registrations'.
 
 A listing of withdrawn tape digests was added in unit R-N and removed before
 release (see the change log). Files under withdrawn_commitments/ that a pins

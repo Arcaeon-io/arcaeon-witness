@@ -241,7 +241,6 @@ async function lostRace(scope, { deleteFails = false } = {}) {
 }
 const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
-const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
@@ -312,8 +311,6 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
     await H.handleCaseWithdraw(request, res, { now: NOW + 2000, env: KEYS, keyDocument: DOC });
     return { status: res._status, body: parsed(res) };
   };
-  const attemptOf = (k) => ({ ...k, reveal_attempts: [{ event: "attempt",
-    commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] });
   const lockPath = (id) => H._internal.caseLockPath(id);
 
   // before the case is read
@@ -334,9 +331,6 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   const gone = await committedCase("RN4 sweep withdrawn");
   assert.equal((await withdraw(gone.id, gone.b)).status, 201);
   await drive("withdrawn, the other role", "tail", 409, "case_withdrawn", () => withdraw(gone.id, gone.a, { now: NOW + 3000 }));
-  const tried = await committedCase("RN4 sweep attempted");
-  gh.seed(PINS, C.casePath(tried.id), attemptOf(storedCase(tried.id)), { keepHistory: true });
-  await drive("attempted", "tail", 409, "reveal_attempted", () => withdraw(tried.id, tried.b));
   const late = await committedCase("RN4 sweep expired");
   await drive("expired", "tail", 409, "expired", () => withdraw(late.id, late.b, { now: Date.parse(DEADLINE) + 1000 }));
 
@@ -387,8 +381,6 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const byA = await lostRootWrite("RN4 sweep lost to a", (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
   await drive("lost to another", "lost", 409, "case_withdrawn", async () => byA.w);
-  const lostTried = await lostRootWrite("RN4 sweep lost to attempt", (c, k) => attemptOf(k));
-  await drive("lost to an attempt", "lost", 409, "reveal_attempted", async () => lostTried.w);
   const lostLate = await lostRootWrite("RN4 sweep lost to deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
   await drive("lost to a deadline", "lost", 409, "expired", async () => lostLate.w);
 
@@ -396,7 +388,6 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   await drive("again: sealed first", "tail", 409, "case_sealed", () => withdraw(first.c.id, first.c.b, { now: REVEAL_AT + 5000 }));
   await drive("again: root failed, then expired", "tail", 409, "expired", () => withdraw(f1.id, f1.b, { now: Date.parse(DEADLINE) + 1000 }));
   await drive("again: lost to another", "tail", 409, "case_withdrawn", () => withdraw(byA.c.id, byA.c.b, { now: NOW + 5000 }));
-  await drive("again: lost to an attempt", "tail", 409, "reveal_attempted", () => withdraw(lostTried.c.id, lostTried.c.b, { now: NOW + 5000 }));
   await drive("again: lost to a deadline", "tail", 409, "expired", () => withdraw(lostLate.c.id, lostLate.c.b, { now: NOW + 5000 }));
   const rt = await committedCase("RN4 sweep retry read");
   assert.equal((await withdraw(rt.id, rt.b)).status, 201);
@@ -414,7 +405,8 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
     if (kind === "lost") assert.ok(r.body.error.includes(` ${LOST_TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);
   }
-  assert.ok(out.length >= 30, `driven: ${out.length}`);
+  // since unit R-RV the three reveal_attempted arms are gone: 27
+  assert.ok(out.length >= 27, `driven: ${out.length}`);
 });
 
 test("R-N4 R6: the sealer's window, 30 entries five a run: an hourly run reads every entry within 12 runs and a daily run within 28, from every start time sampled, and some start needs all of them; the comment and the README say so", () => {
@@ -498,13 +490,5 @@ test("f4: the withdrawer's retry on a WITHDRAWN case whose registration cannot b
     [503, "store_unreachable", "The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.", c.id], JSON.stringify(r.body));
   // sent again once the read works: 200, the record as it stands
   assert.equal((await withdraw(c.id, c.b, { now: NOW + 6000 })).status, 200);
-});
-
-test("f6: a reveal_attempts list holding no attempt event does not throw: the case is still refused as reveal_attempted, with no attempt time", () => {
-  const ws = H._internal.withdrawStanding;
-  const kase = { status: "COMMITTED", deadline: DEADLINE, reveal_attempts: [{ event: "failure", reason: "seal_write_failed", at: C.utcSeconds(NOW) }] };
-  const r = ws(kase, NOW, "c".repeat(64));
-  assert.deepEqual([r.status, r.code, r.extra.reveal_attempt_at], [409, "reveal_attempted", null]);
-  assert.deepEqual([ws({ ...kase, reveal_attempts: [] }, NOW, "c".repeat(64)).code], ["reveal_attempted"]);
 });
 

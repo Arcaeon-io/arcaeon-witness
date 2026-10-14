@@ -17,7 +17,8 @@
 //
 // Tests titled ITEM 2A are item two's registration half (2026-10-10, design
 // "After the fix pass"): stamp_commit read from the stamp's commit history,
-// stamp_history_ambiguous, and item 1b's leftovers (the status rule, a
+// stamp_history_ambiguous (since unit R-RV the oldest commit is recorded
+// instead), and item 1b's leftovers (the status rule, a
 // rebuild that writes, the idempotent replay, a WITHDRAWN re-read, the
 // retry's stamp recheck). Each carries a MUST-FAIL ARM too. The joint
 // reveal and the seal are in test/case_reveal.test.js. Two item-one tests
@@ -594,7 +595,7 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
   // A VERDICT case and a WITHDRAWN (redacted) case, both valid records.
   const opened = C.validateOpening(opening({ scope_digest: sha("verdict case") })).opening;
   const vid = C.deriveCaseId(opened);
-  const entry = (h, r) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: null, stamped_at: "2026-10-10T07:49:00.000Z",
+  const entry = (h, r) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: "5".repeat(40), stamped_at: "2026-10-10T07:49:00.000Z",
     key_id: REG.keyIdOf(REG.KEYS[r]), registration_sha256: sha(`registration file ${r}`), claim_sha256: sha(`claim ${r}`) });
   const reveal = { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T08:10:00Z" };
   const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1"), "a"), b: entry(sha("2"), "b") }, reveals: { a: reveal, b: reveal },
@@ -934,7 +935,7 @@ function stampHistory(hash) {
   return gh.commitsFor(STAMPS, stamp.stampPath(hash));
 }
 
-test("TEST 3, ITEM 2A: a stamp path touched by more than one commit is refused stamp_history_ambiguous and writes nothing; a path with one commit registers it", async () => {
+test("TEST 3, ITEM 2A (since unit R-RV, the architect's ruling b): a stamp path touched by more than one commit registers at the oldest commit that touched it; a path with one commit registers it", async () => {
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   plantStamp(a.commitment_sha256);
@@ -949,24 +950,18 @@ test("TEST 3, ITEM 2A: a stamp path touched by more than one commit is refused s
   assert.equal(H._internal.judgeStampRecord({ json: rec, sha: "x" }, a.commitment_sha256).ok, true);
   assert.equal(rec.size, C.COMMITMENT_BYTES_LENGTH);
 
-  const writes = gh.putLog.length;
   const res = await commit(reg(id, a));
-  assert.equal(res._status, 409, JSON.stringify(res._body));
-  assert.equal(res._body.ok, false);
-  assert.equal(res._body.error_code, "stamp_history_ambiguous");
-  assert.deepEqual(res._body.commits, history.map((c) => c.sha), "both commits are named; neither is chosen");
-  assert.equal(res._body.commitment_sha256, a.commitment_sha256);
-  assert.equal(gh.putLog.length, writes, "nothing written");
-  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
-  assert.deepEqual(storedCase(id).commitments, { a: null, b: null });
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  assert.equal(res._body.registration.stamp_commit, history[1].sha, "the oldest, the commit that wrote the stamp");
+  assert.equal(storedCase(id).commitments.a.stamp_commit, history[1].sha);
 
   // control: a fresh commitment, stamped once, registers with that commit
-  const fresh = party(id, "a", "agent tape\n");
+  const fresh = party(id, "b", "tool tape\n");
   plantStamp(fresh.commitment_sha256);
   const ok = await commit(reg(id, fresh));
   assert.equal(ok._status, 201, JSON.stringify(ok._body));
   assert.equal(ok._body.registration.stamp_commit, stampHistory(fresh.commitment_sha256)[0].sha);
-  assert.equal(storedCase(id).commitments.a.stamp_commit, ok._body.registration.stamp_commit);
+  assert.equal(storedCase(id).commitments.b.stamp_commit, ok._body.registration.stamp_commit);
 });
 
 test("TEST 3, ITEM 2A: a stamp history that cannot be read, cannot be parsed, or names no commit is a 503 and writes nothing; stamp_commit is never written null", async () => {

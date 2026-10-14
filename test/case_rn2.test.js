@@ -237,7 +237,6 @@ async function during(match, inner, outer) {
 }
 const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
-const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
@@ -296,14 +295,14 @@ test("R-N2 m3 (since unit R-REV, on a pin file's history): the commit walk goes 
   assert.equal(st.pin_commit.sha, wrote[0].sha, "the commit that wrote it, past the full page");
 });
 
-test("R-N2 m4, m5: the lease race says exactly what happened; the withdrawn refusal says the tapes are never decoded or hashed", async () => {
+test("R-N2 m4 (since unit R-RV, rule 3's words), m5: the lease race says exactly what happened; the withdrawn refusal says the tapes are never decoded or hashed", async () => {
   const c = await committedCase("RN2 race words");
   const r = await during(
     (url, method) => method === "PUT" && url.includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`),
     () => withdraw(c.id, c.b, { now: REVEAL_AT - 1000 }),
     () => reveal(c),
   );
-  assert.equal(r.out.body.error, "Refused. A withdrawal landed while this reveal was in progress. Nothing computed from the tapes is kept.");
+  assert.equal(r.out.body.error, "The case was withdrawn before this reveal could seal it. Nothing was recorded, and this response carries no verdict.");
   const d = await committedCase("RN2 refusal words");
   assert.equal((await withdraw(d.id, d.b)).status, 201);
   const w = await reveal(d, { body: ownOpening(d, "a") });

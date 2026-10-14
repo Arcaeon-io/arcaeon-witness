@@ -12,7 +12,8 @@
 //          key_separation_unverifiable (GPT's planted test); a separate key
 //          with both others present signs.
 //   FIX 3  a registration with stamp_commit null cannot reveal:
-//          commitment_history_missing, 409, nothing written, no reconcile.
+//          commitment_history_missing, 409 (since unit R-RV a null
+//          stamp_commit is malformed_field, and the test is gone).
 //   READERS  /status skips pins/case as a namespace and counts case anchors
 //          in their own row, and a sealed case does not degrade it; the log
 //          tree's leaf set is unchanged by a sealed case; the reveal and the
@@ -70,7 +71,6 @@ const store = require("../lib/_store.js");
 const C = require("../lib/_case.js");
 const H = require("../lib/_case_http.js");
 const S = require("../lib/_case_seal.js");
-const T = require("../lib/_reconcile_tapes.js");
 const receipts = require("../lib/_reconcile_receipt.js");
 const checkpoint = require("../lib/_checkpoint.js");
 const checkRecord = require("../lib/_check_record.js");
@@ -93,10 +93,6 @@ const NOW = Date.parse("2026-10-10T08:00:00Z"); // open and register
 const DEADLINE = "2026-10-10T20:00:00Z";
 const REVEAL_AT = Date.parse("2026-10-10T09:00:00Z");
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
-// A case root's entry for a registration file seeded whole (since unit
-// R-L4, THE PROJECTION: the entry carries the sha256 of the file's bytes,
-// as the mock writes them).
-const seeded = (reg) => C.caseEntry(reg, sha(JSON.stringify(reg, null, 2) + "\n"));
 
 // Throwaway keys, made here, written nowhere.
 const CASE_KEY = checkpoint.generateKey("arcaeon.io/case-test/2026-10-10");
@@ -216,18 +212,6 @@ function storedCase(id) {
 function pinFilesOf(id) {
   return [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`pins/case/${id}/`));
 }
-function spyReconcile(t) {
-  const real = T.reconcileTapes;
-  let n = 0;
-  T.reconcileTapes = (...args) => {
-    n += 1;
-    return real(...args);
-  };
-  t.after(() => {
-    T.reconcileTapes = real;
-  });
-  return () => n;
-}
 // The judge's input shape: what lib/_store.js getFile returns.
 const asRead = (json) => ({ json, sha: "0".repeat(40) });
 
@@ -235,18 +219,9 @@ const asRead = (json) => ({ json, sha: "0".repeat(40) });
 // FIX 1: anchorCase runs the full sealed-receipt check before it pins
 // =============================================================================
 
-// A sealed case without its reveal_attempts (a VERDICT may lack them).
-function withoutAttempts(k) {
-  const { reveal_attempts: _attempts, ...rest } = k; // eslint-disable-line no-unused-vars
-  return rest;
-}
-
 test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bind its reveals (verdict_unbound) and writes no pin", async () => {
   const { id } = await sealedCase({ pinFails: true });
   const good = storedCase(id);
-  // unit R-N (E1): with the attempt that sealed it kept, swapped reveals are not even a valid record
-  const swapped = { ...good, reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } };
-  assert.deepEqual([C.validateCase(swapped).code, C.validateCase(swapped).field], ["status_inconsistent", "reveal_attempts.0.input_sha256"]);
   assert.deepEqual(pinFilesOf(id), [], "fixture: sealed, no pin yet");
   const R = good.verdict;
   const plants = {
@@ -255,9 +230,7 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
     // the receipt's received-tape digest for tape_a is not role a's committed tape
     tape_a_digest: { ...good, verdict: { ...R, tapes: { ...R.tapes, tape_a: { ...R.tapes.tape_a, digest: `sha256:raw-bytes:v1:${"0".repeat(64)}` } } } },
     // the reveals name the other role's tape: the receipt no longer binds them
-    // (with no reveal_attempts: since unit R-N, E1, the attempt that sealed
-    // the case binds the reveals too, and the schema refuses the swap first)
-    reveals_swapped: { ...withoutAttempts(good), reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } },
+    reveals_swapped: { ...good, reveals: { a: { ...good.reveals.a, tape_sha256: good.reveals.b.tape_sha256 }, b: { ...good.reveals.b, tape_sha256: good.reveals.a.tape_sha256 } } },
     // a signed receipt altered after signing (a count): bound, but its signature breaks
     receipt_altered: { ...good, verdict: { ...R, verdict: { ...R.verdict, findings: R.verdict.findings + 1 } } },
   };
@@ -377,44 +350,6 @@ test("FIX 2: a legitimately separate case key signs when both other keys are pre
 // =============================================================================
 // FIX 3: a registration with stamp_commit null cannot reveal
 // =============================================================================
-
-test("FIX 3: a registration with stamp_commit null cannot reveal: 409 commitment_history_missing, nothing written, reconcile never run", async (t) => {
-  const runs = spyReconcile(t);
-  // A COMMITTED case whose role b registration is in the item-one form
-  // (stamp_commit null), planted whole: no handler writes that form any more.
-  const kase = C.newCase(C.validateOpening(opening({ scope_digest: sha("item-one registration") })).opening);
-  const id = kase.case_id;
-  const a = party(id, "a", AGENT_TAPE);
-  const b = party(id, "b", TOOL_TAPE);
-  const regs = {};
-  for (const p of [a, b]) {
-    plantStamp(p.commitment_sha256);
-    const commit = p.role === "b" ? null : gh.commitsFor(STAMPS, stamp.stampPath(p.commitment_sha256))[0].sha;
-    regs[p.role] = C.registrationRecord({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256, registered_at: "2026-10-10T08:00:00Z",
-      stamp_commit: commit, stamped_at: "2026-10-10T07:45:00.123Z", ...REG.keyFields({ case_id: id, role: p.role, commitment_sha256: p.commitment_sha256 }) });
-    gh.seed(PINS, REG.recordPath(regs[p.role]), regs[p.role]);
-  }
-  const committed = { ...kase, commitments: { a: seeded(regs.a), b: seeded(regs.b) }, status: "COMMITTED" };
-  assert.deepEqual(C.validateCase(committed), { ok: true }, "fixture: the schema still reads the item-one form");
-  gh.seed(PINS, C.casePath(id), committed);
-  const writes = gh.putLog.length;
-  const r = await reveal(revealBody(id, a, b));
-  assert.equal(r.status, 409, JSON.stringify(r.body));
-  assert.equal(r.body.ok, false);
-  assert.equal(r.body.error_code, "commitment_history_missing");
-  assert.equal(r.body.role, "b");
-  assert.equal(r.body.verdict, undefined);
-  assert.equal(gh.putLog.length, writes, "nothing written");
-  assert.equal(runs(), 0, "reconcile never run");
-  assert.equal(storedCase(id).status, "COMMITTED");
-  // MUST-FAIL ARM: the same case with role b's commit filled in reveals.
-  const filled = C.registrationRecord({ ...regs.b, stamp_commit: gh.commitsFor(STAMPS, stamp.stampPath(b.commitment_sha256))[0].sha });
-  gh.seed(PINS, REG.recordPath(filled), filled);
-  gh.seed(PINS, C.casePath(id), { ...committed, commitments: { ...committed.commitments, b: seeded(filled) } });
-  const ok = await reveal(revealBody(id, a, b));
-  assert.equal(ok.status, 201, JSON.stringify(ok.body).slice(0, 300));
-  assert.equal(runs(), 1);
-});
 
 // =============================================================================
 // THE READERS: /status, the log tree, the anchor sentence

@@ -276,10 +276,8 @@ test("R-L2 M3: a case holds at most 500 reference rows: the 500th is written, th
 // L4 (a minor): a withdrawal that lost to a reveal attempt, or to another withdrawal
 // =============================================================================
 
-test("R-L2 L4: a withdrawal that loses to a reveal attempt, or to another withdrawal, writes nothing to the pins repository and removes nothing", async () => {
+test("R-L2 L4 (since unit R-RV no reveal attempt): a withdrawal that loses to another withdrawal writes nothing to the pins repository and removes nothing", async () => {
   for (const [scope, code, seedWith] of [
-    ["RL2 L4 lost to an attempt", "reveal_attempted", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
-      commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] })],
     ["RL2 L4 lost to a withdrawal", "case_withdrawn",
       (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }))],
   ]) {

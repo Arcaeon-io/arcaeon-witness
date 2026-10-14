@@ -279,7 +279,6 @@ async function lostRace(scope, { deleteFails = false } = {}) {
 }
 const storedCase = (id) => gh.read(PINS, C.casePath(id));
 const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
-const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
@@ -382,19 +381,13 @@ async function lostRootWrite(scope, seedWith) {
   return { c, w: r.out };
 }
 
-test("MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing): a root write lost to another withdrawal, a reveal attempt or a deadline keeps the case's standing, says this request wrote nothing to the pins repository, and never says 'nothing was withdrawn'", async () => {
+test("MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing; since unit R-RV no reveal attempt): a root write lost to another withdrawal or a deadline keeps the case's standing, says this request wrote nothing to the pins repository, and never says 'nothing was withdrawn'", async () => {
   const signer = S.loadCaseSigner(KEYS, { keyDocument: DOC });
   const byA = await lostRootWrite("RN3 gap lost to a withdrawal",
     (c, k) => S.withdrawnRecord(k, { role: "a", at: C.utcSeconds(NOW + 1000), salt: c.a.salt }, signer));
   assert.deepEqual([byA.w.status, byA.w.body.error_code, byA.w.body.status, byA.w.body.case_id],
     [409, "case_withdrawn", "WITHDRAWN", byA.c.id], JSON.stringify(byA.w.body));
   assert.equal(byA.w.body.error, `the case is already withdrawn. ${WROTE_NO_PINS}`);
-  const tried = await lostRootWrite("RN3 gap lost to an attempt", (c, k) => ({ ...k, reveal_attempts: [{ event: "attempt",
-    commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] }));
-  assert.deepEqual([tried.w.status, tried.w.body.error_code, tried.w.body.status, tried.w.body.reveal_attempt_at], [409, "reveal_attempted", "COMMITTED", C.utcSeconds(NOW + 1000)],
-    JSON.stringify(tried.w.body));
-  assert.equal(tried.w.body.error, "a joint reveal of this case was attempted (the case records the attempt), and a case whose comparison was attempted " +
-    `is not withdrawn by one role. ${WROTE_NO_PINS}`);
   // a root rewritten with an earlier deadline (only a write outside this
   // service moves a deadline) reads EXPIRED by the withdrawal's clock
   const late = await lostRootWrite("RN3 gap lost to a deadline", (c, k) => ({ ...k, deadline: C.utcSeconds(NOW + 1000) }));
@@ -402,7 +395,7 @@ test("MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing): a root write lost
     JSON.stringify(late.w.body));
   assert.equal(late.w.body.error, "the case's deadline has passed by this service's clock, so it reads EXPIRED, and an expired case is not withdrawn. " +
     WROTE_NO_PINS);
-  for (const b of [byA.w.body, tried.w.body, late.w.body]) {
+  for (const b of [byA.w.body, late.w.body]) {
     assert.doesNotMatch(JSON.stringify(b), /nothing was withdrawn|listed/);
     assert.equal(has(b, "tape_listed"), false);
   }
@@ -436,18 +429,6 @@ test("MUST-FAIL GAP (S02, S03, S04, S07): the window's start: G is odd, so a per
   const ten = Array.from({ length: 10 }, (_, i) => `id-${i}`);
   const t0 = Date.parse("2026-10-13T00:00:00Z");
   assert.notDeepEqual(W(ten, 1, t0), W(ten, 1, t0 + 30000), "half a minute turns the start by 0.309 of the list");
-});
-
-test("MUST-FAIL GAP (P02; since unit R-L, L1, no listing clause): the page of an attempt with no recorded completion says the same reveal, sent again before the deadline, seals it", async () => {
-  const c = await committedCase("RN3 gap page attempt");
-  const k = storedCase(c.id);
-  gh.seed(PINS, C.casePath(c.id), { ...k, reveal_attempts: [{ event: "attempt",
-    commitments: { a: k.commitments.a.commitment_sha256, b: k.commitments.b.commitment_sha256 }, input_sha256: "e".repeat(64), at: C.utcSeconds(NOW + 1000) }] },
-    { keepHistory: true });
-  const html = (await casePage(c.id)).html;
-  assert.ok(html.includes("does not record that it completed"), html.slice(0, 400));
-  assert.ok(html.includes("the same reveal, sent again before the deadline, seals it."));
-  assert.equal(html.includes("listed as withdrawn"), false);
 });
 
 test("MUST-FAIL GAP (T05, T06, T09): the online check exits 0 only for ok: true itself; --document before the receipt is still the partial offline check; an unreadable receipt offline is signature_ok false", async (t) => {
