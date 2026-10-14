@@ -1,5 +1,67 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-14: Unit R-L5: the withdrawal record keeps the root's projection; a withdrawn case's readers read no file or history (branch `case-protocol-2026-10-10`, NOT deployed)
+
+R-L5's first commit precedes unit R-RVf on the branch: the architect's R-RVf rulings were built next, as ordered. This entry and R-L5's gap tests follow R-RVf.
+
+- **The architect's rulings.**
+  - The DAMAGED removal was already done (R-L4b, R-L4e), so that part of the unit is dropped.
+  - `key_fp` belongs on the WITHDRAWN projection this unit shapes. The projection is the root's entries exactly as they stood, checked against the same entry fields as the root's (`CASE_ENTRY_FIELDS`), so when R-AB adds `key_fp` to an entry, the withdrawal record carries it with no change here. This unit does not add `key_fp`: `key_id` versus `key_fp` is R-AB's.
+- **Rule 1.** `WITHDRAWN_FIELDS` gains `commitments`. `withdrawnRecord` copies the case root's `commitments` as they stand when the withdrawal is written, including an OPEN case's null for a role not registered, inside the signed record: the record's signature covers them. There is no `party_a` and no `party_b`.
+  - `checkWithdrawn` holds the projection to: an object with exactly `a` and `b`; each null or a whole case entry (`checkCommitmentEntry`, with a 64-hex `registration_sha256` and `claim_sha256`); the role that withdrew not null (else `status_inconsistent` at `commitments.<role>`); and one commitment never in both roles (`duplicate_commitment`).
+  - A WITHDRAWN record is never single party: `singleParty` does not read a WITHDRAWN record's commitments.
+- **Rule 2.** Every reader of a withdrawn case takes standing from the kept projection, and nothing orders a file against the withdrawal by commit.
+  - The refusal receipt (`withdrawnRefusal`) checks the requester's opening against `commitments[role]`. It reads no registration file and no history.
+  - A retried withdrawal (`retriedWithdrawal`) proves the opening against the same projection, and also reads no registration file and no history.
+  - The page: decided here, the "written, never confirmed" line is not printed. The page cannot see a file the record does not project without listing the directory, and the listing was removed in unit R-L. R-L4's rule also holds that the page neither lists nor links an unprojected file, and R-L4c keyed the paths by claim. The page prints `WITHDRAWN_REGISTRATIONS_NOTE`, now: "The registration files of this case, if any, remain in the public record of the pins repository. This withdrawal record keeps the registrations the case root projected when it was withdrawn; a registration file it does not project does not stand: no reader counts it."
+  - The README says the same in a new paragraph under "Withdrawal".
+- **Rule 3 (no DAMAGED).** Already done. R-L4b made it 503 `case_record_inconsistent` for every handler. R-L4e gave the page its one sentence: "The stored record for this case does not agree with itself. Nothing is asserted about this case while that is so." The brief's rule 3 sentence predates R-L4e's ruling and was not brought back. Test 5 is a guard.
+- **Rule 4.** Already done: a missing withdrawn marker is written by `anchorPending`'s terminal branch (through `repairWithdrawn`, which nothing else calls). Test 6 is a guard.
+- **What R-L4 had already done** (read in the code, not assumed):
+  - `withdrawalCommitOf` and `registrationAgainstWithdrawal` are in no `lib/` file: R-L4 replaced them with `rootBeforeWithdrawal`, which this unit removes.
+  - `repairWithdrawn`'s rotating windows, the markerless scan and `WITHDRAWN_REPAIR_READS` are in no `lib/` file.
+  - No DAMAGED state, reason or page branch exists.
+  - The `case_rj3` table has no row ordering a file against a withdrawal, so no row was removed.
+  - The README's "The sealer's window" describes the window of cases a sealer run reads (`rotatingWindow`), which remains, and R-N4 R6's test requires the README to say so. It is not the withdrawn repair windows, so it is kept.
+- **Removed**, with line counts:
+  - `lib/_case_seal.js` (2343 lines to 2323): `rootBeforeWithdrawal` and `WITHDRAWAL_COMMIT_READS` (23 lines with their comment) and the export.
+  - `lib/_case_http.js` (2349 to 2332):
+    - from `withdrawnRefusal`: the read of the root before the withdrawal, its 503 `store_unreachable` ("the case root before the withdrawal could not be read"), and the projection read with its refusal;
+    - from `retriedWithdrawal`: the same reads, its 503 `store_unreachable` ("The case is withdrawn. This request could not finish checking it. Send the same withdrawal again.") and its `case_record_inconsistent` refusal;
+    - the caller's line for that refusal.
+  - `lib/_case.js` grows (1415 to 1438) with the projection's check. `lib/_case_page.js` changes one comment. The README grows (950 to 957) by the paragraph.
+  - Tests deleted: 3 tests (37 lines) of the removed reads: `case_rl4` H55 and S06/S07/S09, and `case_rn4` f4.
+  - Arms removed: `case_rn` H13 and H17 (H19 stays); the 503 half of `case_rn3` H21; and the "again: withdrawn, registration unread" arm of `case_rn4`'s R1 sweep, which now drives 26 arms.
+- **Rewritten.**
+  - The planted WITHDRAWN records carry `commitments`: `case_item2c` FIX 6; `case_mutation_gaps`; `case_protocol` TEST 3, ITEM 2A and SCHEMA; `case_reveal` TEST 6.
+  - `case_item2c` TEST 10: the record keeps the root's commitments, and no labels.
+  - `case_protocol` SCHEMA: a withdrawn record's `commitments` is no longer `unknown_field`, and one without them is refused.
+  - `test/case_redteam.test.js` GPT-5.6 §2B: DECIDED (unit R-L5). The record identifies the commitments and not the parties' labels, and the test asserts that, so there is no new todo and `case_rn` T1's count is unchanged.
+- **Tests.** New, `test/case_rl5.test.js` (12):
+  - the brief's 1, with 1b (an OPEN case keeps its one entry) and 1c (the schema);
+  - 2, 3 and 4;
+  - 5 and 6, guards;
+  - the removal test;
+  - three gap tests (below).
+
+  Test 4 fails before this unit (the withdrawal record kept no commitments), so it is not a guard.
+- **The must-fail pass.** 17 defects were planted over the lines R-L5 changed (`lib/_case.js` 9, `lib/_case_seal.js` 3, `lib/_case_http.js` 4, the README 1), each alone with the whole suite run. 9 were caught. The 8 that survived are each caught by a gap test in `test/case_rl5.test.js`:
+  - L04: the projection not required to be an object;
+  - L05: a key beside `a` and `b` accepted;
+  - L06: a role missing from the projection;
+  - L07: an entry not checked as a whole entry;
+  - L08: an entry's `registration_sha256` or `claim_sha256` not held to 64 hex;
+  - L10: one commitment in both roles;
+  - L11: a withdrawn record whose two entries name one key read as single party;
+  - L17: the README's paragraph.
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1427 tests, 1420 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1421 pass, 1 skipped. The counts include R-RVf.
+- **UNSURE.**
+  - The page's "written, never confirmed" line (the brief's rule 2 and test 4) is not printed, for the reasons above; the note states the rule instead.
+  - The README's "The sealer's window" section is kept (above).
+  - `key_fp` is not added (above).
+  - A withdrawn record whose two entries name one key can only be planted, since registration refuses a second role under the first role's key (`same_key_both_roles`). Such a record reads WITHDRAWN.
+  - `case_rn`'s R07 gap test still plants a WITHDRAWN record with no `commitments`, which no longer validates. The run never reads it, since its marker is present, and the test passes; it was left as it is.
+
 ## 2026-10-14: Unit R-RVf: the architect's rulings on R-RV's second read (branch `case-protocol-2026-10-10`, NOT deployed)
 
 R-RV's second reader found two blockers and two majors; the architect ruled on each, and this unit builds them. The seal itself is unchanged: one compare-and-swap on the sha read, no 201 for a seal the root does not hold, no double seal.

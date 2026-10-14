@@ -412,3 +412,54 @@ test("R-L5: the root's history is no longer read for a withdrawn case: rootBefor
     "This withdrawal record keeps the registrations the case root projected when it was withdrawn; a registration file it does not project " +
     "does not stand: no reader counts it.");
 });
+
+// =============================================================================
+// UNIT R-L5, THE MUST-FAIL PASS: tests for the planted defects the tests
+// above let through (the ids are the pass's)
+// =============================================================================
+
+test("MUST-FAIL GAP (L04, L05, L06, L07, L08, L10): the withdrawn record's projection is checked as the root's is: an object, no other key, both roles, whole entries, 64-hex sha256 and claim, one commitment per role", async () => {
+  const c = await committedCase("RL5 gap schema");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const w = storedCase(c.id);
+  const at = (commitments) => C.validateCase({ ...w, commitments });
+  const { b: _b, ...onlyA } = w.commitments; // eslint-disable-line no-unused-vars
+  const { key_id: _k, ...noKey } = w.commitments.a; // eslint-disable-line no-unused-vars
+  const plants = [
+    ["not an object", null, "malformed_field"],
+    ["an array", [], "malformed_field"],
+    ["another key", { ...w.commitments, c: null }, "unknown_field"],
+    ["a role missing", onlyA, "missing_field"],
+    ["an entry missing a field", { ...w.commitments, a: noKey }, "missing_field"],
+    ["a registration_sha256 not 64 hex", { ...w.commitments, a: { ...w.commitments.a, registration_sha256: "nope" } }, "malformed_field"],
+    ["a claim_sha256 not 64 hex", { ...w.commitments, a: { ...w.commitments.a, claim_sha256: "A".repeat(64) } }, "malformed_field"],
+    ["one commitment in both roles", { ...w.commitments, a: { ...w.commitments.a, commitment_sha256: w.commitments.b.commitment_sha256 } }, "duplicate_commitment"],
+  ];
+  for (const [what, commitments, code] of plants) {
+    const v = at(commitments);
+    assert.equal(v.ok, false, what);
+    assert.equal(v.code, code, `${what}: ${JSON.stringify(v)}`);
+  }
+  assert.deepEqual(at(w.commitments), { ok: true }, "control");
+});
+
+// Registration refuses one key for both roles (same_key_both_roles), so such
+// a withdrawn record is planted.
+test("MUST-FAIL GAP (L11): a withdrawn record whose kept projection names one key for both roles is WITHDRAWN, never single party", async () => {
+  const c = await committedCase("RL5 gap one key");
+  assert.equal((await withdraw(c.id, c.b)).status, 201);
+  const w = storedCase(c.id);
+  const one = { ...w, commitments: { ...w.commitments, b: { ...w.commitments.b, key_id: w.commitments.a.key_id } } };
+  assert.deepEqual(C.validateCase(one), { ok: true }, "fixture: a valid record");
+  assert.equal(C.singleParty(one), false);
+  gh.seed(PINS, C.casePath(c.id), one);
+  const p = await casePage(c.id);
+  assert.match(p.html, /<h1>Case: WITHDRAWN<\/h1>/);
+  assert.doesNotMatch(p.html, /single_party/);
+});
+
+test("MUST-FAIL GAP (L17): the README says the withdrawal record keeps the root's commitments and every reader of a withdrawn case takes standing from them", () => {
+  assert.ok(README().includes("The withdrawal record keeps the case root's `commitments` exactly as they stood when it was written, inside the signed record. " +
+    "Every reader of a withdrawn case takes a role's standing from them: the refusal receipt, a withdrawal sent again, and the case page. None of them " +
+    "reads a registration file or the root's history to decide it, and a registration file the record does not project does not stand."));
+});
