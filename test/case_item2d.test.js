@@ -208,7 +208,7 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
   const k = checkpoint.parseSignerKey(CASE_KEY.signer);
   const plants = {
     // the receipt's compared_at is not the reveal time: the receipt no longer binds
-    "an unbound receipt": [{ ...good, verdict: { ...good.verdict, compared_at: "2026-10-10T09:00:01Z" } }, "verdict_unbound", "receipt_time_mismatch"],
+    "an unbound receipt": [{ ...good, verdict: { ...good.verdict, compared_at: "2026-10-10T08:59:59Z" } }, "verdict_unbound", "receipt_time_mismatch"],
     // only sig replaced, by a well-formed signature of other bytes made with the right key
     "a replaced sig": [{ ...good, sig: crypto.sign(null, Buffer.from("other bytes"), k.privateKey).toString("base64") }, "case_signature_invalid", "bad_signature"],
   };
@@ -255,7 +255,7 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
   const u = await sealedCase({ over: { scope_digest: sha("fix 1 unsigned") } });
   const ug = S.signRecord({ ...storedCase(u.id), signed_by: null, sig: null, sig_reason: null }, S.loadCaseSigner({}), "This case is sealed and not signed");
   assert.equal(ug.sig, null, "fixture: unsigned");
-  gh.seed(PINS, C.casePath(u.id), { ...ug, verdict: { ...ug.verdict, compared_at: "2026-10-10T09:00:01Z" } });
+  gh.seed(PINS, C.casePath(u.id), { ...ug, verdict: { ...ug.verdict, compared_at: "2026-10-10T08:59:59Z" } });
   const up = await casePage(u.id);
   assert.match(up.html, /<h1>Case: SEALED RECORD DOES NOT VERIFY<\/h1>/);
   assert.match(up.html, /no key: it is stored unsigned/);

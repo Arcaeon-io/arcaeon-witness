@@ -225,8 +225,8 @@ test("FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bi
   assert.deepEqual(pinFilesOf(id), [], "fixture: sealed, no pin yet");
   const R = good.verdict;
   const plants = {
-    // the receipt's compared_at is not the reveal time
-    compared_at: { ...good, verdict: { ...R, compared_at: "2026-10-10T09:00:01Z" } },
+    // the receipt's compared_at is before the reveal time (since unit R-RVf, B1, a later one binds)
+    compared_at: { ...good, verdict: { ...R, compared_at: "2026-10-10T08:59:59Z" } },
     // the receipt's received-tape digest for tape_a is not role a's committed tape
     tape_a_digest: { ...good, verdict: { ...R, tapes: { ...R.tapes, tape_a: { ...R.tapes.tape_a, digest: `sha256:raw-bytes:v1:${"0".repeat(64)}` } } } },
     // the reveals name the other role's tape: the receipt no longer binds them
@@ -681,7 +681,7 @@ test("SEALER: a committed case is passed over, an unbound verdict is refused, a 
   await committedCase({ over: { scope_digest: sha("only committed") } });
   const bad = await sealedCase({ over: { scope_digest: sha("unbound") }, pinFails: true });
   const k = storedCase(bad.id);
-  gh.seed(PINS, C.casePath(bad.id), { ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T09:00:01Z" } });
+  gh.seed(PINS, C.casePath(bad.id), { ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T08:59:59Z" } });
   const writes = gh.putLog.length;
   const run = await sealer.sealOnce({ now: new Date(REVEAL_AT + 60000), keyDocument: KEYS_DOC });
   assert.equal(run.cases.ok, true);

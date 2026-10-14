@@ -470,7 +470,9 @@ test("R-RV ruling b: the oldest is found past the first page of the stamp's hist
   assert.equal(gh.read(PINS, REG.pathOf(gh, id, "a")).stamp_commit, oldest);
 });
 
-test("R-RV ruling c: compared_at is the clock read after the port returns, and the seal's times are that one read", async (t) => {
+// Since unit R-RVf (B1, option a): revealed_at is the arrival time again,
+// and only the receipt's compared_at is the read after the port.
+test("R-RV ruling c (since unit R-RVf, B1): compared_at is the clock read after the port returns; revealed_at and the seal's other times are the arrival time", async (t) => {
   const c = await committedCase("RRV ruling c");
   let ms = REVEAL_AT;
   const real = TAPES.reconcileTapes;
@@ -483,8 +485,9 @@ test("R-RV ruling c: compared_at is the clock read after the port returns, and t
   const r = parsed(res);
   assert.equal(res._status, 201, JSON.stringify(r).slice(0, 300));
   const after = C.utcSeconds(REVEAL_AT + 5000);
+  const arrived = C.utcSeconds(REVEAL_AT);
   assert.equal(r.case.verdict.compared_at, after);
-  assert.deepEqual([r.case.reveals.a.revealed_at, r.case.reveals.b.revealed_at, r.case.signed_under.retrieved_at], [after, after, after]);
+  assert.deepEqual([r.case.reveals.a.revealed_at, r.case.reveals.b.revealed_at, r.case.signed_under.retrieved_at], [arrived, arrived, arrived]);
   assert.equal(r.case.verdict.claim, receipts.CLAIM, "the signed sentence is unchanged");
   assert.equal((await S.sealedRecordReason(storedCase(c.id), DOC)).code, "valid_under_document");
 });
@@ -496,7 +499,9 @@ test("R-RV: the sealer reads a COMMITTED case as not_sealed with its status and 
   assert.equal(has(run.cases || run, "reveal_incomplete"), false);
 });
 
-test("R-RV ruling c, at the deadline: a reveal received before the deadline whose comparison ends at or after it builds a seal the schema refuses: 500 seal_build_failed, nothing written", async (t) => {
+// Since unit R-RVf (B1): the deadline is judged on the arrival time and on
+// nothing else, so this reveal seals.
+test("R-RV ruling c, at the deadline (since unit R-RVf, B1): a reveal received before the deadline whose comparison ends at or after it seals: 201", async (t) => {
   const c = await committedCase("RRV ruling c deadline");
   const before = rootSha(c.id);
   let ms = Date.parse(DEADLINE) - 500; // received half a second before the deadline
@@ -508,8 +513,10 @@ test("R-RV ruling c, at the deadline: a reveal received before the deadline whos
   const res = makeRes();
   await H.handleCaseReveal(req("case-reveal", revealBody(c.id, c.a, c.b)), res, { clock: () => ms, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC });
   const r = parsed(res);
-  assert.deepEqual([res._status, r.error_code], [500, "seal_build_failed"], JSON.stringify(r).slice(0, 300));
-  assert.equal(rootSha(c.id), before, "nothing written");
+  assert.equal(res._status, 201, JSON.stringify(r).slice(0, 300));
+  assert.notEqual(rootSha(c.id), before, "sealed");
+  assert.equal(storedCase(c.id).status, "VERDICT");
+  assert.equal(storedCase(c.id).reveals.a.revealed_at, C.utcSeconds(Date.parse(DEADLINE) - 500));
 });
 
 // =============================================================================
@@ -543,7 +550,7 @@ test("MUST-FAIL GAP (V12): a seal write that throws a conflict is a lost swap, a
   assert.deepEqual([r.status, r.body.error_code, r.body.error], [409, "case_withdrawn", WITHDRAWN_TEXT], JSON.stringify(r.body));
 });
 
-test("MUST-FAIL GAP (V19): the pin is dated by the same read as the seal, after the port returns", async (t) => {
+test("MUST-FAIL GAP (V19): the pin is dated by the clock read after the port returns", async (t) => {
   const c = await committedCase("RRV gap pin time");
   let ms = REVEAL_AT;
   const real = TAPES.reconcileTapes;
@@ -609,14 +616,14 @@ test("MUST-FAIL GAP (V26): ruling b asks for the page the Link header names, not
   assert.equal(gh.read(PINS, REG.pathOf(gh, id, "a")).stamp_commit, oldest);
 });
 
-test("MUST-FAIL GAP (V28): a stamp history longer than 10 pages of 100 is 503 stamp_history_unreadable (commits_beyond_bound), and nothing is registered", async () => {
+test("MUST-FAIL GAP (V28): a stamp history longer than 10 pages of 100 is 409 commits_beyond_bound (since unit R-RVf, B2), and nothing is registered", async () => {
   const id = await openCase("RRV gap beyond bound");
   const a = party(id, "a", AGENT_TAPE);
   plantStamp(a.commitment_sha256);
   const spath = stamp.stampPath(a.commitment_sha256);
   for (let i = 0; i < 1000; i += 1) gh.addCommit(STAMPS, spath);
   const r = await commit(id, a);
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "stamp_history_unreadable", "commits_beyond_bound"], JSON.stringify(r.body));
+  assert.deepEqual([r.status, r.body.error_code], [409, "commits_beyond_bound"], JSON.stringify(r.body));
   assert.equal(storedCase(id).commitments.a, null);
 });
 

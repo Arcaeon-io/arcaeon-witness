@@ -626,7 +626,7 @@ test("RECEIPT CHECK: a tampered receipt is refused by name, and through the endp
     receipt_method_altered: () => resign({ ...fresh().receipt, method: { ...receipt.method, reference: { ...receipt.method.reference, reconcile_sha256: "0".repeat(64) } } }),
     receipt_verdict_mismatch: () => resign({ ...fresh().receipt, verdict: { ...receipt.verdict, verdict: "MISSING" } }),
     receipt_verdict_digest_mismatch: () => resign({ ...fresh().receipt, verdict_digest: `sha256:json-c14n:v1:${"0".repeat(64)}` }),
-    receipt_time_mismatch: () => resign({ ...fresh().receipt, compared_at: "2026-10-10T09:00:01Z" }),
+    receipt_time_mismatch: () => resign({ ...fresh().receipt, compared_at: "2026-10-10T08:59:59Z" }),
     receipt_unknown_field: () => resign({ ...fresh().receipt, anchored: true }),
     receipt_bad_signature: () => ({ ...fresh().receipt, sig: Buffer.alloc(64, 7).toString("base64") }),
     receipt_signer_mismatch: () => receipts.signReceipt({ ...fresh().receipt, sig: undefined, signer: undefined }, receipts.loadSigner({ [receipts.SIGNER_ENV]: CASE_KEY.signer })),
@@ -890,7 +890,7 @@ test("TEST 9: the sealed case verifies under lib/_check_record.js's rule with WI
     ],
     // a relabelled party moves the case id, so the schema refuses it first
     case_id_mismatch: [{ ...k, party_b: { ...k.party_b, label: "tool-operator@example.net" } }],
-    receipt_time_mismatch: [{ ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T09:00:01Z" } }],
+    receipt_time_mismatch: [{ ...k, verdict: { ...k.verdict, compared_at: "2026-10-10T08:59:59Z" } }],
     receipt_tape_a_mismatch: [{ ...k, reveals: { a: { ...k.reveals.a, tape_sha256: k.reveals.b.tape_sha256 }, b: k.reveals.b } }],
   };
   for (const [reason, recs] of Object.entries(plants)) {

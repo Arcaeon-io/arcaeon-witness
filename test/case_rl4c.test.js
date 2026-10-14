@@ -714,12 +714,15 @@ test("R-L4d d2: the late refusal says the file was not confirmed when this reque
   }
 });
 
-test("R-L4d d3: the registrations panel states the rule, each role registers one commitment hash, on an open page and on a committed one; it never says a role registered one", async () => {
+// Since unit R-RVf (the architect's ruling M2) the ruled stamp sentence
+// replaces d3's.
+test("R-L4d d3 (since unit R-RVf, M2): the registrations panel prints the ruled stamp sentence on an open page and on a committed one; it never says a role registered one", async () => {
   const id = await openCase("RL4d d3 open");
   const c = await committedCase("RL4d d3 committed");
   for (const k of [id, c.id]) {
     const html = (await casePage(k, NOW + 1000)).html;
-    assert.ok(registrationsOf(html).includes("Each role registers one commitment hash, stamped first as a public, dated commit."), k);
+    assert.ok(registrationsOf(html).includes("Before registration the commitment's stamp must already be in the stamps repository; this service records " +
+      "the oldest commit that touched it for metering, and this page does not treat that commit or its date as evidence of when the commitment was made."), k);
     assert.ok(!html.includes("registered one commitment hash"), k);
   }
 });

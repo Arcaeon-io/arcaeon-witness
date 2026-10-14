@@ -9,6 +9,10 @@
 //
 //   GET  /repos/<repo>/contents/<path>?ref=<branch>
 //        -> 200 {content:<base64>, sha:<hex>}   | 404 if missing
+//        With ref a commit of <repo> (unit R-RVf, M1: lib/_store.js
+//        getRawFileAt), the file as that commit left it, as the raw host
+//        serves it below (404 when none had written it); its sha is the
+//        sha1 of that text.
 //
 //   PUT  /repos/<repo>/contents/<path>
 //        body {message, branch, content:<base64>, sha?}
@@ -475,6 +479,12 @@ class MockGitHubStore {
       if (forcedGet && forcedGet.remaining > 0) {
         forcedGet.remaining -= 1;
         return fakeResponse(forcedGet.status, { message: "mock: forced read failure" });
+      }
+      const ref = u.searchParams.get("ref");
+      if (ref && this._commitsOf(repo).some((c) => c.sha === ref)) {
+        const text = this._textAt(repo, ref, path);
+        if (text === undefined) return fakeResponse(404, { message: "Not Found" });
+        return fakeResponse(200, { content: Buffer.from(text, "utf-8").toString("base64"), sha: crypto.createHash("sha1").update(text).digest("hex") });
       }
       const rec = map.get(path);
       if (rec) {
