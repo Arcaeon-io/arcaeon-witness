@@ -58,6 +58,11 @@ test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and rec
     assert.ok(codes.has(c), `driven: ${c}`);
   }
   assert.ok(fivexx.length > 100, `5xx bodies read: ${fivexx.length}`);
+  // unit R-L4e: a case_record_inconsistent body is the one error code: no
+  // sentence, no reason code, no role
+  const inconsistent = rows.filter((r) => codeOf(r) === "case_record_inconsistent");
+  assert.ok(inconsistent.length > 0, "driven: case_record_inconsistent");
+  for (const r of inconsistent) assert.deepEqual(JSON.parse(r.body), { ok: false, error_code: "case_record_inconsistent" }, `${r.file}: ${r.body.slice(0, 200)}`);
   // unit R-N3 (N8): the four bodies the reader named, each by the path that sends it, not by its code alone
   const driven = (handler, code) => rows.some((r) => r.handler === handler && r.status === 503 && codeOf(r) === code);
   for (const [handler, code] of [["handleCaseReveal", "signer_unavailable"], ["handleReconcile", "signer_unavailable"],

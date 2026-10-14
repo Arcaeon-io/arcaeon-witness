@@ -606,7 +606,10 @@ test("MUST-FAIL GAP (S04, S05): a projected file is held to being the registrati
     { keepHistory: true });
   const r = await reveal(c);
   assert.notEqual(r.status, 201, JSON.stringify(r.body).slice(0, 300));
-  assert.deepEqual([r.body.role, r.body.reason], ["a", "projection_differs_from_file"]);
+  // unit R-L4e: the body is the code alone; the reason is the reader's
+  assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" });
+  const rp = await S.projectedRegistrations(storedCase(c.id));
+  assert.deepEqual([rp.inconsistent, rp.role, rp.reason], [true, "a", "projection_differs_from_file"]);
   // the same file, at another claim's path that the root names by hand
   const d = await committedCase("RL4c gap other claim");
   const bpath = regFiles(d.id, "b")[0];
@@ -616,7 +619,10 @@ test("MUST-FAIL GAP (S04, S05): a projected file is held to being the registrati
   gh.seed(PINS, C.casePath(d.id), { ...kd, commitments: { ...kd.commitments, b: { ...kd.commitments.b, claim_sha256: otherClaim } } }, { keepHistory: true });
   const s = await reveal(d);
   assert.notEqual(s.status, 201, JSON.stringify(s.body).slice(0, 300));
-  assert.deepEqual([s.body.role, s.body.reason], ["b", "projection_differs_from_file"]);
+  // unit R-L4e: the body is the code alone; the reason is the reader's
+  assert.deepEqual(s.body, { ok: false, error_code: "case_record_inconsistent" });
+  const sp = await S.projectedRegistrations(storedCase(d.id));
+  assert.deepEqual([sp.inconsistent, sp.role, sp.reason], [true, "b", "projection_differs_from_file"]);
 });
 
 test("MUST-FAIL GAP (P06): the single-party page links each registration file at its claim's path", async () => {

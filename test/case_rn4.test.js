@@ -361,10 +361,10 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   await drive("registration read", "tail", 503, "could_not_look", () => withdraw(r1.id, r1.b));
   const r2 = await committedCase("RN4 sweep reg junk");
   gh.seed(PINS, REG.pathOf(gh, r2.id, "b"), { not: "a registration" });
-  await drive("registration junk", "tail", 503, "case_record_inconsistent", () => withdraw(r2.id, r2.b));
+  await drive("registration junk", "code", 503, "case_record_inconsistent", () => withdraw(r2.id, r2.b));
   const r3 = await committedCase("RN4 sweep reg missing");
   gh.repos.get(PINS).delete(REG.pathOf(gh, r3.id, "a"));
-  await drive("registration missing", "tail", 503, "case_record_inconsistent", () => withdraw(r3.id, r3.b));
+  await drive("registration missing", "code", 503, "case_record_inconsistent", () => withdraw(r3.id, r3.b));
   const p1 = await committedCase("RN4 sweep proof");
   await drive("proof", "tail", 403, "withdraw_unauthorized", () => withdraw(p1.id, p1.b, { salt: C.newSalt() }));
   const s1 = await committedCase("RN4 sweep signer");
@@ -419,6 +419,8 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
     assert.doesNotMatch(text, NOTHING, label);
     assert.doesNotMatch(text, /listed|listing/, `${label}: claims no listing`);
     assert.equal(has(r.body, "tape_listed"), false, label);
+    // unit R-L4e: case_record_inconsistent is its code alone
+    if (kind === "code") assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" }, label);
     if (kind === "tail") assert.ok(r.body.error.endsWith(`. ${TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lost") assert.ok(r.body.error.includes(` ${LOST_TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);

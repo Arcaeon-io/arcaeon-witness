@@ -388,8 +388,7 @@ test("R-L4: a projected sha256 that the file at the path does not match, or a fi
   const rpath = REG.pathOf(gh, c.id, "a");
   gh._repoMap(PINS).get(rpath).content += " "; // the same JSON, other bytes
   const r = await reveal(c);
-  assert.deepEqual([r.status, r.body.error_code, r.body.role, r.body.reason], [503, "case_record_inconsistent", "a", "registration_file_differs"],
-    JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(r.body).slice(0, 300)); // unit R-L4e
   assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed");
   const page = await casePage(c.id);
   assert.equal(page.status, 503);
@@ -400,7 +399,7 @@ test("R-L4: a projected sha256 that the file at the path does not match, or a fi
   const d = await committedCase("RL4 inconsistent missing");
   gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
   const m = await reveal(d);
-  assert.deepEqual([m.status, m.body.error_code, m.body.role, m.body.reason], [503, "case_record_inconsistent", "b", "registration_file_missing"]);
+  assert.deepEqual([m.status, m.body], [503, { ok: false, error_code: "case_record_inconsistent" }]);
   assert.equal(storedCase(d.id).status, "COMMITTED");
 });
 
@@ -537,21 +536,29 @@ async function singlePartyByHand(scope) {
   return { id, a, b };
 }
 
-test("MUST-FAIL GAP (H03, S19, S18, S20; since unit R-L4b, case_record_inconsistent): the refusal says which role and why: a file not the one projected, a file missing, a root entry its file does not hold", async () => {
-  const c = await committedCase("RL4 gap inconsistent words");
-  gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "a")).content += " ";
-  const r = await reveal(c);
-  assert.ok(r.body.error.startsWith("role a's registration file does not match the hash this case records for it (registration_file_differs), " +
-    "and nothing is answered from this case until it does"), r.body.error);
-  const d = await committedCase("RL4 gap inconsistent missing words");
-  gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
-  const m = await reveal(d);
-  assert.deepEqual([m.body.role, m.body.reason], ["b", "registration_file_missing"]);
-  const e = await committedCase("RL4 gap inconsistent entry");
-  const k = storedCase(e.id);
-  gh.seed(PINS, C.casePath(e.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
-  const x = await reveal(e);
-  assert.deepEqual([x.status, x.body.error_code, x.body.role, x.body.reason], [503, "case_record_inconsistent", "b", "projection_differs_from_file"]);
+test("MUST-FAIL GAP (H03, S19, S18, S20; since unit R-L4b, case_record_inconsistent; since unit R-L4e, in the operator log): the log says which role and why: a file not the one projected, a file missing, a root entry its file does not hold; the body says neither", async () => {
+  const realError = console.error;
+  const lines = [];
+  console.error = (...a) => { lines.push(a.map(String).join(" ")); };
+  const answers = [];
+  try {
+    const c = await committedCase("RL4 gap inconsistent words");
+    gh._repoMap(PINS).get(REG.pathOf(gh, c.id, "a")).content += " ";
+    answers.push([c.id, "a", "registration_file_differs", await reveal(c)]);
+    const d = await committedCase("RL4 gap inconsistent missing words");
+    gh._repoMap(PINS).delete(REG.pathOf(gh, d.id, "b"));
+    answers.push([d.id, "b", "registration_file_missing", await reveal(d)]);
+    const e = await committedCase("RL4 gap inconsistent entry");
+    const k = storedCase(e.id);
+    gh.seed(PINS, C.casePath(e.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, registered_at: "2026-10-10T08:00:01Z" } } });
+    answers.push([e.id, "b", "projection_differs_from_file", await reveal(e)]);
+  } finally {
+    console.error = realError;
+  }
+  for (const [id, role, reason, r] of answers) {
+    assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "case_record_inconsistent" }], reason);
+    assert.ok(lines.includes(`[case] case_record_inconsistent: case ${id}, role ${role}, ${reason}`), `${reason}: ${JSON.stringify(lines).slice(0, 300)}`);
+  }
 });
 
 test("MUST-FAIL GAP (H09, H10): a replay of a projected registration is not refused by the other role's key; another registration for a projected role names the registered entry without the file's sha256", async () => {

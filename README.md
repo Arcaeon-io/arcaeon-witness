@@ -886,12 +886,14 @@ a role the root does not project, the page says only that no registration
 is confirmed for that role. Every reader takes a case's registrations from
 the root's projection and checks the file at each projected path against
 the sha256 projected. A projected entry whose file is missing or does not
-hash to the projected sha256 is answered 503 `case_record_inconsistent` by
-every handler, and the case page shows the could-not-look page with that
-reason and the sentence: "A registration file does not match the hash this
-case records for it; this page shows nothing from this case until it does."
-The case cannot seal and is never pinned; nothing is written, nothing is
-deleted.
+hash to the projected sha256, or whose projected entry its file does not
+hold, is answered 503 `case_record_inconsistent` by every handler, and the
+body is that code alone; the reason, the case and the role go to the
+operator's log and to the sealer's report. The case page shows the
+could-not-look page with one sentence: "The stored record for this case
+does not agree with itself. Nothing is asserted about this case while that
+is so." The case cannot seal and is never pinned; nothing is written,
+nothing is deleted.
 
 Files under removals/ that a preview pins repository may hold are ignored:
 no code reads or writes them.

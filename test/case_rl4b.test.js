@@ -232,7 +232,13 @@ function jsFiles(dir) {
 
 // The registration file at `rpath` as the pins repository holds it: its
 // bytes, and their sha256.
-const INCONSISTENT = "A registration file does not match the hash this case records for it; this page shows nothing from this case until it does.";
+// unit R-L4b's sentence, and since unit R-L4e the page's one sentence
+const OLD_SENTENCE = "A registration file does not match the hash this case records for it; this page shows nothing from this case until it does.";
+const SENTENCE = "The stored record for this case does not agree with itself. Nothing is asserted about this case while that is so.";
+const OLD_H2 = "could not be read as one consistent record";
+// unit R-L4e: the 503 body, exactly
+const BODY = Object.freeze({ ok: false, error_code: "case_record_inconsistent" });
+const REASONS = Object.freeze(["registration_file_differs", "registration_file_missing", "projection_differs_from_file"]);
 const pinsWrites = () => gh.putLog.filter((w) => w.repo === PINS).length;
 const deletes = () => gh.deleteLog.length;
 // Role `role`'s projected file of case `id` given other bytes (the same
@@ -240,8 +246,31 @@ const deletes = () => gh.deleteLog.length;
 function tamper(id, role, how = "bytes") {
   const p = REG.pathOf(gh, id, role);
   if (how === "missing") gh._repoMap(PINS).delete(p);
-  else gh._repoMap(PINS).get(p).content += " ";
+  else if (how === "entry") {
+    // the root's entry no longer the one its file holds; the file's bytes,
+    // and so the projected sha256, unchanged
+    const k = storedCase(id);
+    gh.seed(PINS, C.casePath(id), { ...k, commitments: { ...k.commitments, [role]: { ...k.commitments[role], registered_at: "2026-10-10T07:59:00Z" } } },
+      { keepHistory: true });
+  } else gh._repoMap(PINS).get(p).content += " ";
   return p;
+}
+const HOW = Object.freeze({ registration_file_differs: "bytes", registration_file_missing: "missing", projection_differs_from_file: "entry" });
+// The page's text below its heading: every panel, tags dropped.
+function panelsText(html) {
+  const body = html.slice(html.indexOf("<section"), html.lastIndexOf("</section>") + "</section>".length);
+  return body.replace(/<[^>]+>/g, " ").replace(/&#39;/g, "'").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim();
+}
+// console.error, captured while `fn` runs.
+async function logged(fn) {
+  const real = console.error;
+  const lines = [];
+  console.error = (...a) => { lines.push(a.map(String).join(" ")); };
+  try {
+    return { out: await fn(), lines };
+  } finally {
+    console.error = real;
+  }
 }
 async function referenceAs(c, role = "a") {
   const p = c[role];
@@ -253,7 +282,6 @@ async function referenceAs(c, role = "a") {
 
 test("R-L4b: a projected file that does not hash to the projected sha256, or is missing, is 503 case_record_inconsistent at every handler, and nothing is written or deleted", async () => {
   for (const how of ["bytes", "missing"]) {
-    const reason = how === "missing" ? "registration_file_missing" : "registration_file_differs";
     const c = await committedCase(`RL4b handlers ${how}`);
     tamper(c.id, "a", how);
     const before = pinsWrites();
@@ -263,9 +291,8 @@ test("R-L4b: a projected file that does not hash to the projected sha256, or is 
       withdraw: await withdraw(c.id, c.b),
     };
     for (const [op, r] of Object.entries(answers)) {
-      assert.deepEqual([r.status, r.body.error_code, r.body.role, r.body.reason], [503, "case_record_inconsistent", "a", reason],
-        `${how} ${op}: ${JSON.stringify(r.body).slice(0, 300)}`);
-      assert.equal(JSON.stringify(r.body).includes("DAMAGED"), false, `${op}: no DAMAGED`);
+      // unit R-L4e: the body is the one error code (the reason goes to the operator log)
+      assert.deepEqual([r.status, r.body], [503, BODY], `${how} ${op}: ${JSON.stringify(r.body).slice(0, 300)}`);
     }
     assert.equal(pinsWrites(), before, "nothing written");
     assert.equal(storedCase(c.id).status, "COMMITTED", "never sealed");
@@ -274,19 +301,19 @@ test("R-L4b: a projected file that does not hash to the projected sha256, or is 
   tamper(s.id, "b");
   const before = pinsWrites();
   const ref = await referenceAs(s);
-  assert.deepEqual([ref.status, ref.body.error_code, ref.body.role], [503, "case_record_inconsistent", "b"], JSON.stringify(ref.body).slice(0, 300));
+  assert.deepEqual([ref.status, ref.body], [503, BODY], JSON.stringify(ref.body).slice(0, 300));
   assert.equal(pinsWrites(), before);
   assert.equal(deletes(), 0, "nothing deleted");
 });
 
-test("R-L4b: the page is the could-not-look page with case_record_inconsistent and the sentence, and shows nothing from the case", async () => {
+test("R-L4b: the page is the could-not-look page with case_record_inconsistent and the sentence (since unit R-L4e, the one sentence), and shows nothing from the case", async () => {
   const c = await sealedCase("RL4b page");
   tamper(c.id, "a");
   const page = await casePage(c.id);
   assert.equal(page.status, 503);
   assert.match(page.html, /<h1>Case: COULD NOT LOOK<\/h1>/);
   assert.ok(page.html.includes("<code>case_record_inconsistent</code>"), page.html.slice(0, 1500));
-  assert.ok(page.html.includes(esc(INCONSISTENT)));
+  assert.ok(page.html.includes(esc(SENTENCE)));
   for (const absent of ["DAMAGED", "registered at", "MATCHED", "agent-operator@example.com", "Registrations", "anchored"]) {
     assert.equal(page.html.includes(absent), false, `the page shows nothing from the case: ${absent}`);
   }
@@ -316,3 +343,58 @@ test("R-L4b: the DAMAGED name, its code and its words are gone", () => {
   }
   assert.doesNotMatch(read("README.md"), /DAMAGED/);
 });
+
+// =============================================================================
+// UNIT R-L4e: the page says one sentence, the body carries only the code, and
+// the reasons go to the operator log and the sealer's refused record
+// =============================================================================
+
+test("R-L4e: for each of the three reasons the page prints exactly the one sentence, the old heading and the old sentence are gone, and the reason goes to the operator log", async () => {
+  for (const reason of REASONS) {
+    const c = await committedCase(`RL4e page ${reason}`);
+    tamper(c.id, "a", HOW[reason]);
+    const { out: page, lines } = await logged(() => casePage(c.id, NOW + 5000));
+    assert.equal(page.status, 503, reason);
+    // the reason goes to the operator log (MUST-FAIL GAP E13, E15)
+    assert.ok(lines.includes(`[case] page: case_record_inconsistent: case ${c.id}, role a, ${reason}`), `${reason}: ${JSON.stringify(lines).slice(0, 300)}`);
+    assert.match(page.html, /<h1>Case: COULD NOT LOOK<\/h1>/);
+    assert.equal(panelsText(page.html), `${SENTENCE} case_record_inconsistent · the case file · its history`, `${reason}: ${panelsText(page.html)}`);
+    assert.equal((page.html.match(/<h2/g) || []).length, 0, `${reason}: no heading below the title`);
+    for (const absent of [OLD_H2, OLD_SENTENCE, reason, "role a", "role b"]) assert.equal(page.html.includes(absent), false, `${reason}: ${absent}`);
+  }
+});
+
+test("R-L4e: for each of the three reasons the 503 body is exactly the one error code, at the registration, the reveal and the withdrawal", async () => {
+  for (const reason of REASONS) {
+    const c = await committedCase(`RL4e body ${reason}`);
+    tamper(c.id, "a", HOW[reason]);
+    for (const [op, r] of Object.entries({ commit: await commit(c.id, c.b, NOW + 1500), reveal: await reveal(c), withdraw: await withdraw(c.id, c.b) })) {
+      assert.deepEqual([r.status, r.body], [503, BODY], `${reason} ${op}: ${JSON.stringify(r.body).slice(0, 300)}`);
+    }
+  }
+});
+
+test("R-L4e: the reason codes go to the operator log, with the case and the role, and to the sealer's refused record", async () => {
+  for (const reason of REASONS) {
+    const c = await committedCase(`RL4e log ${reason}`);
+    tamper(c.id, "a", HOW[reason]);
+    const { out, lines } = await logged(() => withdraw(c.id, c.b));
+    assert.deepEqual(out.body, BODY);
+    assert.ok(lines.some((l) => l.includes("case_record_inconsistent") && l.includes(reason) && l.includes(c.id) && l.includes("role a")),
+      `${reason}: ${JSON.stringify(lines).slice(0, 400)}`);
+  }
+  // the sealer: sealed cases whose reveal's pin write failed, so the sealer is the one to pin them
+  const want = [];
+  for (const reason of REASONS) {
+    const c = await committedCase(`RL4e sealer ${reason}`);
+    gh.forceFailure(PINS, `pins/case/${c.id}/00000001.json`, 1, 500);
+    assert.equal((await reveal(c)).status, 201);
+    tamper(c.id, "a", HOW[reason]);
+    want.push({ case_id: c.id, code: "case_record_inconsistent", role: "a", reason });
+  }
+  const run = await sealerRun();
+  const byId = (x, y) => x.case_id.localeCompare(y.case_id);
+  const ids = new Set(want.map((x) => x.case_id));
+  assert.deepEqual(run.refused.filter((x) => ids.has(x.case_id)).sort(byId), want.sort(byId));
+});
+

@@ -274,7 +274,7 @@ test("A11, A12 (validateRegistrationRecord): a stored registration whose key_id 
     const b = party(id, "b", TOOL_TAPE);
     const res = await commit(id, b);
     assert.equal(res.status, 503, JSON.stringify(res.body));
-    assert.deepEqual([res.body.error_code, res.body.reason], ["case_record_inconsistent", "registration_file_differs"]);
+    assert.deepEqual(res.body, { ok: false, error_code: "case_record_inconsistent" }); // unit R-L4e: the reason goes to the operator log
   }
 });
 

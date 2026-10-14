@@ -898,3 +898,29 @@ for (const t of REGISTRATION_TABLE) {
     assert.doesNotMatch(html, /written, not confirmed|never confirmed|cannot acquire/);
   });
 }
+
+// THE INCONSISTENT RECORD (unit R-L4b; its words since unit R-L4e): a case
+// whose projected registration file is missing, or is not the file
+// projected, or whose root entry its file does not hold. One row per reason:
+// the page is 503, says one sentence and shows no registration row; the
+// reason is not on the page (it goes to the operator log).
+const INCONSISTENT_SENTENCE = "The stored record for this case does not agree with itself. Nothing is asserted about this case while that is so.";
+const INCONSISTENT_TABLE = [
+  { reason: "registration_file_differs", how: (id, p) => { gh._repoMap(PINS).get(p).content += " "; } },
+  { reason: "registration_file_missing", how: (id, p) => { gh._repoMap(PINS).delete(p); } },
+  { reason: "projection_differs_from_file", how: (id) => {
+    const k = gh.read(PINS, C.casePath(id));
+    gh.seed(PINS, C.casePath(id), { ...k, commitments: { ...k.commitments, a: { ...k.commitments.a, registered_at: "2026-10-10T07:59:00Z" } } }, { keepHistory: true });
+  } },
+];
+for (const t of INCONSISTENT_TABLE) {
+  test(`R-L4e TABLE (inconsistent record): ${t.reason} -> 503: "${INCONSISTENT_SENTENCE}"`, async () => {
+    const c = await committedCase(`RJ3 inconsistent ${t.reason}`);
+    t.how(c.id, REG.pathOf(gh, c.id, "a"));
+    const page = await casePage(c.id, { now: NOW + 5000 });
+    assert.equal(page.status, 503);
+    assert.ok(page.html.includes(CP._internal.esc(INCONSISTENT_SENTENCE)), page.html.slice(0, 1500));
+    assert.equal(registrationRows(page.html), "", "no registration rows");
+    assert.equal(page.html.includes(t.reason), false, "the reason is not on the page");
+  });
+}

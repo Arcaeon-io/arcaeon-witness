@@ -296,8 +296,7 @@ test("H36 (since unit R-L4, the projection; unit R-L4b): a projected registratio
   gh.seed(PINS, REG.pathOf(gh, ID, "a"), { kind: "not-a-registration" });
   const res = await commit("b", commitmentFor("b", "tape b"));
   assert.equal(res._status, 503, JSON.stringify(res._body));
-  assert.deepEqual([res._body.error_code, res._body.reason], ["case_record_inconsistent", "registration_file_differs"]);
-  assert.equal(res._body.role, "a");
+  assert.deepEqual(res._body, { ok: false, error_code: "case_record_inconsistent" }); // unit R-L4e: the reason goes to the operator log
   assert.equal(gh.has(PINS, REG.pathOf(gh, ID, "b")), false, "nothing registered");
 });
 
@@ -356,11 +355,18 @@ test("H41 (reveal step 2b): a stamp whose one public commit is no longer the com
   const now = gh.commitsFor(STAMPS, spath);
   assert.equal(now.length, 1, "fixture: one commit, so the history is not ambiguous");
   assert.notEqual(now[0].sha, registered, "fixture: another commit");
-  const r = await reveal(p);
+  const realError = console.error;
+  const lines = [];
+  console.error = (...a) => { lines.push(a.map(String).join(" ")); };
+  let r;
+  try {
+    r = await reveal(p);
+  } finally {
+    console.error = realError;
+  }
   assert.equal(r.status, 503, JSON.stringify(r.body).slice(0, 300));
-  assert.equal(r.body.error_code, "case_record_inconsistent");
-  assert.equal(r.body.reason, "stamp_differs_from_registration");
-  assert.equal(r.body.role, "b");
+  assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" }); // unit R-L4e: the reason goes to the operator log
+  assert.ok(lines.includes(`[case] case_record_inconsistent: case ${ID}, role b, stamp_differs_from_registration`), JSON.stringify(lines).slice(0, 300)); // MUST-FAIL GAP E09
   assert.equal(gh.read(PINS, C.casePath(ID)).status, "COMMITTED", "nothing sealed");
 });
 

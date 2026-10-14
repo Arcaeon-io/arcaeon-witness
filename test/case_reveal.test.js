@@ -503,7 +503,9 @@ test("TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carr
     assert.equal(r.status, p.status, `${p.name}: ${JSON.stringify(r.body).slice(0, 300)}`);
     assert.equal(r.body.ok, false, p.name);
     assert.equal(r.body.error_code, p.code, `${p.name}: ${JSON.stringify(r.body).slice(0, 300)}`);
-    assert.equal(typeof r.body.error, "string", p.name);
+    // unit R-L4e: case_record_inconsistent is its code alone; every other refusal says why
+    if (p.code === "case_record_inconsistent") assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" }, p.name);
+    else assert.equal(typeof r.body.error, "string", p.name);
     assert.equal(r.body.verdict, undefined, `${p.name}: a refusal carries no verdict`);
     assert.equal(r.body.case, undefined, p.name);
     assert.equal(gh.putLog.length, before.writes, `${p.name}: nothing written`);

@@ -786,7 +786,7 @@ test("MUST-FAIL GAP (H13, H17, H19): a refusal whose case root before the withdr
   const rec = S.withdrawnRecord(storedCase(d.id), { role: "b", at: C.utcSeconds(NOW + 2000), salt: d.b.salt }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   gh.seed(PINS, C.casePath(d.id), rec, { keepHistory: true });
   const r = await reveal(d, { body: ownOpening(d, "a") });
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "case_record_inconsistent", "registration_file_differs"], JSON.stringify(r.body).slice(0, 200));
+  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(r.body).slice(0, 200)); // unit R-L4e
   assert.equal(has(r.body, "refusal_receipt"), false);
 });
 
