@@ -502,3 +502,54 @@ test("R-RVf M2: the registrations panel prints the ruled sentence exactly, keeps
   assert.ok(p.html.includes(`(stamped ${e.stamped_at})`));
   assert.ok(p.html.includes(`stamp commit ${e.stamp_commit.slice(0, 12)}`) || p.html.includes(e.stamp_commit));
 });
+
+// =============================================================================
+// UNIT R-RVf, THE MUST-FAIL PASS: tests for the planted defects the tests
+// above let through (the ids are the pass's)
+// =============================================================================
+
+test("MUST-FAIL GAP (W05, W06): a stored receipt whose compared_at is not a UTC-seconds string is receipt_time_mismatch", async (t) => {
+  const c = await committedCase("RRVf gap compared_at form");
+  assert.equal((await timedReveal(t, c, REVEAL_AT, 3000)).status, 201);
+  const k = storedCase(c.id);
+  const with_ = (v) => ({ ...k, verdict: { ...k.verdict, compared_at: v } });
+  for (const v of ["not a time", "2026-10-10T09:00:03.000Z", [k.verdict.compared_at], null]) {
+    assert.equal(S.checkSealedReceipt(with_(v)), "receipt_time_mismatch", JSON.stringify(v));
+  }
+});
+
+// The stamps repository's contents read at a commit, answered by `answer`.
+function stampReadAt(t, answer) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const u = String(url);
+    if (u.includes(`/repos/${STAMPS}/contents/`) && /[?&]ref=[0-9a-f]{40}/.test(u)) return answer(u, viaMock, o);
+    return viaMock(url, o);
+  };
+  t.after(() => { global.fetch = viaMock; });
+}
+
+test("MUST-FAIL GAP (W15, W25): a stamp the oldest commit did not leave at its path is 409 stamp_rewritten, never a 500; nothing is recorded", async (t) => {
+  const id = await openCase("RRVf gap 404 at oldest");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  stampReadAt(t, async () => ({ ok: false, status: 404, headers: { get: () => null }, json: async () => ({ message: "Not Found" }), text: async () => "" }));
+  const puts = gh.putLog.length;
+  const r = await commit(id, a);
+  assert.deepEqual([r.status, r.body.error_code], [409, "stamp_rewritten"], JSON.stringify(r.body));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+});
+
+test("MUST-FAIL GAP (W20): a read at the oldest commit that fails is 503 stamp_store_unreachable, not a 409; nothing is recorded, and the same registration sent again finishes", async (t) => {
+  const id = await openCase("RRVf gap read fails at oldest");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  let fail = true;
+  stampReadAt(t, async (u, viaMock, o) => (fail ? { ok: false, status: 502, headers: { get: () => null }, json: async () => ({}), text: async () => "" } : viaMock(u, o)));
+  const puts = gh.putLog.length;
+  const r = await commit(id, a);
+  assert.deepEqual([r.status, r.body.error_code], [503, "stamp_store_unreachable"], JSON.stringify(r.body));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  fail = false;
+  assert.equal((await commit(id, a)).status, 201);
+});
