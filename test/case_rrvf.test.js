@@ -291,7 +291,12 @@ const noTapeDigest = (c, body) => {
 // =============================================================================
 
 const ADVICE = `Draw a new salt, compute a new commitment, stamp it with size ${C.COMMITMENT_BYTES_LENGTH} and register that hash. Nothing was registered.`;
-const EXPIRED_SENTENCE = "No joint reveal was received before the deadline, by this service's clock";
+// The EXPIRED page's sentence (unit R-RVf2, the architect's ruling, which
+// corrects R-RVf's M2-era sentence: the page reads one root, and arrival is
+// known only to the compare-and-swap).
+const EXPIRED_SENTENCE = "No joint reveal is sealed to this case, and the deadline has passed by this service's clock. A reveal that arrived " +
+  "before the deadline still seals the case whenever its sealing lands, and this page cannot tell whether one is pending.";
+const OLD_EXPIRED_SENTENCE = "No joint reveal was received before the deadline";
 const DEADLINE_MS = Date.parse(DEADLINE);
 // A reveal whose clock reads `arrival` when it arrives and moves `portMs`
 // while the port runs.
@@ -349,22 +354,22 @@ test("R-RVf B1: the page's 'revealed at' is the arrival time, and a case sealed 
   const p = await casePage(c.id, DEADLINE_MS + 3600000);
   assert.equal(p.status, 200);
   assert.equal(revealedAtRow(p.html), C.utcSeconds(arrival), "the arrival time, not the clock after the port");
-  assert.ok(!p.html.includes(EXPIRED_SENTENCE));
+  assert.ok(!p.html.includes(esc(EXPIRED_SENTENCE)));
   assert.doesNotMatch(p.html, /EXPIRED/);
 });
 
-test("R-RVf B1: the EXPIRED sentence prints only when no reveal arrived before the deadline", async () => {
+test("R-RVf B1 (since unit R-RVf2, the ruled sentence): the EXPIRED sentence prints on a COMMITTED case past its deadline, and not before it", async () => {
   // no reveal at all
   const c = await committedCase("RRVf B1 no reveal");
-  assert.ok((await casePage(c.id, DEADLINE_MS + 1000)).html.includes(EXPIRED_SENTENCE));
-  assert.ok(!(await casePage(c.id, DEADLINE_MS - 1000)).html.includes(EXPIRED_SENTENCE), "before the deadline: not expired");
+  assert.ok((await casePage(c.id, DEADLINE_MS + 1000)).html.includes(esc(EXPIRED_SENTENCE)));
+  assert.ok(!(await casePage(c.id, DEADLINE_MS - 1000)).html.includes(esc(EXPIRED_SENTENCE)), "before the deadline: not expired");
   // a reveal that arrives at the deadline is refused, and the case reads EXPIRED
   const d = await committedCase("RRVf B1 at the deadline");
   const before = rootSha(d.id);
   const late = await reveal(d, { now: DEADLINE_MS });
   assert.deepEqual([late.status, late.body.error_code], [409, "expired"], JSON.stringify(late.body).slice(0, 300));
   assert.equal(rootSha(d.id), before, "nothing written");
-  assert.ok((await casePage(d.id, DEADLINE_MS + 1000)).html.includes(EXPIRED_SENTENCE));
+  assert.ok((await casePage(d.id, DEADLINE_MS + 1000)).html.includes(esc(EXPIRED_SENTENCE)));
 });
 
 test("R-RVf B1: a re-send after the deadline is a new arrival, judged on its own arrival time", async (t) => {
@@ -376,7 +381,7 @@ test("R-RVf B1: a re-send after the deadline is a new arrival, judged on its own
   const again = await reveal(c, { now: DEADLINE_MS + 1000 });
   assert.deepEqual([again.status, again.body.error_code], [409, "expired"], JSON.stringify(again.body).slice(0, 300));
   assert.equal(rootSha(c.id), before, "nothing written");
-  assert.ok((await casePage(c.id, DEADLINE_MS + 2000)).html.includes(EXPIRED_SENTENCE));
+  assert.ok((await casePage(c.id, DEADLINE_MS + 2000)).html.includes(esc(EXPIRED_SENTENCE)));
 });
 
 test("R-RVf B2: a stamp path with more than ten pages of history answers 409 commits_beyond_bound with the existing sentence, writes nothing, and a re-send with a new salt finishes", async () => {
@@ -552,4 +557,56 @@ test("MUST-FAIL GAP (W20): a read at the oldest commit that fails is 503 stamp_s
   assert.equal(gh.putLog.length, puts, "nothing written");
   fail = false;
   assert.equal((await commit(id, a)).status, 201);
+});
+
+// =============================================================================
+// UNIT R-RVf2: one sentence (the architect's ruling)
+// =============================================================================
+
+// The page for a COMMITTED case past its deadline: the heading EXPIRED, the
+// ruled sentence exactly, the old one nowhere, and nothing written by the read.
+async function expiredPage(id, now) {
+  const puts = gh.putLog.length;
+  const p = await casePage(id, now);
+  assert.equal(gh.putLog.length, puts, "the page read writes nothing");
+  assert.equal(p.status, 200);
+  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  assert.ok(p.html.includes(`<p class="muted">${esc(EXPIRED_SENTENCE)} `), p.html.slice(0, 2000));
+  assert.ok(!p.html.includes(OLD_EXPIRED_SENTENCE));
+  assert.doesNotMatch(p.html, /received before the deadline/);
+  return p;
+}
+
+test("R-RVf2: a reveal in flight. A reveal that arrived before the deadline has not landed its seal; the page read past the deadline prints the ruled sentence under EXPIRED, and the seal then lands", async () => {
+  const c = await committedCase("RRVf2 in flight");
+  const sealPut = (u, m) => m === "PUT" && decodeURIComponent(u).includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`);
+  const { out: r, inner: p, fired } = await during(sealPut, () => expiredPage(c.id, DEADLINE_MS + 1000), () => reveal(c, { now: DEADLINE_MS - 500 }));
+  assert.equal(fired, true, "fixture: the page was read before the seal landed");
+  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(storedCase(c.id).status, "VERDICT");
+  const after = await casePage(c.id, DEADLINE_MS + 2000);
+  assert.doesNotMatch(after.html, /EXPIRED/);
+});
+
+test("R-RVf2: a timely reveal whose seal write failed: the root stays COMMITTED, and the page past the deadline prints the ruled sentence under EXPIRED", async () => {
+  const c = await committedCase("RRVf2 seal failed");
+  const before = rootSha(c.id);
+  gh.forceFailure(PINS, C.casePath(c.id), 1, 500);
+  const r = await reveal(c, { now: DEADLINE_MS - 500 });
+  assert.notEqual(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(rootSha(c.id), before, "fixture: the seal did not land");
+  assert.equal(storedCase(c.id).status, "COMMITTED");
+  await expiredPage(c.id, DEADLINE_MS + 1000);
+});
+
+test("R-RVf2: no reveal ever: the page past the deadline prints the ruled sentence under EXPIRED", async () => {
+  const c = await committedCase("RRVf2 no reveal");
+  await expiredPage(c.id, DEADLINE_MS + 1000);
+});
+
+test("R-RVf2: the old sentence appears nowhere in lib/, tools/ or the README", () => {
+  for (const file of jsFiles("lib").concat(jsFiles("tools"), ["README.md"])) {
+    assert.ok(!read(file).includes(OLD_EXPIRED_SENTENCE), file);
+  }
 });
