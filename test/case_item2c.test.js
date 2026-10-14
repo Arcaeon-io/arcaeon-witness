@@ -245,12 +245,12 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   // since, and one that does not read cannot say: could not look.
   gh.seed(PINS, C.casePath(id), good);
   // Since unit R-I the current document must list both keys in their roles
-  // (else signer_unlisted), and a key it marks revoked holds only for a case
-  // pinned before the revocation's marker (this case has no pin: signer_revoked).
+  // (else signer_unlisted), and since unit R-REV a key it lists revoked is
+  // signer_revoked, whenever it signed.
   for (const [name, doc, code] of [
     ["the committed document (no test key), current", undefined, "signer_unlisted"],
     ["the test keys listed, current", KEYS_DOC, "valid_under_document"],
-    ["revoked, current, the case not pinned", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }, RECONCILE_ENTRY] }, "signer_revoked"],
+    ["revoked, current", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked" }, RECONCILE_ENTRY] }, "signer_revoked"],
     ["unreadable, current", { ...KEYS_DOC, extra: true }, "document_unavailable"],
   ]) {
     assert.equal((await S.sealedRecordReason(good, doc)).code, code, name);
@@ -261,13 +261,13 @@ test("FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its si
   // MUST-FAIL ARM: 2b's retry checked the receipt only, which passes the
   // forged case, so only the signature check stood between it and a pin.
   assert.equal(S.checkStoredReceipt(forged, { receiptVerifier: RECEIPT_KEY.verifier }), null);
-  // control: the case as sealed anchors, under a retired key too (a
-  // retired key's cases stay trusted: the document's status_meaning; since
-  // unit R-I the current document lists the reconcile key too)
-  const retired = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }, RECONCILE_ENTRY] } });
-  assert.equal(retired.ok, true, JSON.stringify(retired));
-  assert.equal(retired.pin, "pinned");
-  assert.equal(retired.chain, S.caseChain(good));
+  // control: the case as sealed anchors, under a rotated-out key too (since
+  // unit R-REV it stays listed active, with a note that it no longer signs;
+  // since unit R-I the current document lists the reconcile key too)
+  const rotated = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: { ...KEYS_DOC, keys: [{ ...ENTRY, note: "rotated out: it no longer signs" }, RECONCILE_ENTRY] } });
+  assert.equal(rotated.ok, true, JSON.stringify(rotated));
+  assert.equal(rotated.pin, "pinned");
+  assert.equal(rotated.chain, S.caseChain(good));
 });
 
 test("FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the reveal will not make one, and the sealer refuses one it finds (case_signature_invalid, unsigned_seal) and pins nothing", async () => {
@@ -320,8 +320,8 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   assert.equal(storedCase(plain.id).status, "COMMITTED");
   // the other ways a key is not an active entry
   for (const [name, doc, why] of [
-    ["retired", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] }, /listed .* as retired, not active/],
-    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked", revoked_since: "2026-10-11" }] }, /as revoked, not active/],
+    ["retired, no longer a status since unit R-REV", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "retired" }] }, /does not read \(malformed_field at keys\[0\]\.status\)/],
+    ["revoked", { ...KEYS_DOC, keys: [{ ...ENTRY, status: "revoked" }] }, /as revoked, not active/],
     ["a document that does not read", { ...KEYS_DOC, keys: [{ ...ENTRY, note: "" }] }, /does not read/],
     ["no document", null, /does not read/],
   ]) {

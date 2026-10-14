@@ -241,17 +241,6 @@ const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWi
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
-// The case key revoked (unit R-I): the current document, its marker, the tool.
-const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
-const revokedDoc = () => CASE_REVOKED;
-const TOOL = { recordRevocation: (...args) => require("../tools/record_key_revocation.js").recordRevocation(...args) };
-const markerFor = (W) => ({ kind: "key-revocation", v: 1, key_id: KD.keyIdOf(CASE_KEY), key_fingerprint: S.keyFingerprint(CASE_KEY.verifier), revoked_in_commit: W });
-async function revoke() {
-  const W = KD.serve(gh, CASE_REVOKED);
-  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  return { W, R: out.commit, path: out.path };
-}
 
 // =============================================================================
 // UNIT R-N2
@@ -289,22 +278,22 @@ test("R-N2 M3: the sealer writes a failed withdrawn marker for a case with ONE r
   assert.deepEqual(gh.putLog.slice(writes), []);
 });
 
-test("R-N2 m3: the commit walk goes on when the page is full, whether or not the host names a next page", async (t) => {
+test("R-N2 m3 (since unit R-REV, on a pin file's history): the commit walk goes on when the page is full, whether or not the host names a next page", async (t) => {
   const c = await sealedCase("RN2 full page");
-  const { R, path: mp } = await revoke();
-  const late = await sealedCase("RN2 full page, late");
-  for (let i = 0; i < 105; i += 1) gh.addCommit(PINS, mp);
+  const { seq } = S.pinPaths(c.id);
+  const wrote = gh.commitsFor(PINS, seq);
+  assert.equal(wrote.length, 1, "fixture: written once");
+  for (let i = 0; i < 105; i += 1) gh.addCommit(PINS, seq);
   const viaMock = global.fetch;
   global.fetch = async (url, o) => {
     const r = await viaMock(url, o);
     return String(url).includes("/commits?") ? { ...r, headers: { get: () => null } } : r;
   };
   t.after(() => { global.fetch = viaMock; });
-  S._internal.clearDocumentCache();
   S._internal.clearCommitFiles();
-  const a = await S.sealedRecordReason(storedCase(late.id), revokedDoc());
-  assert.deepEqual([a.code, a.reason], ["signer_revoked", "pinned_at_or_after_revocation"], "R is the oldest, past the full page");
-  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).revoked[0].revoking_commit, R);
+  const st = await S.pinState(c.id, S.caseChain(storedCase(c.id)));
+  assert.equal(st.pin, "pinned");
+  assert.equal(st.pin_commit.sha, wrote[0].sha, "the commit that wrote it, past the full page");
 });
 
 test("R-N2 m4, m5: the lease race says exactly what happened; the withdrawn refusal says the tapes are never decoded or hashed", async () => {
@@ -461,21 +450,6 @@ test("MUST-FAIL GAP (C03, C11): the loaders' codes: a reconcile key the document
   assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "signer_unavailable", "reconcile_key_unpublished"]);
 });
 
-test("MUST-FAIL GAP (L07, L08): the marker tool's walk goes on after a full page with no next page named, to the page after it", async (t) => {
-  const revokedAt = (note) => KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11", note }), KD.reconcileEntry(RECEIPT_KEY));
-  const first = KD.serve(gh, revokedAt("revoked, 0"));
-  for (let i = 1; i <= 100; i += 1) KD.serve(gh, revokedAt(`revoked, ${i}`));
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    const r = await viaMock(url, o);
-    return String(url).includes("/commits?") ? { ...r, headers: { get: () => null } } : r;
-  };
-  t.after(() => { global.fetch = viaMock; });
-  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revokedAt("revoked, 100") });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  assert.equal(out.marker.revoked_in_commit, first);
-});
-
 test("MUST-FAIL GAP (R02, R04): a receipt whose commit the repository does not show, or whose document cannot be fetched, is could-not-look, never definitely off the branch", async () => {
   const c = await committedCase("RN2 gap could not look");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
@@ -496,9 +470,9 @@ test("MUST-FAIL GAP (R10, R11, R13, R15): the offline checker holds the receipt 
   assert.deepEqual(offline({ ...good, v: 2 }, DOC), { signature_ok: false, reason: "malformed_field" });
   const byCase = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, DOC, at) }, S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.deepEqual(offline(byCase, DOC), { signature_ok: false, reason: "signer_unpublished" });
-  const retired = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }));
-  const underRetired = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, retired, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
-  assert.deepEqual(offline(underRetired, retired), { signature_ok: false, reason: "signer_not_active" });
+  const revoked = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" }));
+  const underRevoked = S.refusalReceipt({ ...fields, signedUnder: KD.signedUnder(gh, revoked, at) }, S.loadReconcileSigner(KEYS, { keyDocument: DOC }));
+  assert.deepEqual(offline(underRevoked, revoked), { signature_ok: false, reason: "signer_not_active" });
 });
 
 

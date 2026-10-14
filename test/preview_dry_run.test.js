@@ -386,14 +386,15 @@ test("(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_
   assert.equal(gh.read(PINS, C.casePath(id)).status, "COMMITTED", "it really sealed nothing");
 
   // Sealed under another document than this checkout's: one that does not
-  // list the key, or lists it retired (Design I: the seal names its document).
+  // list the key, or lists it revoked (Design I: the seal names its document;
+  // since unit R-REV there is no retired status).
   const sealedElsewhere = /it was sealed under the key document [0-9a-f]{64} at commit [0-9a-f]{40}, not this checkout's public\/\.well-known\/arcaeon\/case-signing-keys\.json \([0-9a-f]{64}\)$/;
   const unlisted = await dryRun(t, { keyDocument: COMMITTED_DOC });
   assert.equal(word(unlisted, "e"), "BROKEN");
   assert.match(unlisted.by.e.line, sealedElsewhere);
-  const retired = await dryRun(t, { keyDocument: { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => (e.key_id === CASE_ENTRY.key_id ? { ...e, status: "retired" } : e)) } });
-  assert.equal(word(retired, "e"), "BROKEN");
-  assert.match(retired.by.e.line, sealedElsewhere);
+  const revoked = await dryRun(t, { keyDocument: { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => (e.key_id === CASE_ENTRY.key_id ? { ...e, status: "revoked" } : e)) } });
+  assert.equal(word(revoked, "e"), "BROKEN");
+  assert.match(revoked.by.e.line, sealedElsewhere);
 
   // The answer altered on its way out.
   const arms = [

@@ -781,20 +781,23 @@ commit of the key document it was sealed under, and every reader holds that
 commit to this branch (`lib/_case_seal.js` `commitOnBranch`): a commit that
 is not on it is not a published document, and the case reads as could not
 look. The joint reveal refuses to seal from a deployment whose own commit is
-not on it, and `tools/record_key_revocation.js` checks the marker it writes
-against it. A preview deployment of another branch sets it to that branch.
+not on it. A preview deployment of another branch sets it to that branch.
 The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
-steps (e) and (f), and `tools/record_key_revocation.js` holds the marker to
-it. The readers walk at most 5,000 commits of a key's marker path (50 pages
-of 100, and a full 50th page means there may be more), so a marker path
-that someone with write access to the pins repository forces to
-5,000 commits or more reads `revocation_marker_unreadable` for good, and
-every case under that key reads `signer_revoked`; this bound is accepted.
+steps (e) and (f).
 
-A key once shown revoked by a valid marker stays revoked. If the marker file
-is later removed, the answer is that the marker cannot be read, never that
-the key is trusted again.
+### A revoked key
+
+A key in the case key document is `active` or `revoked`. A record a key
+signed holds only while the key document this service carries lists that
+key active in its role. A key it lists as revoked makes every case the key
+signed read `signer_revoked`, whenever it was signed: the case page shows
+no verdict, the sealer does not pin it, and a reference to it is refused 409
+`signer_revoked`. The key document cannot order a signature against a
+revocation, so none is ordered. A rotated-out key stays listed active, with
+a note that it no longer signs. Revocation marker files
+(`revocations/<fingerprint>.json`) already in a repository are left in place
+and ignored: no code reads or writes them.
 
 ### Checking a refusal receipt
 

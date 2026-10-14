@@ -22,8 +22,8 @@
 //     document listing a key, no document recorded): Design I. A sealed
 //     case records signed_under {document_sha256, document_commit,
 //     retrieved_at} and is held to the document it names, read at its
-//     commit (lib/_case_seal.js THE SEALED CHECK); a later revocation is
-//     signer_since_revoked, still sealed.
+//     commit (lib/_case_seal.js THE SEALED CHECK). A later revocation was
+//     signer_since_revoked, still sealed, until unit R-REV (DECIDED, below).
 //   - GPT-5.6 §3.1, a verdict no comparison produced: red-team fix B, A
 //     RECEIPT IS THE SERVICE'S (lib/_case_seal.js). A stored receipt holds
 //     only when the service's reconcile signer signed it (receipt_unsigned
@@ -71,6 +71,12 @@
 //     removes row_commit. The row's note says the pins-repository commit
 //     that writes it records it, and the page links the row's history. The
 //     test is todo again.
+//   - GPT-5.6 §1.4 / §3.3 / §6.4, a later revocation: unit R-REV (the
+//     architect's ruling). A key the current document lists revoked makes
+//     every case it signed signer_revoked, whenever it signed: no verdict,
+//     under SIGNED BY A REVOKED KEY rather than SEALED RECORD DOES NOT
+//     VERIFY. The key document cannot order a signature against a
+//     revocation. The test is todo again.
 //
 // NOT TESTABLE HERE (no test, one line why):
 //   - GPT-5.6 §1.2 and the reference row's note, "no code verifies that
@@ -144,8 +150,7 @@ const LOG_KEY = checkpoint.generateKey("arcaeon.io/log-test/2026-10-10");
 const OTHER_KEY = checkpoint.generateKey("arcaeon.io/case-test-unlisted/2026-10-10");
 const SIGNED = Object.freeze({ [S.CASE_SIGNER_ENV]: CASE_KEY.signer, [receipts.SIGNER_ENV]: RECEIPT_KEY.signer, WITNESS_LOG_SIGNER_KEY: LOG_KEY.signer });
 const keyIdOf = (k) => k.verifier.split("+").slice(0, 2).join("+");
-const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status,
-  ...(status === "revoked" ? { revoked_since: "2026-10-11" } : {}) });
+const entry = (k, status = "active") => ({ key_id: keyIdOf(k), verifier: k.verifier, since: "2026-10-10", note: "a test key", status });
 const docWith = (...entries) => ({ ...S.PUBLISHED_KEYS, keys: entries });
 // Design I: the document lists the reconcile key too, as a reconcile entry.
 const KEYS_DOC = Object.freeze(docWith(entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY)));
@@ -372,33 +377,20 @@ test('GPT-5.6 §1.3: "If the reveal subsequently fails its root write after comp
   assert.equal(storedCase(id).reveal_attempts[1].reason, "case_seal_failed", "and its failure (unit R-N, E1: appended after it)");
 });
 
-test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"', async () => {
-  // FIXED (Design I, lib/_case_seal.js THE SEALED CHECK): a sealed case is
-  // held to the document it names; a later revocation makes it
-  // signer_since_revoked, still sealed, with a dated banner.
-  const { id } = await sealedCase({ scope_digest: sha("1.4 revoke") });
-  const rec = storedCase(id);
-  assert.equal(typeof rec.sig, "string", "fixture: signed");
-  assert.equal((await S.sealedRecordReason(rec, KEYS_DOC)).code, "valid_under_document", "verifies under the document it was sealed under");
-  assert.equal((await S.sealedRecordReason(rec, docWith(entry(CASE_KEY, "retired"), KD.reconcileEntry(RECEIPT_KEY)))).code, "valid_under_document",
-    "control: a retired key's seals stay trusted");
-  const revoked = docWith(entry(CASE_KEY, "revoked"), KD.reconcileEntry(RECEIPT_KEY));
-  // unit R-I (I1): a revocation is ordered against the case's pin by commit:
-  // the document's revocation published on the branch, then the key's marker
-  // recorded in the pins repository, after this case's file was written
-  KD.serve(gh, revoked);
-  const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
-  assert.equal(marked.ok, true, JSON.stringify(marked));
-  const page = await casePage(id, { keyDocument: revoked });
-  const answer = await S.sealedRecordReason(rec, revoked);
-  assert.deepEqual({ holds: S.sealHolds(answer), doesNotVerify: page.html.includes("SEALED RECORD DOES NOT VERIFY") },
-    { holds: true, doesNotVerify: false },
-    "a case sealed while its key was active still verifies, and its page shows its verdict, after a later document revokes the key");
-  assert.equal(answer.code, "signer_since_revoked");
-  assert.match(page.html, /<h2>The verdict<\/h2>/);
-  assert.match(page.html, /A key that signed this case is revoked\./);
-  assert.ok(page.html.includes(`recorded in the pins repository at commit <a href="https://github.com/${store.REPO}/commit/${marked.commit}"`), "R, the marker's commit");
-});
+test('GPT-5.6 §1.4 / §3.3 / §6.4: "A later edit changing a key from active or retired to revoked makes old sealed cases fail sealedRecordReason() and display SEALED RECORD DOES NOT VERIFY"',
+  { todo: "DECIDED (unit R-REV): a key the current document lists revoked makes every case it signed signer_revoked, whenever it signed, and the page shows no verdict, under SIGNED BY A REVOKED KEY (the assertion 'a case sealed while its key was active still verifies' fails)" }, async () => {
+    const { id } = await sealedCase({ scope_digest: sha("1.4 revoke") });
+    const rec = storedCase(id);
+    assert.equal(typeof rec.sig, "string", "fixture: signed");
+    assert.equal((await S.sealedRecordReason(rec, KEYS_DOC)).code, "valid_under_document", "verifies under the document it was sealed under");
+    assert.equal((await S.sealedRecordReason(rec, docWith({ ...entry(CASE_KEY), note: "rotated out: it no longer signs" }, KD.reconcileEntry(RECEIPT_KEY)))).code,
+      "valid_under_document", "control: a rotated-out key, listed active, keeps its seals");
+    const revoked = docWith(entry(CASE_KEY, "revoked"), KD.reconcileEntry(RECEIPT_KEY));
+    const page = await casePage(id, { keyDocument: revoked });
+    assert.ok(!page.html.includes("SEALED RECORD DOES NOT VERIFY"), "the page is SIGNED BY A REVOKED KEY, not that one");
+    const answer = await S.sealedRecordReason(rec, revoked);
+    assert.equal(S.sealHolds(answer), true, "a case sealed while its key was active still verifies after a later document revokes the key");
+  });
 
 test('GPT-5.6 §1.4: "Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid"', async () => {
   // FIXED (Design I): the named document alone decides whether a stored

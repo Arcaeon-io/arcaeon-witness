@@ -792,7 +792,7 @@ test("MUST-FAIL GAP (N15, N17, N19, N20, N22, N23, N24; since unit R-N): the ref
     ["a commitment that is not one", resigned({ commitment_sha256: "D".repeat(64) }), DOC, "malformed_field"],
     ["signed_under with a field more", resigned({ signed_under: { ...signedUnder, extra: 1 } }), DOC, "malformed_field"],
     ["a current document that does not read", rr, { not: "a key document" }, "current_document_unreadable"],
-    ["the reconcile key revoked", rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked", revokedSince: "2026-10-11" })), "signer_revoked"],
+    ["the reconcile key revoked", rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" })), "signer_revoked"],
     ["signed by the case key", S.refusalReceipt(fields, S.loadCaseSigner(KEYS, { keyDocument: DOC })), DOC, "signer_unpublished"],
   ]) {
     assert.deepEqual(await S.verifyRefusalReceipt(rec, doc), { ok: false, reason: want }, name);

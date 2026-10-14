@@ -465,39 +465,34 @@ function commitsOnPage(html) {
   return { bare, linked };
 }
 
-test("EVERY COMMIT IS A LINK: on a sealed page, pinned and with a row recorded, and under a since-revoked key, every commit (the key document's, the stamps', the case file's, the pin's, the revoking document's) is a link into the public repository it is a commit of, and none is bare text", async () => {
+test("EVERY COMMIT IS A LINK: on a sealed page, pinned and with a row recorded, and under a revoked key, every commit (the key document's, the stamps', the case file's, the pin's, the carried document's) is a link into the public repository it is a commit of, and none is bare text", async () => {
   const c = await sealedCase("J every commit");
   const r = await reference(c, "a", "row-linked");
   assert.equal(r.status, 201);
   const k = storedCase(c.id);
-  const current = "c".repeat(40);
   const render = async (keyDocument, env) => {
     const res = makeRes();
     await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: c.id }, headers: { "x-forwarded-for": `10.98.1.${(ipSeq += 1) & 255}` } }), res,
       { now: REVEAL_AT + 3600000, keyDocument, env });
     return String(res._body);
   };
-  // the row shows under the document that lists its key active; the banner under one that revokes it since
+  // the row shows under the document that lists its key active; since unit
+  // R-REV a document that lists it revoked shows one sentence naming the
+  // commit V of the document this service carries
   const page = await render(DOC, {});
-  // unit R-I: a revocation counts by commit order: the document's
-  // revocation on the branch (W), then the key's marker in the pins
-  // repository (R), after this case's file was written
-  const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
-  const W = KD.serve(gh, revoked);
-  const marked = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revoked, write: true });
-  assert.equal(marked.ok, true, JSON.stringify(marked));
-  const banner = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: current });
+  const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked" }), KD.reconcileEntry(RECEIPT_KEY));
+  const V = KD.serve(gh, revoked);
+  const revokedPage = await render(revoked, { [S.DEPLOY_COMMIT_ENV]: V });
   assert.match(page, /Pinned at commit <a /, "fixture: pinned");
   assert.match(rowLine(page, 1), /the row and the commit that wrote it/, "fixture: the row");
-  assert.match(banner, /A key that signed this case is revoked\./, "fixture: the banner");
+  assert.match(revokedPage, /SIGNED BY A REVOKED KEY/, "fixture: the revoked page");
   const one = commitsOnPage(page);
-  const two = commitsOnPage(banner);
+  const two = commitsOnPage(revokedPage);
   assert.deepEqual([...one.bare, ...two.bare], [], "no commit is bare text");
   const linked = [...one.linked, ...two.linked];
   const want = [
     [S.KEY_DOCUMENT_REPO, k.signed_under.document_commit, "the key document the case names"],
-    [S.KEY_DOCUMENT_REPO, W, "the document's commit that lists the key revoked"],
-    [PINS, marked.commit, "the revoking commit, the marker's"],
+    [S.KEY_DOCUMENT_REPO, V, "the commit of the key document this service carries, which lists the key revoked"],
     [STAMPS, k.commitments.a.stamp_commit, "role a's stamp"],
     [STAMPS, k.commitments.b.stamp_commit, "role b's stamp"],
     [PINS, sealCommit(c.id), "the case file"],

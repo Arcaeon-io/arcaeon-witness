@@ -234,8 +234,6 @@ const CLAIM = "Withdrawal before the reveal closes that case; it does not recall
   "binds a key that did not sign in the case that produced it.";
 const LEGACY = "Files under withdrawn_commitments/ that a pins repository may hold from before this release are ignored: no code reads " +
   "or writes them.";
-const REVOCATION = "A key once shown revoked by a valid marker stays revoked. If the marker file is later removed, the answer is that the " +
-  "marker cannot be read, never that the key is trusted again.";
 const DATES = "Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document.";
 
 // =============================================================================
@@ -378,32 +376,6 @@ test("R-L L4: a withdrawal that loses (the case sealed first, or expired) writes
 // L6: two sentences
 // =============================================================================
 
-test("R-L L6 (a): the README and the key document's notes say a revoked key stays revoked, and a removed marker reads as a marker that cannot be read", () => {
-  assert.ok(README().includes(REVOCATION));
-  const doc = read("public/.well-known/arcaeon/case-signing-keys.json");
-  assert.ok(JSON.stringify(JSON.parse(doc)).includes(REVOCATION));
-  assert.equal(S.checkKeyDocument(JSON.parse(doc)).ok, true);
-});
-
-test("R-L L6 (a): a marker removed after it was read: the answer is that the marker cannot be read, never that the key is trusted again", async () => {
-  const c = await sealedCase("RL L6 marker removed");
-  const CASE_REVOKED = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
-  KD.serve(gh, CASE_REVOKED);
-  const out = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  const k = storedCase(c.id);
-  const held = await S.sealedRecordReason(k, CASE_REVOKED);
-  assert.equal(held.code, "signer_since_revoked", JSON.stringify(held));
-  gh._repoMap(PINS).delete(out.path);
-  gh.addCommit(PINS, out.path, "mock: the marker removed");
-  // no cache stands in for the file: the same instance, read again
-  const after = await S.sealedRecordReason(k, CASE_REVOKED);
-  assert.deepEqual([after.code, after.reason], ["signer_revoked", "revocation_marker_unreadable"]);
-  S._internal.clearDocumentCache();
-  const fresh = await S.sealedRecordReason(k, CASE_REVOKED);
-  assert.deepEqual([fresh.code, fresh.reason], ["signer_revoked", "revocation_marker_unreadable"]);
-});
-
 test("R-L L6 (b): the case page says, beside the key document it names, that dates in a key document are not enforced", async () => {
   const c = await sealedCase("RL L6 dates");
   const html = (await casePage(c.id)).html;
@@ -427,19 +399,6 @@ test("R-L L7: the change log says the withdrawn-tape listing was removed before 
 // MUST-FAIL GAP (unit R-L): the mutants the pass over the lines R-L changed
 // left alive, each caught here
 // =============================================================================
-
-test("MUST-FAIL GAP (S02): a revocation marker held from an earlier read whose file cannot be read this time is a marker that cannot be read", async () => {
-  const c = await sealedCase("RL gap marker read fails");
-  const CASE_REVOKED = KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY));
-  KD.serve(gh, CASE_REVOKED);
-  const out = await require("../tools/record_key_revocation.js").recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  const k = storedCase(c.id);
-  assert.equal((await S.sealedRecordReason(k, CASE_REVOKED)).code, "signer_since_revoked", "fixture: the marker read, and held");
-  gh.forceGetFailure(PINS, out.path, 1, 503);
-  const after = await S.sealedRecordReason(k, CASE_REVOKED);
-  assert.deepEqual([after.code, after.reason], ["signer_revoked", "revocation_marker_unreadable"]);
-});
 
 
 test("MUST-FAIL GAP (H21, H22): the withdrawal's answer carries the public claim, and says that only the salt's sha256 is kept, in the withdrawal record", async () => {

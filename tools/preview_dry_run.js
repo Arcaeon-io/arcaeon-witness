@@ -580,18 +580,15 @@ const NO_RECONCILE_VERIFIER = `no reconcile verifier is known here (set ${receip
   `${receipts.SIGNER_ENV}), so the receipt's signer cannot be checked`;
 
 // What (e) says of lib/_case_seal.js sealedRecordReason's answer: null when
-// it is valid_under_document; could-not-look for a document, or (unit R-L,
-// g6) a pin under a revoked key, that could not be read; broken otherwise.
+// it is valid_under_document; could-not-look for a document that could not
+// be read; broken otherwise (since unit R-REV a revoked key is broken,
+// whenever it signed).
 function holdsVerdict(answer) {
   if (answer.code === "valid_under_document") return null;
   if (answer.code === "document_unavailable") {
     // unit R-I (I5): which document could not be read
     if (answer.document === "current") return couldNotLook(`the current key document this checkout carries could not be read (${answer.reason})`);
     return couldNotLook(`the key document it names (commit ${answer.document_commit}) could not be read from the public repository (${answer.reason})`);
-  }
-  if (answer.code === "pin_unavailable") {
-    return couldNotLook("a key that signed it is revoked in the current key document, and whether its pin shows its case file written before " +
-      `the revocation was recorded could not be read (${answer.reason})`);
   }
   return broken(`its sealed record does not hold under the key document it names (${answer.code}${answer.reason ? `: ${answer.reason}` : ""})`);
 }

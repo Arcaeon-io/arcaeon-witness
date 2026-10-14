@@ -19,10 +19,11 @@ const keyIdOf = (k) => k.verifier.split("+").slice(0, 2).join("+");
 
 // A key document entry for a throwaway key ({signer, verifier} as
 // lib/_checkpoint.js generateKey makes one). `role` absent is a case key.
-function entry(k, { role, status = "active", revokedSince, since = "2026-10-10", note = "a test key" } = {}) {
+// Since unit R-REV a status is active or revoked, and no entry carries a
+// revocation date.
+function entry(k, { role, status = "active", since = "2026-10-10", note = "a test key" } = {}) {
   const e = { key_id: keyIdOf(k), verifier: k.verifier, since, note, status };
   if (role !== undefined) e.role = role;
-  if (revokedSince !== undefined) e.revoked_since = revokedSince;
   return e;
 }
 const reconcileEntry = (k, over = {}) => entry(k, { role: "reconcile", note: "a test reconcile key", ...over });

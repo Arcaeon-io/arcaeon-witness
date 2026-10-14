@@ -253,17 +253,6 @@ const lockOf = (id) => gh.read(USAGE, H._internal.caseLockPath(id));
 const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWith(`${C.caseLogDir(id)}/`)).sort();
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
-// The case key revoked (unit R-I): the current document, its marker, the tool.
-const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
-const revokedDoc = () => CASE_REVOKED;
-const TOOL = { recordRevocation: (...args) => require("../tools/record_key_revocation.js").recordRevocation(...args) };
-const markerFor = (W) => ({ kind: "key-revocation", v: 1, key_id: KD.keyIdOf(CASE_KEY), key_fingerprint: S.keyFingerprint(CASE_KEY.verifier), revoked_in_commit: W });
-async function revoke() {
-  const W = KD.serve(gh, CASE_REVOKED);
-  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  return { W, R: out.commit, path: out.path };
-}
 
 // =============================================================================
 // N1: one signature rule everywhere; the refusal receipt is signed or not issued
@@ -313,7 +302,7 @@ test("R-N N1, N3: a refusal on a withdrawn case with the requester's own valid o
   assert.equal((await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_sha256: "e".repeat(64) } }, DOC)).reason, "document_sha256_mismatch");
   // a key the CURRENT document does not list in its role, or lists revoked, does not hold
   assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY)))).reason, "signer_unlisted");
-  assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked", revokedSince: "2026-10-11" })))).reason,
+  assert.equal((await S.verifyRefusalReceipt(rr, KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" })))).reason,
     "signer_revoked");
   // nothing changes anywhere
   assert.deepEqual(gh.putLog.slice(writes), []);
@@ -585,12 +574,13 @@ test("R-N E1: the schema: reveal_attempts only on COMMITTED or VERDICT, entries 
 // T1: the §2B todos are plain assertions now
 // =============================================================================
 
-test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing; since unit R-PIN §1.2 and §5 are todo again, decided)", () => {
+test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.test.js, and the §4 cost todo stays (since unit R-L the M2 open question is gone with the listing; since unit R-PIN §1.2 and §5 are todo again, decided; since unit R-REV §1.4's later revocation too)", () => {
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
-  assert.equal(todos.length, 3, JSON.stringify(todos));
+  assert.equal(todos.length, 4, JSON.stringify(todos));
   assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-PIN)")).length, 2, "§1.2 and §5");
+  assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-REV)")).length, 1, "§1.4's later revocation");
   assert.ok(!todos.some((t) => /2B/.test(t)));
 });
 
@@ -607,92 +597,6 @@ test("MUST-FAIL GAP (F04): a read held to a sha256 never takes a document kept b
   const held = await S.fetchNamedDocument(W, "e".repeat(64));
   assert.equal(held.ok, true);
   assert.equal(gh.rawLog.filter((k) => k.startsWith(at)).length, n + 1, "read again");
-});
-
-test("MUST-FAIL GAP (F11): an order the compare answers 404 is read again on the next request, never kept", async () => {
-  const c = await sealedCase("RN gap order 404");
-  const { R } = await revoke(c);
-  S._internal.clearDocumentCache();
-  gh.forceCompareFailure(1, 404, `${PINS}:${R}...`);
-  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).reason, "order_not_shown");
-  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).code, "signer_since_revoked", "read again, and now shown");
-});
-
-test("MUST-FAIL GAP (F16): the second reads count toward the bound: 150 commits that removed the marker, then a valid one, is more than 200 reads", async () => {
-  const c = await sealedCase("RN gap second reads");
-  const W = KD.serve(gh, revokedDoc());
-  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
-  for (let i = 0; i < 150; i += 1) gh._recordCommit(PINS, mp, "mock: removed", null);
-  gh.seed(PINS, mp, markerFor(W), { keepHistory: true });
-  S._internal.clearDocumentCache();
-  S._internal.clearCommitFiles();
-  const a = await S.sealedRecordReason(storedCase(c.id), revokedDoc());
-  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
-});
-
-test("MUST-FAIL GAP (F19): a candidate that is not JSON is a plain skip: a marker found after it is kept", async () => {
-  const c = await sealedCase("RN gap not json");
-  const W = KD.serve(gh, revokedDoc());
-  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
-  gh.seedText(PINS, mp, "not json");
-  gh.seed(PINS, mp, markerFor(W), { keepHistory: true });
-  S._internal.clearDocumentCache();
-  S._internal.clearCommitFiles();
-  assert.equal((await S.sealedRecordReason(storedCase(c.id), revokedDoc())).code, "signer_since_revoked");
-  const n = gh.commitsLog.filter((p) => p === mp).length;
-  await S.sealedRecordReason(storedCase(c.id), revokedDoc());
-  assert.equal(gh.commitsLog.filter((p) => p === mp).length, n, "kept");
-});
-
-test("MUST-FAIL GAP (F23): a skipped candidate whose second read fails is unreadable, never passed over", async (t) => {
-  const c = await sealedCase("RN gap second read fails");
-  const { R, path: mp } = await revoke(c);
-  gh.addCommit(PINS, mp);
-  S._internal.clearDocumentCache();
-  S._internal.clearCommitFiles();
-  const key = `/${PINS}/${R}/${mp}`;
-  let reads = 0;
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    if (String(url).startsWith("https://raw.githubusercontent.com") && String(url).endsWith(key)) {
-      reads += 1;
-      const status = reads === 1 ? 404 : 503;
-      return { status, ok: false, json: async () => ({}), text: async () => "" };
-    }
-    return viaMock(url, o);
-  };
-  t.after(() => { global.fetch = viaMock; });
-  const a = await S.sealedRecordReason(storedCase(c.id), revokedDoc());
-  assert.equal(reads, 2, "read twice");
-  assert.deepEqual([a.code, a.reason], ["signer_revoked", "revocation_marker_unreadable"]);
-});
-
-test("MUST-FAIL GAP (F26, T02): a walk asks for the page the Link header names, not the one after the last", async (t) => {
-  await sealedCase("RN gap link page");
-  const W = KD.serve(gh, revokedDoc());
-  const mp = S.revocationMarkerPath(CASE_KEY.verifier);
-  gh.seed(PINS, mp, markerFor(W));
-  const asked = { pins: [], doc: [] };
-  const viaMock = global.fetch;
-  global.fetch = async (url, o) => {
-    const u = new URL(String(url));
-    if (!u.pathname.endsWith("/commits")) return viaMock(url, o);
-    const which = u.searchParams.get("path") === mp ? "pins" : u.searchParams.get("path") === S.CASE_KEYS_FILE ? "doc" : null;
-    const page = Number(u.searchParams.get("page") || 1);
-    if (which) asked[which].push(page);
-    const r = await viaMock(url, o);
-    if (!which || page !== 1) return r;
-    const next = new URL(u.href);
-    next.searchParams.set("page", "3");
-    return { ...r, headers: { get: (h) => (h.toLowerCase() === "link" ? `<${next.href}>; rel="next"` : null) } };
-  };
-  t.after(() => { global.fetch = viaMock; });
-  S._internal.clearDocumentCache();
-  S._internal.clearCommitFiles();
-  await S.sealedRecordReason(storedCase((await sealedCase("RN gap link page, read")).id), revokedDoc());
-  assert.deepEqual(asked.pins, [1, 3]);
-  await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: revokedDoc() });
-  assert.deepEqual(asked.doc, [1, 3]);
 });
 
 test("MUST-FAIL GAP (R07): a case the tree shows withdrawn with no registration file is passed over by the withdrawn path, and the run does not fail", async () => {
@@ -716,7 +620,7 @@ test("MUST-FAIL GAP (R18, H14): a role with no registration file on a withdrawn 
   assert.deepEqual([r.status, r.body.error_code], [404, "not_a_party"], JSON.stringify(r.body));
 });
 
-test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a reconcile key the named document lists as retired, does not verify", async () => {
+test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a reconcile key the named document lists as revoked (retired until unit R-REV), does not verify", async () => {
   const at = C.utcSeconds(REVEAL_AT);
   const signer = S.loadReconcileSigner(KEYS, { keyDocument: DOC });
   const checkRecord = require("../lib/_check_record.js");
@@ -724,9 +628,9 @@ test("MUST-FAIL GAP (R32, R36): a receipt carrying a sig_reason, or signed by a 
   const withReason = { ...base, sig_reason: "a reason", sig: null };
   withReason.sig = crypto.sign(null, checkRecord.preimage(withReason), signer.privateKey).toString("base64");
   assert.deepEqual(await S.verifyRefusalReceipt(withReason, DOC), { ok: false, reason: "malformed_field" });
-  const retired = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "retired" }));
-  const underRetired = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder: KD.signedUnder(gh, retired, at) }, signer);
-  assert.deepEqual(await S.verifyRefusalReceipt(underRetired, DOC), { ok: false, reason: "signer_not_active" });
+  const revoked = KD.docWith(KD.entry(CASE_KEY), KD.reconcileEntry(RECEIPT_KEY, { status: "revoked" }));
+  const underRevoked = S.refusalReceipt({ caseId: "c".repeat(64), at, role: "a", commitmentSha256: "d".repeat(64), signedUnder: KD.signedUnder(gh, revoked, at) }, signer);
+  assert.deepEqual(await S.verifyRefusalReceipt(underRevoked, DOC), { ok: false, reason: "signer_not_active" });
 });
 
 test("MUST-FAIL GAP (C03, C04, C06): a refusal names role a or b and carries exactly its opening's two fields; a joint reveal's role is a or b", async () => {

@@ -8,7 +8,7 @@
 // entry is handed to it), and an existing file is refused and left
 // byte-identical.
 // BREAK ARMS: an entry whose key_id or verifier does not match the key is
-// refused by the same checkKeyDocument; the entry listed retired, or another
+// refused by the same checkKeyDocument; the entry listed revoked, or another
 // key's entry, does not load the key; another key resolves another key_id; a
 // signature by another key does not verify under the printed verifier.
 "use strict";
@@ -114,9 +114,9 @@ test("loadCaseSigner given the minted private string resolves the same key_id an
   assert.equal(vk.ok, true);
   assert.equal(crypto.verify(null, msg, vk.publicKey, sig), true);
 
-  // BREAK ARMS: listed retired, or only another key listed, the key is not
+  // BREAK ARMS: listed revoked, or only another key listed, the key is not
   // used; another key is another key id, and its signature does not verify here.
-  assert.equal(S.loadCaseSigner(env, { keyDocument: { ...doc, keys: [{ ...entry, status: "retired" }] } }).code, "key_unpublished");
+  assert.equal(S.loadCaseSigner(env, { keyDocument: { ...doc, keys: [{ ...entry, status: "revoked" }] } }).code, "key_unpublished");
   const otherKey = cp.generateKey("test.example/other");
   const otherEntry = S.keyDocumentEntry({ keyId: otherKey.verifier.split("+").slice(0, 2).join("+"), verifier: otherKey.verifier }, { since: entry.since, note: "other" });
   assert.equal(S.loadCaseSigner(env, { keyDocument: { ...doc, keys: [otherEntry] } }).code, "key_unpublished");

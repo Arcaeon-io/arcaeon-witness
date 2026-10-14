@@ -695,46 +695,6 @@ test("F1, F2: the page states no future pin as fact and says no 'never' of a pin
 });
 
 // =============================================================================
-// F4: under a revoked key, a pin that could not be read is could_not_look
-// =============================================================================
-
-const REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
-
-test("F4: under a revoked key, a pin that could not be read renders the could-not-look page (503), never SEALED RECORD DOES NOT VERIFY; the reference answers 503 could_not_look and the sealer could_not_look", async () => {
-  const c = await withRow("RJ3 F4 revoked");
-  const latest = seqOf(c.id);
-  S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, latest, 1, 503);
-  const answer = await S.sealedRecordReason(storedCase(c.id), REVOKED);
-  assert.deepEqual([answer.code, answer.reason], ["pin_unavailable", "pin_read_failed"]);
-  assert.equal(S.sealHolds(answer), false, "not a yes");
-  S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, latest, 1, 503);
-  const page = await casePage(c.id, { keyDocument: REVOKED });
-  assert.equal(page.status, 503);
-  assert.match(page.html, /Case: COULD NOT LOOK/);
-  assert.doesNotMatch(page.html, /DOES NOT VERIFY/);
-  assert.ok(page.html.includes(esc("whether this case's pin shows that could not be read when this page was read (could_not_look: pin_read_failed)")),
-    page.html.slice(page.html.indexOf("<h2>"), page.html.indexOf("<h2>") + 1200));
-  assert.ok(page.html.includes("This is not a no; try again."));
-  S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, latest, 1, 503);
-  const r = await reference(c, "b", "probe", REVOKED);
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "could_not_look", "pin_read_failed"]);
-  assert.ok(r.body.error.startsWith("could not look; this is not a refusal of the row. Try again."), r.body.error);
-  S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, latest, 1, 503);
-  const sealer = await S.anchorCase(c.id, { now: REVEAL_AT + 3600000, keyDocument: REVOKED });
-  assert.deepEqual([sealer.ok, sealer.code, sealer.reason], [false, "could_not_look", "pin_read_failed"]);
-  // a pin read, that is not a case seal record, is still a no: signer_revoked
-  gh.seed(PINS, latest, { not: "a pin" });
-  S._internal.clearDocumentCache();
-  const no = await S.sealedRecordReason(storedCase(c.id), REVOKED);
-  assert.deepEqual([no.code, no.reason], ["signer_revoked", "pin_unreadable:case_seal_unknown_field"]);
-  assert.match((await casePage(c.id, { keyDocument: REVOKED })).html, /DOES NOT VERIFY/);
-});
-
-// =============================================================================
 // F8: a page kept again moves to the newest place in the eviction order
 // =============================================================================
 
@@ -747,17 +707,6 @@ test("F4: under a revoked key, a pin that could not be read renders the could-no
 // g7 and g8
 // =============================================================================
 
-test("R-L g6: the preview tool reports pin_unavailable as could-not-look, never as a sealed record that does not hold", () => {
-  const TOOL = require("../tools/preview_dry_run.js");
-  const v = TOOL._internal.holdsVerdict({ code: "pin_unavailable", reason: "pin_read_failed", revoked: [] });
-  assert.equal(v.word, "COULD NOT LOOK");
-  assert.equal(v.text, "a key that signed it is revoked in the current key document, and whether its pin shows its case file written before " +
-    "the revocation was recorded could not be read (pin_read_failed)");
-  assert.doesNotMatch(v.text, /does not hold/);
-  assert.equal(TOOL._internal.holdsVerdict({ code: "valid_under_document" }), null, "control: a record that holds");
-  assert.equal(TOOL._internal.holdsVerdict({ code: "signer_revoked", reason: "case_not_pinned" }).word, "BROKEN", "control: a no");
-});
-
 test("R-L g8: the R-J3 change log entry says what the table covers, not 'every pair'", () => {
   const log = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
   const rj3 = log.slice(log.indexOf("## 2026-10-13: Unit R-J3"), log.indexOf("## 2026-10-13: Unit R-J2"));
@@ -769,32 +718,10 @@ test("R-L g8: the R-J3 change log entry says what the table covers, not 'every p
 // left alive, each caught here
 // =============================================================================
 
-test("MUST-FAIL GAP (S04, P38, P42): the could-not-look page under a revoked key names the revoked key and its pin's state and reason", async () => {
-  const c = await withRow("RJ3 gap revoked page");
-  S._internal.clearDocumentCache();
-  gh.forceGetFailure(PINS, seqOf(c.id), 1, 503);
-  const page = await casePage(c.id, { keyDocument: REVOKED });
-  assert.equal(page.status, 503, "fixture: the could-not-look page");
-  assert.ok(page.html.includes(`<tr><th>revoked in the current key document</th><td>the case key <code>${KD.keyIdOf(CASE_KEY)}</code></td></tr>`),
-    page.html.slice(page.html.indexOf("<table"), page.html.indexOf("</table>")));
-  assert.ok(page.html.includes('<tr><th>its pin</th><td>could_not_look <span class="muted">(<code>pin_read_failed</code>)</span></td></tr>'));
-});
-
 // =============================================================================
 // MUST-FAIL GAP (unit R-L): the mutants the pass over the lines R-L changed
 // left alive, each caught here
 // =============================================================================
-
-test("MUST-FAIL GAP (unit R-L, P14): the could-not-look page under a revoked key, for a pin whose commit history is longer than this service reads, does not say try again", async () => {
-  const c = await withRow("RL gap revoked beyond bound");
-  longHistory(seqOf(c.id));
-  S._internal.clearDocumentCache();
-  const page = await casePage(c.id, { keyDocument: REVOKED });
-  assert.equal(page.status, 503, "fixture: the could-not-look page");
-  assert.ok(page.html.includes("pin_commits_beyond_bound"));
-  assert.ok(page.html.includes("This is not a no.</p>"), page.html.slice(page.html.indexOf("This is not a no") - 200, page.html.indexOf("This is not a no") + 40));
-  assert.doesNotMatch(page.html, /This is not a no; try again/);
-});
 
 // =============================================================================
 // UNIT R-L2, M4: an anchor miss is passed over, and a row is refused only on

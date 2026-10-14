@@ -245,17 +245,6 @@ const logFiles = (id) => [...gh.repos.get(PINS).keys()].filter((p) => p.startsWi
 const pinsText = () => [...gh.repos.get(PINS).values()].map((r) => r.content).join("\n");
 const sealerRun = (dt = 60000) => S.anchorPending({ now: REVEAL_AT + 3600000 + dt, keyDocument: DOC, env: KD.deployed(gh, KEYS, DOC) });
 // N2: the sha256 of the digest's 32 bytes, as a salt is kept (lib/_case.js saltSha256)
-// The case key revoked (unit R-I): the current document, its marker, the tool.
-const CASE_REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked", revokedSince: "2026-10-11" }), KD.reconcileEntry(RECEIPT_KEY)));
-const revokedDoc = () => CASE_REVOKED;
-const TOOL = { recordRevocation: (...args) => require("../tools/record_key_revocation.js").recordRevocation(...args) };
-const markerFor = (W) => ({ kind: "key-revocation", v: 1, key_id: KD.keyIdOf(CASE_KEY), key_fingerprint: S.keyFingerprint(CASE_KEY.verifier), revoked_in_commit: W });
-async function revoke() {
-  const W = KD.serve(gh, CASE_REVOKED);
-  const out = await TOOL.recordRevocation({ keyId: KD.keyIdOf(CASE_KEY), currentDocument: CASE_REVOKED, write: true });
-  assert.equal(out.ok, true, JSON.stringify(out));
-  return { W, R: out.commit, path: out.path };
-}
 
 // =============================================================================
 // UNIT R-N4
