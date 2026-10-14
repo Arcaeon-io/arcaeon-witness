@@ -245,7 +245,9 @@ const fileSha256 = (rpath) => sha(Buffer.from(fileText(rpath), "utf8"));
 // the json-c14n:v1 bytes of the fields a party supplies, computed here.
 const PARTY = ["case_id", "role", "commitment_sha256", "verifier", "key_id", "sig"];
 const claimOf = (rec) => sha(canonicalBytes(Object.fromEntries(PARTY.map((k) => [k, rec[k]]))));
-const projectionOf = (rpath) => ({ ...C.commitmentEntry(gh.read(PINS, rpath)), registration_sha256: fileSha256(rpath), claim_sha256: claimOf(gh.read(PINS, rpath)) });
+// since unit R-AB the entry carries the file's verifier's key_fp
+const projectionOf = (rpath) => ({ ...C.commitmentEntry(gh.read(PINS, rpath)), key_fp: C.keyFpOf(gh.read(PINS, rpath).verifier),
+  registration_sha256: fileSha256(rpath), claim_sha256: claimOf(gh.read(PINS, rpath)) });
 // How many writes of the case root put role `role` into it (null before, an
 // entry after).
 function projectionsOf(id, role) {

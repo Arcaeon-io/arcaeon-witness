@@ -519,6 +519,8 @@ test("TEST 3: stamp fields come from the fetched stamp record; a caller's stampe
   assert.deepEqual(storedCase(id).commitments.a, {
     commitment_sha256: a.commitment_sha256, registered_at: "2026-10-10T08:00:00Z", stamp_commit: history[0].sha, stamped_at: STAMPED,
     key_id: REG.keyIdOf(REG.KEYS.a),
+    // since unit R-AB: the key's public key, from the file's verifier
+    key_fp: C.keyFpOf(REG.KEYS.a.verifier),
     // since unit R-L4 (THE PROJECTION): the sha256 of the file's bytes
     registration_sha256: sha(gh._repoMap(PINS).get(REG.pathOf(gh, id, "a")).content),
     // since unit R-L4c (c4, THE CLAIM): the claim that names the file's path
@@ -601,7 +603,7 @@ test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, 
   const opened = C.validateOpening(opening({ scope_digest: sha("verdict case") })).opening;
   const vid = C.deriveCaseId(opened);
   const entry = (h, r) => ({ commitment_sha256: h, registered_at: "2026-10-10T07:50:00Z", stamp_commit: "5".repeat(40), stamped_at: "2026-10-10T07:49:00.000Z",
-    key_id: REG.keyIdOf(REG.KEYS[r]), registration_sha256: sha(`registration file ${r}`), claim_sha256: sha(`claim ${r}`) });
+    key_id: REG.keyIdOf(REG.KEYS[r]), key_fp: C.keyFpOf(REG.KEYS[r].verifier), registration_sha256: sha(`registration file ${r}`), claim_sha256: sha(`claim ${r}`) });
   const reveal = { tape_sha256: sha("t"), salt_sha256: sha("s"), revealed_at: "2026-10-10T08:10:00Z" };
   const verdictCase = { ...C.newCase(opened, vid), commitments: { a: entry(sha("1"), "a"), b: entry(sha("2"), "b") }, reveals: { a: reveal, b: reveal },
     verdict: { kind: "arcaeon-reconcile-receipt", sig: "c2ln" }, status: "VERDICT", ...SIGNED_PLANT };
@@ -825,7 +827,7 @@ test("TEST 3, ITEM 1B, TWO WRITES (since unit R-L4, THE PROJECTION): role b's fi
   assert.equal(again._status, 200, JSON.stringify(again._body));
   assert.deepEqual([again._body.existing, again._body.projected, again._body.status], [true, ["b"], "COMMITTED"]);
   const fileText = gh._repoMap(PINS).get(REG.pathOf(gh, id, "b")).content;
-  assert.deepEqual(storedCase(id).commitments.b, { ...C.commitmentEntry(fileB), registration_sha256: sha(fileText), claim_sha256: C.claimSha256(fileB) });
+  assert.deepEqual(storedCase(id).commitments.b, { ...C.commitmentEntry(fileB), key_fp: C.keyFpOf(fileB.verifier), registration_sha256: sha(fileText), claim_sha256: C.claimSha256(fileB) });
   assert.deepEqual(C.validateCase(storedCase(id)), { ok: true });
 });
 
@@ -1149,7 +1151,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER; since unit R-L4c, THE TIE RULE): a registrat
   const k = storedCase(id);
   const projected = (r) => {
     const p = REG.pathOf(gh, id, r);
-    return { ...C.commitmentEntry(gh.read(PINS, p)), registration_sha256: sha(gh._repoMap(PINS).get(p).content), claim_sha256: C.claimSha256(gh.read(PINS, p)) };
+    return { ...C.commitmentEntry(gh.read(PINS, p)), key_fp: C.keyFpOf(gh.read(PINS, p).verifier), registration_sha256: sha(gh._repoMap(PINS).get(p).content),
+      claim_sha256: C.claimSha256(gh.read(PINS, p)) };
   };
   assert.deepEqual(k.commitments.a, projected("a"));
   assert.deepEqual(k.commitments.b, projected("b"));
@@ -1193,8 +1196,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER; since unit R-L4, THE PROJECTION): the same r
   const k = storedCase(id);
   assert.equal(k.status, "COMMITTED");
   const bPath = REG.pathOf(gh, id, "b");
-  assert.deepEqual(k.commitments.b, { ...C.commitmentEntry(gh.read(PINS, bPath)), registration_sha256: sha(gh._repoMap(PINS).get(bPath).content),
-    claim_sha256: C.claimSha256(gh.read(PINS, bPath)) });
+  assert.deepEqual(k.commitments.b, { ...C.commitmentEntry(gh.read(PINS, bPath)), key_fp: C.keyFpOf(gh.read(PINS, bPath).verifier),
+    registration_sha256: sha(gh._repoMap(PINS).get(bPath).content), claim_sha256: C.claimSha256(gh.read(PINS, bPath)) });
   assert.deepEqual(C.validateCase(k), { ok: true });
 
   // replayed again, by either party, it confirms and writes nothing
@@ -1222,7 +1225,8 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
   const cpath = C.casePath(id);
   // since unit R-L5 the record keeps the projection: b's, which b proved
   const bEntry = { commitment_sha256: sha("b's commitment"), registered_at: "2026-10-10T07:50:00Z", stamp_commit: "5".repeat(40),
-    stamped_at: "2026-10-10T07:49:00.000Z", key_id: REG.keyIdOf(REG.KEYS.b), registration_sha256: sha("registration file b"), claim_sha256: sha("claim b") };
+    stamped_at: "2026-10-10T07:49:00.000Z", key_id: REG.keyIdOf(REG.KEYS.b), key_fp: C.keyFpOf(REG.KEYS.b.verifier), registration_sha256: sha("registration file b"),
+    claim_sha256: sha("claim b") };
   const withdrawn = { v: 1, case_id: id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: "2026-10-10T07:30:00Z",
     commitments: { a: null, b: bEntry },
     withdrawal: { by_role: "b", at: "2026-10-10T07:59:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), ...SIGNED_PLANT };
@@ -1316,7 +1320,8 @@ test("SCHEMA: an unknown field, an altered limit, a stored EXPIRED, a wrong id, 
   // a redacted withdrawal that still carries a label is not the redacted form;
   // since unit R-L5 it keeps the projection, and one without it is refused
   const aEntry = { commitment_sha256: sha("a's commitment"), registered_at: "2026-10-10T07:35:00Z", stamp_commit: "5".repeat(40),
-    stamped_at: "2026-10-10T07:34:00.000Z", key_id: REG.keyIdOf(REG.KEYS.a), registration_sha256: sha("registration file a"), claim_sha256: sha("claim a") };
+    stamped_at: "2026-10-10T07:34:00.000Z", key_id: REG.keyIdOf(REG.KEYS.a), key_fp: C.keyFpOf(REG.KEYS.a.verifier), registration_sha256: sha("registration file a"),
+    claim_sha256: sha("claim a") };
   const withdrawn = { v: 1, case_id: good.case_id, protocol_version: "case/1", status: "WITHDRAWN", opened_at: good.opened_at,
     commitments: { a: aEntry, b: null },
     withdrawal: { by_role: "a", at: "2026-10-10T07:40:00Z", salt_sha256: sha("s") }, limits: C.LIMITS.slice(), ...SIGNED_PLANT };

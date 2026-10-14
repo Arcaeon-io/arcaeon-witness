@@ -15,9 +15,16 @@
 // FIXED SINCE, each in its own commit, its test's `todo` removed and its
 // named assertion kept, with tests of the fix beside it:
 //   - GPT-5.6 §2A, a one-key bilateral case: red-team fix A, ONE KEY PER
-//     ROLE (lib/_case.js). Registration is signed by a registration key, the
-//     two roles take two distinct key ids (409 same_key_both_roles), and a
-//     case whose two commitments share one is single_party, never sealed.
+//     ROLE (lib/_case.js). NARROWED (unit R-AB): what the fix removes is one
+//     PUBLIC KEY in both roles, told apart by key_fp, never by key id.
+//     Registration is signed by a registration key; one public key in both
+//     roles, under any name, is 409 same_key_both_roles (codes only); a
+//     stored case whose two entries share a key_fp is single_party, never
+//     sealed, and its page says one key signs both roles. Two keys show two
+//     keys and nothing about who holds them (one holder can make a second
+//     key), so the claim is narrowed to the one-key case, not refuted. Until
+//     unit R-AB the fix compared key ids, which one key under two names
+//     passed.
 //   - GPT-5.6 §1.4 and §3.3, three claims (a later revocation, a later
 //     document listing a key, no document recorded): Design I. A sealed
 //     case records signed_under {document_sha256, document_commit} (since
@@ -427,11 +434,12 @@ test('GPT-5.6 §1.5 / §4 / §6.5 (and Gemini §4, unauthenticated consumption):
 // GPT-5.6, section 2: what an adversarial role can do
 // =============================================================================
 
-test('GPT-5.6 §2A: "Create a seemingly bilateral case using an honest party\'s label": one key holder opens, registers both roles and reveals', async () => {
-  // FIXED (red-team fix A, lib/_case.js ONE KEY PER ROLE): role b's
-  // registration under the key id role a registered with is refused 409
-  // same_key_both_roles, so the case never reaches COMMITTED and the reveal
-  // seals nothing.
+test('GPT-5.6 §2A (NARROWED by unit R-AB to one public key): "Create a seemingly bilateral case using an honest party\'s label": one key holder opens, registers both roles and reveals', async () => {
+  // FIXED, NARROWED (red-team fix A, lib/_case.js ONE KEY PER ROLE; unit
+  // R-AB): role b's registration under the public key role a registered
+  // with, under any name, is refused 409 same_key_both_roles, so the case
+  // never reaches COMMITTED and the reveal seals nothing. A second key the
+  // same holder makes is two keys (test/case_rab.test.js).
   const id = await openCase({ scope_digest: sha("2A"), party_a: ATTACKER, party_b: HONEST });
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
@@ -454,11 +462,12 @@ test('GPT-5.6 §2A: "Create a seemingly bilateral case using an honest party\'s 
 
 // -----------------------------------------------------------------------------
 // Red-team fix A: ONE KEY PER ROLE (lib/_case.js). The two roles of a case are
-// registered by two distinct key ids; a case whose two commitments share one
-// never reaches sealed.
+// registered by two distinct public keys, told apart by key_fp (since unit
+// R-AB; key ids until then); a case whose two entries share one never reaches
+// sealed.
 // -----------------------------------------------------------------------------
 
-test("FIX A: the refusal is symmetric and writes nothing: role a under the key id role b registered with is 409 same_key_both_roles too", async () => {
+test("FIX A (by public key since unit R-AB): the refusal is symmetric and writes nothing: role a under the public key role b registered with is 409 same_key_both_roles too, codes only", async () => {
   const id = await openCase({ scope_digest: sha("A sym"), party_a: ATTACKER, party_b: HONEST });
   const a = party(id, "a", AGENT_TAPE);
   const b = party(id, "b", TOOL_TAPE);
@@ -469,7 +478,8 @@ test("FIX A: the refusal is symmetric and writes nothing: role a under the key i
   assert.equal(r._status, 409, JSON.stringify(r._body));
   assert.equal(r._body.error_code, "same_key_both_roles");
   assert.equal(r._body.role, "a");
-  assert.equal(r._body.key_id, REG.keyIdOf(REG.KEYS.b));
+  // codes only since unit R-AB: the body names no key
+  assert.deepEqual(r._body, { ok: false, error_code: "same_key_both_roles", case_id: id, role: "a", other_role: "b" });
   assert.equal(gh.putLog.length, writes, "nothing written");
   // the same role under its own key registers
   const ok = await commit(id, a, NOW, REG.KEYS.a);
@@ -477,7 +487,7 @@ test("FIX A: the refusal is symmetric and writes nothing: role a under the key i
   assert.equal(ok._body.status, "COMMITTED");
 });
 
-test("FIX A: two registrations under two distinct key ids still seal, and the page shows the verdict naming both parties", async () => {
+test("FIX A: two registrations under two distinct public keys still seal, and the page shows the verdict naming both parties", async () => {
   const { id } = await sealedCase({ scope_digest: sha("A two keys"), party_a: ATTACKER, party_b: HONEST });
   const k = storedCase(id);
   assert.equal(k.status, "VERDICT");
@@ -536,15 +546,15 @@ async function racedSingleParty(scope) {
   return { id, a, b };
 }
 
-test("FIX A: a case whose two commitments share a key id never reaches sealed: the joint reveal is 409 single_party and writes nothing", async () => {
+test("FIX A: a case whose two entries share a public key (key_fp; since unit R-AB) never reaches sealed: the joint reveal is 409 single_party, codes only, and writes nothing", async () => {
   const { id, a, b } = await racedSingleParty("A raced reveal");
   const before = storedCase(id);
   const writes = gh.putLog.length;
   const r = await reveal(revealBody(id, a, b));
   assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 300));
   assert.equal(r.body.error_code, "single_party");
-  assert.equal(r.body.key_id, before.commitments.a.key_id);
-  assert.equal(r.body.verdict, undefined, "no verdict");
+  // codes only since unit R-AB: no key id named as the one key
+  assert.deepEqual(r.body, { ok: false, error_code: "single_party", case_id: id });
   assert.equal(gh.putLog.length, writes, "nothing written");
   assert.deepEqual(storedCase(id), before);
 });
@@ -560,26 +570,28 @@ test("FIX A: the sealer reports such a case not_sealed: single_party, and pins n
   assert.equal(gh.has(PINS, S.pinPaths(id).seq), false);
 });
 
-test("FIX A: the case page shows such a case as single_party and names no second label", async () => {
+test("FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)", async () => {
   const { id } = await racedSingleParty("A raced page");
   const page = await casePage(id);
   assert.equal(page.status, 200);
   assert.match(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
-  assert.ok(page.html.includes("single_party"));
-  assert.ok(page.html.includes(REG.keyIdOf(REG.KEYS.a)), "the page names the one key id");
+  assert.ok(page.html.includes("<code>single_party</code>"));
+  assert.ok(page.html.includes(CP.SINGLE_PARTY_SENTENCE));
+  assert.equal(page.html.includes(REG.keyIdOf(REG.KEYS.a)), false, "no key id: one key under two names has two");
   assert.equal(page.html.includes("honest-party-account"), false, "no second label");
   assert.equal(page.html.includes("attacker-account"), false, "no label at all: the labels are the opener's text");
   assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
   assert.equal(page.html.includes("<h2>Parties</h2>"), false);
 });
 
-// DECISION ON THE A + B REPORT: two key ids prove two keys, not two holders,
-// so the page says "two keys" and never "two parties", on the single-party
-// page and on a sealed one.
-test("A + B DECISION: the page says two keys, never two parties", async () => {
+// DECISION ON THE A + B REPORT: two keys prove two keys, not two holders.
+// NARROWED by unit R-AB: the pages make no claim about who holds a key; the
+// single-party page says one key signs both roles, and the sealed page says
+// nothing of key identity (test/case_rab.test.js, R-AB 7).
+test("A + B DECISION (narrowed by unit R-AB): no page says two parties; the single-party page says one key signs both roles", async () => {
   const single = await racedSingleParty("A page in words");
   const one = await casePage(single.id);
-  assert.match(one.html, /not shown as a case between two keys/);
+  assert.ok(one.html.includes(CP.SINGLE_PARTY_SENTENCE));
   assert.equal(/two parties/i.test(one.html), false, "the single-party page");
   const sealed = await sealedCase({ scope_digest: sha("A sealed page in words") });
   const two = await casePage(sealed.id);
@@ -587,10 +599,10 @@ test("A + B DECISION: the page says two keys, never two parties", async () => {
   assert.equal(/two parties/i.test(two.html), false, "the sealed page");
 });
 
-test("FIX A: a VERDICT whose two commitments share a key id (signed by the case key) is still not sealed: page, sealed check, sealer and reference all refuse it", async () => {
+test("FIX A: a VERDICT whose two entries share a public key (key_fp; since unit R-AB) (signed by the case key) is still not sealed: page, sealed check, sealer and reference all refuse it", async () => {
   const { id, a } = await sealedCase({ scope_digest: sha("A forged verdict"), party_a: ATTACKER, party_b: HONEST }, { pinFails: true });
   const k = storedCase(id);
-  const forged = S.signCase({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_id: k.commitments.a.key_id } } },
+  const forged = S.signCase({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_fp: k.commitments.a.key_fp } } },
     S.loadCaseSigner(SIGNED, { keyDocument: KEYS_DOC }));
   assert.deepEqual(C.validateCase(forged), { ok: true }, "fixture: the schema reads it");
   assert.notEqual(forged.sig, null, "fixture: signed by the published case key");

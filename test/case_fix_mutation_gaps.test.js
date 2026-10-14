@@ -400,16 +400,19 @@ test("S05 (anchorCase, the order): a single-party case past its deadline is term
 // lib/_case_page.js
 // =============================================================================
 
-test("P03, P04 (the single-party page past the deadline): still SINGLE PARTY, never the EXPIRED page with its labels, and it says the deadline passed", async () => {
+// Since unit R-AB the single-party page is the one-sentence shape: it states
+// no status and no time, past the deadline or before it.
+test("P03, P04 (the single-party page past the deadline; since unit R-AB the one-sentence page): still SINGLE PARTY, never the EXPIRED page with its labels, the same page before and after the deadline", async () => {
   const { id } = await racedSingleParty("P04");
   const p = await casePage(id, PAST_DEADLINE);
   assert.equal(p.status, 200);
   assert.match(p.html, /<h1>Case: SINGLE PARTY<\/h1>/);
-  assert.ok(p.html.includes("stored as COMMITTED, past its deadline"));
+  assert.ok(p.html.includes(CP.SINGLE_PARTY_SENTENCE));
+  assert.doesNotMatch(p.html, /EXPIRED/);
   assert.equal(p.html.includes("honest-party-account"), false);
   assert.equal(p.html.includes("attacker-account"), false);
   const before = await casePage(id, REVEAL_AT);
-  assert.ok(before.html.includes("stored as COMMITTED, not shown"), "before the deadline: the stored status alone");
+  assert.equal(before.html, p.html, "the page states no time");
 });
 
 // =============================================================================

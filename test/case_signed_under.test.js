@@ -434,7 +434,7 @@ test("A LATER DOCUMENT NEVER MAKES A FORMERLY UNVERIFIABLE STORED SIGNATURE VERI
   }
 });
 
-test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, the reference refuses 409 with the reason, and once it can be fetched the next run pins", async () => {
+test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, the reference refuses 503 with the reason (since unit R-AB, codes only), and once it can be fetched the next run pins", async () => {
   const { id, a, k } = await sealedCase("unavailable", { pinFails: true });
   S._internal.clearDocumentCache(); // the reveal kept its own matching read: a fresh reader
   const commit = k.signed_under.document_commit;
@@ -457,9 +457,10 @@ test("DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, networ
   // (since unit R-SIG the reference confirms its own document first: a
   // deployment carrying another one, so the seal's is the one not read)
   const ref = await referenceAs(id, a, { doc: LATER_DOC });
-  assert.equal(ref.status, 409, JSON.stringify(ref.body));
-  assert.equal(ref.body.error_code, "document_unavailable");
-  assert.equal(ref.body.reason, "http_404");
+  // since unit R-AB (the architect's ruling): a could-not-look is the
+  // retry-safe 503, codes only, never a 409
+  assert.equal(ref.status, 503, JSON.stringify(ref.body));
+  assert.deepEqual(ref.body, { ok: false, error_code: "document_unavailable", case_id: id, reason: "http_404" });
   // the page: could not look, 503, neither the verdict nor DOES NOT VERIFY
   const res = makeRes();
   await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": "10.97.0.1" } }), res,
@@ -599,13 +600,15 @@ test("K06 (checkSignedUnder): a signed_under missing a field is missing_field, n
   }
 });
 
-test("H09 (reference, the words for document_unavailable): the refusal says the document could not be read, and that this is not a no", async () => {
+// Since unit R-AB (the architect's ruling) the reference answers a
+// could-not-look 503 with codes only: no sentence to read as a no.
+test("H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence", async () => {
   const { id, a, k } = await sealedCase("H09");
   S._internal.clearDocumentCache(); // the reveal kept its own matching read: a fresh reader
   gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@${k.signed_under.document_commit}:${S.CASE_KEYS_FILE}`);
   const ref = await referenceAs(id, a, { doc: LATER_DOC });
-  assert.equal(ref.status, 409);
-  assert.match(ref.body.error, /the key document it names could not be read on this request, which is not a no/);
+  assert.equal(ref.status, 503);
+  assert.deepEqual([ref.body.error_code, ref.body.reason, Object.prototype.hasOwnProperty.call(ref.body, "error")], ["document_unavailable", "http_404", false]);
 });
 
 test("S21, S24 (the sealed check, each key in its role): a receipt key the named document lists only as a case key, or a case key it lists only as a reconcile key, does not count", async () => {

@@ -360,15 +360,18 @@ test("MUST-FAIL GAP (S12, P06): a reason the words do not know claims no chain a
   assert.equal(CP._internal.mismatchWords("case_served_differs", "case file"), "the case file there is not shown to be this case file in canonical form (json-c14n:v1)");
 });
 
-test("MUST-FAIL GAP (P31): a single-party page of an unsealed case says it is past its deadline once the deadline has passed", async () => {
+// Since unit R-AB the single-party page states no time (the one-sentence
+// shape), and the case is read single party by key_fp.
+test("MUST-FAIL GAP (P31; since unit R-AB): a single-party page of an unsealed case is the same page before and after its deadline, and never the EXPIRED page", async () => {
   const c = await committedCase("RJ2 gap single party");
   const k = storedCase(c.id);
-  gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_id: k.commitments.a.key_id } } }, { keepHistory: true });
-  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: one key id in both commitments");
+  gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_fp: k.commitments.a.key_fp } } }, { keepHistory: true });
+  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: one key_fp in both entries");
   const dl = Date.parse(DEADLINE);
   const before = await casePage(c.id, { now: dl - 2000 });
   assert.equal(before.status, 200, before.html.slice(0, 200));
-  assert.doesNotMatch(before.html, /past its deadline/);
   const after = await casePage(c.id, { now: dl + 1000 });
-  assert.match(after.html, /past its deadline/);
+  assert.equal(after.html, before.html);
+  assert.match(after.html, /<h1>Case: SINGLE PARTY<\/h1>/);
+  assert.doesNotMatch(after.html, /EXPIRED|past its deadline/);
 });

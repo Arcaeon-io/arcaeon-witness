@@ -257,7 +257,8 @@ const claimOf = (rec) => sha(canonicalBytes(Object.fromEntries(PARTY.map((k) => 
 // entry, the sha256 of the file's bytes, and (since c4) the file's claim.
 function projectionOf(rpath) {
   const rec = gh.read(PINS, rpath);
-  const e = { ...C.commitmentEntry(rec), registration_sha256: fileSha256(rpath) };
+  // since unit R-AB the entry carries the file's verifier's key_fp
+  const e = { ...C.commitmentEntry(rec), key_fp: C.keyFpOf(rec.verifier), registration_sha256: fileSha256(rpath) };
   return C.CASE_ENTRY_FIELDS.includes("claim_sha256") ? { ...e, claim_sha256: claimOf(rec) } : e;
 }
 // How many writes of the case root put role `role` into it.
@@ -624,7 +625,9 @@ test("MUST-FAIL GAP (S04, S05): a projected file is held to being the registrati
   assert.deepEqual([sp.inconsistent, sp.role, sp.reason], [true, "b", "projection_differs_from_file"]);
 });
 
-test("MUST-FAIL GAP (P06): the single-party page links each registration file at its claim's path", async () => {
+// Since unit R-AB the single-party page links the case file and its history
+// only (the one-sentence shape): no registration file.
+test("MUST-FAIL GAP (P06; since unit R-AB): the single-party page links the case file and its history, and no registration file", async () => {
   const id = await openCase("RL4c gap single party");
   const a = party(id, "a", AGENT_TAPE);
   await register(id, a);
@@ -638,7 +641,8 @@ test("MUST-FAIL GAP (P06): the single-party page links each registration file at
   gh.seed(PINS, C.casePath(id), C.applyRegistration(storedCase(id), rec, fileSha256(bpath)), { keepHistory: true });
   assert.equal(C.singleParty(storedCase(id)), true, "fixture: single party");
   const html = (await casePage(id, NOW + 5000)).html;
-  for (const p of [regFiles(id, "a")[0], bpath]) assert.ok(html.includes(`https://github.com/${PINS}/commits/main/${p}`), p);
+  assert.ok(html.includes(`https://github.com/${PINS}/commits/main/${C.casePath(id)}`), "the case file's history");
+  for (const p of [regFiles(id, "a")[0], bpath]) assert.equal(html.includes(p), false, p);
 });
 
 // =============================================================================
