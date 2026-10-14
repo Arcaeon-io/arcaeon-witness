@@ -353,10 +353,10 @@ ${brandMark.FAVICON_LINK}
   </div>
 
   <h2>Case seals</h2>
-  <p class="muted">A sealed case (the case protocol) is pinned by its own pin under <code>pins/case/&lt;case_id&gt;/</code>, not by a namespace, so it has its own row. This row is counted from the repository tree alone and reads no case file. <em>Pinned</em> means the case has its pin file, by path alone; whether the pin holds the case's chain at the commit that wrote it, the case's own page says. A case with no pin file is not counted as anything here: the tree alone cannot say whether it is open, committed, sealed and waiting for the operator's sealer run, or past its deadline. No registration file is counted. <em>Withdrawn</em> cases carry the withdrawal marker. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <p class="muted">A case of the case protocol is not a namespace, so cases have their own row. This row is counted from the repository tree alone and reads no case file. <em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists; whether a pin holds its case, only the case's own page reads. A case with no pin file is not counted as anything here: the tree alone cannot say whether it is open, committed, sealed and waiting for the operator's sealer run, or past its deadline. No registration file is counted. <em>withdrawal markers</em> counts the case files whose withdrawal marker the tree lists. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
   <div class="panel scroll">
     <table>
-      <thead><tr><th>where</th><th>case files</th><th>pinned</th><th>withdrawn</th></tr></thead>
+      <thead><tr><th>where</th><th>case files</th><th>pin files</th><th>withdrawal markers</th></tr></thead>
       <tbody>${caseRowHtml}</tbody>
     </table>
     ${casePartialHtml}

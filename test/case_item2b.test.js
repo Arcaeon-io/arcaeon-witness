@@ -470,7 +470,7 @@ test("STATUS: a store holding a sealed case does not degrade /status; pins/case 
   const page = String(html._body);
   assert.equal(html._status, 200);
   assert.match(page, /<h2>Case seals<\/h2>/);
-  assert.ok(page.includes("not as a log-tree leaf"), "the anchor sentence is on the page");
+  assert.ok(page.includes("not a log-tree leaf"), "the pin sentence is on the page");
   assert.match(page, /badge-green" style="font-size:\.95rem">OK</);
   const json = makeRes();
   await statusHandler(makeReq({ method: "GET", query: { format: "json" }, headers: { "x-forwarded-for": freshIp() } }), json);
@@ -537,10 +537,11 @@ test("LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1
   // the sentence, in the reveal's answer and in lib/_case_seal.js's header
   assert.equal(r.body.anchor_note, S.ANCHOR_NOTE);
   // unit R-PIN: pinned by the commit that writes its one pin, and nothing of anchoring
-  assert.match(S.ANCHOR_NOTE, /pinned by the pins-repository commit that writes its one pin, pins\/case\/<case_id>\/00000001\.json\. It is pinned as its own record, not as a log-tree leaf/);
+  // unit R-PINf (f2): where a sealed case's pin is, when it has one
+  assert.match(S.ANCHOR_NOTE, /A sealed case's pin, when it has one, is pins\/case\/<case_id>\/00000001\.json, written once by this service\. It is its own record, not a log-tree leaf/);
   assert.doesNotMatch(S.ANCHOR_NOTE, /anchor/);
   const header = fs.readFileSync(path.join(ROOT, "lib", "_case_seal.js"), "utf-8").replace(/\r\n/g, "\n").split("\n").filter((l) => l.startsWith("//")).map((l) => l.replace(/^\/\/ ?/, "")).join(" ");
-  assert.match(header.replace(/\s+/g, " "), /a case is pinned by the pins-repository commit that writes its pin, as its own record, not as a log-tree leaf/);
+  assert.match(header.replace(/\s+/g, " "), /a sealed case's pin, when it has one, is its own record, not a log-tree leaf/);
 });
 
 // =============================================================================

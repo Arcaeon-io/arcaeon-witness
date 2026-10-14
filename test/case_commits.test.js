@@ -592,7 +592,7 @@ test("C01, C02 (the pin holds seq 1): the pin read at its commit with another se
   assert.equal(gh.read(PINS, op.seq).seq, 2, "never written over");
 });
 
-test("S01, S02 (the status page's case row): the column says pinned and holds the pinned count", async () => {
+test("S01, S02 (the status page's case row): the column counts pin files (since unit R-PINf: says pin files) and holds the pinned count", async () => {
   const statusHandler = require("../api/status.js");
   await sealedCase("J status one");
   await sealedCase("J status two");
@@ -600,10 +600,10 @@ test("S01, S02 (the status page's case row): the column says pinned and holds th
   const res = makeRes();
   await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": "10.98.2.1" } }), res);
   const page = String(res._body);
-  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pinned<\/th><th>withdrawn<\/th>/);
+  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pin files<\/th><th>withdrawal markers<\/th>/);
   const row = /<td><code>pins\/case\/<\/code>[\s\S]*?<\/tr>/.exec(page);
   assert.ok(row, "the case row");
   assert.deepEqual([...row[0].matchAll(/<td>(\d+)<\/td>/g)].map((x) => Number(x[1])), [3, 2, 0]);
   // (since unit R-L4 no registration file is counted; since unit R-PIN no pending count)
-  assert.match(page, /<em>Pinned<\/em> means the case has its pin file, by path alone/);
+  assert.match(page, /<em>pin files<\/em> counts the case files whose pin file, <code>pins\/case\/&lt;case_id&gt;\/00000001\.json<\/code>, the tree lists/);
 });

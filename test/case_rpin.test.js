@@ -446,6 +446,94 @@ test("MUST-FAIL GAP (A02): a tree that cannot be read fills the status page's ca
   const res = makeRes();
   await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": nextIp() } }), res);
   const page = String(res._body);
-  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pinned<\/th><th>withdrawn<\/th>/);
+  assert.match(page, /<th>where<\/th><th>case files<\/th><th>pin files<\/th><th>withdrawal markers<\/th>/);
   assert.match(page, /<td><code>pins\/case\/<\/code><\/td><td colspan="3">case anchors not counted: /);
+});
+
+// =============================================================================
+// UNIT R-PINf: two follow-ups from R-PIN's reader
+// =============================================================================
+
+test("R-PINf f1: a pin create the store answers 409 on every attempt, with no file at the path on the re-read, is commit_unrecorded, never conflict: the reveal answers 201 with pin commit_unrecorded, and no pin file exists", async () => {
+  const attempts = store._putRetry.maxAttempts;
+  const c = await committedCase("RPINf f1 reveal");
+  gh.forceConflict(PINS, pinFile(c.id), attempts);
+  const r = await reveal(c);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual([r.body.pin, r.body.pin_commit], ["commit_unrecorded", null]);
+  assert.deepEqual(pinTree(c.id), [], "no pin file");
+  // pinChain itself, on a sealed case its reveal did not pin
+  const u = await sealedUnpinned("RPINf f1 pinChain");
+  gh.forceConflict(PINS, pinFile(u.id), attempts);
+  assert.deepEqual(await S.pinChain(u.id, S.caseChain(storedCase(u.id)), REVEAL_AT, gh.commitsFor(PINS, C.casePath(u.id))[0].sha),
+    { pin: "commit_unrecorded", reason: "store_conflict" });
+  assert.deepEqual(pinTree(u.id), []);
+});
+
+test("R-PINf f2: the fixed sentence is printed once, directly under the pin line, in the pin's own cell", async () => {
+  const c = await sealedCase("RPINf f2 sentence");
+  const html = (await casePage(c.id)).html;
+  const cell = /<tr><th>pin<\/th><td>([\s\S]*?)<\/td><\/tr>/.exec(html);
+  assert.ok(cell, "the pin row");
+  assert.match(cell[1], /^Pinned at commit <a [^>]+>[0-9a-f]{12}<\/a> \(the pins repository&#39;s commit time, [^)]+\)<br><span class="muted">/);
+  assert.equal(pagePlain(cell[1]).includes(OTS), true, pagePlain(cell[1]));
+  assert.equal(pagePlain(html).split(OTS).length - 1, 1, "printed once");
+});
+
+test("R-PINf f2: a pin found already written is held as the page holds it: a pin naming another commit for the case file is pin_commit_mismatch, never pinned; one naming the right commit is pinned, naming the commit that wrote it", async () => {
+  const u = await sealedUnpinned("RPINf f2 found");
+  const chain = S.caseChain(storedCase(u.id));
+  const opened = gh.commitsFor(PINS, C.casePath(u.id)).slice(-1)[0].sha; // the case file as opened
+  gh.seed(PINS, pinFile(u.id), S._internal.pinRecord(u.id, chain, REVEAL_AT, opened));
+  const p = await S.pinChain(u.id, chain, REVEAL_AT + 60000, gh.commitsFor(PINS, C.casePath(u.id))[0].sha);
+  assert.deepEqual([p.pin, p.reason, p.case_commit], ["pin_commit_mismatch", "case_at_commit_differs", opened], JSON.stringify(p)); // MUST-FAIL GAP F06
+  const run = await S.anchorCase(u.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual([run.ok, run.code, run.reason], [false, "pin_commit_mismatch", "case_at_commit_differs"]);
+  // the right commit
+  const sealedAt = gh.commitsFor(PINS, C.casePath(u.id))[0].sha;
+  gh.seed(PINS, pinFile(u.id), S._internal.pinRecord(u.id, chain, REVEAL_AT, sealedAt));
+  const ok = await S.pinChain(u.id, chain, REVEAL_AT + 120000, sealedAt);
+  assert.deepEqual([ok.pin, ok.existing, ok.written, ok.pin_commit], ["pinned", true, false, gh.commitsFor(PINS, pinFile(u.id)).slice(-1)[0].sha]);
+});
+
+test("R-PINf f2: the status page and the README claim no more than the tree shows: pin files and withdrawal markers are counted by path, and a sealed case has at most one pin", async () => {
+  const statusHandler = require("../api/status.js");
+  const res = makeRes();
+  await statusHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": nextIp() } }), res);
+  const page = String(res._body).replace(/\s+/g, " ");
+  assert.ok(page.includes("<thead><tr><th>where</th><th>case files</th><th>pin files</th><th>withdrawal markers</th></tr></thead>"), "the column heads");
+  assert.ok(page.includes("<em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists; " +
+    "whether a pin holds its case, only the case's own page reads."), "pin files");
+  assert.ok(page.includes("<em>withdrawal markers</em> counts the case files whose withdrawal marker the tree lists."), "markers");
+  for (const said of ["is pinned by its own pin", "<em>Pinned</em> means", "cases carry the withdrawal marker"]) assert.equal(page.includes(said), false, said);
+  assert.equal(S.ANCHOR_NOTE, "A sealed case's pin, when it has one, is pins/case/<case_id>/00000001.json, written once by this service. It is its own " +
+    "record, not a log-tree leaf: the witness log's v1 leaves are pins/<namespace>/<seq>.json one level deep.");
+  const readme = README();
+  assert.ok(readme.includes("A sealed case has at most one pin, `pins/case/<case_id>/00000001.json`, written once"), "at most one");
+  assert.ok(readme.includes("This service writes nothing else under a case's pin namespace"));
+  for (const said of ["A sealed case has exactly one pin", "Nothing else is ever written under a case's pin"]) assert.equal(readme.includes(said), false, said);
+});
+
+test("MUST-FAIL GAP (F05, unit R-PINf): a pin found, and not found when it is read again, is commit_unrecorded (pin_not_found), never not_pinned", async () => {
+  const u = await sealedUnpinned("RPINf gap vanished");
+  const chain = S.caseChain(storedCase(u.id));
+  const sealedAt = gh.commitsFor(PINS, C.casePath(u.id))[0].sha;
+  gh.seed(PINS, pinFile(u.id), S._internal.pinRecord(u.id, chain, REVEAL_AT, sealedAt));
+  // the second read of the pin file (pinState's) answers 404
+  const viaMock = global.fetch;
+  let reads = 0;
+  global.fetch = async (url, o) => {
+    if (((o && o.method) || "GET") === "GET" && String(url).includes(`/contents/${pinFile(u.id)}`) && ++reads === 2) {
+      return { ok: false, status: 404, json: async () => ({ message: "Not Found" }), text: async () => "Not Found" };
+    }
+    return viaMock(url, o);
+  };
+  let p;
+  try {
+    p = await S.pinChain(u.id, chain, REVEAL_AT + 60000, sealedAt);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(reads, 2, "fixture: found, then read again");
+  assert.deepEqual(p, { pin: "commit_unrecorded", reason: "pin_not_found" });
 });

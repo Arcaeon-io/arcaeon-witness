@@ -251,13 +251,13 @@ function plain(h) {
 }
 // The page's pin line, and the sentence under it, `code` spans read back as
 // backticks (unit R-PIN).
+// The pin cell: the pin line, then (since unit R-PINf, f2) the fixed
+// sentence directly under it, in the same cell after a line break.
 function pageCells(html) {
-  const m = /<tr><th>pin<\/th><td>([\s\S]*?)<\/td><\/tr>/.exec(html);
-  assert.ok(m, `the page has a pin line: ${html.slice(0, 300)}`);
-  const at = html.indexOf("<h2>Pin and signature</h2>");
-  assert.ok(at >= 0, "the page has its pin panel");
-  const n = html.indexOf('<p class="muted">', html.indexOf("</table>", at));
-  return { pin: plain(m[1]), note: plain(html.slice(n, html.indexOf("</p>", n)).replace(/<code>([^<]*)<\/code>/g, "`$1`")) };
+  const m = /<tr><th>pin<\/th><td>([\s\S]*?)<br><span class="muted">([\s\S]*?)<\/span><\/td><\/tr>/.exec(html);
+  assert.ok(m, `the page has a pin line with the sentence under it: ${html.slice(0, 300)}`);
+  assert.ok(html.indexOf("<h2>Pin and signature</h2>") >= 0, "the page has its pin panel");
+  return { pin: plain(m[1]), note: plain(m[2].replace(/<code>([^<]*)<\/code>/g, "`$1`")) };
 }
 function fill(t, x) {
   return t.replace(/\{(\w+)\}/g, (_, k) => {

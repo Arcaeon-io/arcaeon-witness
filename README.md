@@ -850,11 +850,13 @@ anchoring job upgrades once the Bitcoin attestation arrives) and the
 namespace pin pointers (`pins/<namespace>/latest.json`, which each new pin
 of a namespace moves).
 
-A sealed case has exactly one pin, `pins/case/<case_id>/00000001.json`,
-written once by the reveal or by the sealer after the seal, and it records
-`case_commit`, the commit that wrote the sealed case file; a pin without it
-is not read as a pin. Nothing else is ever written under a case's pin
-namespace: no pointer and no next pin. A case's pin line on its page says
+A sealed case has at most one pin, `pins/case/<case_id>/00000001.json`,
+written once, by the reveal or by the sealer's run after the seal. It
+records `case_commit`, the commit its writer read back as the one that
+wrote the sealed case file, and a reader holds the case file at that commit
+to the case it serves; a pin without `case_commit` is not read as a pin.
+This service writes nothing else under a case's pin namespace: no pointer
+and no next pin. A case's pin line on its page says
 "Pinned at commit P (the pins repository's commit time, T)", or what was
 read instead. Files a preview pins repository may hold from before this
 release under a case's pin namespace (`latest.json`, and `0000000N.json`
