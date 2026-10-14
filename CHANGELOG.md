@@ -1,5 +1,31 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-14: Unit R-RVf2: the EXPIRED page's sentence, as ruled (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 0ee71e0 (tests and the sentence) and this entry's commit.
+- **The ruling** (the architect's, correcting the sentence R-RVf kept). The page reads one root. It learns only three things: the root is not sealed, no seal is recorded, and the deadline has passed by this service's clock. Arrival is known only to the reveal's compare-and-swap, so "received" is not the page's to say. The EXPIRED page's sentence (`lib/_case_page.js` `EXPIRED_SENTENCE`) is now exactly: "No joint reveal is sealed to this case, and the deadline has passed by this service's clock. A reveal that arrived before the deadline still seals the case whenever its sealing lands, and this page cannot tell whether one is pending." It replaces "No joint reveal was received before the deadline, by this service's clock, so the case reads EXPIRED."
+  - The heading stays EXPIRED.
+  - The sentence after it, "Expiry is read, not written, and implies no actor.", is kept.
+  - No new state, field, marker or write. The verdict page is unchanged.
+  - R-RVf's entry, which says the EXPIRED sentence was unchanged, stands as the record of that unit.
+  - `lib/_case_page.js` goes from 719 lines to 726 (the constant and its comment).
+- **Tests** (`test/case_rrvf.test.js`, 4 new). For a COMMITTED case past its deadline, the page prints the sentence exactly under `<h1>Case: EXPIRED</h1>`, in three states:
+  - a reveal in flight: arrived before the deadline, the page read before its seal lands, and the seal then landing;
+  - a timely reveal whose seal write failed: the root unchanged;
+  - no reveal ever.
+
+  In each, the page read writes nothing, and neither the old sentence nor "received before the deadline" appears. A fourth test checks that the old sentence is in no `lib/` or `tools/` file and not in the README. The R-RVf tests on the old sentence now assert the new one, escaped as the page prints it.
+- **The must-fail pass.** 4 defects were planted in `lib/_case_page.js`, each alone with the whole suite run, and all 4 were caught:
+
+  | id | planted defect | result |
+  |---|---|---|
+  | E01 | the old sentence printed | caught (10 failing) |
+  | E02 | the sentence names no limit of the page | caught (9 failing) |
+  | E03 | the sentence not escaped | caught (9 failing) |
+  | E04 | the first clause claims a receipt | caught (9 failing) |
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1464 tests, 1457 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1458 pass, 1 skipped.
+- **UNSURE.** The ruling replaces "the sentence". The page's second sentence, "Expiry is read, not written, and implies no actor.", says nothing about arrival, so it is kept.
+
 ## 2026-10-14: Unit R-L5f: the reader's blocker on R-L5 (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 2bc85f5 (tests, code, README) and this entry's commit (the gap tests, the change log).
