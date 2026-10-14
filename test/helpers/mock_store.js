@@ -57,8 +57,7 @@
 //   GET  /repos/<repo>/compare/<base>...<head>
 //        -> 200 {status, ahead_by, behind_by} | 404
 //        how `head` stands to `base` in the repository's one branch
-//        (2026-10-13, unit R-I: lib/_case_seal.js commitOnBranch, and the
-//        order of a case's pin commit and a key's revocation marker). Each
+//        (2026-10-13, unit R-I: lib/_case_seal.js commitOnBranch). Each
 //        repository here has one linear branch, its commits in the order
 //        they were made: `identical` (the same commit), `behind` (head is
 //        an ancestor of base), `ahead`. A ref that is the branch's name

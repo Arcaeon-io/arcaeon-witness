@@ -297,7 +297,8 @@ async function pageUnder(id, keyDocument, { now = REVEAL_AT + 3600000 } = {}) {
     { now, keyDocument, env });
   return { status: res._status, html: String(res._body), V: env[S.DEPLOY_COMMIT_ENV] };
 }
-const REVOKED_SENTENCE = (keyId, V) => `The key that signed this case (${keyId}) is listed as revoked in the key document this service carries ` +
+// since unit R-REVf, one sentence for either key (the architect's ruling, option c)
+const REVOKED_SENTENCE = (keyId, V) => `One of the keys this case is signed with (${keyId}) is listed as revoked in the key document this service carries ` +
   `(commit ${V.slice(0, 12)}), so this page does not show its verdict, whenever it was signed.`;
 const VERDICT_WORDS = /MATCHED|ALTERED|MISSING|class="word pass"|class="word fail"|first divergence/;
 // The page's text, every tag dropped.
@@ -382,7 +383,7 @@ test("R-REV 7: the reference refuses a revoked-key case 409 signer_revoked and w
   await H.handleCaseReference(req("case-reference", { case_id: c.id, role: "a", tape_sha256: c.a.tape_sha256, salt: c.a.salt, cross_reference: XREF }),
     res, { now: REVEAL_AT + 1800000, env: KEYS, keyDocument: docRevoking({ caseKey: "revoked" }) });
   const body = parsed(res);
-  assert.deepEqual([res._status, body.error_code, body.reason], [409, "signer_revoked", "case_key_revoked"], JSON.stringify(body).slice(0, 300));
+  assert.deepEqual([res._status, body.error_code, body.reason], [409, "signer_revoked", "key_revoked"], JSON.stringify(body).slice(0, 300));
   assert.doesNotMatch(body.error, /pins repository|written before|does not verify/);
   assert.equal(gh.putLog.length, before, "no row, no quota");
 });
@@ -401,7 +402,7 @@ test("R-REV: the sealer never pins a signer_revoked case: anchorCase answers not
 test("R-REV: the reconcile key revoked is signer_revoked too, naming that key; signer_since_revoked and pin_unavailable are gone", async () => {
   const c = await sealedCase("RREV reconcile revoked");
   const a = await S.sealedRecordReason(storedCase(c.id), docRevoking({ reconcileKey: "revoked" }));
-  assert.deepEqual([a.code, a.reason, a.key_id], ["signer_revoked", "reconcile_key_revoked", KD.keyIdOf(RECEIPT_KEY)]);
+  assert.deepEqual([a.code, a.reason, a.key_id], ["signer_revoked", "key_revoked", KD.keyIdOf(RECEIPT_KEY)]);
   for (const f of jsFiles("lib")) assert.doesNotMatch(read(f), /signer_since_revoked|pin_unavailable/, f);
 });
 
@@ -436,7 +437,7 @@ test("R-REV: the key document's prose says two statuses, and the README says mar
 test("R-REV: KEY_DATES_NOTE stays beside the key document a valid seal names", async () => {
   const c = await sealedCase("RREV key dates");
   const page = await pageUnder(c.id, docRevoking());
-  assert.ok(page.html.includes("Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document."));
+  assert.ok(page.html.includes("A key is judged by its status in the named document and in the key document this service carries; it counts as active only when both list it active."), "since unit R-REVf, as ruled");
 });
 
 // =============================================================================
@@ -447,7 +448,7 @@ test("R-REV: KEY_DATES_NOTE stays beside the key document a valid seal names", a
 test("MUST-FAIL GAP (R06): both keys listed revoked: the answer names the case key, which is checked first", async () => {
   const c = await sealedCase("RREV gap both revoked");
   const a = await S.sealedRecordReason(storedCase(c.id), docRevoking({ caseKey: "revoked", reconcileKey: "revoked" }));
-  assert.deepEqual(a, { code: "signer_revoked", reason: "case_key_revoked", key_id: KD.keyIdOf(CASE_KEY) });
+  assert.deepEqual(a, { code: "signer_revoked", reason: "key_revoked", key_id: KD.keyIdOf(CASE_KEY) });
 });
 
 test("MUST-FAIL GAP (R15, R16, R17): status_meaning names exactly the two statuses, each a string, in an object; anything else is malformed_field, never a throw", () => {

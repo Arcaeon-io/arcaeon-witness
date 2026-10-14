@@ -406,6 +406,6 @@ test("MUST-FAIL GAP (B29, C04, D07): a reader that holds the case it serves neve
   const revoked = KD.docWith(KD.entry(CASE_KEY, { status: "revoked" }), KD.reconcileEntry(RECEIPT_KEY));
   r0 = caseReads(c.id);
   const answer = await S.sealedRecordReason(storedCase(c.id), revoked);
-  assert.deepEqual([answer.code, answer.reason], ["signer_revoked", "case_key_revoked"]);
+  assert.deepEqual([answer.code, answer.reason], ["signer_revoked", "key_revoked"]);
   assert.equal(caseReads(c.id) - r0, 0, "the sealed check reads no case file");
 });

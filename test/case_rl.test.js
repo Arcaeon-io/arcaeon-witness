@@ -234,7 +234,8 @@ const CLAIM = "Withdrawal before the reveal closes that case; it does not recall
   "binds a key that did not sign in the case that produced it.";
 const LEGACY = "Files under withdrawn_commitments/ that a pins repository may hold from before this release are ignored: no code reads " +
   "or writes them.";
-const DATES = "Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document.";
+// since unit R-REVf, as the architect ruled
+const DATES = "A key is judged by its status in the named document and in the key document this service carries; it counts as active only when both list it active.";
 
 // =============================================================================
 // L1: the withdrawn-tape listing is removed

@@ -200,7 +200,7 @@ test("I1 (since unit R-REV): a case whose signer the current document lists as r
   assert.notEqual(pinned.P, null, "fixture: a pin");
   for (const k of [c.k, pinned.k]) {
     const got = await S.sealedRecordReason(k, CASE_REVOKED);
-    assert.deepEqual([got.code, got.reason], ["signer_revoked", "case_key_revoked"]);
+    assert.deepEqual([got.code, got.reason], ["signer_revoked", "key_revoked"]);
   }
   const anchored = await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: CASE_REVOKED });
   assert.deepEqual([anchored.code, anchored.reason], ["not_sealed", "signer_revoked"]);
@@ -448,10 +448,10 @@ test("MUST-FAIL GAP (H03, H04, G04, G05): the reference and the page say signer_
   assert.ok((await pageOf(c.id, noCase)).html.includes("the current key document: a key that signed it is not listed there in its role"));
   // since unit R-REV: revoked, whenever it signed; the page's one sentence
   const r = await referenceAs(c.id, c.a, CASE_REVOKED);
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "signer_revoked", "case_key_revoked"]);
-  assert.match(r.body.error, /a key that signed it is listed as revoked in the key document this service carries, whenever it signed \(case_key_revoked\)/);
-  assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes(`The key that signed this case (<code>${KD.keyIdOf(CASE_KEY)}</code>) is listed as revoked in ` +
-    "the key document this service carries (commit not known to this deployment), so this page does not show its verdict, whenever it was signed."));
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason, r.body.key_id], [409, "signer_revoked", "key_revoked", KD.keyIdOf(CASE_KEY)]);
+  assert.match(r.body.error, /^One of the keys this case is signed with \(.+\) is listed as revoked in the key document this service carries \(commit not known to this deployment\), so this case takes no reference row, whenever it was signed; no row was written\.$/);
+  assert.ok((await pageOf(c.id, CASE_REVOKED)).html.includes(`One of the keys this case is signed with (<code>${KD.keyIdOf(CASE_KEY)}</code>) is listed as revoked ` +
+    "in the key document this service carries (commit not known to this deployment), so this page does not show its verdict, whenever it was signed."));
 });
 
 test("MUST-FAIL GAP (B01): KEY_DOCUMENT_BRANCH names the branch: a deployment of another branch seals when it names that branch, and is refused when it does not", async () => {

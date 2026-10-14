@@ -69,6 +69,12 @@ test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and rec
     ["handleCaseReveal", "document_unavailable"], ["handleCaseReference", "operator_key_not_configured"]]) {
     assert.ok(driven(handler, code), `driven: ${code} by ${handler}`);
   }
+  // unit R-REVf: one revoked reason, key_revoked, with key_id; the role-named reasons are in no body
+  const roleNamed = rows.filter((r) => /case_key_revoked|reconcile_key_revoked/.test(r.body));
+  assert.deepEqual(roleNamed.map((r) => `${r.file} ${r.status}`), [], "no body names a revoked key's role");
+  const revoked = rows.filter((r) => r.handler === "handleCaseReference" && codeOf(r) === "signer_revoked");
+  assert.ok(revoked.length > 0, "driven: signer_revoked by handleCaseReference");
+  for (const r of revoked) assert.equal(JSON.parse(r.body).reason, "key_revoked", r.body.slice(0, 200));
   // and the 2xx bodies are read too
   assert.ok(rows.filter((r) => r.status >= 200 && r.status < 300).length > 200, "2xx bodies read");
 });
