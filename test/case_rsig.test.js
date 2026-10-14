@@ -819,3 +819,31 @@ test("R-RVf3 5c: a row at note_version 3 reads row_note_v3 only when its signatu
     assert.deepEqual([live.records, live.invalid.map((x) => ({ seq: x.seq, reason: x.reason }))], [1, [{ seq: 1, reason }]], `${reason}: ${JSON.stringify(live)}`);
   }
 });
+
+// R-RVf3's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (W11): the 5a refusals carry the reader's reason", async () => {
+  const bad = await withdrawnBy("RRVf3 gap W11 invalid", "b");
+  gh.seed(PINS, C.casePath(bad.id), flipSig(storedCase(bad.id)));
+  assert.equal((await reveal(bad, { body: ownOpening(bad, "a") })).body.reason, "bad_signature");
+  const away = await withdrawnBy("RRVf3 gap W11 unavailable", "b");
+  gh.seed(PINS, C.casePath(away.id), namingNoDocument(storedCase(away.id)));
+  assert.equal((await withdraw(away.id, away.b)).body.reason, "commit_not_on_branch");
+});
+
+test("MUST-FAIL GAP (B05): a pre-write judge refusal that is not a could-not-look stays 500 internal_error (a row dated before the seal); nothing is written", async () => {
+  const s = await sealedCase("RRVf3 gap B05");
+  const puts = gh.putLog.length;
+  const r = await reference(s, { now: REVEAL_AT - 60000 });
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [500, "internal_error", "reference_before_seal"], JSON.stringify(r.body).slice(0, 300));
+  assert.equal(gh.putLog.length, puts);
+});
+
+test("MUST-FAIL GAP (V01): a version-3 row whose other fields do not read as a row's reads by its form, never row_note_v3, and is not counted", async () => {
+  const f = await fourRecords("RRVf3 gap V01");
+  const v3 = signByHand({ ...withoutSig(f.row), note_version: 3, anchor_note: V3_ANCHOR_NOTE }, caseSigner());
+  const { signed_under: _su, ...noDocument } = v3; // eslint-disable-line no-unused-vars
+  assert.equal(C.validateReferenceRow(noDocument).code, "missing_field");
+  gh.seed(PINS, C.referencePath(f.s.id, 1), noDocument);
+  const live = await S.liveRecords(f.seal, { keyDocument: DOC });
+  assert.deepEqual([live.records, live.invalid.map((x) => x.reason)], [1, ["reference_missing_field"]], JSON.stringify(live));
+});
