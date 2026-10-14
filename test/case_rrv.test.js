@@ -511,3 +511,117 @@ test("R-RV ruling c, at the deadline: a reveal received before the deadline whos
   assert.deepEqual([res._status, r.error_code], [500, "seal_build_failed"], JSON.stringify(r).slice(0, 300));
   assert.equal(rootSha(c.id), before, "nothing written");
 });
+
+// =============================================================================
+// UNIT R-RV, THE MUST-FAIL PASS: tests for the planted defects the tests
+// above let through (the ids are the pass's)
+// =============================================================================
+
+test("MUST-FAIL GAP (V09): a receipt that cannot be held in a case record for another reason is 500 receipt_check_failed with that reason, nothing written", async (t) => {
+  const c = await committedCase("RRV gap not storable");
+  const before = rootSha(c.id);
+  t.mock.method(S, "storableReceipt", () => ({ ok: false, reason: "planted_reason" }));
+  const r = await reveal(c);
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [500, "receipt_check_failed", "planted_reason"]);
+  assert.equal(rootSha(c.id), before);
+});
+
+test("MUST-FAIL GAP (V12): a seal write that throws a conflict is a lost swap, answered from the root read again: a withdrawal that landed is 409 case_withdrawn", async (t) => {
+  const c = await committedCase("RRV gap thrown conflict");
+  const realPut = store.putFile;
+  let fired = false;
+  t.mock.method(store, "putFile", async (p, ...rest) => {
+    if (fired || p !== C.casePath(c.id)) return realPut(p, ...rest);
+    fired = true;
+    assert.equal((await withdraw(c.id, c.b)).status, 201, "fixture: the withdrawal lands first");
+    const e = new Error("conflict");
+    e.conflict = true;
+    throw e;
+  });
+  const r = await reveal(c);
+  assert.ok(fired);
+  assert.deepEqual([r.status, r.body.error_code, r.body.error], [409, "case_withdrawn", WITHDRAWN_TEXT], JSON.stringify(r.body));
+});
+
+test("MUST-FAIL GAP (V19): the pin is dated by the same read as the seal, after the port returns", async (t) => {
+  const c = await committedCase("RRV gap pin time");
+  let ms = REVEAL_AT;
+  const real = TAPES.reconcileTapes;
+  t.mock.method(TAPES, "reconcileTapes", (...args) => {
+    ms += 5000;
+    return real(...args);
+  });
+  const res = makeRes();
+  await H.handleCaseReveal(req("case-reveal", revealBody(c.id, c.a, c.b)), res, { clock: () => ms, env: KD.deployed(gh, KEYS, DOC), keyDocument: DOC });
+  assert.equal(res._status, 201);
+  assert.equal(gh.read(PINS, pinFile(c.id)).pinned_at, new Date(REVEAL_AT + 5000).toISOString());
+});
+
+// The stamps repository's commits listings, rewritten by `edit(page, answer)`.
+function stampListings(t, edit) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    const u = String(url);
+    if (!u.includes(`/repos/${STAMPS}/commits?`)) return viaMock(url, o);
+    const page = Number(new URL(u).searchParams.get("page") || 1);
+    return edit(page, u, viaMock, o);
+  };
+  t.after(() => { global.fetch = viaMock; });
+}
+
+test("MUST-FAIL GAP (V25): ruling b walks on past a full page whose answer names no next page", async (t) => {
+  const id = await openCase("RRV gap full page");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  for (let i = 0; i < 104; i += 1) gh.addCommit(STAMPS, spath);
+  const oldest = gh.commitsFor(STAMPS, spath).slice(-1)[0].sha;
+  stampListings(t, async (page, u, viaMock, o) => {
+    const r = await viaMock(u, o);
+    return { ...r, headers: { get: () => null } };
+  });
+  const r = await commit(id, a);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(gh.read(PINS, REG.pathOf(gh, id, "a")).stamp_commit, oldest);
+});
+
+test("MUST-FAIL GAP (V26): ruling b asks for the page the Link header names, not the one after the last", async (t) => {
+  const id = await openCase("RRV gap next page");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  for (let i = 0; i < 104; i += 1) gh.addCommit(STAMPS, spath);
+  const oldest = gh.commitsFor(STAMPS, spath).slice(-1)[0].sha;
+  // page 1 names page 3 as next, and page 3 holds the history's second page; page 2 is empty
+  stampListings(t, async (page, u, viaMock, o) => {
+    if (page === 1) {
+      const r = await viaMock(u, o);
+      return { ...r, headers: { get: (h) => (h.toLowerCase() === "link" ? `<https://api.github.com/repos/${STAMPS}/commits?page=3>; rel="next"` : null) } };
+    }
+    if (page === 3) {
+      const r = await viaMock(u.replace("page=3", "page=2"), o);
+      return { ...r, headers: { get: () => null } };
+    }
+    return { ok: true, status: 200, headers: { get: () => null }, json: async () => [], text: async () => "[]" };
+  });
+  const r = await commit(id, a);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(gh.read(PINS, REG.pathOf(gh, id, "a")).stamp_commit, oldest);
+});
+
+test("MUST-FAIL GAP (V28): a stamp history longer than 10 pages of 100 is 503 stamp_history_unreadable (commits_beyond_bound), and nothing is registered", async () => {
+  const id = await openCase("RRV gap beyond bound");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const spath = stamp.stampPath(a.commitment_sha256);
+  for (let i = 0; i < 1000; i += 1) gh.addCommit(STAMPS, spath);
+  const r = await commit(id, a);
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "stamp_history_unreadable", "commits_beyond_bound"], JSON.stringify(r.body));
+  assert.equal(storedCase(id).commitments.a, null);
+});
+
+test("MUST-FAIL GAP (V37): the README says the joint reveal writes the case root once and a failed reveal writes nothing", () => {
+  assert.ok(README().includes("The joint reveal writes the case root once: the sealed case, by compare-and-swap over the COMMITTED root it read. " +
+    "A reveal that fails writes nothing, so the case stays COMMITTED as it was, and either role may send the same reveal again or withdraw. " +
+    "The reveal reads no stamp: a sealed case's stamp commits and stamp times are its registrations'."));
+});
