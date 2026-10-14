@@ -438,3 +438,44 @@ test("R-REV: KEY_DATES_NOTE stays beside the key document a valid seal names", a
   const page = await pageUnder(c.id, docRevoking());
   assert.ok(page.html.includes("Dates in a key document are shown for information and are not enforced; a key is judged by its status in the named document."));
 });
+
+// =============================================================================
+// UNIT R-REV, THE MUST-FAIL PASS: tests for the planted defects the tests
+// above let through (the ids are the pass's)
+// =============================================================================
+
+test("MUST-FAIL GAP (R06): both keys listed revoked: the answer names the case key, which is checked first", async () => {
+  const c = await sealedCase("RREV gap both revoked");
+  const a = await S.sealedRecordReason(storedCase(c.id), docRevoking({ caseKey: "revoked", reconcileKey: "revoked" }));
+  assert.deepEqual(a, { code: "signer_revoked", reason: "case_key_revoked", key_id: KD.keyIdOf(CASE_KEY) });
+});
+
+test("MUST-FAIL GAP (R15, R16, R17): status_meaning names exactly the two statuses, each a string, in an object; anything else is malformed_field, never a throw", () => {
+  const doc = JSON.parse(read("public/.well-known/arcaeon/case-signing-keys.json"));
+  const sm = doc.status_meaning;
+  for (const [name, meaning] of [
+    ["a third status explained", { ...sm, retired: "rotated out" }],
+    ["revoked not explained", { active: sm.active }],
+    ["active not a string", { ...sm, active: 1 }],
+    ["null", null],
+    ["a list", [sm.active, sm.revoked]],
+    ["a string", "active or revoked"],
+  ]) {
+    assert.deepEqual(S.checkKeyDocument({ ...doc, status_meaning: meaning }), { ok: false, reason: "malformed_field", at: "status_meaning" }, name);
+  }
+  assert.equal(S.checkKeyDocument(doc).ok, true, "control");
+});
+
+test("MUST-FAIL GAP (P06): with the reconcile key revoked, the page's one sentence names the reconcile key, never the case key", async () => {
+  const c = await sealedCase("RREV gap reconcile page");
+  const page = await pageUnder(c.id, docRevoking({ reconcileKey: "revoked" }));
+  assert.equal(page.status, 200);
+  assert.ok(textOf(page.html).includes(REVOKED_SENTENCE(KD.keyIdOf(RECEIPT_KEY), page.V)), textOf(page.html).slice(0, 800));
+});
+
+test("MUST-FAIL GAP (P11): the revoked page's title says SIGNED BY A REVOKED KEY, never VERDICT", async () => {
+  const c = await sealedCase("RREV gap title");
+  const page = await pageUnder(c.id, docRevoking({ caseKey: "revoked" }));
+  assert.ok(page.html.includes(`<title>Case ${c.id.slice(0, 12)}: SIGNED BY A REVOKED KEY`), page.html.slice(0, 600));
+  assert.doesNotMatch(page.html, /<title>[^<]*VERDICT/);
+});
