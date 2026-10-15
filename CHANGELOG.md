@@ -1,5 +1,101 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-ABf: the fixes for R-AB (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 0408ca1 (tests and code) and this entry's commit (the defect list and its ledger, the gap tests, the change log).
+- **B1 (the blocker; the architect's ruling: the order changes, not the sentence).** The page (`renderCase`), the sealer (`anchorCase`) and the reference read the projected registration files (`projectedRegistrations`) before they judge a root single party and before the sealed check, as the reveal already did.
+  - A root that does not agree with its files, such as a `key_fp` written over while the file holds another key, reads `case_record_inconsistent` on each: the page 503, the sealer `refused`, the reference 503 codes only.
+  - A single-key root whose file could not be read is could-not-look. The page is 503, in the one-sentence shape: "A registration file this case projects could not be read when this page was read, so nothing is asserted about this case; this is not a no.", then `<code>could_not_look</code>` and the two links. The sealer answers `could_not_look`, the reference 503.
+  - Only a root that agrees with its files gets the 200 single-party page.
+  - The reference now reads the files for the operator's row too, and the role's proof is checked against what it read.
+  - `sealedRecordReason` alone still answers `single_party` first: it reads no file, and its callers read the files before it.
+  - The page now reads the registration files for a VERDICT that does not verify too; `case_item2d` FIX 1's list of reads says so.
+- **M1 (the runner).** A run is caught only when the suite exits non-zero AND a test failed.
+  - A suite killed at its timeout is recorded `timeout`. One that exits non-zero, or is killed, with no failing test is `error` (it did not start, say). The table prints each as such and never as caught.
+  - Nothing was run again: no run in the committed ledgers (`test/must_fail/r_ab.ledger.json`) is recorded caught with no failing test (each caught run there has 2 or more), and a test reads every committed ledger to say so.
+- **M2 (a named commit definitely off the published branch).** `off`, set and until now read by nothing, is read.
+  - **Set:** in `lib/_case_seal.js` `namedDocumentOf`, at two returns: the branch read's (`off: !on.unknown && !on.not_found`, true for a commit ahead of or diverged from the branch) and a document read that failed (`off: false`).
+  - **Read:** in `signedUnderReason`, its one reader, which now answers `document_off_branch` (reason `commit_not_on_branch`) for it: a known refusal.
+  - No body code existed for this state: the page showed the reason `commit_not_on_branch` under `document_unavailable`, at 503. So `document_off_branch` is new, and it is no new state.
+  - Through the one reader:
+    - the reference: 409 `document_off_branch`, codes only (`case_id`, `reason`);
+    - the page: the same page at 200, worded off the branch by the code (it was worded by the reason, which a 404 also carries);
+    - the sealer: `refused` (`document_off_branch`), no longer `could_not_look`;
+    - the withdrawn root's answer (`unconfirmedWithdrawal`): 409 with words, `UNSEALED_WORDS.document_off_branch`;
+    - the marker repair (`repairWithdrawn`): not repaired, logged;
+    - a reference row (`judgeReferenceRow`): invalid, not unreadable;
+    - `verifyRefusalReceipt` and `tools/check_refusal_receipt.js`: reason `document_off_branch`.
+  - A read that failed, a 404 commit among them, stays `document_unavailable` and 503 everywhere.
+  - Not changed: `confirmSealingDocument`, for the deployment's own commit, still answers 503 `document_unavailable` with reason `commit_not_on_branch`; a redeploy, not a re-send, finishes it. The pin's own `commit_off_branch` was already a definite `pin_commit_mismatch`.
+- **Minors.**
+  - **m-a:** the reference's `single_party` is 409 codes only, `{case_id}`, as the reveal's.
+  - **m-b:** `UNSEALED_WORDS.document_unavailable` is still reached, by the withdrawn root's could-not-look (`unconfirmedWithdrawal`), so it stays; a test shows it.
+  - **m-c:** `projectionBar` is no longer handed the key id. Planting it back changes nothing observable, so no defect was planted for it.
+  - **m-d:** a defect's file must be a relative path inside the repository (no absolute path, no `..` segment), checked before anything is planted. An interrupt (SIGINT, SIGTERM) removes the copies, the planted file with them, and kills the suite.
+  - **m-e:** a re-seed that catches a defect its earlier runs did not records `caught_by`: the failing tests named MUST-FAIL GAP, or all failing tests when none is. The table prints that record (the names as the runner stored them, at most 160 characters each); the operator's `--gap` option is gone. The table reads the R-AB ledger's older form the same way.
+  - **m-f:** the single-party sentence stands.
+- **Found while testing the runner, and fixed.**
+  - A runner started from inside a test inherited `NODE_TEST_CONTEXT`, and its `node --test` then exited at once with its tests unrun, which would have recorded every defect survived. The suite now runs without it.
+  - Killing the suite killed only `node --test`, not its test processes. The suite now runs in its own process group, killed whole on timeout and on interrupt.
+  - `--suite` names the test files (`test/*.test.js` unless given). `test/must_fail/slow_suite.fixture.js` is a one-minute suite the interrupt tests hand it.
+- **Line counts.** `lib/_case_page.js` 723 to 754, `lib/_case_http.js` 2432 to 2449, `lib/_case_seal.js` 2313 to 2322, `test/must_fail/run.js` 150 to 241.
+- **Tests.**
+  - New, `test/case_rab.test.js` (R-ABf: 8, and 2 gap tests). On a118c94, 6 of the 8 fail; 2 pass by design: a 404 commit stays a could-not-look, and m-b shows the words are still reached.
+  - New, `test/must_fail_runner.test.js` (7, and 1 gap test). On a118c94, 6 of the 7 fail; the committed-ledger check passes there by design (it is M1's "say so").
+  - Rewritten to the ruling, each failing on a118c94:
+    - R-AB 2 (a written-over `key_fp` reads `case_record_inconsistent`);
+    - R-AB 6's VERDICT part (a single-key VERDICT that agrees with its files; this one passes on a118c94 too, which read such a root single party as well);
+    - P31;
+    - the FIX A forged VERDICT;
+    - H07 (codes only);
+    - `case_item2d` FIX 1 (the files are read);
+    - the off-branch expectations in `case_rn`, `case_rn2` and `case_trust_root` (ANCESTRY and R-I2 m4: `document_off_branch`, the page at 200).
+- **The must-fail pass** (the repository's runner; dates from the ledger, `test/must_fail/r_abf.ledger.json`). 26 defects were planted over the lines R-ABf changed, each alone with the whole suite run: `lib/_case_page.js` 7, `lib/_case_seal.js` 3, `lib/_case_http.js` 7, `test/must_fail/run.js` 9.
+  - The reader's own defects were among them: PG1, SE1 and HT1 (judge before read), SE2 (`off` read by nothing) and RN1 (caught on any non-zero exit).
+  - 21 were caught. Of the 5 that survived, 4 are caught by gap tests and were re-seeded the same day (PG4, PG6, RN8, RN9). One is equivalent:
+    - RN3, the absolute-path check removed. The inside-the-repository check that follows refuses every absolute path itself, so the explicit check changes nothing. It stays because it names the rule.
+  - During the RN9 re-seed, the interrupt test without the pid check left one fixture process. It ended within its minute.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | PG1 | `lib/_case_page.js` | B1: the page judges single party before it reads the files (the reader's defect) | caught (7 failing) | 2026-10-15 |
+  | PG2 | `lib/_case_page.js` | B1: a single-key root whose file could not be read gets the single-party page | caught (2 failing) | 2026-10-15 |
+  | PG3 | `lib/_case_page.js` | B1: the could-not-look page at 200 | caught (2 failing) | 2026-10-15 |
+  | PG4 | `lib/_case_page.js` | B1: the could-not-look sentence altered | survived; caught on re-seed by MUST-FAIL GAP (PG4): the could-not-look sentence for a single-key root whose file could not be read, exactly | 2026-10-15 |
+  | PG5 | `lib/_case_page.js` | M2: the off-branch page at 503 | caught (5 failing) | 2026-10-15 |
+  | PG6 | `lib/_case_page.js` | M2: a 404 commit's page worded as off the branch | survived; caught on re-seed by MUST-FAIL GAP (PG6): a named commit the repository does not have (404) is worded as a read that failed, 'try again', never as off the published branch | 2026-10-15 |
+  | PG7 | `lib/_case_page.js` | M2: the off-branch page worded as a read that failed | caught (5 failing) | 2026-10-15 |
+  | SE1 | `lib/_case_seal.js` | B1: the sealer judges single party before it reads the files (the reader's defect) | caught (6 failing) | 2026-10-15 |
+  | SE2 | `lib/_case_seal.js` | M2: off read by nothing (the reader's defect) | caught (9 failing) | 2026-10-15 |
+  | SE3 | `lib/_case_seal.js` | M2: every named read that failed answered off-branch | caught (22 failing) | 2026-10-15 |
+  | HT1 | `lib/_case_http.js` | B1: the reference judges single party before it reads the files (the reader's defect) | caught (5 failing) | 2026-10-15 |
+  | HT2 | `lib/_case_http.js` | B1: the operator's reference reads no file | caught (2 failing) | 2026-10-15 |
+  | HT3 | `lib/_case_http.js` | M2: the reference's off-branch at 503 | caught (2 failing) | 2026-10-15 |
+  | HT4 | `lib/_case_http.js` | M2: the reference's off-branch with a sentence | caught (2 failing) | 2026-10-15 |
+  | HT5 | `lib/_case_http.js` | M2: the reference's off-branch branch gone | caught (2 failing) | 2026-10-15 |
+  | HT6 | `lib/_case_http.js` | m-a: the reference's single_party with a sentence | caught (3 failing) | 2026-10-15 |
+  | HT7 | `lib/_case_http.js` | M2: no words for document_off_branch in the withdrawn root's answer | caught (2 failing) | 2026-10-15 |
+  | RN1 | `test/must_fail/run.js` | M1: caught on any non-zero exit (the reader's defect) | caught (1 failing) | 2026-10-15 |
+  | RN2 | `test/must_fail/run.js` | M1: a timeout classified by its exit | caught (1 failing) | 2026-10-15 |
+  | RN3 | `test/must_fail/run.js` | m-d: an absolute path accepted | survived | never |
+  | RN4 | `test/must_fail/run.js` | m-d: a '..' path accepted | caught (1 failing) | 2026-10-15 |
+  | RN5 | `test/must_fail/run.js` | m-d: an interrupt leaves the copies | caught (1 failing) | 2026-10-15 |
+  | RN6 | `test/must_fail/run.js` | m-e: a re-seed's catch records no gap test | caught (1 failing) | 2026-10-15 |
+  | RN7 | `test/must_fail/run.js` | m-e: the table prints every failing test, not the record's gap test | caught (2 failing) | 2026-10-15 |
+  | RN8 | `test/must_fail/run.js` | found in testing: the suite inherits NODE_TEST_CONTEXT | survived; caught on re-seed by MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes,  | 2026-10-15 |
+  | RN9 | `test/must_fail/run.js` | found in testing: the suite's test processes outlive a kill | survived; caught on re-seed by MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes,  | 2026-10-15 |
+
+- Counts, as `npm test` prints them here (both environment-dependent tests skip, R-L4d (a)): 1514 tests, 1507 pass, 2 skipped, 0 fail, 5 todo, three runs. Where one of them runs (the reader's environment): 1508 pass, 1 skipped.
+- **UNSURE.**
+  - The could-not-look page for a single-key root whose file could not be read is new copy: its sentence is mine, its heading is COULD NOT LOOK, and its code is `could_not_look`.
+  - A 404 named commit (a read that failed) is now worded on the page as could-not-look, "try again". Until now it was worded as off the published branch, since it carries the same reason. R-I2 m4's off-branch words now apply only to `document_off_branch`.
+  - The off-branch page at 200 keeps its words, heading COULD NOT LOOK and "says neither that the sealed record verifies nor that it does not". Only its status changed.
+  - The sealer lists `document_off_branch` under `refused`. Like every refused case, it is still read again on later passes while it has no pin.
+  - M1: `error` is a result the ruling did not name; it is never a catch.
+  - m-d: "restore the copy on SIGINT" is read as removing the copies, which takes the planted file with them, and killing the suite's process group.
+  - m-e: a gap test is known by its name's prefix, MUST-FAIL GAP.
+  - The reference reads the projected files before its sealed check for every request, which is one more read per operator row.
+
 ## 2026-10-14: Unit R-AB: parties are told apart by public key (key_fp), never by key id (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 851e77b (tests, code, red-team record) and this entry's commit (the runner, the defect list and its ledger, the gap test, the change log).

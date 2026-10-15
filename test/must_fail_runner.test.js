@@ -113,3 +113,41 @@ test("R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree", as
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// R-ABf's must-fail gap tests (the runner): each fails with its planted defect
+test("MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, not only the suite", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-sigint-"));
+  const defects = path.join(tmp, "one.json");
+  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
+  const line = readme.split("\n").find((l) => l.length > 20 && readme.split(l).length === 2);
+  fs.writeFileSync(defects, JSON.stringify([{ id: "S1", file: "README.md", find: line, replace: `${line} (planted)`, what: "a planted line" }]));
+  const work = path.join(tmp, "work");
+  fs.mkdirSync(work);
+  const pidFile = path.join(tmp, "fixture.pid");
+  const env = { ...process.env, TMPDIR: work, NODE_TEST_CONTEXT: "child", MUST_FAIL_FIXTURE_PID_FILE: pidFile };
+  const child = spawn(process.execPath, [RUN, defects, "--workers", "1", "--suite", "test/must_fail/slow_suite.fixture.js"], { env, stdio: "ignore" });
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let pid = null;
+  try {
+    for (let i = 0; i < 400 && !fs.existsSync(pidFile); i += 1) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(fs.existsSync(pidFile), true, "the suite ran its test (NODE_TEST_CONTEXT did not end it at once)");
+    pid = Number(fs.readFileSync(pidFile, "utf8"));
+    assert.equal(child.exitCode, null, "the run is still running");
+    const ended = new Promise((r) => child.on("exit", (code, signal) => r({ code, signal })));
+    child.kill("SIGINT");
+    await ended;
+    for (let i = 0; i < 40 && alive(pid); i += 1) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(alive(pid), false, "the suite's test process was killed with it");
+  } finally {
+    child.kill("SIGKILL");
+    if (pid && alive(pid)) process.kill(pid, "SIGKILL");
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

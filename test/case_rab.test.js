@@ -937,3 +937,19 @@ test("R-ABf m-b: the withdrawn root's could-not-look (unconfirmedWithdrawal) sti
   assert.deepEqual([r.status, r.body.error_code], [503, "document_unavailable"]);
   assert.ok(r.body.error.includes("the key document it names could not be read on this request, which is not a no"), r.body.error);
 });
+
+// R-ABf's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (PG4): the could-not-look sentence for a single-key root whose file could not be read, exactly", () => {
+  assert.equal(CP.UNREAD_SENTENCE, "A registration file this case projects could not be read when this page was read, so nothing is asserted about " +
+    "this case; this is not a no.");
+});
+
+test("MUST-FAIL GAP (PG6): a named commit the repository does not have (404) is worded as a read that failed, 'try again', never as off the published branch", async () => {
+  const s = await sealedCase("RABf gap PG6");
+  const v = storedCase(s.id);
+  gh.seed(PINS, C.casePath(s.id), signByHand(withoutSig({ ...v, signed_under: { ...v.signed_under, document_commit: "6".repeat(40) } }), caseSigner()));
+  const p = await casePage(s.id);
+  assert.equal(p.status, 503);
+  assert.ok(p.html.includes("This is not a no; try again."), p.html.slice(0, 2500));
+  assert.equal(p.html.includes("is not on the published branch"), false);
+});

@@ -1,0 +1,442 @@
+{
+  "PG2": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "PG3": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "PG1": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "R-AB 2 (since unit R-ABf, B1): a stored case whose two entries share a key_fp and agree with their files is single party wherever it is read; one whose key_fp w",
+          "R-ABf B1: a COMMITTED root whose b.key_fp is overwritten with a's while file b holds another key reads case_record_inconsistent on the page and the sealer, neve",
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the sealer and the reference re",
+          "MUST-FAIL GAP (P31; since unit R-ABf): an unsealed root whose b.key_fp is overwritten with a's is the inconsistent page before and after its deadline, never the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), th"
+        ]
+      }
+    ]
+  },
+  "PG4": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG4): the could-not-look sentence for a single-key root whose file could not be read, exactly",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (PG4): the could-not-look sentence for a single-key root whose file could not be read, exactly"
+        ]
+      }
+    ]
+  },
+  "PG6": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG6): a named commit the repository does not have (404) is worded as a read that failed, 'try again', never as off the published branch",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (PG6): a named commit the repository does not have (404) is worded as a read that failed, 'try again', never as off the published branch"
+        ]
+      }
+    ]
+  },
+  "PG5": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is never valid: since un",
+          "R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the b",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-I2 m4: a compare 404 is off only on a br"
+        ]
+      }
+    ]
+  },
+  "PG7": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the b",
+          "R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off the branch is not on it, and a current document that does not read is named as the curr",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off the b"
+        ]
+      }
+    ]
+  },
+  "SE1": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "R-AB 2 (since unit R-ABf, B1): a stored case whose two entries share a key_fp and agree with their files is single party wherever it is read; one whose key_fp w",
+          "R-ABf B1: a COMMITTED root whose b.key_fp is overwritten with a's while file b holds another key reads case_record_inconsistent on the page and the sealer, neve",
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the sealer and the reference re",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), th"
+        ]
+      }
+    ]
+  },
+  "SE2": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 9,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, with words, ",
+          "R-N N1, N3: a refusal on a withdrawn case with the requester's own valid opening carries a receipt signed by the reconcile key, naming the requester's role and ",
+          "R-N2 m6: a receipt naming a commit definitely off the published branch has its own reason; one whose branch cannot be read is could-not-look",
+          "ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is never valid: since un",
+          "R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the b",
+          "R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off the branch is not on it, and a current document that does not read is named as the curr",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-N N1, N3: a refusal on a withdrawn case with the requester's own valid opening carries a re"
+        ]
+      }
+    ]
+  },
+  "HT1": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-AB 2 (since unit R-ABf, B1): a stored case whose two entries share a key_fp and agree with their files is single party wherever it is read; one whose key_fp w",
+          "R-ABf B1: the reference reads the projected files before the sealed check, for the operator too: a forged key_fp is 503 case_record_inconsistent, codes only, an",
+          "FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the sealer and the reference re",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the se"
+        ]
+      }
+    ]
+  },
+  "SE3": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 22,
+        "failing_tests": [
+          "EVERY COMMIT IS A LINK, ON THE OTHER PAGES THAT NAME ONE: pin_commit_mismatch (the commit the pin names), could_not_look on the key document, a case not yet pin",
+          "MUST-FAIL GAP (R04; since unit R-SIG the schema's rule): an unsigned seal is malformed_field even when the document it names cannot be fetched: the rule needs n",
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again once it ",
+          "R-AB m2: a withdrawal record whose named document cannot be read for a moment: the refusal receipt and the retried withdrawal each answer 503 document_unavailab",
+          "R-AB m3: a version-3 row whose named document cannot be read is unreadable: neither counted nor invalid",
+          "R-ABf M2: a named commit the repository does not have (404) stays a could-not-look: the reference 503 document_unavailable, the page 503",
+          "R-ABf m-b: the withdrawn root's could-not-look (unconfirmedWithdrawal) still prints UNSEALED_WORDS.document_unavailable, so the words stay",
+          "R-N2 m6: a receipt naming a commit definitely off the published branch has its own reason; one whose branch cannot be read is could-not-look",
+          "MUST-FAIL GAP (R02, R04): a receipt whose commit the repository does not show, or whose document cannot be fetched, is could-not-look, never definitely off the ",
+          "MUST-FAIL GAP (T29, T30): a reference row whose named document cannot be read is unreadable, not invalid, and the live count is not established",
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-RVf3 5a: a refusal receipt is signed only from a withdrawal record that verifies: one whose signature does not verify is 409 signature_invalid, one whose name",
+          "R-RVf3 5a: a retried withdrawal is answered only from a withdrawal record that verifies: 409 signature_invalid, or 503 document_unavailable; no marker is writte",
+          "R-RVf3 5b: the reference's pre-write judge that cannot read the row's named document answers 503 document_unavailable, codes only; nothing is written",
+          "DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, th",
+          "THE DOCUMENT AT THE COMMIT MUST BE THE ONE NAMED: other bytes at the named commit, or a file there that is not a key document, is signature_invalid",
+          "THE NAMED DOCUMENT IS FETCHED ONCE PER COMMIT: a commit's document never changes, so a read is cached; a failed read is not",
+          "H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence",
+          "ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is never valid: since un",
+          "I5: the could-not-look page names which document could not be read: the one the case names, or the current one this reader carries",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again on"
+        ]
+      }
+    ]
+  },
+  "HT2": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf B1: the reference reads the projected files before the sealed check, for the operator too: a forged key_fp is 503 case_record_inconsistent, codes only, an",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "HT4": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "HT3": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "HT5": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "HT6": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "H07 (reference, single_party; since unit R-ABf codes only): the refusal is 409 single_party with the case id and no sentence",
+          "R-ABf B1: a single-key VERDICT whose root agrees with its files is single party everywhere: the page 200, the sealer not_sealed single_party, the reference 409 ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "HT7": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, with words, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      }
+    ]
+  },
+  "RN1": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-ABf M1: caught only on a non-zero exit with a failing test; a timeout is timeout and an exit with no failing test is error, never caught"
+        ]
+      }
+    ]
+  },
+  "RN2": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-ABf M1: caught only on a non-zero exit with a failing test; a timeout is timeout and an exit with no failing test is error, never caught"
+        ]
+      }
+    ]
+  },
+  "RN4": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-ABf m-d: a defect's file must be a relative path inside the repository: an absolute path or a '..' segment is refused before anything is planted"
+        ]
+      }
+    ]
+  },
+  "RN3": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      }
+    ]
+  },
+  "RN5": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree"
+        ]
+      }
+    ]
+  },
+  "RN6": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-ABf m-e: a re-seed that catches a defect its earlier run missed records the gap test that failed; the table prints the record's words, and a first-run catch r"
+        ]
+      }
+    ]
+  },
+  "RN7": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf m-e: a re-seed that catches a defect its earlier run missed records the gap test that failed; the table prints the record's words, and a first-run catch r",
+          "R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, first_failing) the same way"
+        ]
+      }
+    ]
+  },
+  "RN9": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, "
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, "
+        ]
+      }
+    ]
+  },
+  "RN8": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, "
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, "
+        ]
+      }
+    ]
+  }
+}
