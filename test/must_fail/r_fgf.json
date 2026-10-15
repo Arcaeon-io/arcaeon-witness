@@ -1,0 +1,345 @@
+[
+ {
+  "id": "FF01",
+  "file": "lib/_case_page.js",
+  "find": "const ROW_LIMIT_SENTENCE = `This case takes no further reference row: its listing has reached the limit of ${SEAL.MAX_REFERENCE_ROWS}.`;",
+  "replace": "const ROW_LIMIT_SENTENCE = `This case has reached ${SEAL.MAX_REFERENCE_ROWS} reference rows, the most one case takes; no further row is appended to it.`;",
+  "what": "B1: the page claims 40 rows again"
+ },
+ {
+  "id": "FF02",
+  "file": "lib/_case_page.js",
+  "find": "reference row: its listing has reached the limit of",
+  "replace": "reference row: it has reached the limit of",
+  "what": "B1: the sentence does not say it is the listing's"
+ },
+ {
+  "id": "FF03",
+  "file": "lib/_case_http.js",
+  "find": "    if (put && put.abandoned) continue;\n",
+  "replace": "",
+  "what": "B2: an abandoned write is taken as written"
+ },
+ {
+  "id": "FF04",
+  "file": "lib/_case_http.js",
+  "find": "    if (put && put.abandoned) continue;",
+  "replace": "    if (put && put.abandoned) return refuse(res, new Refusal(503, \"reference_seq_contended\", \"\", { case_id }));",
+  "what": "B2: an abandoned write is refused 503, not moved to the next seq"
+ },
+ {
+  "id": "FF05",
+  "file": "lib/_case_http.js",
+  "find": "      // another row took this seq: list again and take the next\n      continue;\n",
+  "replace": "      // another row took this seq: list again and take the next\n",
+  "what": "B2: a thrown conflict falls through to the 201"
+ },
+ {
+  "id": "FF06",
+  "file": "lib/_case_http.js",
+  "find": "    const sent = await sentRow(kase, seqs, appendedBy, wanted, keyDocument);",
+  "replace": "    const sent = {};",
+  "what": "M2: no look for the same send"
+ },
+ {
+  "id": "FF07",
+  "file": "lib/_case_http.js",
+  "find": "    if (sent.row) return rowAnswer(200, sent.row, sent.path, sent.judged);",
+  "replace": "    if (sent.row) return rowAnswer(201, sent.row, sent.path, sent.judged);",
+  "what": "M2: the same send is answered 201"
+ },
+ {
+  "id": "FF08",
+  "file": "lib/_case_http.js",
+  "find": "      existing: status === 200,",
+  "replace": "      existing: false,",
+  "what": "M2: the answer never says existing"
+ },
+ {
+  "id": "FF09",
+  "file": "lib/_case_http.js",
+  "find": "    if (sent.unreadable) {",
+  "replace": "    if (sent.unreadable && false) {",
+  "what": "M2: a row that could not be read is passed over, and a new row written"
+ },
+ {
+  "id": "FF10",
+  "file": "lib/_case_http.js",
+  "find": "    if (sent.unavailable) {",
+  "replace": "    if (sent.unavailable && false) {",
+  "what": "M2: a row whose named document could not be read is passed over"
+ },
+ {
+  "id": "FF11",
+  "file": "lib/_case_http.js",
+  "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS) break;",
+  "replace": "    if (false) break;",
+  "what": "M2: rows past 40 are read too"
+ },
+ {
+  "id": "FF12",
+  "file": "lib/_case_http.js",
+  "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS) break;",
+  "replace": "    if (seq > 1) break;",
+  "what": "M2: only seq 1 is read"
+ },
+ {
+  "id": "FF13",
+  "file": "lib/_case_http.js",
+  "find": "      continue; // not JSON: not a row",
+  "replace": "      return { unreadable: \"not json\", seq }; // not JSON: not a row",
+  "what": "M2: a file that is not JSON is a could-not-look"
+ },
+ {
+  "id": "FF14",
+  "file": "lib/_case_http.js",
+  "find": "    if (!json || typeof json !== \"object\" || json.appended_by !== appendedBy) continue;",
+  "replace": "    if (!json || typeof json !== \"object\") continue;",
+  "what": "M2: appended_by is not compared"
+ },
+ {
+  "id": "FF15",
+  "file": "lib/_case_http.js",
+  "find": "    if (wanted === null || xrefSha256(json.cross_reference) !== wanted) continue;",
+  "replace": "",
+  "what": "M2: the cross_reference is not compared"
+ },
+ {
+  "id": "FF16",
+  "file": "lib/_case_http.js",
+  "find": "    if (v.ok) return { row: json, path: p, judged: v };",
+  "replace": "    if (v.ok || !v.unavailable) return { row: json, path: p, judged: v };",
+  "what": "M2: a row its judge refuses is taken as the record's"
+ },
+ {
+  "id": "FF17",
+  "file": "lib/_case_http.js",
+  "find": "    return sha256hex(canonicalBytes({ operator: x.operator, reference: x.reference, url: x.url }));",
+  "replace": "    return sha256hex(canonicalBytes({ operator: x.operator, url: x.url }));",
+  "what": "M2: the reference is not in the hash"
+ },
+ {
+  "id": "FF18",
+  "file": "lib/_case_http.js",
+  "find": "  return refuse(res, new Refusal(503, \"reference_seq_contended\", \"\", { case_id }));",
+  "replace": "  return refuse(res, new Refusal(503, \"reference_seq_contended\", `other rows kept taking the next seq; ${nothing}. Send it again`, { case_id }));",
+  "what": "m4: the contended 503 carries a sentence"
+ },
+ {
+  "id": "FF19",
+  "file": "lib/_case_http.js",
+  "find": "another request has this case's lock",
+  "replace": "another request holds this case's lock",
+  "what": "M1: the lock sentence says holds"
+ },
+ {
+  "id": "FF20",
+  "file": "lib/_case_http.js",
+  "find": "the role your party has in this case.",
+  "replace": "the role your party holds in this case.",
+  "what": "M1: role_note says holds"
+ },
+ {
+  "id": "FF21",
+  "file": "lib/_case_http.js",
+  "find": "so it does not show that the caller has that role. ",
+  "replace": "so it does not show that the caller holds that role. ",
+  "what": "M1: the withdrawal's 403 says holds"
+ },
+ {
+  "id": "FF22",
+  "file": "lib/_case.js",
+  "find": "`${field} has a lone surrogate, which json-c14n:v1 cannot encode`",
+  "replace": "`${field} holds a lone surrogate, which json-c14n:v1 cannot encode`",
+  "what": "M1: malformed_field lone surrogate says holds"
+ },
+ {
+  "id": "FF23",
+  "file": "lib/_case.js",
+  "find": "`${field} has a control character`",
+  "replace": "`${field} holds a control character`",
+  "what": "M1: malformed_field control character says holds"
+ },
+ {
+  "id": "FF24",
+  "file": "lib/_case.js",
+  "find": "`${field} has a Unicode format character (category Cf)`",
+  "replace": "`${field} holds a Unicode format character (category Cf)`",
+  "what": "M1: malformed_field Cf says holds"
+ },
+ {
+  "id": "FF25",
+  "file": "lib/_case_seal.js",
+  "find": "has another verifier, so the configured key is not used",
+  "replace": "holds another verifier, so the configured key is not used",
+  "what": "M1: the signer reason says holds"
+ },
+ {
+  "id": "FF26",
+  "file": "lib/_reconcile_receipt.js",
+  "find": "the verdict text has a lone surrogate from a tape",
+  "replace": "the verdict text holds a lone surrogate from a tape",
+  "what": "M1: verdict_digest_note says holds"
+ },
+ {
+  "id": "FF27",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "res.cannot = `line ${i} has a duplicate key",
+  "replace": "res.cannot = `line ${i} holds a duplicate key",
+  "what": "M1: verifyStrict's cannot says holds"
+ },
+ {
+  "id": "FF28",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "return `${label} line ${i} has a duplicate key",
+  "replace": "return `${label} line ${i} holds a duplicate key",
+  "what": "M1: cannotRead says holds (reconcile.py's word)"
+ },
+ {
+  "id": "FF29",
+  "file": "lib/_sealer.js",
+  "find": "sealing slot has leaves",
+  "replace": "sealing slot holds leaves",
+  "what": "M1: the sealer's corrupt message says holds"
+ },
+ {
+  "id": "FF30",
+  "file": "lib/_stamp.js",
+  "find": "the public commit that has this stamp.",
+  "replace": "the public commit that holds this stamp.",
+  "what": "M1: scope.proves says holds"
+ },
+ {
+  "id": "FF31",
+  "file": "lib/_store.js",
+  "find": "\"that the caller has a key bound to this namespace prefix",
+  "replace": "\"that the caller holds a key bound to this namespace prefix",
+  "what": "M1: AUTH_LEVEL_NOTE says holds"
+ },
+ {
+  "id": "FF32",
+  "file": "lib/_store.js",
+  "find": "/ keeps the case protocol's seal anchors",
+  "replace": "/ holds the case protocol's seal anchors",
+  "what": "M1: the reserved namespace refusal says holds"
+ },
+ {
+  "id": "FF33",
+  "file": "lib/_welcome_email.js",
+  "find": "Anyone with the key can pin",
+  "replace": "Anyone holding the key can pin",
+  "what": "M1: the welcome email says holding"
+ },
+ {
+  "id": "FF34",
+  "file": "api/pin.js",
+  "find": "and what it now has cannot be read as a pin",
+  "replace": "and what it now holds cannot be read as a pin",
+  "what": "M1: pin's 503 says holds"
+ },
+ {
+  "id": "FF35",
+  "file": "api/status.js",
+  "find": "anyone with the bound key can still renew",
+  "replace": "anyone holding the bound key can still renew",
+  "what": "M1: the status page says holding"
+ },
+ {
+  "id": "FF36",
+  "file": "public/.well-known/arcaeon/case-signing-keys.json",
+  "find": "is not shown as verified, whenever",
+  "replace": "is not shown as holding, whenever",
+  "what": "M1: the key document says holding"
+ },
+ {
+  "id": "FF37",
+  "file": "public/.well-known/arcaeon/case-signing-keys.json",
+  "find": "A reader checks a record against the document it names",
+  "replace": "A reader keeps a record to the document it names",
+  "what": "G2: the rotation sentence as before"
+ },
+ {
+  "id": "FF38",
+  "file": "tools/preview_dry_run.js",
+  "find": "\"not shown as verified, whenever it was signed\");",
+  "replace": "\"not shown as holding, whenever it was signed\");",
+  "what": "M1: the preview's revoked words out of step with the key document"
+ },
+ {
+  "id": "FF39",
+  "file": "README.md",
+  "find": "\"This case takes no further reference row: its listing has reached the limit\nof 40.\"",
+  "replace": "\"This case has reached 40 reference rows.\"",
+  "what": "B1: the README quotes the old sentence"
+ },
+ {
+  "id": "FF40",
+  "file": "README.md",
+  "find": "when there is one, the answer is 200,\n`existing: true`, with that row and its seq, and nothing is written.",
+  "replace": "when there is one, a new row is written.",
+  "what": "M2: the README says a new row"
+ },
+ {
+  "id": "FF41",
+  "file": "README.md",
+  "find": "no later than the time of the public commit that has this stamp.",
+  "replace": "no later than the time of the public commit that holds this stamp.",
+  "what": "M1: the README's stamp quote out of step"
+ },
+ {
+  "id": "FF42",
+  "file": "README.md",
+  "find": "> that the caller has a key bound to this namespace prefix, not that the",
+  "replace": "> that the caller holds a key bound to this namespace prefix, not that the",
+  "what": "M1: the README's auth_note quote out of step"
+ },
+ {
+  "id": "FF43",
+  "file": "test/helpers/js_strings.js",
+  "find": "    i += 1;\n    out.push({ line: startLine, text });\n  }\n\n  function readTemplate() {",
+  "replace": "    i += 1;\n  }\n\n  function readTemplate() {",
+  "what": "M1 scan: a quoted string is not returned"
+ },
+ {
+  "id": "FF44",
+  "file": "test/helpers/js_strings.js",
+  "find": "        out.push({ line: startLine, text });\n        text = \"\";\n        i += 2;",
+  "replace": "        text = \"\";\n        i += 2;",
+  "what": "M1 scan: a template's chunk before ${ is not returned"
+ },
+ {
+  "id": "FF45",
+  "file": "test/helpers/js_strings.js",
+  "find": "      if (ch === \"/\" && next === \"/\") {",
+  "replace": "      if (false && ch === \"/\" && next === \"/\") {",
+  "what": "M1 scan: a line comment is lexed as code"
+ },
+ {
+  "id": "FF46",
+  "file": "test/helpers/js_strings.js",
+  "find": "        if (REGEX_AFTER_PUNCT.has(prev) || REGEX_AFTER_WORDS.has(prev)) {",
+  "replace": "        if (false) {",
+  "what": "M1 scan: no regular expression literal is known"
+ },
+ {
+  "id": "FF47",
+  "file": "test/helpers/js_strings.js",
+  "find": "      if (close && ch === \"}\") {\n        if (depth === 0) return;",
+  "replace": "      if (close && ch === \"}\") {\n        if (depth >= 0) return;",
+  "what": "M1 scan: a template expression ends at its first inner brace"
+ },
+ {
+  "id": "FF48",
+  "file": "test/helpers/reconcile_words.js",
+  "find": "  if (mine.includes(PYTHON_DUPLICATE)) return null;\n",
+  "replace": "",
+  "what": "M1 divergence: a port that says holds is let through"
+ },
+ {
+  "id": "FF49",
+  "file": "test/helpers/reconcile_words.js",
+  "find": "  return mine.split(PORT_DUPLICATE).join(PYTHON_DUPLICATE);",
+  "replace": "  return mine;",
+  "what": "M1 divergence: the port's words are not read back"
+ }
+]
