@@ -1,0 +1,324 @@
+{
+  "PG01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "9324995ec3676666417ff76fa7894ee38b0cfa6339c666dbfb73b9e6d19e544d"
+      }
+    ]
+  },
+  "PG02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5b9925e5e22b54657fdfb4975a82a2aed0a79f22511b6842486c8fa363729329"
+      }
+    ]
+  },
+  "PG03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5740473138008d5377a74ca0d24cccfb24822fb3eed62fe4c48660e1f433b887"
+      }
+    ]
+  },
+  "PG05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "6b226c5024d18e8a9c90ef6f8f14adc89c9444ac213907ba61b8bdc0eec76c9b"
+      }
+    ]
+  },
+  "PG04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "7183fccede5a8859680d48a8ecfc730ce4901ab71bf82b7ec57e22184fb08432"
+      }
+    ]
+  },
+  "PG06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "f3025643742505f1d2b5fef1242e8817af0fbd827737c10907da528bbe2b3f45"
+      }
+    ]
+  },
+  "PG08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "a31cc3f57c1c22902487dcd1abc102376d4a4b55523c272bccd99355d3e93e0b"
+      }
+    ]
+  },
+  "PG07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "f3d8bed70d84c8639aa06ec8670d70d83d57ef2a3b9bd7656517131b8e575242"
+      }
+    ]
+  },
+  "PG09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: GET /status rate limited answers 429 {ok: false, error_code: rate_limited, retry_after_seconds}, codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "602e426ed531771387d8e1c3edb67a17693a395775b819459beadeb5ab6b5434"
+      }
+    ]
+  },
+  "PG10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "551005121d8458c8b51f25faca77a77f3bc3055a59d5de52d0673bd6f96a5dd3"
+      }
+    ]
+  },
+  "PG12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "387b6e3792142a403b067a6930d344e664931129d1d5005017bd9ebe0e10815e"
+      }
+    ]
+  },
+  "PG11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "J4: the case is compared at case_commit byte for byte, sig included: a served case whose sig differs from the bytes at case_commit is pin_commit_mismatch; the c",
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "d97465b9674631cabf2b99c4829b0e9dd205b0638e040433755ca04dd762ce8e"
+      }
+    ]
+  },
+  "PG13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "bd97e8af69357be2abca49edd44675d027be26b99aef4835450f093fe1028571"
+      }
+    ]
+  },
+  "PG15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 52,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §3.4 / §5: \"pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion i",
+          "THE TABLE: pinState, pinned (pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, not_pinned (not_pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_missing_field (no_case_commit): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_unknown_field (unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / pin_not_json (pin_not_json): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / not_a_json_object (unreadable_not_a_json_object): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_record_kind (unreadable_case_seal_wrong_record_kind): the pin line, the sentence under it, and the reference's",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_auth_level (unreadable_case_seal_wrong_auth_level): the pin line, the sentence under it, and the reference's a",
+          "THE TABLE: pinState, unreadable / case_seal_namespace_unreadable (unreadable_case_seal_namespace_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / namespace_mismatch (unreadable_namespace_mismatch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_rows (unreadable_case_seal_wrong_rows): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_seq (unreadable_case_seal_wrong_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / chain_unreadable (unreadable_chain_unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_pinned_at_unreadable (unreadable_case_seal_pinned_at_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_auth_note_unreadable (unreadable_case_seal_auth_note_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_case_commit_unreadable (unreadable_case_seal_case_commit_unreadable): the pin line, the sentence under it, and the r",
+          "THE TABLE: pinState, conflict / pin_holds_another_chain (pin_file_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_read_failed (pin_read_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commit_unreadable (pin_commit_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_beyond_bound (pin_commits_beyond): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_none (pin_commits_none): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_json (pin_text): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_503 (pin_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_404 (pin_raw_404): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_fetch_failed (pin_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_500 (pin_raw_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_holds_another_chain (pin_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_judge_fails): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_other_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_at_commit_differs (case_differs): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_absent_at_commit (case_absent): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_not_found (case_not_found): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_off_branch (case_off_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_not_shown (case_not_shown): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_503 (case_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_fetch_failed (case_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_429 (case_raw_429): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_503 (case_exists_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_read_failed (case_exists_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_500 (case_exists_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_503 (case_compare_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_failed (case_compare_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_500 (case_compare_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_unreadable (case_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_name_invalid (case_branch_name): the pin line, the sentence under it, and the reference's answer",
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-PIN 3: the page never prints \"anchored\", even beside a daily anchor record naming the pin's head, and prints the fixed ots verify sentence once",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "THE TABLE: pinState, not_pinned (not_pinned): the pin line, the se",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "007c0483d6a6e916ab8fb918d722cd853afcb17fe8be4146e1f7f413fb45cfd5"
+      }
+    ]
+  },
+  "PG14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "0ee44d3942751bf1464f41631132fb8a3a4fd1a99642e2d531fdb9c00c3886d1"
+      }
+    ]
+  }
+}
