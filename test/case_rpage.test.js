@@ -1095,3 +1095,65 @@ test("R-PAGEg m1: on the real clock the key document's read time is taken when i
   const row = cell(html, "key document");
   assert.ok(row && row.endsWith(`<span class="muted">last read ${iso(AT + 5000)}</span>`), row);
 });
+
+// R-PAGEg's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (PH13): role a's file unreadable and role b's missing: the record is inconsistent, whatever role a's read found: the page 503 case_record_inconsistent, codes only, and so the reveal", async () => {
+  const c = await committedCase("RPAGEg gap precedence");
+  const ra = REG.pathOf(gh, c.id, "a");
+  gh._repoMap(PINS).delete(REG.pathOf(gh, c.id, "b"));
+  const v = await bothViews(c.id, { arm: () => gh.forceGetFailure(PINS, ra, 1, 503), disarm: () => gh.forceGetFailure(PINS, ra, 0) });
+  assert.deepEqual([v.status, v.jsonStatus, v.json], [503, 503, { ok: false, error_code: "case_record_inconsistent" }]);
+  gh.forceGetFailure(PINS, ra, 1, 503);
+  const r = await reveal(c);
+  gh.forceGetFailure(PINS, ra, 0);
+  assert.deepEqual([r.status, r.body.error_code], [503, "case_record_inconsistent"], JSON.stringify(r.body));
+});
+
+test("MUST-FAIL GAP (PH18): both registration files unreadable: each row says its file could not be read, and the twin gives neither time", async () => {
+  const c = await committedCase("RPAGEg gap both unread");
+  const ra = REG.pathOf(gh, c.id, "a");
+  const rb = REG.pathOf(gh, c.id, "b");
+  const v = await bothViews(c.id, {
+    arm: () => { gh.forceGetFailure(PINS, ra, 1, 503); gh.forceGetFailure(PINS, rb, 1, 503); },
+    disarm: () => { gh.forceGetFailure(PINS, ra, 0); gh.forceGetFailure(PINS, rb, 0); },
+  });
+  for (const r of ["a", "b"]) assert.equal(cell(v.html, `role ${r}`), esc("its registration file could not be read when this page was read (registration_unreadable)"), r);
+  assert.deepEqual(v.json.registered_at, { a: null, b: null });
+});
+
+test("MUST-FAIL GAP (PH27): a role whose file this page did not read has no check line: a sealed case read by a reader that skipped role b", async () => {
+  const c = await sealedCase("RPAGEg gap unchecked check line");
+  const real = S.projectedRegistrations;
+  S.projectedRegistrations = async (kase) => {
+    const p = await real(kase);
+    return { ...p, texts: { ...p.texts, b: null }, shas: { ...p.shas, b: null } };
+  };
+  let v;
+  try {
+    v = await bothViews(c.id);
+  } finally {
+    S.projectedRegistrations = real;
+  }
+  const reg = checkLines(v.html).filter((l) => l.text.startsWith(esc("role ")));
+  assert.deepEqual(reg.map((l) => l.text.startsWith(esc("role a's registration file: read"))), [true], JSON.stringify(reg));
+  assert.deepEqual(v.json.checks.filter((x) => x.check === "registration_file").map((x) => x.role), ["a"]);
+});
+
+test("MUST-FAIL GAP (PH29): renderCase handed a clock takes it as the key document's read time (the tests' clock), as the page does when one is handed in", async () => {
+  const c = await sealedCase("RPAGEg gap render clock");
+  S._internal.clearDocumentCache();
+  const out = await CP._internal.renderCase(storedCase(c.id), AT, DOC, {}, null);
+  const row = cell(out.html, "key document");
+  assert.ok(row && row.endsWith(`<span class="muted">last read ${iso(AT)}</span>`), row);
+});
+
+test("MUST-FAIL GAP (PH06): a JSON file's bytes are its text's (fileText, with its closing newline), and a fresh registration's file is written as those bytes, its projection their sha256", async () => {
+  const obj = { kind: "example", n: 1 };
+  assert.deepEqual(store.fileBytes(obj), Buffer.from(store.fileText(obj), "utf8"));
+  const id = await openCase("RPAGEg gap file bytes");
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  const content = gh._repoMap(PINS).get(REG.pathOf(gh, id, "a")).content;
+  assert.equal(content, store.fileText(JSON.parse(content)));
+  assert.equal(storedCase(id).commitments.a.registration_sha256, sha(Buffer.from(content, "utf8")));
+});
