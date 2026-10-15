@@ -1,5 +1,74 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDEg: the R-WIDEf reader's minors (branch `case-protocol-2026-10-10`, NOT deployed)
+
+The R-WIDEf reader said MERGE. The operator's Windows run at 98866db read 1598 tests, 1590 pass, 0 fail, three times, so R-AB, R-ABf, R-WIDE and R-WIDEf count.
+
+- **Commits.** 9321342 (tests and code), 0c16025 (the defect list, committed before the run), 2c471da (the pass's ledger; Group A's run again starts here), and this entry's commit (Group A's ledger and the change log).
+- **G1.** WA24 (`test/must_fail/r_wide_a.json`) found 0 times at 98866db: R-WIDEf's F3-d rewrote its line. It is retargeted at F3-d's off arm (`: { state: "deployment_document_off_branch", ... }` in `deploymentDocumentState`), planted as `document_unavailable`. A test holds every defect in Group A's list to the tree. Group A's 30 were run again at 2c471da: 30 caught. The table below says which commit each run was at; WA24's run at 6d3bef6 planted the line before F3-d, its run at 2c471da the retargeted one.
+- **G2.** No served file under `public/` says "holds": `public/PRACTICES.md` says "a single operator has it", and the key document's `rotation` says "A reader keeps a record to the document it names". The F3-a test now reads every file under `public/` and refuses "holds" and "second operator" in each. `case_rrev`'s test of the key document's prose is rewritten to the new word, with a note.
+- **G3.** R-WIDEf's LATER list gains three bullets, in place: the real registration binding (the opening names the parties' keys), the pin lane's outage marking (a deadline missed while the store answered 5xx is `service_outage`), and the status page's case count truncated past 1,000.
+- **G4.** The contents-API read of the document at the tip (`carriedDocumentPublished`) keeps the raw read's 8-second timeout: `AbortSignal.timeout(DOCUMENT_FETCH_TIMEOUT_MS)` on the read (`lib/_store.js` `getFile` takes a `signal`). A read cut at it is `published_document_unreadable`, reason `fetch_failed`: could not look. The test hangs the read and sets the timeout to 50 ms through `_internal.documentFetch`.
+- **G5.** The status cache's comment names unit R-WIDEf. The README says, next to the status line: "The status page's line about this deployment's key document may be up to about 120 seconds old: a confirmed or off answer is kept 60 seconds, and a commit read as on the branch is kept 60 seconds before that." The cache's key (branch:commit:sha) was planted (WG08): it survived, and is equivalent, since a deployment's branch and the document it carries are fixed for its life.
+- **Tests.** New: R-WIDEg G1 (`test/must_fail_runner.test.js`), G3, G4, G5 (`test/case_rwide_f.test.js`), and the F3-a test's read of `public/`. Each fails on 98866db. Rewritten with a note: `case_rrev`'s key document prose.
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_wide_g.ledger.json`). 12 defects over the lines this unit changed, at 0c16025: 11 caught; WG08 survived and is equivalent, as the brief expected.
+
+  | id | file | planted defect | result | date, at commit |
+  |---|---|---|---|---|
+  | WG01 | `public/PRACTICES.md` | G2: PRACTICES.md says holds | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG02 | `public/.well-known/arcaeon/case-signing-keys.json` | G2: the key document says holds | caught (3 failing) | 2026-10-15, at 0c16025 |
+  | WG03 | `lib/_store.js` | G4: getFile drops the signal it is handed | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG04 | `lib/_case_seal.js` | G4: the tip is read with no timeout | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG05 | `lib/_case_seal.js` | G4: the tip's timeout is not the raw read's 8 seconds | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG06 | `lib/_case_seal.js` | G5: the comment names R-WIDE | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG07 | `README.md` | G5: the README does not say how old the status line can be | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG08 | `lib/_case_seal.js` | G5: the status cache's key is the commit alone (expected equivalent: branch and document are fixed for a deployment's life) | survived; equivalent: a deployment's branch and the document it carries are fixed for its life, so a key of the commit alone names the same answers | 2026-10-15, at 0c16025 |
+  | WG09 | `CHANGELOG.md` | G3: the LATER list drops the registration binding | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG10 | `CHANGELOG.md` | G3: the LATER list drops the outage marking | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG11 | `CHANGELOG.md` | G3: the LATER list drops the count's truncation | caught (2 failing) | 2026-10-15, at 0c16025 |
+  | WG12 | `test/must_fail/r_wide_a.json` | G1: WA24 targets the line F3-d rewrote | caught (1 failing) | 2026-10-15, at 0c16025 |
+
+- **Group A, run again** (`test/must_fail/r_wide_a.ledger.json`): every run, with the commit it was at.
+
+  | id | file | planted defect | first run (pre-B4) | run at 6d3bef6 (R-WIDEf) | run at 2c471da (R-WIDEg) |
+  |---|---|---|---|---|---|
+  | WA01 | `lib/_case_page.js` | the records line drops the typed cross-reference sentence | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA02 | `lib/_case_page.js` | a read that did not see every row says no row was appended | caught (2 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+  | WA03 | `lib/_case_page.js` | every row is said to be appended with the operator key | caught (3 failing), 2026-10-15, no commit recorded | caught (4 failing), 2026-10-15 | caught (5 failing), 2026-10-15 |
+  | WA04 | `lib/_case_page.js` | a failed rows read says no row was appended | survived, 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA05 | `lib/_case_page.js` | rows whose read failed are taken as seen | survived, 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA06 | `lib/_case_page.js` | invalid rows are counted as appended | survived, 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA07 | `lib/_case_page.js` | a withdrawn root whose document could not be read is not the 503 could-not-look page | caught (3 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+  | WA08 | `lib/_case_page.js` | a withdrawn root naming an off-branch document is not the could-not-look page | survived, 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA09 | `lib/_case_page.js` | a withdrawn root signed by a revoked key is not the revoked page | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA10 | `lib/_case_page.js` | a withdrawal record that does not verify shows its detail | caught (4 failing), 2026-10-15, no commit recorded | caught (4 failing), 2026-10-15 | caught (5 failing), 2026-10-15 |
+  | WA11 | `lib/_case_page.js` | the withdrawn row names a role, not the preimage presented | caught (5 failing), 2026-10-15, no commit recorded | caught (5 failing), 2026-10-15 | caught (6 failing), 2026-10-15 |
+  | WA12 | `lib/_case_page.js` | the withdrawn could-not-look page speaks of a sealed record | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA13 | `lib/_case_page.js` | the withdrawn revoked page speaks of a verdict | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA14 | `lib/_case_page.js` | the registration sentence names a party as the signer | caught (3 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+  | WA15 | `lib/_case_http.js` | the opening's named key id is not compared (replanted by unit R-WIDEf, F2-d: a pure not-compared; it was the inverted condition) | caught (548 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA16 | `lib/_case_http.js` | the pre-write bar is not given the registering key id | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA17 | `lib/_case_seal.js` | a revoked reconcile entry offers sealing | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA18 | `lib/_case_http.js` | the reveal does not answer sealing_not_offered | caught (4 failing), 2026-10-15, no commit recorded | caught (5 failing), 2026-10-15 | caught (6 failing), 2026-10-15 |
+  | WA19 | `lib/_case_http.js` | the refusal receipt does not answer sealing_not_offered | caught (3 failing), 2026-10-15, no commit recorded | caught (5 failing), 2026-10-15 | caught (6 failing), 2026-10-15 |
+  | WA20 | `lib/_case_http.js` | the withdrawal and the reference answer an off-branch deployment document_unavailable | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA21 | `lib/_case_http.js` | the reveal answers an off-branch deployment document_unavailable | caught (4 failing), 2026-10-15, no commit recorded | caught (4 failing), 2026-10-15 | caught (5 failing), 2026-10-15 |
+  | WA22 | `lib/_case_http.js` | the refusal receipt answers an off-branch deployment document_unavailable | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA23 | `lib/_case_seal.js` | a commit the repository does not show is taken as off the branch (its text follows R-WIDE C14's line, unit R-WIDEf) | caught (3 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+  | WA24 | `lib/_case_seal.js` | the status state never says the deployment's document is off the branch (retargeted by unit R-WIDEg, G1, at R-WIDEf F3-d's arm) | caught (2 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (6 failing), 2026-10-15 |
+  | WA25 | `api/status.js` | the status page drops the deployment document line | caught (2 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (6 failing), 2026-10-15 |
+  | WA26 | `tools/preview_dry_run.js` | the preview does not call an off-branch deployment BROKEN | caught (1 failing), 2026-10-15, no commit recorded | caught (1 failing), 2026-10-15 | caught (2 failing), 2026-10-15 |
+  | WA27 | `tools/preview_dry_run.js` | the preview does not call a document with no reconcile key BROKEN | caught (1 failing), 2026-10-15, no commit recorded | caught (1 failing), 2026-10-15 | caught (2 failing), 2026-10-15 |
+  | WA28 | `lib/_case_http.js` | the not-a-party refusal says a receipt is issued to a party | caught (2 failing), 2026-10-15, no commit recorded | caught (2 failing), 2026-10-15 | caught (3 failing), 2026-10-15 |
+  | WA29 | `lib/_case_http.js` | the refusal receipt's sealing_not_offered does not say the case is WITHDRAWN | caught (2 failing), 2026-10-15, no commit recorded | caught (4 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+  | WA30 | `public/.well-known/arcaeon/case-signing-keys.json` | the key document's description describes a reconcile key it does not list | caught (3 failing), 2026-10-15, no commit recorded | caught (3 failing), 2026-10-15 | caught (4 failing), 2026-10-15 |
+
+- Counts: as `npm test` prints them on this unit's final tree, three runs, each the same (both environment-dependent tests skip): 1602 tests, 1595 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - G1: "re-run group A's table at the tip" is read as the tip of this unit's code (2c471da carries 9321342's code); the table is generated from the ledger by a script, so the runner's own `--table` is unchanged.
+  - G2: "keeps a record to the document it names" is the architect's word in place of "holds"; it reads as holding a record to a document.
+
 ## 2026-10-15: Unit R-WIDEf: the fixes for the R-WIDE reader's findings (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The reader's verdict on R-WIDE was DO NOT MERGE, on two false sentences (F1). This unit fixes them, the runner (F2) and the reader's other findings (F3), as the architect ruled.
