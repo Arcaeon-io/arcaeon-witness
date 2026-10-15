@@ -1,5 +1,118 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-PAGEg: a writer and its readers hash the same bytes; a row only from its own read (branch `case-protocol-2026-10-10`, NOT deployed)
+
+The R-PAGEf reader's findings, as the architect ruled them; the reader said DO NOT MERGE on B1 and B2. The operator's Windows run at a94c96d read 1660 tests, 1652 pass, 0 fail, three times.
+
+Each new fix test fails on a94c96d: run there in a worktree with this unit's two test files, 6 of 6 fail. Two added tests pass there by design, because they cover behaviour this unit does not change:
+- m3's cost test pins the gone seq's re-read.
+- m2's added page states extend R-PAGEf B1's state list.
+
+- **Commits.**
+  - 7180dca: tests and code.
+  - 94ba74a: the defect list, committed before the run.
+  - 9281716: the pass's ledger part way through the run, committed so the tree was clean.
+  - 924744e: the pass's first ledger, and the gap tests, named in the defect list.
+  - 71be744: the re-seed's ledger.
+  - This entry's commit: the change log.
+- **B1. The commit path projects the bytes it reads.**
+  - `claimOf` now takes the store's read (`{text, bytes}`) and carries the bytes.
+  - The held path projects `sha256(held.bytes)`, and the won path (the lost create-only race) projects `sha256(won.bytes)`.
+  - A fresh write projects `store.fileBytes(record)`. That is a new `lib/_store.js` function, and `putOnce` now sends its output, so the bytes written and the bytes hashed come from one function. `fileText` is used only for this service's own write.
+  - Every reader already compares `sha256(got.bytes)` (R-PAGEf, M1). So a file at the claim's path that validates with a byte that is not UTF-8 in it is now projected as the file it is. A re-send answers 200, and the page, the reveal and the commit read the case.
+- **B2. The twin's `registered_at` comes only from a role's own read.**
+  - `registered_at[r]` (OPEN, COMMITTED and VERDICT twins) is the role's time only where its row was printed from its own read. Everywhere else it is null: a file that could not be read, a role not checked, or no registration.
+  - B2's test runs over every page state, field by field: each string or number in the twin must be on the page. It skips `ok`, a check's kind, the role letters and booleans, which are the twin's structure.
+- **M1. Every role is read before a row prints.**
+  - `projectedRegistrations` reads and checks every projected role before it answers, whatever another role's read found. It answers `failed: {a, b}` per role, and the roles read and checked are in `texts` and `shas`.
+  - Its summary (`ok: false`, `role`, `reason`) names the first inconsistent role, or else the first unreadable one.
+  - On the page (`roleRead`), a role's row prints its time and links only from its own read. A failed read says "its registration file could not be read when this page was read (registration_unreadable)". A row whose file no read checked says "not checked by this page", with no time and no link. Since every role is read, only a reader that skips one reaches that branch; the test stubs one.
+  - A failed read is now a check that ran, and it is listed: "role a's registration file: could not be read", with its code (`registration_unreadable`).
+- **Minors.**
+  - **m1:** on the real clock (no clock handed to `handleCasePage`), the key document's read time is `Date.now()` when its read completes, not the page's start. A clock handed in (`opts.now`, or a direct `renderCase` call) is still the read time.
+  - **m2:** the every-state list (`pageStates`, shared by R-PAGEf B1 and R-PAGEg B2) adds:
+    - both `document_off_branch` pages, each at 200;
+    - the unread page on cases that are not single party (COMMITTED and VERDICT).
+  - **m3: the gone seq's cost.**
+    - Since R-PAGEf (M2), `sentRow` (`lib/_case_http.js:2513`) no longer keeps a seq that was listed and then read 404.
+    - The request's `seen` map is handed to the live count (`liveRecords(kase, {keyDocument, listing, read: seen})`, `lib/_case_http.js:2386`). So on the same request's 201 path, the live count reads that seq again.
+    - That is one more contents-API read for each listed seq among the first 20 that read 404, and only then.
+    - No cost test exercised this path before this unit. `R-PAGEg m3` (`test/case_rfg.test.js`) now pins the calls: the listing, `GET 1` (404), `PUT 2`, `GET 1`.
+  - **m4:** the second `namedDocumentOf` call in `sealedRecordReason` gets the reader's clock.
+- **Line counts.**
+  - `lib/_case_page.js`: 1117 to 1149.
+  - `lib/_case_seal.js`: 2509 to 2528.
+  - `lib/_case_http.js`: 2540 to 2544.
+  - `lib/_store.js`: 972 to 979.
+- **Tests.**
+  - New in `test/case_rpage.test.js`:
+    - R-PAGEg B1 (two: the held path, and the won path);
+    - B2 (every state, field by field);
+    - M1 (two: role a unread with role b read, and the unchecked row);
+    - m1;
+    - the gap tests below for PH06, PH13, PH18, PH27 and PH29.
+
+    New in `test/case_rfg.test.js`: m3.
+  - Rewritten, with a note: R-PAGEf B1's state list is now `pageStates()` (m2).
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_pageg.ledger.json`). 34 defects over the lines this unit changed, at 94ba74a.
+  - 26 were caught on their first run. 8 survived. Five got gap tests (924744e), and their re-seed at 924744e caught all five, each by its gap test:
+    - PH06: `fileBytes` returns bytes other than the file's text. The writer and the projection both use it, so they agree, and only the file's form changed. The gap test holds `fileBytes` to `fileText` and to the file as written.
+    - PH13: the summary in role order, so an unreadable role a hides an inconsistent role b.
+    - PH18: only the first failed role is marked unread, which shows when both files are unreadable.
+    - PH27: a role whose file was not read is given a check line.
+    - PH29: `renderCase`, handed a clock directly, does not take it as the read time.
+
+    PH16, PH17 and PH28 are equivalent (the table gives the reasons).
+  - 31 of 34 caught; PH16, PH17 and PH28 equivalent.
+  - Not planted: the comments.
+
+  | id | file | planted defect | first run (date, at commit) | last re-seeded and caught (date, at commit) |
+  |---|---|---|---|---|
+  | PH01 | `lib/_case_http.js` | B1: the held path projects the text re-encoded | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH02 | `lib/_case_http.js` | B1: the won path projects the text re-encoded | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH03 | `lib/_case_http.js` | B1: claimOf carries the text re-encoded, not the bytes | caught (4 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH04 | `lib/_case_http.js` | B1: a fresh write projects bytes it did not write | caught (560 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH05 | `lib/_case_http.js` | B1: claimOf reads no record from the file | caught (30 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH06 | `lib/_store.js` | B1: fileBytes is not the file's text | survived; caught on re-seed by MUST-FAIL GAP (PH06): a JSON file's bytes are its text's (fileText, with its closing newline), and a fresh registration's file is written as those bytes, its projection their sha256, 2026-10-15, at 94ba74a | 2026-10-15, at 924744e |
+  | PH07 | `lib/_store.js` | B1: the write sends other bytes than fileBytes | caught (560 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH08 | `lib/_store.js` | B1: fileBytes not exported | caught (606 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH09 | `lib/_case_seal.js` | M1: an unreadable role returns before the other role is read (R-PAGEf's form) | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH10 | `lib/_case_seal.js` | M1: a missing file is not inconsistent | caught (15 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH11 | `lib/_case_seal.js` | M1: a file that differs is not inconsistent | caught (18 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH12 | `lib/_case_seal.js` | M1: a projection that differs is not inconsistent | caught (16 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH13 | `lib/_case_seal.js` | M1: the first failure in role order, an inconsistent one or not | survived; caught on re-seed by MUST-FAIL GAP (PH13): role a's file unreadable and role b's missing: the record is inconsistent, whatever role a's read found: the page 503 case_record_inconsistent, codes only, and so the reveal, 2026-10-15, at 94ba74a | 2026-10-15, at 924744e |
+  | PH14 | `lib/_case_seal.js` | M1: an unreadable role answers ok | caught (7 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH15 | `lib/_case_seal.js` | M1: an ok answer names no failed roles | caught (192 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH16 | `lib/_case_seal.js` | m4: the second document read drops the reader's clock | survived; equivalent: the second read of the named document in sealedRecordReason runs only after the first (signedUnderReason's) read and checked it, which keeps it in the cache; the second is always that cache hit, and its read time is not returned, 2026-10-15, at 94ba74a | never (equivalent) |
+  | PH17 | `lib/_case_page.js` | M1: an inconsistent answer also fills the unread roles | survived; equivalent: renderCase returns the case_record_inconsistent page on reads.inconsistent before it uses reads.unread or reads.proj, so what registrationReads fills in after an inconsistent answer is never read, 2026-10-15, at 94ba74a | never (equivalent) |
+  | PH18 | `lib/_case_page.js` | M1: only the first failed role is unread | survived; caught on re-seed by MUST-FAIL GAP (PH18): both registration files unreadable: each row says its file could not be read, and the twin gives neither time, 2026-10-15, at 94ba74a | 2026-10-15, at 924744e |
+  | PH19 | `lib/_case_page.js` | M1: no projection kept when a read failed (R-PAGEf's form) | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH20 | `lib/_case_page.js` | M1: an unread role is not said to be unread | caught (6 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH21 | `lib/_case_page.js` | M1: a role with no registration is unchecked | caught (8 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH22 | `lib/_case_page.js` | M1: a role not read prints as read | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH23 | `lib/_case_page.js` | M1: the unchecked row in other words | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH24 | `lib/_case_page.js` | M1: an unchecked row prints its time and links | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH25 | `lib/_case_page.js` | M1: a failed registration read has no check line | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH26 | `lib/_case_page.js` | M1: the failed read's line names another code | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH27 | `lib/_case_page.js` | M1: a role not read gets a check line | survived; caught on re-seed by MUST-FAIL GAP (PH27): a role whose file this page did not read has no check line: a sealed case read by a reader that skipped role b, 2026-10-15, at 94ba74a | 2026-10-15, at 924744e |
+  | PH28 | `lib/_case_page.js` | M1: a role with no registration gets a check line | survived; equivalent: a role with no registration has no sha256 and no failed read, so the next guard (no sha256 read) skips it; and the checks list is printed only on pages of a sealed record, where both roles are registered, 2026-10-15, at 94ba74a | never (equivalent) |
+  | PH29 | `lib/_case_page.js` | m1: a clock handed to renderCase is not the read time's | survived; caught on re-seed by MUST-FAIL GAP (PH29): renderCase handed a clock takes it as the key document's read time (the tests' clock), as the page does when one is handed in, 2026-10-15, at 94ba74a | 2026-10-15, at 924744e |
+  | PH30 | `lib/_case_page.js` | m1: the page's start is the read time on the real clock (R-PAGEf's form) | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH31 | `lib/_case_page.js` | m1: a clock handed in is not the read time's | caught (4 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH32 | `lib/_case_page.js` | m1: the real clock is taken as handed in | caught (3 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH33 | `lib/_case_page.js` | m1: a clock handed in is taken as the real one | caught (4 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+  | PH34 | `lib/_case_page.js` | B2: the twin gives every registered role's time (R-PAGEf's form) | caught (5 failing), 2026-10-15, at 94ba74a | 2026-10-15, at 94ba74a |
+
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1672 tests, 1665 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - **The summary's precedence.** M1 reads every role, so a case can have role a unreadable and role b inconsistent. The summary names the inconsistent role first, so the page, the commit, the reveal, the withdrawal and the reference all answer `case_record_inconsistent` there. Before this unit, role a's read ended the check, and they answered could-not-look. Both are 503s.
+  - **A failed read now has a check line.** "role a's registration file: could not be read" `registration_unreadable` is listed among the checks, and in the twin. R-PAGE P8 says a check that failed carries its code. Before M1 there was no line for it, because the answer for an unread file carried no projection.
+  - **"not checked by this page" is unreachable through the real reader.** It is reached only through a reader that skips a role, which the tests stub, since `projectedRegistrations` now reads every role. The rule is kept so that no row prints from a read that did not run.
+  - **m1 tells the real clock apart by its source.** The page's clock is real when no `opts.now` is handed to `handleCasePage`. A direct `renderCase` call is taken as handed a clock (`clockGiven` defaults to true), as the tests call it.
+  - **m4 changes nothing observable.** The second read of the named document is always the first read's cache hit, and its read time is not returned. Its planted defect, PH16, is equivalent for that reason.
+  - **The README is unchanged.** Its paragraph on the page's checks still holds. It says nothing of the registration rows.
+
 ## 2026-10-15: Unit R-PAGEf: the twin shows only what the page shows; the key document's read time is the read's (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The R-PAGE reader's findings, as the architect ruled them. The reader said DO NOT MERGE on B1 and B2. R-FGg counts: the operator's Windows run at 81b4da8 read 1646 tests, 1638 pass, 0 fail, three times. Each new test fails on 81b4da8. They were run there in a worktree with this unit's two test files, and all 9 of 9 fail. Eight fail on the behaviour this unit changes. m5's fails because `jsFilesUnder` is not in the helper at 81b4da8 (the walk is the fix). R-PAGE P2, rewritten for m1, fails there too.
