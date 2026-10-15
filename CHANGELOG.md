@@ -1,5 +1,93 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDE, Group B: fail closed, and the read budget (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** d659aa1 (tests and code), ece9165 (the defect list, committed before the run, since the runner now plants only over a clean checkout), 2007c30 (the gap tests, and two runner fixes the pass found), and this entry's commit (the ledger and the change log).
+- **B1. The case page reads with its own token, and keeps a page a minute.**
+  - `lib/_store.js` `asReader(fn)`: every GitHub call `fn` makes, and every call those make, for a target whose token is the pins token (the pins repository, and the key document's compare) carries `GITHUB_READ_TOKEN` when that is set, the pin token when it is not. A call for another repository's target (the stamps repository) keeps its own token. A write inside a reader throws ("a reader writes nothing"). The scope follows the page's async calls, so the helpers the page shares with writers (`projectedRegistrations`, `pinState`, `liveRecords`, the sealed check) read with the read token on the page's path only.
+  - The case page runs every read inside `asReader`.
+  - THE PAGE CACHE (`lib/_case_page.js` `pageCache`): the dispatch (`api/verify.js`) passes the instance's cache; a page answered 200 is kept 60 seconds by case id, with the root's blob sha it was rendered from, at most 500 pages, the oldest dropped first. A view within the minute makes no store call. A 503 or a 404 is not kept. The page's footer says it "may be up to 60 seconds old". A direct call with no cache (the tests') reads every time.
+  - The status page shows one line: "The case page reads the pins repository with its own read token." or "This deployment has no separate read token: the case page reads the pins repository with the token it writes with." It names no variable and prints no token.
+  - README: `GITHUB_READ_TOKEN` and the 60 seconds.
+- **B2. One raw read of the document at the tip.** `lib/_case_seal.js` `carriedDocumentPublished(doc, env)`: the key document at the tip of the published branch (`KEY_DOCUMENT_BRANCH`), read once from the raw host and never kept, must be the carried copy, byte for byte in json-c14n:v1 (the comparison `confirmSealingDocument` makes at a commit).
+  - The sealer's pass (`anchorPending`, which `lib/_sealer.js` `anchorCases` and `tools/seal_batch.js` run) reads it first: a copy that differs is `{ok: false, reason: "carried_document_not_published", detail: "published_document_differs"}`, a tip that could not be read `published_document_unreadable` (with the read's reason), and nothing is read or written.
+  - `tools/check_refusal_receipt.js`'s online check reads it before it prints `ok: true`: otherwise `{ok: false, reason: <the code>, detail}` and exit 1. `main` takes the carried document as an option (tests hand theirs).
+  - `tools/preview_dry_run.js` (f): a stale checkout is BROKEN, a tip it could not read COULD NOT LOOK.
+  - Test helper: `KD.publishTip(gh, doc[, branch])` serves a document at the branch tip; `KD.serve` now also makes the document it serves the tip, as publishing it would.
+- **B3. (f) writes only where --store names.** `tools/preview_dry_run.js` takes `--store <owner/repo>`. Without it (f) is COULD NOT LOOK: "--store <owner/repo> was not given: (f) writes to the pins store this shell names (R@B), and runs only when --store names it". A name that is not this shell's store is COULD NOT LOOK too, and nothing is written. When it runs, it logs "(f) target repository: R@B; the case pass writes here" before the case pass. README says so.
+- **B4. The runner vouches only for a catch that happened.** `test/must_fail/run.js`:
+  - It plants only over a clean checkout (`git status --porcelain` prints nothing; otherwise it refuses and plants nothing), and only after the unplanted suite, run the same way, exits 0 with no failing test (otherwise it refuses: "the unplanted suite does not pass ..."). TODO tests are not failing tests.
+  - A catch is exit code 1 AND a failing test; any other exit with failing tests is `error`.
+  - Every ledger run records `head` (`git rev-parse HEAD`), `porcelain` ("") and `defect_sha256` (the sha256 of the json bytes of `{find, replace}`).
+  - A defect may name its gap test (`gap`); the table prints it "named, not verified" until the latest catch failed it. R-ABf removed the operator's `--gap` option; the defects file's field is where a name is given now.
+  - The suite runs with no `WITNESS_*`, no `GITHUB_*` and nothing named `*_TOKEN` or `*_SECRET`, and with `NODE_OPTIONS` set to one preload, `test/must_fail/no_network.js`, which refuses `fetch` to any host but this machine's (a test's mock replaces it while installed).
+  - `--root <dir>` runs it over another repository; the runner's own tests use a tiny fixture repository, never this one.
+  - **Found by this group's own pass, and fixed** (2007c30): the copies were taken after the unplanted suite ran, so a file changed in the tree mid-run would have been planted against (WB34's survival showed the planted file was read from the live tree too, before the change); every copy is now taken right after the clean-tree check. And the suite's `NODE_OPTIONS` was appended to an inherited one, so a runner run inside a planted-defect run carried the outer shim first, which answered for the inner (WB38's survival); it is now replaced. Group A's pass was run before either fix, by the R-ABf runner.
+- **B5 (the runner on Windows).** `killGroup` kills the suite's tree with `taskkill /pid <pid> /T /F` on win32 and its process group elsewhere; a test asserts both paths with the platform and the spawner handed in. The two interrupt tests (SIGINT removes the copies; RN8, RN9) now run against a fixture repository and skip on win32 with the reason printed ("Windows delivers no SIGINT to a handler and has no process groups; the taskkill path is asserted by R-WIDE B5").
+- **Line counts.** `lib/_store.js` 942 to 968, `lib/_case_page.js` 786 to 828, `lib/_case_seal.js` 2355 to 2403, `test/must_fail/run.js` 241 to 337, `tools/check_refusal_receipt.js` 72 to 78, `tools/preview_dry_run.js` 999 to 1025, `api/status.js` 407 to 416.
+- **Tests.**
+  - New: `test/case_rwide.test.js` Group B (5, and 3 gap tests), `test/must_fail_runner.test.js` (6, and 3 gap tests), `test/preview_dry_run.test.js` (2, and 1 gap test). The 13 new tests fail on 7cfb55f.
+  - Rewritten, each with a note: the two interrupt tests (a fixture repository; skip on win32); `case_item2c` FIX 6, `case_mutation_gaps` S39 and `case_signed_under` L01 (each publishes the tip it needs: they ran the sealer with no document served at the tip; L01's tip is its own unreadable document, so the pass still reaches the case); `case_rn3` N3 (the online check's ok needs the tip); the preview's (f) VERIFIED test (its fresh store publishes the tip) and its CLI usage line (`[--pin-token <t> --store <owner/repo>]`); the preview test helper names the test's store when the pin token is given.
+  - `tools/check_refusal_receipt.js` stays under 80 lines (R-N2 m6).
+
+- **The must-fail pass** (the repository's runner, the B4 runner itself; dates from the ledger, `test/must_fail/r_wide_b.ledger.json`, whose runs record the commit they planted against). 38 defects were planted over the lines Group B changed, each alone with the whole suite run, over ece9165: `lib/_store.js` 4, `lib/_case_page.js` 7, `api/verify.js` 1, `api/status.js` 2, `lib/_case_seal.js` 4, `tools/check_refusal_receipt.js` 2, `tools/preview_dry_run.js` 5, `test/must_fail/run.js` 11, `test/must_fail/no_network.js` 2.
+  - 31 were caught. 7 survived: WB02, WB10, WB17 and WB25 each got a gap test. WB34 (a defect's file read from the live tree) and WB38 (the shim lets the network through) showed the two runner faults above; WB37 (the shim refuses this machine) got a gap test.
+  - The two fixes went in 2007c30 with the gap tests, and two new defects plant them back: WB39 and WB40. WB32's text changed with the fix (it removes the new assignment), so its new runs carry a new `defect_sha256`.
+  - The re-seed, over 2007c30, ran the 7 survivors, every runner defect (WB26 to WB40, since the runner changed) and the two new ones: 19, all caught. WB38 is caught by the B4 environment test, not by a gap test of its own: once the shim is the only preload, that test sees it.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | WB01 | `lib/_store.js` | B1: a reader's calls carry the pin token | caught (2 failing) | 2026-10-15 |
+  | WB02 | `lib/_store.js` | B1: a reader's call to another repository's target carries the read token | survived; caught on re-seed by MUST-FAIL GAP (WB02): inside a reader, a call for another repository's target (the stamps repository) carries that target's own token, never the read token | 2026-10-15 |
+  | WB03 | `lib/_store.js` | B1: a reader may write | caught (2 failing) | 2026-10-15 |
+  | WB04 | `lib/_store.js` | B1: the read token is never seen as set | caught (3 failing) | 2026-10-15 |
+  | WB05 | `lib/_case_page.js` | B1: the page reads outside the reader scope | caught (2 failing) | 2026-10-15 |
+  | WB06 | `lib/_case_page.js` | B1: a 503 page is kept | caught (2 failing) | 2026-10-15 |
+  | WB07 | `lib/_case_page.js` | B1: a page is kept one millisecond past 60 seconds | caught (2 failing) | 2026-10-15 |
+  | WB08 | `lib/_case_page.js` | B1: a kept page is never served | caught (2 failing) | 2026-10-15 |
+  | WB09 | `lib/_case_page.js` | B1: no page is kept | caught (2 failing) | 2026-10-15 |
+  | WB10 | `lib/_case_page.js` | B1: the cache has no bound | survived; caught on re-seed by MUST-FAIL GAP (WB10): the page cache keeps at most its bound, dropping the oldest page first | 2026-10-15 |
+  | WB11 | `lib/_case_page.js` | B1: the page does not say it may be up to 60 seconds old | caught (2 failing) | 2026-10-15 |
+  | WB12 | `api/verify.js` | B1: the dispatch keeps no page | caught (2 failing) | 2026-10-15 |
+  | WB13 | `api/status.js` | B1: the status line says the opposite | caught (2 failing) | 2026-10-15 |
+  | WB14 | `api/status.js` | B1: the status page drops the read-token line | caught (2 failing) | 2026-10-15 |
+  | WB15 | `lib/_case_seal.js` | B2: the sealer pins under a document that is not the published one | caught (3 failing) | 2026-10-15 |
+  | WB16 | `lib/_case_seal.js` | B2: the tip is read and not compared | caught (4 failing) | 2026-10-15 |
+  | WB17 | `lib/_case_seal.js` | B2: the tip is read on main whatever branch is published | survived; caught on re-seed by MUST-FAIL GAP (WB17): the document at the tip is read on the published branch KEY_DOCUMENT_BRANCH names, not on main | 2026-10-15 |
+  | WB18 | `lib/_case_seal.js` | B2: a tip that could not be read passes | caught (3 failing) | 2026-10-15 |
+  | WB19 | `tools/check_refusal_receipt.js` | B2: the checker says ok under a stale document | caught (2 failing) | 2026-10-15 |
+  | WB20 | `tools/check_refusal_receipt.js` | B2: the checker checks under another document than the one it holds to the tip | caught (2 failing) | 2026-10-15 |
+  | WB21 | `tools/preview_dry_run.js` | B3: (f) runs with no --store | caught (1 failing) | 2026-10-15 |
+  | WB22 | `tools/preview_dry_run.js` | B3: (f) runs when --store names another repository | caught (1 failing) | 2026-10-15 |
+  | WB23 | `tools/preview_dry_run.js` | B3: the target is not printed before any write | caught (1 failing) | 2026-10-15 |
+  | WB24 | `tools/preview_dry_run.js` | B2: a tip that could not be read is BROKEN in (f) | caught (1 failing) | 2026-10-15 |
+  | WB25 | `tools/preview_dry_run.js` | B3: the CLI has no --store | survived; caught on re-seed by MUST-FAIL GAP (WB25): the CLI takes --store, and refuses an empty one | 2026-10-15 |
+  | WB26 | `test/must_fail/run.js` | B4: the runner plants over a suite that already fails | caught (1 failing) | 2026-10-15 |
+  | WB27 | `test/must_fail/run.js` | B4: any non-zero exit with a failing test is a catch | caught (1 failing) | 2026-10-15 |
+  | WB28 | `test/must_fail/run.js` | B4: the runner plants over a tree that is not clean | caught (1 failing) | 2026-10-15 |
+  | WB29 | `test/must_fail/run.js` | B4: no defect sha256 recorded | caught (1 failing) | 2026-10-15 |
+  | WB30 | `test/must_fail/run.js` | B4: a named gap test is printed as verified | caught (1 failing) | 2026-10-15 |
+  | WB31 | `test/must_fail/run.js` | B4: GITHUB_* variables and tokens reach the suite | caught (1 failing) | 2026-10-15 |
+  | WB32 | `test/must_fail/run.js` | B4: the suite may reach the network | caught (1 failing) | 2026-10-15 |
+  | WB33 | `test/must_fail/run.js` | B5: no taskkill on Windows | caught (1 failing) | 2026-10-15 |
+  | WB34 | `test/must_fail/run.js` | found in R-WIDE A: a defect's file read from the live tree, not the copy | survived; caught on re-seed by MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and | 2026-10-15 |
+  | WB35 | `test/must_fail/run.js` | B4: --root ignored | caught (5 failing) | 2026-10-15 |
+  | WB36 | `test/must_fail/run.js` | B5: the kill reaches the suite only, not its group | caught (2 failing) | 2026-10-15 |
+  | WB37 | `test/must_fail/no_network.js` | B4: the suite's fetch refuses this machine too | survived; caught on re-seed by MUST-FAIL GAP (WB37): the suite's fetch reaches this machine: a fixture that serves itself on 127.0.0.1 passes unplanted | 2026-10-15 |
+  | WB38 | `test/must_fail/no_network.js` | B4: the suite's fetch reaches the network | survived; caught on re-seed by R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's | 2026-10-15 |
+  | WB39 | `test/must_fail/run.js` | found in this pass: an inherited NODE_OPTIONS preload is carried before the no-network shim | caught (1 failing) | 2026-10-15 |
+  | WB40 | `test/must_fail/run.js` | found in this pass: a worker's copy is taken after the unplanted suite has run | caught (1 failing) | 2026-10-15 |
+
+- Counts: as `npm test` prints them here (both environment-dependent tests skip): 1554 tests, 1547 pass, 2 skipped, 0 fail, 5 todo. The three runs are on the final tree, after Group D.
+- **UNSURE.**
+  - B1: "keyed by case id and root sha" is read as kept by case id, with the root's sha recorded beside the page. A key that needs the root's sha needs a read to learn it, and the ruling's test asks that a second view make no store call.
+  - B1: the cache is per instance and lives only in memory; another instance reads afresh. A deployment's own write (a reveal, a withdrawal) does not drop the page it changed: the page may show the state before it for up to 60 seconds, and says so.
+  - B1: the status page and the other public reads (`api/latest.js`, the badge, `?op=` reads) still read with the pin token; the ruling names the case page's readers.
+  - B2: a tip that could not be read stops the sealer's whole pass (nothing pinned, nothing repaired), and it reads again next run. The page and the reveal do not read the tip.
+  - B3: COULD NOT LOOK, not BROKEN, for a run without `--store`: the preview was not shown to be broken.
+  - B4: "a clean git status --porcelain" is read as a precondition (the runner refuses otherwise) and recorded (`porcelain: ""`), so a defect list is committed before its run and its ledger in the commit after. "No not-ok line" is read as no failing test: the suite's TODO tests print "not ok ... # TODO" and are not failures. Nothing else of the environment is scrubbed (PATH, HOME and the rest are kept).
+  - B5: the Windows path is asserted with the platform handed in; this session has no Windows machine, so "0 fail on Windows at this unit's tip" is not shown here.
+
 ## 2026-10-15: Unit R-WIDE, Group A: page sentences that claim more than the record (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **The brief.** Three outside readers read the whole protocol at a118c94 as hostile strangers; the architect's rulings on what they found are binding. R-WIDE is four groups (A to D), each its own commit set and its own entry here. This is Group A, the blockers.
