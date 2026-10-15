@@ -1,0 +1,57 @@
+{
+  "PF03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGEf B2: the key-document row prints when the document was read, and says so when it came from this instance's cache",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
+        "porcelain": "",
+        "defect_sha256": "614b8060205ba86c62f089900248a19d2d5dd490a6aed6e14db07b9afcda2b1f"
+      }
+    ]
+  },
+  "PF01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGEf B2: the key-document row prints when the document was read, and says so when it came from this instance's cache",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
+        "porcelain": "",
+        "defect_sha256": "aec2072070fb4482e8512e17660ed15ab1859605dab1a16622aa96907ab3d0f9"
+      }
+    ]
+  },
+  "PF02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were las",
+          "R-PAGEf B2: the key-document row prints when the document was read, and says so when it came from this instance's cache",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
+        "porcelain": "",
+        "defect_sha256": "e44ab0d9a888a72cc215e142822634380e750b9f8c0d35abc8e5100ab28892a4"
+      }
+    ]
+  }
+}
