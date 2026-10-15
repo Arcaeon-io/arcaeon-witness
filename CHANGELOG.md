@@ -1,5 +1,53 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-FG (v2): 40 reference rows a case, judged from the listing; no counter (branch `case-protocol-2026-10-10`, NOT deployed)
+
+AIM (the architect's ruling): a case takes at most 40 reference rows, judged from the listing, with no counter and no quota unit spent on a refusal. The brief was written against c5770ce; its line numbers were stale at 98866db, so each piece is named below with where it was at 98866db and where it lives now.
+
+- **Commits.** 3820e60 (tests and code), 376393b (the defect list, committed before the run), 3196788 (the pass's first ledger and the gap tests), and this entry's commit (the re-seed's ledger and the change log).
+- **1. The cap is 40, for every caller, the operator too.** `lib/_case_seal.js` `MAX_REFERENCE_ROWS` (98866db: line 1546, 500; now line 1555, 40). README: "A case takes at most 40 reference rows, for every appender, the operator too; the 41st is refused 409 `row_limit`." (98866db: README line 1050, "500 ... the 501st"; now line 1053 on, with how the cap is judged and that a contended reference finishes on a re-send.)
+- **2. Judged from the listing, either way; codes only.** `lib/_case_seal.js` `referenceListing(caseId)` (new, line 2230) lists the rows directory once and answers `{seqs, files}`: the row seqs in order, and the count of every file listed, a row or not. `referenceSeqs` (98866db line 2218, now 2242) reads it. In `handleCaseReference`, step 4 (the row listing: 98866db line 2373, `SEAL.referenceSeqs`; now line 2350, `SEAL.referenceListing`), a reference is refused when the highest listed seq plus one would pass 40 OR the listing has 40 files or more: 409 `row_limit`, body `{ok: false, error_code: "row_limit", case_id, count, limit}`, `count` the files listed, `limit` 40, and no sentence (it carried one). The page says it instead (`lib/_case_page.js` `ROW_LIMIT_SENTENCE`, line 414, shown under the records line when `liveRecords`, which now answers `listed` and `highest`, reads the case at the cap).
+- **3. The counter is removed** (`lib/_case_http.js` at 98866db): the THE REFERENCE QUOTA comment (433-452; replaced by THE ROW CAP, line 433), `REFERENCE_QUOTA_PER_ROLE` (506-508), `referenceQuotaPath` and `referenceQuotaRecord` (525-530), `takeReferenceQuota` (579-583), the handler's `unitTaken` (2369) and quota block (2406-2425, the 409 `reference_quota` and the 503 `reference_quota_unreadable`), the export `REFERENCE_QUOTA_PER_ROLE` (2467) and `_internal.referenceQuotaPath`, `takeReferenceQuota` (2470). `takeUnit` (now line 524) and `quotaStore` (now line 506) stay: the open quota uses them. `reference_quota` is answered nowhere; nothing is read or written under `case_references/` in the usage repository. Counters a deployment before R-FG wrote there are left in place and never read (nothing is deleted).
+- **4. A contended reference spends nothing.** `reference_seq_contended` (98866db line 2440, now 2397) is unchanged; at 98866db a role's unit was taken before the write, so twenty contended sends spent twenty units and a re-send was refused 409 `reference_quota`. With no unit, a re-send finishes.
+- **5.** No request reads or writes a `case_references/` path: the test spies the page, the status page, open, commit, reveal, withdrawal, a reference with no proof and no bearer, with a bearer that is not the operator's, with the operator's key unset, by a role and by the operator.
+- **Line counts.** `lib/_case_http.js` 2471 to 2427, `lib/_case_seal.js` 2456 to 2474, `lib/_case_page.js` 849 to 857, `README.md` 1082 to 1088.
+- **Tests.**
+  - New: `test/case_rfg.test.js`, five (R-FG 1 to 5, one per item 1 to 5), and two gap tests from the pass (RF02; RF05, RF15). Each fails on 98866db and on c5770ce (run there with this branch's test helpers), for its own reason: the 500 cap, the per-role counter refusing row 21, the counter path written, and the re-send after contention refused 409 `reference_quota`.
+  - Rewritten to the new rule, each with a note: `case_rl2` R-L2 M3 (the cap and its codes-only 409); `case_budgets`'s FIX G block (one role past 20 up to 40 and the 41st refused for every caller; refusals write nothing; a pre-R-FG counter is not read and the cap is per case; 46 at once append at most 40; a moved seq counts nothing; the create race now on the open quota's counter, which `takeUnit` still keeps); `case_redteam` §2C (a role's flood stops at the case's 40, 409 `row_limit`) and the §4 cost test's notes; `case_rn` R-N N1 (no `case_references/` path, in place of `referenceQuotaPath`).
+  - Removed: `case_budgets` "FIX G: one number" (the regex over the source that held `REFERENCE_QUOTA_PER_ROLE` to `OPEN_QUOTA_PER_DAY`).
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_fg.ledger.json`). 16 defects over the lines this unit changed, at 376393b, one of them a counter write put back (RF12).
+  - 13 were caught on their first run. 3 survived and got gap tests: RF02 (a directory in the listing counted as a file) and RF05, RF15 (the page judging the cap by the file count alone). Their re-seed, at 3196788, caught all three.
+  - 16 of 16 caught.
+  - Not planted: `live.ok &&` in `atRowLimit` (a listing that could not be read answers no `listed` or `highest`, so the sentence is not shown either way).
+
+  | id | file | planted defect | first run (date, at commit) | last re-seeded and caught (date, at commit) |
+  |---|---|---|---|---|
+  | RF01 | `lib/_case_seal.js` | 1: the cap is 41 | caught (6 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF02 | `lib/_case_seal.js` | 2: a directory in the listing is counted as a file | survived; caught on re-seed by MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th, 2026-10-15, at 376393b | 2026-10-15, at 3196788 |
+  | RF03 | `lib/_case_seal.js` | 2: no file is counted | caught (6 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF04 | `lib/_case_seal.js` | 2: the page is told no file is listed | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF05 | `lib/_case_seal.js` | 2: the page is told the highest seq is 0 | survived; caught on re-seed by MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed, 2026-10-15, at 376393b | 2026-10-15, at 3196788 |
+  | RF06 | `lib/_case_http.js` | 2: the highest seq is not held to the cap | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF07 | `lib/_case_http.js` | 2: the listed file count is not held to the cap | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF08 | `lib/_case_http.js` | 2: 40 files listed is not the cap | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF09 | `lib/_case_http.js` | 2: count is the rows, not the files listed | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF10 | `lib/_case_http.js` | 2: the 409 body carries a sentence | caught (5 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF11 | `lib/_case_http.js` | 2: the 409 body has no limit | caught (6 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF12 | `lib/_case_http.js` | 3: a reference writes a counter in the usage repository again | caught (13 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF13 | `lib/_case_page.js` | 2: the page never says the case reached the cap | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF14 | `lib/_case_page.js` | 2: the page's cap ignores the listed file count | caught (2 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+  | RF15 | `lib/_case_page.js` | 2: the page's cap ignores the highest seq | survived; caught on re-seed by MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed, 2026-10-15, at 376393b | 2026-10-15, at 3196788 |
+  | RF16 | `README.md` | 1: the README says 500 | caught (3 failing), 2026-10-15, at 376393b | 2026-10-15, at 376393b |
+
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1608 tests, 1601 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - unit_R_FG.txt was not in this session (the reader's and architect's files live on the operator's machine). The five new tests are written from this brief's items 1 to 5, one each, and the page sentence is this unit's own: "This case has reached 40 reference rows, the most one case takes; no further row is appended to it." The ruled sentence, when it comes, replaces it.
+  - "reason row_limit" is read as the error code `row_limit` (the code that exists); the body has no `reason` field.
+  - "the listed file count" is read as every file the rows directory lists, a row or not (a directory is not counted); `count` in the body is that number.
+  - The 503 `reference_seq_contended` keeps its sentence: this unit changes when it is answered, not its body.
+  - Found, not fixed (outside this unit): the reference write passes `rebuild: () => null` to `putFile`; when a PUT answers 409 and the re-read finds another writer's row at that seq, `putFile` returns `{abandoned: true}` rather than throwing, and the handler takes it as written and answers 201 for a row another request wrote. A create race that answers 422 is handled (it throws, and the row moves to the next seq). Named for LATER.
+
 ## 2026-10-15: Unit R-WIDEg: the R-WIDEf reader's minors (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The R-WIDEf reader said MERGE. The operator's Windows run at 98866db read 1598 tests, 1590 pass, 0 fail, three times, so R-AB, R-ABf, R-WIDE and R-WIDEf count.

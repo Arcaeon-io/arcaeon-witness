@@ -52,6 +52,22 @@
         "head": "376393b7affacc87cac8d5026c994c69b61d52da",
         "porcelain": "",
         "defect_sha256": "cc4d43f73a9485dc7d856869ce495d70a472b61fb9989ac6d1cb73e77757b401"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "cc4d43f73a9485dc7d856869ce495d70a472b61fb9989ac6d1cb73e77757b401",
+        "caught_by": [
+          "MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th"
+        ]
       }
     ]
   },
@@ -83,6 +99,22 @@
         "head": "376393b7affacc87cac8d5026c994c69b61d52da",
         "porcelain": "",
         "defect_sha256": "8bfb80d924fe5a64dabe91369c5eb526dcf86c6e43775bd36d59bce6d0f6959a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "8bfb80d924fe5a64dabe91369c5eb526dcf86c6e43775bd36d59bce6d0f6959a",
+        "caught_by": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
+        ]
       }
     ]
   },
@@ -268,6 +300,22 @@
         "head": "376393b7affacc87cac8d5026c994c69b61d52da",
         "porcelain": "",
         "defect_sha256": "1aab48ce658527e1fc7e33065ad4acb0b3d698c482b5fdeb7de1259131cd7388"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "1aab48ce658527e1fc7e33065ad4acb0b3d698c482b5fdeb7de1259131cd7388",
+        "caught_by": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
+        ]
       }
     ]
   },
