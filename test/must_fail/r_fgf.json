@@ -60,21 +60,24 @@
   "file": "lib/_case_http.js",
   "find": "    if (sent.unreadable) {",
   "replace": "    if (sent.unreadable && false) {",
-  "what": "M2: a row that could not be read is passed over, and a new row written"
+  "what": "M2: a row that could not be read is passed over, and a new row written",
+  "gap": "MUST-FAIL GAP (FF09): a listed row that could not be read in the look for the same send is 503 store_unreachable, codes only, and nothing is written; sent again, it finishes"
  },
  {
   "id": "FF10",
   "file": "lib/_case_http.js",
   "find": "    if (sent.unavailable) {",
   "replace": "    if (sent.unavailable && false) {",
-  "what": "M2: a row whose named document could not be read is passed over"
+  "what": "M2: a row whose named document could not be read is passed over",
+  "gap": "MUST-FAIL GAP (FF10): the same send's row whose named document could not be read is 503 document_unavailable, codes only, never passed over for a second row"
  },
  {
   "id": "FF11",
   "file": "lib/_case_http.js",
   "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS) break;",
   "replace": "    if (false) break;",
-  "what": "M2: rows past 40 are read too"
+  "what": "M2: rows past 40 are read too",
+  "gap": "MUST-FAIL GAP (FF11): the look for the same send reads no row past seq 40 (rows a deployment before R-FG wrote)"
  },
  {
   "id": "FF12",
@@ -88,7 +91,8 @@
   "file": "lib/_case_http.js",
   "find": "      continue; // not JSON: not a row",
   "replace": "      return { unreadable: \"not json\", seq }; // not JSON: not a row",
-  "what": "M2: a file that is not JSON is a could-not-look"
+  "what": "M2: a file that is not JSON is a could-not-look",
+  "gap": "MUST-FAIL GAP (FF13): a file at a row's path that is not JSON is not this send's row: the reference takes the next seq"
  },
  {
   "id": "FF14",
@@ -291,7 +295,8 @@
   "file": "README.md",
   "find": "> that the caller has a key bound to this namespace prefix, not that the",
   "replace": "> that the caller holds a key bound to this namespace prefix, not that the",
-  "what": "M1: the README's auth_note quote out of step"
+  "what": "M1: the README's auth_note quote out of step",
+  "gap": "MUST-FAIL GAP (FF42): the README quotes auth_note as the API sends it"
  },
  {
   "id": "FF43",
@@ -305,7 +310,8 @@
   "file": "test/helpers/js_strings.js",
   "find": "        out.push({ line: startLine, text });\n        text = \"\";\n        i += 2;",
   "replace": "        text = \"\";\n        i += 2;",
-  "what": "M1 scan: a template's chunk before ${ is not returned"
+  "what": "M1 scan: a template's chunk before ${ is not returned",
+  "gap": "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
  },
  {
   "id": "FF45",
@@ -326,14 +332,16 @@
   "file": "test/helpers/js_strings.js",
   "find": "      if (close && ch === \"}\") {\n        if (depth === 0) return;",
   "replace": "      if (close && ch === \"}\") {\n        if (depth >= 0) return;",
-  "what": "M1 scan: a template expression ends at its first inner brace"
+  "what": "M1 scan: a template expression ends at its first inner brace",
+  "gap": "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
  },
  {
   "id": "FF48",
   "file": "test/helpers/reconcile_words.js",
   "find": "  if (mine.includes(PYTHON_DUPLICATE)) return null;\n",
   "replace": "",
-  "what": "M1 divergence: a port that says holds is let through"
+  "what": "M1 divergence: a port that says holds is let through",
+  "gap": "MUST-FAIL GAP (FF48): BREAK ARM: a port that says reconcile.py's \"holds a duplicate key\" is caught on every case that says it"
  },
  {
   "id": "FF49",

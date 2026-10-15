@@ -1,0 +1,868 @@
+{
+  "FF01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says the listing has reached the limit when the highest seq is 40, with one file listed",
+          "R-FGf B1: the page claims the listing fact only, in the ruled sentence: one row at seq 40 and nothing else, and 39 rows and one stray file, each print it, and n",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "a0cab35c8d19045296b2cd3e827bf3ea3030fa4353c04f3a25fc2c004c67c6c3"
+      }
+    ]
+  },
+  "FF03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-FGf B2: a row PUT answered 409 whose re-read finds another sender's row at that seq is not taken as written: the sender gets 201 at the next seq with its own ",
+          "R-FGf B2: when the other sender's row was the 40th, the sender is refused 409 row_limit, codes only; never a 201 for a row it did not write",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "b17e36ab199d88d25936c1bd6e77223b032e3de87204eb19767b5bd4b6f793e7"
+      }
+    ]
+  },
+  "FF02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says the listing has reached the limit when the highest seq is 40, with one file listed",
+          "R-FGf B1: the page claims the listing fact only, in the ruled sentence: one row at seq 40 and nothing else, and 39 rows and one stray file, each print it, and n",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "b511f48943c25e83fe69e1c6bbf3eb28685408475cb82e71090fbc7ede80d948"
+      }
+    ]
+  },
+  "FF04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-FGf B2: a row PUT answered 409 whose re-read finds another sender's row at that seq is not taken as written: the sender gets 201 at the next seq with its own ",
+          "R-FGf B2: when the other sender's row was the 40th, the sender is refused 409 row_limit, codes only; never a 201 for a row it did not write",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "79f211b32e9f175a19bc5db2b5edf6e25a696ffe555ed2abebaedbb6b4e0066b"
+      }
+    ]
+  },
+  "FF06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-FGf M2: the lost write was the 40th: the same send again is answered 200 with that row, never 409 row_limit",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "9e8341f47cebc6253c7f734c61b42c3494eac25fcaa584a96e7800a676ab7dda"
+      }
+    ]
+  },
+  "FF05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 8,
+        "failing_tests": [
+          "FIX G (since unit R-FG): 46 references by one role at once append at most 40 rows; each is answered 201, 409 row_limit or 503 reference_seq_contended",
+          "FIX G (since unit R-FG): a row whose seq another row takes moves to the next seq; nothing is counted",
+          "ADDENDUM: rows are create-only: the second append takes seq 2; a row that lands first at the next seq is never written over, and the append moves to the one aft",
+          "R-FG 4: a reference refused 503 reference_seq_contended spends nothing: twenty contended sends, then the same send finishes, never 409 reference_quota",
+          "R-FGf m4: 503 reference_seq_contended is codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FG 4: a reference refused 503 reference_seq_contended spends nothing: twenty contended sends, then the same send finishes, never 409",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "609becc055c078f64b7e73e6d1b725fd5be176c6dec4b5918275a9c3ba5b244b"
+      }
+    ]
+  },
+  "FF09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "42153361d0af0d26dd77e29f3b19e5222a7e74ad57c161b2500e8caaca724b59"
+      }
+    ]
+  },
+  "FF07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-FGf M2: the lost write was the 40th: the same send again is answered 200 with that row, never 409 row_limit",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "4dc9b90b08f476bc79c32628ae284c361937497f97fd197f9fd6e2d89b7a0f12"
+      }
+    ]
+  },
+  "FF08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "ac6c785b8c4d564ad0ff6cdab8b84feff262f98d0a41eccd5d3a6cdc886d5026"
+      }
+    ]
+  },
+  "FF10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "37093c5764379534e5bb8be11111682c42f5c35b189b57bb4a07c7b71900c978"
+      }
+    ]
+  },
+  "FF11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "18653ecd058cac5f82bf3ee2088d7c2d1e71c63c08028c7ee438b07278a32262"
+      }
+    ]
+  },
+  "FF13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "be4e1a0b0f3507ccc28689c4301cc8e73450e7c069b09f4faddaa2aab7c0a559"
+      }
+    ]
+  },
+  "FF12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf M2: the lost write was the 40th: the same send again is answered 200 with that row, never 409 row_limit",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "2585c9a153ba2456de6ce0841bba08b8017184b1243ee6d1cb1fa7bdaad75f3a"
+      }
+    ]
+  },
+  "FF14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 9,
+        "failing_tests": [
+          "FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS_ADMIN_KEY; unset, no bearer is 401 reference_unauthorized and a bearer is 503 operato",
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-PIN 1: a sealed case writes exactly one file under its pin namespace: the sealer three times, two reference rows, and the sealer again",
+          "R-PIN 2: no code path updates any pins file except the case root, over a whole case life",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-PIN 1: a sealed case writes exactly one fi",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "aa6be8abf1bfbd0b78f266810c97dc525d3ab803b2d4cb7d64c3cb1f98619700"
+      }
+    ]
+  },
+  "FF15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 10,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "FIX G (since unit R-FG): 46 references by one role at once append at most 40 rows; each is answered 201, 409 row_limit or 503 reference_seq_contended",
+          "ADDENDUM: rows are create-only: the second append takes seq 2; a row that lands first at the next seq is never written over, and the append moves to the one aft",
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 3: there is no reference counter: one role appends past 20 rows; nothing under case_references/ is read or written; reference_quota is answered nowhere",
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "FIX 2 (planted): twenty invalid ref",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "8d8fc7b36dd0e5849a8374d5eebd3add1ce20d23e30bfa23f3e529fa13fa34c2"
+      }
+    ]
+  },
+  "FF16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "dc312bfbfdb4d58eab92f2053261004d67c49547df120df78867a1ea7411cf6f"
+      }
+    ]
+  },
+  "FF17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 10,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "FIX G (since unit R-FG): 46 references by one role at once append at most 40 rows; each is answered 201, 409 row_limit or 503 reference_seq_contended",
+          "ADDENDUM: rows are create-only: the second append takes seq 2; a row that lands first at the next seq is never written over, and the append moves to the one aft",
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 3: there is no reference counter: one role appends past 20 rows; nothing under case_references/ is read or written; reference_quota is answered nowhere",
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "FIX 2 (planted): twenty invalid ref",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "a325420197759ba50cdddad6bf556b96044f05ca755d6cf69a31549a45b2aa07"
+      }
+    ]
+  },
+  "FF18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf m4: 503 reference_seq_contended is codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "6bdece47087455dbabde31649dafb15525f1d0b3f77ad90681aadc2b8316f192"
+      }
+    ]
+  },
+  "FF19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other handler's tail as it was: '; ' or ', and ' before a clause",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "c441b35f3059afcc6a3621b2827a36adbe2d8aa457fc64d4f10fadbf25f574bc"
+      }
+    ]
+  },
+  "FF20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "f7ff2987955d31a410f9b45d9ae9e90bc654aa1f5517f86c53866c2298dd88b7"
+      }
+    ]
+  },
+  "FF21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "27d6f30256da47fecdc59119568320f17ab44e2ccce3922eaf4a5341e84ee23a"
+      }
+    ]
+  },
+  "FF22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "3a467b2b67b0c7faa126034b35c6fc3b947fde52c3d6367bf21a56f049934c6c"
+      }
+    ]
+  },
+  "FF23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "17281e3d5c91687b7ed3c7308963231046fb11ae46e2404650706834c9c46780"
+      }
+    ]
+  },
+  "FF24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "f1d8d8af11c8b5b5c355c3c2326f6b9e46a81844a6ee20ff9504e4e6632a4ffe"
+      }
+    ]
+  },
+  "FF25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "9c5d4d582b714aeb4012a11355229d3edfa2c2b293736b48452394b93c9db478"
+      }
+    ]
+  },
+  "FF26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "5803b9b979ec466df39a9275f6535b6160afb59e901e1806227ac509bb859849"
+      }
+    ]
+  },
+  "FF27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "c3cff1cf19f504d884ecaa0c44d0cb889256ca4f54b932a553f0ad6201eda077"
+      }
+    ]
+  },
+  "FF29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "fe9f3722b23f09ddd247fd0243c37b1cb14350a5400aee8db02fb61c43080ba5"
+      }
+    ]
+  },
+  "FF28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "CONFORMANCE: every edge case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "271243203cea18ded9d6e1338d42c3e395eb3de09b1be1850fcbb466d1b5c393"
+      }
+    ]
+  },
+  "FF30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca",
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "b553e8df2385f4e17aad05c9b0e81153ad2d23fb0c6ad6a958da589b438a78c9"
+      }
+    ]
+  },
+  "FF32": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "e7e4a548981833fada4c007fcbf2b3ecb2328d10ca4e489134bec53cbf9dcf7b"
+      }
+    ]
+  },
+  "FF31": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca",
+          "FLAG OFF: what api/pin.js writes is byte-identical to the pre-claim shape — no claim, no pending, nothing new"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "d9d5e9f50b01051d467293be89956b82934c6e20fad48ec47b88c002289916f3"
+      }
+    ]
+  },
+  "FF33": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "00b6b88a2ed1a3f2dddacb9495a622399e07a8a9066215fcd8723f42847d6a04"
+      }
+    ]
+  },
+  "FF34": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "fb8289574deb0a13182920cbdffa73f19f0f29c0b18d2d6e2d6795d6fcf8c5b0"
+      }
+    ]
+  },
+  "FF35": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "4dd2e30c4c596b790f1d3b9649826597819d8415bb9a665f3204edab0a436d18"
+      }
+    ]
+  },
+  "FF36": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-REV: the key document's prose says two statuses, and the README says marker files are left in place and ignored",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "b41a434239973487d4a9ca00254af797ef06fef6257f6069745fbe55c4f685a2"
+      }
+    ]
+  },
+  "FF37": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-REV: the key document's prose says two statuses, and the README says marker files are left in place and ignored",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "e03cdef7f059d498e8589a773238dde7d06e2d4a4dc3be6d21723a738e3d4c6a"
+      }
+    ]
+  },
+  "FF38": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-REVf 5: the preview tool names the key document this checkout carries, listed revoked, and the key",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "8930a407f7a0c275b781d0b8e6cc5a5ec68631ad4ee23a40456129ea64cd240a"
+      }
+    ]
+  },
+  "FF39": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf B1: the page claims the listing fact only, in the ruled sentence: one row at seq 40 and nothing else, and 39 rows and one stray file, each print it, and n",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "0ae9b436ed9237bdbfb00028e9c1d123bbbb4f3a9cfa3c85abec694c95ef75ce"
+      }
+    ]
+  },
+  "FF40": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "6dcc481c99464452487cc4f155bcfc5e4941637784f30114b3c097f63f8a515e"
+      }
+    ]
+  },
+  "FF41": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "f3e92c09bb78f7c630294b7972f8566a37a1147520e95b32b9bee51322e451fd"
+      }
+    ]
+  },
+  "FF42": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "93d6b00862699917eff25bfdf3aea304388b6137a49648c4571aa8dd77c264dd"
+      }
+    ]
+  },
+  "FF43": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "5eff3920b3c6c280e87bb682f851e2761019d96ed3a96d7d27dda388ea176189"
+      }
+    ]
+  },
+  "FF44": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "ce599e12acb3f17f26df7e230bb48d2579df82221cef51b532f4081bdf0b9863"
+      }
+    ]
+  },
+  "FF45": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "9f0663d8b52775cb0d7aea084397499668886dce0721e2b98ac7440e9d12c24d"
+      }
+    ]
+  },
+  "FF46": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGf M1: no string literal in lib/ or api/, and no file under public/, says holds, holding or second operator; comments and identifiers are exempt, and the sca"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "ddd01fe68463a38a0e80123f6c292bab5e0d88a7562f0a1c08d6013397cd928c"
+      }
+    ]
+  },
+  "FF47": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "2fd1b12ba44c186dc187f08f3f760830b8f1b642904da6e06ad1888cd084b70b"
+      }
+    ]
+  },
+  "FF48": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "e8d4022023c6408e29ff1488aecdb4c4790e598d66ca85e23c7552fc87d01da1"
+      }
+    ]
+  },
+  "FF49": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "CONFORMANCE: every edge case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
+        "porcelain": "",
+        "defect_sha256": "55c1aff791832bc0f0a9e9245f35949dc3aa3a677bc2bea7c014695a7387c262"
+      }
+    ]
+  }
+}
