@@ -496,7 +496,9 @@ test("R-N T1: the §2B todos are plain passing assertions in test/case_redteam.t
   const text = fs.readFileSync(path.join(__dirname, "case_redteam.test.js"), "utf8");
   const todos = [...text.matchAll(/\{ todo: "([^"]*)"/g)].map((m) => m[1]);
   assert.equal(todos.length, 5, JSON.stringify(todos));
-  assert.ok(todos.some((t) => /reads 20 rows/.test(t)), "the §4 cost todo");
+  // (named by its assertion since unit R-FGg, G1: the live count no longer
+  // reads 20 rows of its own)
+  assert.ok(todos.some((t) => /an accepted reference reads fewer than 20 rows/.test(t)), "the §4 cost todo");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-PIN)")).length, 2, "§1.2 and §5");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-REV)")).length, 1, "§1.4's later revocation");
   assert.equal(todos.filter((t) => t.startsWith("DECIDED (unit R-RV)")).length, 1, "§1.3's comparison trace");
