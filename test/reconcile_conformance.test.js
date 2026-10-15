@@ -20,7 +20,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fixtures = require("./fixtures/reconcile/cases.json");
 const R = require("../lib/_reconcile_tapes.js");
-const { inPythonWords, PORT_DUPLICATE } = require("./helpers/reconcile_words.js");
+const { inPythonWords, PORT_DUPLICATE, PYTHON_DUPLICATE } = require("./helpers/reconcile_words.js");
 
 function bytesOf(b64) {
   return Buffer.from(b64, "base64");
@@ -178,6 +178,21 @@ test("BREAK ARM: a port that parses with JSON.parse (floats lose their type) is 
   assert.equal(JSON.parse(c.python).verdict, "COULD_NOT_LOOK");
   const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
   assert.equal(R.conformanceJson(got), c.python);
+});
+
+// unit R-FGf (M1): a port that says reconcile.py's "holds a duplicate key"
+// (the second divergence undone)
+function saysHolds(a, b) {
+  const r = R.reconcileTapes(a, b);
+  const back = (s) => (typeof s === "string" ? s.split(PORT_DUPLICATE).join(PYTHON_DUPLICATE) : s);
+  return { ...r, reason: back(r.reason), summary: back(r.summary), could_not_look: Array.isArray(r.could_not_look) ? r.could_not_look.map(back) : r.could_not_look };
+}
+
+test("MUST-FAIL GAP (FF48): BREAK ARM: a port that says reconcile.py's \"holds a duplicate key\" is caught on every case that says it", () => {
+  const dup = fixtures.cases.filter((c) => c.python.includes(PYTHON_DUPLICATE));
+  assert.ok(dup.length >= 2, `fixture: duplicate-key cases (${dup.length})`);
+  for (const c of dup) assert.ok(R.conformanceJson(saysHolds(bytesOf(c.a_b64), bytesOf(c.b_b64))).includes(PYTHON_DUPLICATE), `fixture: ${c.name} says it`);
+  assert.equal(disagreements(saysHolds, dup).length, dup.length);
 });
 
 test("R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side", () => {

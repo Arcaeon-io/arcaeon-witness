@@ -176,3 +176,9 @@ test("R-FGf M1: no string literal in lib/ or api/, and no file under public/, sa
   }
   assert.deepEqual(hits, []);
 });
+
+// R-FGf's must-fail gap test: it fails with either planted defect
+test("MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code", () => {
+  const probe = "const u = `it holds ${x}`;\nconst t = `${ {a: 1}.a + holds }`;\n";
+  assert.deepEqual(stringLiterals(probe).filter((x) => REFUSED.test(x.text)).map((x) => [x.line, x.text]), [[1, "it holds "]]);
+});

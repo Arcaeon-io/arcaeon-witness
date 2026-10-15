@@ -348,7 +348,7 @@ same sentence ships in the API responses themselves (`auth_note`):
 > chain, timestamp}` verified against a public key registered to the namespace
 > — is the Stage-1 requirement and is NOT built yet. Read
 > `publisher_heartbeat_current` as proof that a key-holder was alive and
-> asserting nothing changed, never as proof of the log owner's intent.
+> asserting, never as proof of the log owner's intent.
 
 Renewal is the write where this matters most: a leaked bearer key can keep a
 namespace looking alive indefinitely without the owner's involvement. That is a

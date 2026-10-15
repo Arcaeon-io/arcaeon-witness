@@ -676,3 +676,72 @@ test("R-FGf m4: 503 reference_seq_contended is codes only", async () => {
   const r = await roleReference(c, "a", "contended");
   assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "reference_seq_contended", case_id: c.id }]);
 });
+
+// R-FGf's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (FF09): a listed row that could not be read in the look for the same send is 503 store_unreachable, codes only, and nothing is written; sent again, it finishes", async () => {
+  const c = await sealedCase("RFGf gap row unreadable");
+  assert.equal((await roleReference(c, "a", "the first")).status, 201);
+  gh.forceGetFailure(PINS, C.referencePath(c.id, 1), 1, 502);
+  const puts = gh.putLog.length;
+  const r = await roleReference(c, "a", "the second");
+  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "store_unreachable", case_id: c.id }]);
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  const again = await roleReference(c, "a", "the second");
+  assert.deepEqual([again.status, again.body.seq], [201, 2]);
+});
+
+test("MUST-FAIL GAP (FF10): the same send's row whose named document could not be read is 503 document_unavailable, codes only, never passed over for a second row", async () => {
+  const c = await sealedCase("RFGf gap row document");
+  const first = await roleReference(c, "a", "sent twice");
+  assert.equal(first.status, 201);
+  const X = first.body.row.signed_under.document_commit;
+  // the deployment now carries another document (another commit); the row names X
+  const send = async () => {
+    const res = makeRes();
+    await H.handleCaseReference(req("case-reference", { case_id: c.id, role: "a", tape_sha256: c.a.tape_sha256, salt: c.a.salt,
+      cross_reference: { ...XREF, reference: "sent twice" } }), res, { now: REVEAL_AT + 1800000, env: KD.deployed(gh, KEYS, CURRENT), keyDocument: CURRENT });
+    return { status: res._status, body: parsed(res) };
+  };
+  assert.notEqual(KD.serve(gh, CURRENT), X, "fixture: two commits");
+  const listing = (u, m) => m === "GET" && decodeURIComponent(u).includes(`/repos/${PINS}/contents/${C.referencesDir(c.id)}`);
+  const puts = gh.putLog.length;
+  let r;
+  let fired;
+  try {
+    ({ out: r, fired } = await during(listing, async () => {
+      S._internal.clearDocumentCache();
+      gh.forceRawFailure(1000, 503, X);
+    }, send));
+  } finally {
+    gh.forceRawFailure(0);
+  }
+  assert.equal(fired, true, "fixture: the row's document went away after the sealed check");
+  assert.deepEqual([r.status, r.body.error_code, has(r.body, "error")], [503, "document_unavailable", false], JSON.stringify(r.body).slice(0, 300));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  const again = await send();
+  assert.deepEqual([again.status, again.body.seq, again.body.existing], [200, 1, true], JSON.stringify(again.body).slice(0, 300));
+});
+
+test("MUST-FAIL GAP (FF11): the look for the same send reads no row past seq 40 (rows a deployment before R-FG wrote)", async () => {
+  const c = await sealedCase("RFGf gap past 40");
+  plantRows(c.id, [41, 42, 43]);
+  const g0 = gh.getLog.length;
+  const r = await roleReference(c, "a", "past forty");
+  assert.deepEqual([r.status, r.body.error_code], [409, "row_limit"]);
+  assert.deepEqual(gh.getLog.slice(g0).filter((p) => p.startsWith(`${C.referencesDir(c.id)}/`)), [], "no row past 40 is read");
+});
+
+test("MUST-FAIL GAP (FF13): a file at a row's path that is not JSON is not this send's row: the reference takes the next seq", async () => {
+  const c = await sealedCase("RFGf gap not json");
+  gh._repoMap(PINS).set(C.referencePath(c.id, 1), { content: "not json\n", sha: "f".repeat(40) });
+  const r = await roleReference(c, "a", "past a file that is not JSON");
+  assert.deepEqual([r.status, r.body.seq], [201, 2], JSON.stringify(r.body).slice(0, 300));
+});
+
+test("MUST-FAIL GAP (FF42): the README quotes auth_note as the API sends it", () => {
+  const text = read("README.md");
+  const at = text.indexOf("> Bearer-key auth only.");
+  assert.ok(at > 0, "the quote");
+  const quoted = text.slice(at).split("\n\n")[0].split("\n").map((l) => l.replace(/^> ?/, "")).join(" ").replace(/`/g, "").replace(/\s+/g, " ").trim();
+  assert.equal(quoted, store.AUTH_LEVEL_NOTE);
+});
