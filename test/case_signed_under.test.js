@@ -669,6 +669,10 @@ test("P13 (the page's reads): a case not pinned yet reads no pin commit history"
 
 test("L01 (lib/_sealer.js anchorCases): the current document it is handed is the one the pass reads; an unreadable one is could_not_look, not a pin", async () => {
   const { id } = await sealedCase("L01", { pinFails: true });
+  // since unit R-WIDE (B2) the pass first holds the document it carries to
+  // the one at the tip of the published branch; here they are the same
+  // unreadable document, so the pass reaches the case
+  KD.publishTip(gh, { ...DOC, extra: true });
   const run = await sealer.anchorCases({ now: new Date(REVEAL_AT + 60000), keyDocument: { ...DOC, extra: true } });
   assert.deepEqual(run.could_not_look, [{ case_id: id, reason: "current_document_unreadable" }]);
   assert.deepEqual(run.newly_pinned, []);

@@ -22,8 +22,9 @@
 // Without --document: the readers' own check (verifyRefusalReceipt), which
 // reads the named document from GitHub's raw host, checks its commit is on
 // the published branch, and holds the key to the current document this
-// checkout carries. Only this check prints ok: true and exits 0; it exits 1
-// otherwise, and on a usage error.
+// checkout carries, which (unit R-WIDE, B2) must be the document at the tip
+// of the published branch (lib/_case_seal.js carriedDocumentPublished).
+// Only this check prints ok: true and exits 0; else 1, as on a usage error.
 "use strict";
 
 const fs = require("fs");
@@ -39,7 +40,8 @@ async function offline(rec, doc) {
   return S.sealHolds(a) ? { signature_ok: true, reason: null } : { signature_ok: false, reason: a.reason };
 }
 
-async function main(argv) {
+// opts.keyDocument: the document this checkout carries (tests hand another).
+async function main(argv, { keyDocument = S.PUBLISHED_KEYS, env = process.env } = {}) {
   const file = argv.find((a, i) => !a.startsWith("--") && argv[i - 1] !== "--document");
   const at = argv.indexOf("--document");
   if (!file || (at >= 0 && !argv[at + 1])) {
@@ -59,9 +61,13 @@ async function main(argv) {
   }
   let out;
   try {
-    out = await S.verifyRefusalReceipt(JSON.parse(fs.readFileSync(file, "utf8")));
+    out = await S.verifyRefusalReceipt(JSON.parse(fs.readFileSync(file, "utf8")), keyDocument);
   } catch (e) {
     out = { ok: false, reason: "unreadable", detail: e && e.message };
+  }
+  if (out.ok === true) {
+    const pub = await S.carriedDocumentPublished(keyDocument, env);
+    if (!pub.ok) out = { ok: false, reason: pub.code, detail: pub.reason };
   }
   process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
   return out.ok === true ? 0 : 1;

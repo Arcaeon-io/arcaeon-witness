@@ -655,3 +655,179 @@ test("MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the
   assert.ok(p.html.includes("says neither that the withdrawal record verifies nor that it does not"));
   for (const d of WITHDRAWAL_DETAIL) assert.doesNotMatch(p.html, d, String(d));
 });
+
+// =============================================================================
+// GROUP B: fail-closed and the read budget
+// =============================================================================
+
+const verifyHandler = require("../api/verify.js");
+// Every request to the GitHub API `fn` sends: its URL and its bearer.
+async function spyAuth(fn) {
+  const viaMock = global.fetch;
+  const seen = [];
+  global.fetch = async (url, o) => {
+    const u = String(url);
+    if (u.startsWith("https://api.github.com/")) {
+      const h = (o && o.headers) || {};
+      seen.push({ url: decodeURIComponent(u), auth: h.authorization || h.Authorization || null });
+    }
+    return viaMock(url, o);
+  };
+  try {
+    await fn();
+  } finally {
+    global.fetch = viaMock;
+  }
+  return seen;
+}
+async function withEnv(vars, fn) {
+  const before = {};
+  for (const k of Object.keys(vars)) before[k] = process.env[k];
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(before)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+const READ_TOKEN = "test-read-token-rwide";
+
+test("R-WIDE B1: with GITHUB_READ_TOKEN set, a case page view makes every store call with the read token and none with the pin token; unset, it reads with the pin token", async () => {
+  const s = await sealedCase("RWIDE B1 token");
+  assert.equal((await reference(s, { role: "a" })).status, 201);
+  const seen = await withEnv({ GITHUB_READ_TOKEN: READ_TOKEN }, () => spyAuth(async () => assert.equal((await casePage(s.id)).status, 200)));
+  assert.ok(seen.length >= 5, `fixture: the page reads the store (${seen.length} calls)`);
+  assert.deepEqual([...new Set(seen.map((x) => x.auth))], [`Bearer ${READ_TOKEN}`], JSON.stringify(seen.slice(0, 3)));
+  // the withdrawn page and the could-not-look page read with it too
+  const w = await withdrawnBy("RWIDE B1 token withdrawn", "a");
+  const ws = await withEnv({ GITHUB_READ_TOKEN: READ_TOKEN }, () => spyAuth(() => casePage(w.id)));
+  assert.deepEqual([...new Set(ws.map((x) => x.auth))], [`Bearer ${READ_TOKEN}`]);
+  // unset: the pin token, as before
+  const fallback = await withEnv({ GITHUB_READ_TOKEN: undefined }, () => spyAuth(() => casePage(s.id)));
+  assert.deepEqual([...new Set(fallback.map((x) => x.auth))], [`Bearer ${process.env.GITHUB_PIN_TOKEN}`]);
+  // a reader writes nothing
+  await assert.rejects(store.asReader(() => store.putFile("x/y.json", { a: 1 }, "a write from a reader")), /a reader writes nothing/);
+});
+
+test("R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept", async () => {
+  const s = await sealedCase("RWIDE B1 cache");
+  const view = async (id) => {
+    const res = makeRes();
+    await verifyHandler(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res);
+    return { status: res._status, html: String(res._body) };
+  };
+  let first;
+  const calls1 = await spyAuth(async () => { first = await view(s.id); });
+  assert.equal(first.status, 200);
+  assert.ok(calls1.length >= 3, "the first view reads the store");
+  let second;
+  const calls2 = await spyAuth(async () => { second = await view(s.id); });
+  assert.deepEqual(calls2, [], "the second view makes no store call");
+  assert.equal(second.html, first.html);
+  assert.equal(second.status, 200);
+  // the cache's clock: past 60 seconds the page is read again
+  let t0 = 1_000_000;
+  const cache = CP.pageCache({ clock: () => t0 });
+  const direct = async () => {
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: s.id }, headers: { "x-forwarded-for": nextIp() } }), res,
+      { now: REVEAL_AT + 3600000, keyDocument: DOC, env: {}, cache });
+    return res._status;
+  };
+  assert.equal(await direct(), 200);
+  t0 += 59_999;
+  assert.deepEqual(await spyAuth(direct), [], "within 60 seconds: no call");
+  t0 += 1;
+  assert.ok((await spyAuth(direct)).length > 0, "at 60 seconds: read again");
+  // a 503 is not kept: an inconsistent root is read again on the next view
+  const bad = await committedCase("RWIDE B1 cache 503");
+  gh.seed(PINS, C.casePath(bad.id), { ...storedCase(bad.id), commitments: { ...storedCase(bad.id).commitments,
+    a: { ...storedCase(bad.id).commitments.a, registration_sha256: "0".repeat(64) } } });
+  const v1 = await view(bad.id);
+  assert.equal(v1.status, 503, v1.html.slice(0, 300));
+  assert.ok((await spyAuth(() => view(bad.id))).length > 0, "a 503 is read again");
+  // the page says it may be up to 60 seconds old, and so does the README
+  assert.ok(first.html.includes("may be up to 60 seconds old"));
+  assert.ok(README().includes("The case page keeps a page it answered 200 for 60 seconds per instance, so a page may be up to 60 seconds old, and says so."));
+  assert.ok(README().includes("`GITHUB_READ_TOKEN` is optional: the case page reads the pins repository with it"));
+});
+
+test("R-WIDE B1: the status page says in one line whether the case page reads with its own read token", async () => {
+  const render = async () => {
+    const res = makeRes();
+    await statusHandler(makeReq({ method: "GET", query: {}, headers: { "x-forwarded-for": nextIp() } }), res);
+    return String(res._body);
+  };
+  const unset = await withEnv({ GITHUB_READ_TOKEN: undefined }, render);
+  const lines = unset.split("\n").filter((l) => l.includes("read token"));
+  assert.equal(lines.length, 1, lines.join("\n"));
+  assert.ok(lines[0].includes("This deployment has no separate read token: the case page reads the pins repository with the token it writes with."), lines[0]);
+  const set = await withEnv({ GITHUB_READ_TOKEN: READ_TOKEN }, render);
+  const l2 = set.split("\n").filter((l) => l.includes("read token"));
+  assert.equal(l2.length, 1);
+  assert.ok(l2[0].includes("The case page reads the pins repository with its own read token."), l2[0]);
+  assert.ok(!set.includes(READ_TOKEN), "the token itself is never printed");
+});
+
+// B2. The sealer and the online checker hold the carried document to the
+// one at the tip of the published branch.
+const NEWER = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked" }), KD.reconcileEntry(RECEIPT_KEY)));
+test("R-WIDE B2: a sealer carrying a document that is not the one at the tip of the published branch refuses to pin; nothing is written", async () => {
+  const s = await sealedCase("RWIDE B2 sealer");
+  gh._repoMap(PINS).delete(pinFile(s.id));
+  KD.publishTip(gh, NEWER);
+  // the deployment's environment as it stands (deployedEnv would serve DOC again)
+  const env = { ...KEYS, [S.DEPLOY_COMMIT_ENV]: KD.commitOf(DOC) };
+  const sealerRun = () => S.anchorPending({ now: REVEAL_AT + 3600000 + 60000, keyDocument: DOC, env });
+  const puts = gh.putLog.length;
+  const rep = await sealerRun();
+  assert.deepEqual([rep.ok, rep.reason, rep.detail], [false, "carried_document_not_published", "published_document_differs"], JSON.stringify(rep).slice(0, 400));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  assert.equal(gh.has(PINS, pinFile(s.id)), false, "not pinned");
+  // a tip that cannot be read is could-not-look, and nothing is written
+  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@main:${S.CASE_KEYS_FILE}`);
+  const unread = await sealerRun();
+  assert.deepEqual([unread.ok, unread.reason], [false, "published_document_unreadable"], JSON.stringify(unread).slice(0, 400));
+  assert.equal(gh.has(PINS, pinFile(s.id)), false);
+  // control: the carried document at the tip pins
+  KD.publishTip(gh, DOC);
+  const ok = await sealerRun();
+  assert.equal(ok.ok, true, JSON.stringify(ok).slice(0, 400));
+  assert.deepEqual(ok.newly_pinned, [s.id]);
+});
+
+test("R-WIDE B2: the online refusal-receipt checker refuses to say the signature verifies when the document it carries is not the one at the tip of the published branch", async (t) => {
+  const c = await withdrawnBy("RWIDE B2 checker", "b");
+  const r = await reveal(c, { body: ownOpening(c, "a") });
+  assert.equal(r.status, 409, JSON.stringify(r.body).slice(0, 200));
+  const file = path.join(fs.mkdtempSync(path.join(require("node:os").tmpdir(), "rwide-b2-")), "receipt.json");
+  fs.writeFileSync(file, JSON.stringify(r.body.refusal_receipt));
+  t.after(() => fs.rmSync(path.dirname(file), { recursive: true, force: true }));
+  const checker = require("../tools/check_refusal_receipt.js");
+  const run = async () => {
+    const out = [];
+    t.mock.method(process.stdout, "write", (s) => { out.push(String(s)); return true; });
+    let code;
+    try {
+      code = await checker.main([file], { keyDocument: DOC });
+    } finally {
+      process.stdout.write.mock.restore();
+    }
+    return { code, json: JSON.parse(out.join("")) };
+  };
+  KD.publishTip(gh, NEWER);
+  const stale = await run();
+  assert.equal(stale.code, 1);
+  assert.deepEqual([stale.json.reason, stale.json.detail], ["carried_document_not_published", "published_document_differs"], JSON.stringify(stale.json));
+  assert.notEqual(stale.json.ok, true);
+  KD.publishTip(gh, DOC);
+  const fresh = await run();
+  assert.equal(fresh.code, 0, JSON.stringify(fresh.json));
+  assert.ok(README().includes("the answer is then `carried_document_not_published` (or `published_document_unreadable`). The sealer makes the same read before it pins"));
+});

@@ -41,8 +41,9 @@
 //   (f) the sealer's case pass (lib/_sealer.js anchorCases, the pass
 //       tools/seal_batch.js runs) against the preview's pins store. It reads
 //       and writes that store directly, never through the preview, so it
-//       needs the pins token: without --pin-token it is COULD NOT LOOK. With
-//       it, the store GITHUB_PIN_REPO / GITHUB_PIN_BRANCH name must hold the
+//       needs the pins token: without --pin-token it is COULD NOT LOOK, and
+//       so it is (unit R-WIDE, B3) unless --store names the repository the
+//       pass writes to. With them, the store GITHUB_PIN_REPO / GITHUB_PIN_BRANCH name must hold the
 //       case this run opened on the preview (else it is not the preview's
 //       store, and the line says so), the pass must report nothing refused,
 //       in conflict or unreadable, and the case sealed in (e) must be
@@ -62,7 +63,7 @@
 // USAGE
 //
 //   node tools/preview_dry_run.js --base <preview URL> --key <issued key>
-//        [--bypass <secret>] [--operator-key <k>] [--pin-token <t>] [--exhaust-quota]
+//        [--bypass <secret>] [--operator-key <k>] [--pin-token <t> --store <owner/repo>] [--exhaust-quota]
 //
 //   --base <url>        the preview's origin, https://<deployment>.vercel.app
 //                       (no path, no query).
@@ -83,6 +84,10 @@
 //                       It is set for the pass alone and never sent to the
 //                       preview. Set GITHUB_PIN_REPO and GITHUB_PIN_BRANCH to
 //                       the preview's pins store if it is not the default.
+//   --store <owner/repo> the pins store (f) writes to, named (unit R-WIDE,
+//                       B3): (f) runs only when it is the repository this
+//                       shell's GITHUB_PIN_REPO names (the production store
+//                       when that is unset), and prints it before any write.
 //   --exhaust-quota     run the quota half of (c): up to 21 opens.
 //   --help              this text
 //
@@ -205,6 +210,7 @@ function parseArgs(argv) {
     else if (t === "--bypass") a.bypass = next();
     else if (t === "--operator-key") a.operatorKey = next();
     else if (t === "--pin-token") a.pinToken = next();
+    else if (t === "--store") a.store = next();
     else if (t === "--exhaust-quota") a.exhaustQuota = true;
     else throw new Error(`unknown argument ${t}`);
   }
@@ -707,10 +713,22 @@ async function checkSealerPass(ctx) {
     return couldNotLook("the sealer's case pass (lib/_sealer.js anchorCases, as tools/seal_batch.js runs it) reads and writes the pins store " +
       "directly, never through the preview, and needs the pins token: --pin-token was not given");
   }
+  // THE STORE IS NAMED (unit R-WIDE, B3, the architect's ruling): the pass
+  // writes to the pins store this shell's lib/_store.js names, which is the
+  // production store when GITHUB_PIN_REPO is unset; so it runs only when
+  // --store names that store, and the target is printed before any write.
+  const store = require("../lib/_store.js");
+  const target = `${store.REPO}@${store.BRANCH}`;
+  if (!ctx.store) {
+    return couldNotLook(`--store <owner/repo> was not given: (f) writes to the pins store this shell names (${target}), and runs only when --store names it`);
+  }
+  if (ctx.store !== store.REPO) {
+    return couldNotLook(`--store names ${ctx.store}, and this shell's pins store is ${target} (GITHUB_PIN_REPO); nothing was written`);
+  }
+  ctx.log(`(f) target repository: ${target}; the case pass writes here`);
   const o = await firstOpen(ctx);
   if (!o.caseId) return couldNotLook(`no case was opened on the preview, so no store can be shown to be the preview's: case-open answered ${said(o.ans)}`);
-  const store = require("../lib/_store.js");
-  const where = `the pins store ${store.REPO}@${store.BRANCH}`;
+  const where = `the pins store ${target}`;
   const had = Object.prototype.hasOwnProperty.call(process.env, "GITHUB_PIN_TOKEN");
   const before = process.env.GITHUB_PIN_TOKEN;
   process.env.GITHUB_PIN_TOKEN = ctx.pinToken;
@@ -732,6 +750,12 @@ async function checkSealerPass(ctx) {
     const rep = await sealer.anchorCases({ now: new Date(), keyDocument: ctx.keyDocument });
     if (!rep.ok) {
       if (rep.reason === "tree_unreadable") return couldNotLook(`${where}: the case pass could not read the tree (${rep.detail})`);
+      // unit R-WIDE (B2): the key document at the tip of the published
+      // branch could not be read, so the pass pinned nothing; one that is
+      // not this checkout's is BROKEN below (the checkout is stale)
+      if (rep.reason === "published_document_unreadable") {
+        return couldNotLook(`${where}: the key document at the tip of the published branch could not be read (${rep.detail}), so the case pass pinned nothing`);
+      }
       return broken(`${where}: the case pass failed (${rep.reason}${rep.detail ? `: ${rep.detail}` : ""})`);
     }
     const summary = `${where}: the case pass read ${rep.read} of ${rep.candidates} candidates (${rep.deferred} deferred): ` +
@@ -902,6 +926,7 @@ async function run(opts) {
     bypass: opts.bypass || null,
     keysDocAnswer: null,
     pinToken: opts.pinToken || null,
+    store: typeof opts.store === "string" && opts.store ? opts.store : null,
     receiptVerifier: opts.receiptVerifier !== undefined ? opts.receiptVerifier : receipts.expectedVerifier(process.env),
     exhaustQuota: opts.exhaustQuota === true,
     root,
@@ -970,7 +995,7 @@ async function main(argv) {
     process.stderr.write("usage: --base must be the preview's origin, http(s)://host[:port], with no path, query or credentials\n");
     return 1;
   }
-  for (const [flag, v] of [["--key", a.key], ["--bypass", a.bypass], ["--operator-key", a.operatorKey], ["--pin-token", a.pinToken]]) {
+  for (const [flag, v] of [["--key", a.key], ["--bypass", a.bypass], ["--operator-key", a.operatorKey], ["--pin-token", a.pinToken], ["--store", a.store]]) {
     if (v !== undefined && !String(v).trim()) {
       process.stderr.write(`usage: ${flag} must not be empty\n`);
       return 1;
@@ -985,6 +1010,7 @@ async function main(argv) {
     bypass,
     operatorKey: a.operatorKey,
     pinToken: a.pinToken,
+    store: a.store,
     exhaustQuota: a.exhaustQuota,
   });
   return code;

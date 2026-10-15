@@ -163,7 +163,10 @@ async function dryRun(t, { preview = {}, ...opts } = {}) {
   t.after(() => p.close());
   const out = [];
   const err = [];
-  const r = await tool.run({ base: p.base, key: KEY, keyDocument: TEST_DOC, stdout: (l) => out.push(l), stderr: (l) => err.push(l), ...opts });
+  // since unit R-WIDE (B3) (f) runs only when --store names the pins store;
+  // a run with the pin token names the test's store unless it says otherwise
+  const store = opts.pinToken && !Object.prototype.hasOwnProperty.call(opts, "store") ? { store: process.env.GITHUB_PIN_REPO } : {};
+  const r = await tool.run({ base: p.base, key: KEY, keyDocument: TEST_DOC, stdout: (l) => out.push(l), stderr: (l) => err.push(l), ...store, ...opts });
   const by = Object.fromEntries(r.results.map((x) => [x.id, x]));
   const show = out.join("\n");
   // Every run: seven lines, in order, each a verdict word; no secret anywhere;
@@ -479,6 +482,7 @@ test("(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BRO
   gh = new MockGitHubStore();
   restore();
   restore = install(gh);
+  KD.publishTip(gh, TEST_DOC); // since unit R-WIDE (B2) the pass reads the document at the tip first
   const bad = "ab".repeat(32);
   gh.seed(PINS, C.casePath(bad), { not: "a case" });
   const refused = await dryRun(t, { pinToken: PIN_TOKEN });
@@ -821,7 +825,8 @@ test("CLI usage: --base and --key are required, --base is an origin, no flag is 
   assert.equal(h.code, 0);
   assert.match(h.stdout, /^tools\/preview_dry_run\.js — a dry run of the case protocol/);
   assert.match(h.stdout, /EXIT CODES: 0 every check VERIFIED; 2 a check BROKEN; 3 a check COULD NOT/);
-  assert.match(h.stdout, /\[--bypass <secret>\] \[--operator-key <k>\] \[--pin-token <t>\] \[--exhaust-quota\]/);
+  // since unit R-WIDE (B3) the pin token goes with --store
+  assert.match(h.stdout, /\[--bypass <secret>\] \[--operator-key <k>\] \[--pin-token <t> --store <owner\/repo>\] \[--exhaust-quota\]/);
   assert.match(h.stdout, /VERCEL_AUTOMATION_BYPASS_SECRET/);
 });
 
@@ -883,4 +888,42 @@ test("R-WIDE A5: a preview whose key document lists no active reconcile key is B
   const r = await dryRun(t, { preview: { signer: { env: { ...SIGNER.env, [S.DEPLOY_COMMIT_ENV]: KD.serve(gh, bare) }, keyDocument: bare } } });
   assert.equal(word(r, "e"), "BROKEN", r.show);
   assert.match(r.by.e.line, /answered HTTP 409 sealing_not_offered: the preview's key document lists no active reconcile key, so the preview seals nothing$/);
+});
+
+// =============================================================================
+// UNIT R-WIDE, B3: (f) writes only to a pins store --store names
+// =============================================================================
+
+test("R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write", async (t) => {
+  // no --store: refused, and the case pass never ran
+  const none = await dryRun(t, { pinToken: PIN_TOKEN, store: undefined });
+  assert.equal(word(none, "f"), "COULD NOT LOOK", none.show);
+  assert.match(none.by.f.line, /--store <owner\/repo> was not given: \(f\) writes to the pins store this shell names \(test-owner\/test-pins@main\), and runs only when --store names it$/);
+  assert.equal(none.err.some((l) => /\(f\) target repository/.test(l)), false, "nothing printed as a target");
+  // another repository: refused
+  const other = await dryRun(t, { pinToken: PIN_TOKEN, store: "dan8433-user/arcaeon-witness-pins" });
+  assert.equal(word(other, "f"), "COULD NOT LOOK", other.show);
+  assert.match(other.by.f.line, /--store names dan8433-user\/arcaeon-witness-pins, and this shell's pins store is test-owner\/test-pins@main \(GITHUB_PIN_REPO\); nothing was written$/);
+  // the right one: the target is printed before any write
+  const ok = await dryRun(t, { pinToken: PIN_TOKEN, store: process.env.GITHUB_PIN_REPO });
+  assert.equal(word(ok, "f"), "VERIFIED", ok.show);
+  const at = ok.err.findIndex((l) => l.includes("(f) target repository: test-owner/test-pins@main; the case pass writes here"));
+  const pass = ok.err.findIndex((l) => l.includes("then the case pass"));
+  assert.ok(at >= 0 && pass > at, ok.err.join("\n"));
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8").replace(/\s+/g, " ");
+  assert.ok(readme.includes("so it runs only when `--store <owner/repo>` names that store, and it prints the target repository before any write."));
+});
+
+test("R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read; the pass pins nothing", async (t) => {
+  const other = { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => ({ ...e, note: `${e.note} (a newer copy)` })) };
+  const after = (fn) => ({ wrap: onOp("case-reveal", async (req, res, next) => {
+    await next(req, res);
+    fn();
+  }) });
+  const stale = await dryRun(t, { pinToken: PIN_TOKEN, preview: after(() => KD.publishTip(gh, other)) });
+  assert.equal(word(stale, "f"), "BROKEN", stale.show);
+  assert.match(stale.by.f.line, /the case pass failed \(carried_document_not_published: published_document_differs\)$/);
+  const unread = await dryRun(t, { pinToken: PIN_TOKEN, preview: after(() => gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@main:${S.CASE_KEYS_FILE}`)) });
+  assert.equal(word(unread, "f"), "COULD NOT LOOK", unread.show);
+  assert.match(unread.by.f.line, /the key document at the tip of the published branch could not be read \(http_404\), so the case pass pinned nothing$/);
 });

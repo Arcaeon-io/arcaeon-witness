@@ -8,23 +8,42 @@
 // re-seeded and caught: a stranger can tell a defect caught on the day its
 // fix was exercised from one whose catch was never run again.
 //
-// A run's RESULT (unit R-ABf, M1, the architect's ruling) is one of:
-//   caught    the suite exited non-zero AND at least one test failed;
+// A run's RESULT (unit R-ABf, M1; since unit R-WIDE, B4, the architect's
+// ruling) is one of:
+//   caught    the suite exited with code 1 AND at least one test failed;
 //   survived  the suite exited zero;
 //   timeout   the suite was killed at its timeout (whatever it had printed);
-//   error     the suite exited non-zero, or was killed, with no failing test
-//             (it did not start, say).
+//   error     anything else: another exit code, or a kill, or code 1 with no
+//             failing test (it did not start, say).
 // Only `caught` is a catch; a timeout or an error is never printed as one.
 //
-// A defects file is a JSON array of {id, file, find, replace, what}: in
-// `file`, a relative path inside the repository (never absolute, never
+// BEFORE ANYTHING IS PLANTED (unit R-WIDE, B4): the tree is a clean
+// checkout (`git status --porcelain` prints nothing, so the commit names
+// every byte planted against), and the unplanted suite, run the same way,
+// exits 0 with no failing test. Otherwise the runner refuses and plants
+// nothing: a defect "caught" by a suite that already fails proves nothing.
+// Every ledger run records that commit (`head`), the clean status
+// (`porcelain`, ""), and `defect_sha256`, the sha256 of the json bytes of
+// {find, replace}, so a later change to a defect's text is a different
+// defect.
+//
+// THE SUITE'S ENVIRONMENT (unit R-WIDE, B4): no WITNESS_* or GITHUB_*
+// variable, and nothing named *_TOKEN or *_SECRET, reaches it, and every
+// test process loads test/must_fail/no_network.js first, which refuses any
+// fetch to a host that is not this machine's: a test's own mock replaces it,
+// and a test that would have reached the network fails instead.
+//
+// A defects file is a JSON array of {id, file, find, replace, what[, gap]}:
+// in `file`, a relative path inside the repository (never absolute, never
 // with a '..' segment; unit R-ABf, m-d), the one occurrence of `find` is
-// replaced by `replace`; `what` names the defect in words. A defect that
+// replaced by `replace`; `what` names the defect in words; `gap`, for a
+// defect that survived, names the gap test written for it. A defect that
 // breaks either rule stops the run before anything is planted.
 //
-//   node test/must_fail/run.js <defects.json> [--only ID,ID] [--workers N] [--suite GLOB]
+//   node test/must_fail/run.js <defects.json> [--only ID,ID] [--workers N] [--suite GLOB] [--root DIR]
 //       plant and run; the ledger gains one entry per defect run. --suite
-//       names the test files the suite runs (test/*.test.js unless given)
+//       names the test files the suite runs (test/*.test.js unless given);
+//       --root the repository (this one unless given)
 //   node test/must_fail/run.js <defects.json> --table
 //       print the must-fail table from the ledger: one row per defect, its
 //       first run's result, and the date it was last re-seeded and caught
@@ -34,38 +53,45 @@
 // after its gap test was written) records, as `caught_by`, the failing
 // tests named MUST-FAIL GAP (all failing tests when none is), and the
 // table prints those names: the record's words, not the operator's (unit
-// R-ABf, m-e).
+// R-ABf, m-e). A `gap` the defects file names is printed as "named, not
+// verified" unless that test is among the failing tests of the defect's
+// latest catch (unit R-WIDE, B4).
 //
 // The copies are made under the system's temporary directory and removed
 // when the run ends, or is interrupted (SIGINT, SIGTERM; unit R-ABf, m-d).
+// Each defect is planted into its worker's own copy, read from that copy.
 // Each suite runs in its own process group, without the NODE_TEST_CONTEXT a
 // runner started from a test inherits (a node --test that inherits it
 // exits at once, its tests unrun); a timeout or an interrupt kills the whole
-// group, the test files' processes with it. Nothing in the repository is
-// changed but the ledger.
+// group, the test files' processes with it: on Windows, which has no
+// process groups, `taskkill /T /F` kills the tree (unit R-WIDE, B5).
+// Nothing in the repository is changed but the ledger.
 "use strict";
 
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 
 const ROOT = path.join(__dirname, "..", "..");
 const SUITE_TIMEOUT_MS = 300000;
 const GAP_PREFIX = "MUST-FAIL GAP";
+const NO_NETWORK = path.join(__dirname, "no_network.js");
 
 function args(argv) {
-  const out = { file: null, only: null, workers: 3, table: false, suite: "test/*.test.js" };
+  const out = { file: null, only: null, workers: 3, table: false, suite: "test/*.test.js", root: ROOT };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--only") out.only = argv[++i].split(",");
     else if (a === "--workers") out.workers = Number(argv[++i]);
     else if (a === "--table") out.table = true;
     else if (a === "--suite") out.suite = argv[++i];
+    else if (a === "--root") out.root = path.resolve(argv[++i]);
     else out.file = a;
   }
   if (!out.file) {
-    process.stderr.write("usage: node test/must_fail/run.js <defects.json> [--only ID,ID] [--workers N] | --table\n");
+    process.stderr.write("usage: node test/must_fail/run.js <defects.json> [--only ID,ID] [--workers N] [--suite GLOB] [--root DIR] | --table\n");
     process.exit(2);
   }
   return out;
@@ -88,14 +114,16 @@ const today = () => new Date().toISOString().slice(0, 10);
 function classify({ code, timedOut, failing }) {
   if (timedOut) return "timeout";
   if (code === 0) return "survived";
-  return code !== null && code !== undefined && failing.length > 0 ? "caught" : "error";
+  return code === 1 && failing.length > 0 ? "caught" : "error";
 }
 
 // A defect's file: relative, inside the repository, no '..' segment; and
-// its `find` in that file exactly once, changed by `replace`.
+// its `find` in that file exactly once, changed by `replace`. An absolute
+// path is refused by name (unit R-WIDE, C16): one inside the repository
+// passes the inside-the-repository check.
 function checkDefects(defects, root = ROOT) {
   for (const d of defects) {
-    if (typeof d.file !== "string" || !d.file || path.isAbsolute(d.file) || /^[A-Za-z]:/.test(d.file) ||
+    if (typeof d.file !== "string" || !d.file || path.isAbsolute(d.file) || /^[A-Za-z]:/.test(d.file) || d.file.startsWith("\\") ||
       d.file.split(/[\\/]/).includes("..") || !path.resolve(root, d.file).startsWith(path.resolve(root) + path.sep)) {
       throw new Error(`${d.id}: file must be a relative path inside the repository (${d.file})`);
     }
@@ -108,10 +136,26 @@ function checkDefects(defects, root = ROOT) {
   }
 }
 
+// The sha256 of a defect's text (unit R-WIDE, B4).
+function defectSha256(d) {
+  return crypto.createHash("sha256").update(JSON.stringify({ find: d.find, replace: d.replace })).digest("hex");
+}
+
+// The commit the tree is, and whether it is clean. -> {head, porcelain}, or
+// throws when `root` is not a git checkout.
+function treeState(root) {
+  const git = (...a) => {
+    const r = spawnSync("git", ["-C", root, ...a], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`git ${a.join(" ")} failed in ${root}: ${String(r.stderr || r.error || "").trim()}`);
+    return r.stdout;
+  };
+  return { head: git("rev-parse", "HEAD").trim(), porcelain: git("status", "--porcelain").trim() };
+}
+
 // One run's ledger entry, after the defect's earlier runs `prev`.
-function runRecord(prev, outcome, date = today()) {
+function runRecord(prev, outcome, date = today(), extra = {}) {
   const result = classify(outcome);
-  const rec = { date, result, exit: outcome.timedOut ? null : outcome.code, failing: outcome.failing.length, failing_tests: outcome.failing.slice() };
+  const rec = { date, result, exit: outcome.timedOut ? null : outcome.code, failing: outcome.failing.length, failing_tests: outcome.failing.slice(), ...extra };
   const last = prev.length ? resultOf(prev[prev.length - 1]) : null;
   if (result === "caught" && last !== null && last !== "caught") {
     const gap = outcome.failing.filter((t) => t.startsWith(GAP_PREFIX));
@@ -124,13 +168,16 @@ function runRecord(prev, outcome, date = today()) {
 const resultOf = (r) => r.result || (r.caught ? "caught" : "survived");
 const testsOf = (r) => r.failing_tests || r.first_failing || [];
 const caughtByOf = (r) => r.caught_by || (testsOf(r).some((t) => t.startsWith(GAP_PREFIX)) ? testsOf(r).filter((t) => t.startsWith(GAP_PREFIX)) : testsOf(r));
+// A failing test's name as the ledger keeps it: at most 160 characters.
+const kept = (name) => String(name).slice(0, 160);
 
 // The must-fail table, from the defects and their ledger, and nothing else.
 function table(defects, ledger) {
   const rows = ["| id | file | planted defect | first run | last re-seeded and caught |", "|---|---|---|---|---|"];
+  const cellText = (s) => String(s).replace(/\|/g, "\\|");
   for (const d of defects) {
     const runs = (ledger[d.id] || { runs: [] }).runs;
-    const what = String(d.what).replace(/\|/g, "\\|");
+    const what = cellText(d.what);
     if (!runs.length) {
       rows.push(`| ${d.id} | \`${d.file}\` | ${what} | never run | never |`);
       continue;
@@ -144,10 +191,16 @@ function table(defects, ledger) {
       case "caught": result = `caught (${first.failing} failing)`; break;
       case "timeout": result = "timeout"; break;
       case "error": result = `error (exit ${first.exit})`; break;
-      default: result = lastCaught ? `survived; caught on re-seed by ${caughtByOf(lastCaught).join("; ").replace(/\|/g, "\\|")}` : "survived";
+      default: result = lastCaught ? `survived; caught on re-seed by ${cellText(caughtByOf(lastCaught).join("; "))}` : "survived";
     }
     if (resultOf(first) !== "caught" && resultOf(first) !== "survived" && lastCaught) {
-      result += `; caught on re-seed by ${caughtByOf(lastCaught).join("; ").replace(/\|/g, "\\|")}`;
+      result += `; caught on re-seed by ${cellText(caughtByOf(lastCaught).join("; "))}`;
+    }
+    // A gap test the defects file names counts only once the latest catch
+    // failed it (unit R-WIDE, B4).
+    if (typeof d.gap === "string" && d.gap) {
+      const verified = lastCaught && testsOf(lastCaught).map(kept).includes(kept(d.gap));
+      if (!verified) result += `; ${cellText(d.gap)} (named, not verified)`;
     }
     const when = !lastCaught ? "never" : resultOf(latest) === "caught" ? lastCaught.date : `${lastCaught.date} (then ${resultOf(latest)} ${latest.date})`;
     rows.push(`| ${d.id} | \`${d.file}\` | ${what} | ${result} | ${when} |`);
@@ -155,9 +208,26 @@ function table(defects, ledger) {
   return `${rows.join("\n")}\n`;
 }
 
+// THE SUITE'S ENVIRONMENT, above: `env` without the names a suite must not
+// see, and with the no-network preload.
+function scrubbedEnv(env = process.env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (k === "NODE_TEST_CONTEXT" || /^(WITNESS_|GITHUB_)/.test(k) || /(_TOKEN|_SECRET)$/.test(k)) continue;
+    out[k] = v;
+  }
+  out.NODE_OPTIONS = `${out.NODE_OPTIONS ? `${out.NODE_OPTIONS} ` : ""}--require ${JSON.stringify(NO_NETWORK)}`;
+  return out;
+}
+
 const children = new Set();
-// The suite and every process it started (its own group).
-function killGroup(p) {
+// The suite and every process it started: its own group, or on Windows,
+// which has none, its process tree (unit R-WIDE, B5).
+function killGroup(p, { platform = process.platform, run = spawnSync } = {}) {
+  if (platform === "win32") {
+    run("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" });
+    return;
+  }
   try {
     process.kill(-p.pid, "SIGKILL");
   } catch {
@@ -166,9 +236,7 @@ function killGroup(p) {
 }
 function runSuite(dir, suite = "test/*.test.js") {
   return new Promise((resolve) => {
-    const env = { ...process.env };
-    delete env.NODE_TEST_CONTEXT;
-    const p = spawn(process.execPath, ["--test", suite], { cwd: dir, env, detached: true });
+    const p = spawn(process.execPath, ["--test", suite], { cwd: dir, env: scrubbedEnv(), detached: true });
     children.add(p);
     let out = "";
     let timedOut = false;
@@ -181,15 +249,21 @@ function runSuite(dir, suite = "test/*.test.js") {
     p.on("close", (code) => {
       clearTimeout(t);
       children.delete(p);
-      const failing = out.split("\n").filter((l) => /^\s*not ok /.test(l) && !/# TODO/.test(l)).map((l) => l.trim().replace(/^not ok \d+ - /, "").slice(0, 160));
+      const failing = out.split("\n").filter((l) => /^\s*not ok /.test(l) && !/# TODO/.test(l)).map((l) => kept(l.trim().replace(/^not ok \d+ - /, "")));
       resolve({ code, timedOut, failing: [...new Set(failing)] });
     });
   });
 }
 
 async function plantAll(opts) {
+  const root = opts.root || ROOT;
   const defects = JSON.parse(fs.readFileSync(opts.file, "utf8")).filter((d) => !opts.only || opts.only.includes(d.id));
-  checkDefects(defects);
+  checkDefects(defects, root);
+  const tree = treeState(root);
+  if (tree.porcelain) {
+    throw new Error(`the tree at ${root} is not clean (git status --porcelain prints ${tree.porcelain.split("\n").length} line(s)); ` +
+      "commit it first, so the ledger's commit names what was planted against. Nothing was planted.");
+  }
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-"));
   const cleanup = () => {
     for (const c of children) killGroup(c);
@@ -202,21 +276,32 @@ async function plantAll(opts) {
       process.exit(130);
     });
   }
+  const copy = (name) => {
+    const dir = path.join(base, name);
+    fs.cpSync(root, dir, { recursive: true, filter: (s) => path.basename(s) !== ".git" });
+    return dir;
+  };
+  // THE UNPLANTED SUITE FIRST (above)
+  const baseline = await runSuite(copy("unplanted"), opts.suite);
+  if (baseline.timedOut || baseline.code !== 0 || baseline.failing.length) {
+    cleanup();
+    throw new Error(`the unplanted suite does not pass (${baseline.timedOut ? "timed out" : `exit ${baseline.code}`}, ${baseline.failing.length} failing` +
+      `${baseline.failing.length ? `: ${baseline.failing.slice(0, 3).join("; ")}` : ""}), so no catch would mean anything. Nothing was planted.`);
+  }
   const queue = defects.slice();
   const ledger = readLedger(opts.file);
   async function worker(w) {
-    const dir = path.join(base, `w${w}`);
-    fs.cpSync(ROOT, dir, { recursive: true, filter: (s) => path.basename(s) !== ".git" });
+    const dir = copy(`w${w}`);
     for (;;) {
       const d = queue.shift();
       if (!d) return;
       const target = path.join(dir, d.file);
-      const orig = fs.readFileSync(path.join(ROOT, d.file), "utf8");
+      const orig = fs.readFileSync(target, "utf8");
       fs.writeFileSync(target, orig.replace(d.find, () => d.replace));
       const outcome = await runSuite(dir, opts.suite);
       fs.writeFileSync(target, orig);
       const entry = ledger[d.id] || { runs: [] };
-      const rec = runRecord(entry.runs, outcome);
+      const rec = runRecord(entry.runs, outcome, today(), { head: tree.head, porcelain: tree.porcelain, defect_sha256: defectSha256(d) });
       entry.runs.push(rec);
       ledger[d.id] = entry;
       writeLedger(opts.file, ledger);
@@ -238,4 +323,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classify, checkDefects, runRecord, table };
+module.exports = { classify, checkDefects, runRecord, table, defectSha256, scrubbedEnv, killGroup, treeState };

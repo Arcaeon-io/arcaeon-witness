@@ -6,7 +6,14 @@
 // caught (M1). A defect's file is a relative path inside the repository
 // (m-d). The ledger records, for a re-seed that catches a defect its first
 // run missed, the gap test that failed, and the table prints that record
-// (m-e). An interrupted run removes its copies (m-d).
+// (m-e). An interrupted run removes its copies (m-d). Unit R-WIDE (B4,
+// B5): the runner plants only over a clean checkout whose unplanted suite
+// passes, records the commit and each defect's sha256, counts a catch only
+// on exit code 1 with a failing test, runs the suite with no secret in its
+// environment and no network, prints a gap test the defects file names as
+// "named, not verified" until a catch failed it, and on Windows kills the
+// suite's tree with taskkill. The runner's own process tests run against a
+// tiny fixture repository, never this one.
 "use strict";
 
 const { test } = require("node:test");
@@ -14,7 +21,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const crypto = require("node:crypto");
+const { spawn, spawnSync } = require("node:child_process");
 
 const RUN = path.join(__dirname, "must_fail", "run.js");
 const R = require("./must_fail/run.js");
@@ -83,19 +91,23 @@ test("R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, fir
   assert.ok(t.includes("| K07 | `lib/_case.js` | a guard | survived; caught on re-seed by MUST-FAIL GAP (K07): singleParty | 2026-10-14 |"), t);
 });
 
-test("R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree", async () => {
+// The interrupt tests send SIGINT, which Windows does not deliver to a
+// handler: there they skip, saying why (unit R-WIDE, B5); the taskkill path
+// is asserted below on every platform.
+const ON_WINDOWS = process.platform === "win32" ? "Windows delivers no SIGINT to a handler and has no process groups; the taskkill path is asserted by R-WIDE B5" : false;
+// A fixture repository whose suite is test/must_fail/slow_suite.fixture.js.
+const slowFixture = () => fixtureRepo({ suite: fs.readFileSync(path.join(__dirname, "must_fail", "slow_suite.fixture.js"), "utf8") });
+
+test("R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree", { skip: ON_WINDOWS }, async () => {
+  const fx = slowFixture();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-sigint-"));
-  const defects = path.join(tmp, "one.json");
-  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
-  const line = readme.split("\n").find((l) => l.length > 20 && readme.split(l).length === 2);
-  fs.writeFileSync(defects, JSON.stringify([{ id: "S1", file: "README.md", find: line, replace: `${line} (planted)`, what: "a planted line" }]));
   const work = path.join(tmp, "work");
   fs.mkdirSync(work);
-  // the suite it runs is a fixture that waits a minute (the run is
-  // interrupted while it runs), not the suite this test is part of
+  // the suite it runs waits a minute (the run is interrupted while its
+  // unplanted suite runs), not the suite this test is part of
   const env = { ...process.env, TMPDIR: work };
   delete env.NODE_TEST_CONTEXT;
-  const child = spawn(process.execPath, [RUN, defects, "--workers", "1", "--suite", "test/must_fail/slow_suite.fixture.js"], { env, stdio: "ignore" });
+  const child = spawn(process.execPath, [RUN, fx.defects, "--root", fx.root, "--workers", "1"], { env, stdio: "ignore" });
   const copies = () => fs.readdirSync(work).filter((f) => f.startsWith("must-fail-"));
   try {
     for (let i = 0; i < 400 && copies().length === 0; i += 1) await new Promise((r) => setTimeout(r, 50));
@@ -107,25 +119,23 @@ test("R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree", as
     const end = await ended;
     assert.ok(end.code === 130 || end.signal === "SIGINT", JSON.stringify(end));
     assert.deepEqual(copies(), [], "no copy left");
-    assert.equal(fs.existsSync(path.join(tmp, "one.ledger.json")), false, "no run recorded");
+    assert.equal(fs.existsSync(fx.defects.replace(/\.json$/, ".ledger.json")), false, "no run recorded");
   } finally {
     child.kill("SIGKILL");
     fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(fx.root, { recursive: true, force: true });
   }
 });
 
 // R-ABf's must-fail gap tests (the runner): each fails with its planted defect
-test("MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, not only the suite", async () => {
+test("MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, not only the suite", { skip: ON_WINDOWS }, async () => {
+  const fx = slowFixture();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-sigint-"));
-  const defects = path.join(tmp, "one.json");
-  const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
-  const line = readme.split("\n").find((l) => l.length > 20 && readme.split(l).length === 2);
-  fs.writeFileSync(defects, JSON.stringify([{ id: "S1", file: "README.md", find: line, replace: `${line} (planted)`, what: "a planted line" }]));
   const work = path.join(tmp, "work");
   fs.mkdirSync(work);
   const pidFile = path.join(tmp, "fixture.pid");
   const env = { ...process.env, TMPDIR: work, NODE_TEST_CONTEXT: "child", MUST_FAIL_FIXTURE_PID_FILE: pidFile };
-  const child = spawn(process.execPath, [RUN, defects, "--workers", "1", "--suite", "test/must_fail/slow_suite.fixture.js"], { env, stdio: "ignore" });
+  const child = spawn(process.execPath, [RUN, fx.defects, "--root", fx.root, "--workers", "1"], { env, stdio: "ignore" });
   const alive = (pid) => {
     try {
       process.kill(pid, 0);
@@ -149,5 +159,132 @@ test("MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as 
     child.kill("SIGKILL");
     if (pid && alive(pid)) process.kill(pid, "SIGKILL");
     fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(fx.root, { recursive: true, force: true });
   }
+});
+
+// =============================================================================
+// UNIT R-WIDE, B4 and B5: the runner vouches only for a catch that happened
+// =============================================================================
+
+// A tiny repository: lib/x.js, a suite that passes against it, and a
+// defects file, committed. `suite` is the test file's text; `extra` more
+// files. -> {root, defects}.
+function fixtureRepo({ suite, extra = {}, defects } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-fixture-"));
+  const files = {
+    "lib/x.js": "\"use strict\";\nmodule.exports = (a) => a + 1;\n",
+    "test/x.test.js": suite || "\"use strict\";\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+      "test(\"x adds one\", () => assert.equal(require(\"../lib/x.js\")(1), 2));\n",
+    "defects.json": JSON.stringify(defects || [{ id: "F1", file: "lib/x.js", find: "a + 1", replace: "a + 2", what: "x adds two" }]),
+    ...extra,
+  };
+  for (const [rel, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), text);
+  }
+  const git = (...a) => {
+    const r = spawnSync("git", ["-C", root, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", ...a], { encoding: "utf8" });
+    assert.equal(r.status, 0, `git ${a.join(" ")}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  git("init", "-q");
+  git("add", "-A");
+  git("commit", "-q", "-m", "fixture");
+  return { root, defects: path.join(root, "defects.json"), head: git("rev-parse", "HEAD"), git };
+}
+// The runner over a fixture, to its end. -> {code, stderr, ledger}.
+function runOver(fx, { env = {}, argv = [] } = {}) {
+  const childEnv = { ...process.env, ...env };
+  delete childEnv.NODE_TEST_CONTEXT;
+  const r = spawnSync(process.execPath, [RUN, fx.defects, "--root", fx.root, "--workers", "1", ...argv], { env: childEnv, encoding: "utf8", timeout: 120000 });
+  let ledger = null;
+  try {
+    ledger = JSON.parse(fs.readFileSync(fx.defects.replace(/\.json$/, ".ledger.json"), "utf8"));
+  } catch {
+    ledger = null;
+  }
+  return { code: r.status, stderr: String(r.stderr), ledger };
+}
+
+test("R-WIDE B4: the runner refuses to plant unless the unplanted suite exits 0 with no failing test; nothing is planted and no ledger is written", (t) => {
+  const failing = "\"use strict\";\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+    "test(\"x adds one\", () => assert.equal(require(\"../lib/x.js\")(1), 2));\ntest(\"already broken\", () => assert.equal(1, 2));\n";
+  const fx = fixtureRepo({ suite: failing });
+  t.after(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+  const r = runOver(fx);
+  assert.equal(r.code, 1, r.stderr);
+  assert.match(r.stderr, /the unplanted suite does not pass \(exit 1, 1 failing: already broken\).*Nothing was planted\./);
+  assert.equal(r.ledger, null, "no ledger written");
+  // control: the passing suite plants, and the defect is caught
+  const ok = fixtureRepo();
+  t.after(() => fs.rmSync(ok.root, { recursive: true, force: true }));
+  const g = runOver(ok);
+  assert.equal(g.code, 0, g.stderr);
+  assert.equal(g.ledger.F1.runs[0].result, "caught", JSON.stringify(g.ledger));
+});
+
+test("R-WIDE B4: caught only when the suite exits with code 1 and a test failed: another exit code with failing tests is error", () => {
+  const R = require("./must_fail/run.js");
+  assert.equal(R.classify({ code: 1, timedOut: false, failing: ["a test"] }), "caught");
+  assert.equal(R.classify({ code: 2, timedOut: false, failing: ["a test"] }), "error");
+  assert.equal(R.classify({ code: 7, timedOut: false, failing: ["a test"] }), "error");
+  assert.equal(R.classify({ code: null, timedOut: false, failing: ["a test"] }), "error");
+});
+
+test("R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}", (t) => {
+  const fx = fixtureRepo();
+  t.after(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(fx.root, "lib", "y.js"), "// not committed\n");
+  const dirty = runOver(fx);
+  assert.equal(dirty.code, 1);
+  assert.match(dirty.stderr, /is not clean \(git status --porcelain prints 1 line\(s\)\).*Nothing was planted\./);
+  assert.equal(dirty.ledger, null);
+  fs.rmSync(path.join(fx.root, "lib", "y.js"));
+  const r = runOver(fx);
+  assert.equal(r.code, 0, r.stderr);
+  const run = r.ledger.F1.runs[0];
+  const sha = crypto.createHash("sha256").update(JSON.stringify({ find: "a + 1", replace: "a + 2" })).digest("hex");
+  assert.deepEqual([run.head, run.porcelain, run.defect_sha256], [fx.head, "", sha]);
+  assert.equal(R.defectSha256({ id: "F1", find: "a + 1", replace: "a + 2", what: "x" }), sha);
+});
+
+test("R-WIDE B4: the table prints a gap test the defects file names as 'named, not verified' unless the latest catch failed it", () => {
+  const d = { id: "G1", file: "lib/x.js", what: "a defect", gap: "MUST-FAIL GAP (G1): the gap test" };
+  const survived = { date: "2026-10-15", result: "survived", exit: 0, failing: 0, failing_tests: [] };
+  const caughtOther = { date: "2026-10-15", result: "caught", exit: 1, failing: 1, failing_tests: ["another test"], caught_by: ["another test"] };
+  const caughtGap = { date: "2026-10-16", result: "caught", exit: 1, failing: 1, failing_tests: ["MUST-FAIL GAP (G1): the gap test"], caught_by: ["MUST-FAIL GAP (G1): the gap test"] };
+  assert.ok(R.table([d], { G1: { runs: [survived] } }).includes("| survived; MUST-FAIL GAP (G1): the gap test (named, not verified) | never |"));
+  assert.ok(R.table([d], { G1: { runs: [survived, caughtOther] } }).includes("survived; caught on re-seed by another test; MUST-FAIL GAP (G1): the gap test (named, not verified) |"));
+  const v = R.table([d], { G1: { runs: [survived, caughtOther, caughtGap] } });
+  assert.ok(v.includes("| survived; caught on re-seed by MUST-FAIL GAP (G1): the gap test | 2026-10-16 |"), v);
+  assert.doesNotMatch(v, /not verified/);
+});
+
+test("R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's", (t) => {
+  const probe = "\"use strict\";\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+    "test(\"x adds one\", () => assert.equal(require(\"../lib/x.js\")(1), 2));\n" +
+    "test(\"no secret in the environment\", () => assert.deepEqual(Object.keys(process.env).filter((k) => /^(WITNESS_|GITHUB_)|_TOKEN$|_SECRET$/.test(k)), []));\n" +
+    "test(\"no network\", async () => { await assert.rejects(fetch(\"https://api.github.com/\"), /must-fail run: no network \\(api\\.github\\.com\\)/); });\n";
+  const fx = fixtureRepo({ suite: probe });
+  t.after(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+  const r = runOver(fx, { env: { WITNESS_CASE_SIGNER_KEY: "x", GITHUB_PIN_TOKEN: "y", GITHUB_PIN_REPO: "a/b", STAMP_TOKEN: "z", SOME_SECRET: "w" } });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.ledger.F1.runs[0].result, "caught", JSON.stringify(r.ledger));
+  assert.deepEqual(Object.keys(R.scrubbedEnv({ WITNESS_X: "1", GITHUB_REPO: "a", A_TOKEN: "t", B_SECRET: "s", PATH: "/bin", NODE_TEST_CONTEXT: "child" })).sort(), ["NODE_OPTIONS", "PATH"]);
+});
+
+test("R-WIDE B5: on Windows the runner kills the suite's process tree with taskkill /T /F; elsewhere its process group", () => {
+  const calls = [];
+  R.killGroup({ pid: 4242, kill: () => calls.push("kill") }, { platform: "win32", run: (cmd, argv) => calls.push([cmd, ...argv]) });
+  assert.deepEqual(calls, [["taskkill", "/pid", "4242", "/T", "/F"]]);
+  const killed = [];
+  const real = process.kill;
+  process.kill = (pid, sig) => killed.push([pid, sig]);
+  try {
+    R.killGroup({ pid: 4242, kill: () => killed.push("kill") }, { platform: "linux", run: () => assert.fail("no taskkill off Windows") });
+  } finally {
+    process.kill = real;
+  }
+  assert.deepEqual(killed, [[-4242, "SIGKILL"]]);
 });

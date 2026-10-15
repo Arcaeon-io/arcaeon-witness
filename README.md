@@ -726,7 +726,12 @@ public pins repo and the private usage repo — same account, same token, two
 repos. `WITNESS_CADENCE` is optional (default cadence is 24h for every
 namespace when unset or malformed) and holds no secrets, but lives with the
 others for one reason: it's operational policy, not code — changing it
-shouldn't require a redeploy.
+shouldn't require a redeploy. `GITHUB_READ_TOKEN` is optional: the case
+page reads the pins repository with it, so page views do not spend the
+token the writers use; when it is unset the page reads with
+`GITHUB_PIN_TOKEN`, and the status page says so in one line. The case page
+keeps a page it answered 200 for 60 seconds per instance, so a page may be
+up to 60 seconds old, and says so.
 
 ## Deploy shape
 
@@ -790,7 +795,10 @@ commit the repository does not show yet is 503 `document_unavailable`,
 which a re-send can finish. A preview deployment of another branch sets it to that branch.
 The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
-steps (e) and (f).
+steps (e) and (f). Step (f) runs the sealer's case pass, which writes to the
+pins store the shell's `GITHUB_PIN_REPO` names (the production store when it
+is unset), so it runs only when `--store <owner/repo>` names that store, and
+it prints the target repository before any write.
 
 ### A revoked key
 
@@ -845,7 +853,13 @@ document is the published one (the commit on the published branch is the
 trust root, and it needs the network). So it never prints `ok: true`: it
 prints `{ok: false, reason: "offline_partial", signature_ok, signature_reason,
 not_checked}`
-and exits 3. Only the full online check prints `ok: true` and exits 0.
+and exits 3. Only the full online check prints `ok: true` and exits 0, and
+only when the key document this checkout carries is the one at the tip of
+the published branch, read once from the raw host: an older copy could
+vouch for a key a newer document revokes, so the answer is then
+`carried_document_not_published` (or `published_document_unreadable`). The
+sealer makes the same read before it pins, and pins nothing on either
+answer.
 
 ### Withdrawal
 

@@ -524,7 +524,8 @@ module.exports = async (req, res) => {
     return caseHttp.handleCaseReference(req, res);
   }
   if (op === "case-page") {
-    return casePage.handleCasePage(req, res);
+    // the instance's page cache (lib/_case_page.js THE PAGE CACHE; unit R-WIDE, B1)
+    return casePage.handleCasePage(req, res, { cache: casePage.PAGE_CACHE });
   }
 
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every

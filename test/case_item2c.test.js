@@ -451,6 +451,9 @@ test("FIX 4: checkKeyDocument refuses an unknown top-level field by name; the co
 
 test("FIX 6: a case with the withdrawn marker is not considered for a pin (its case file is read only by the withdrawn path, unit R-N C1); a root read as expired or withdrawn is skipped as terminal; nothing is written but a withdrawn marker that was missing", async () => {
   // (a) the marker, by the tree alone
+  // since unit R-WIDE (B2) the pass first reads the key document at the tip
+  // of the published branch: here, the one it carries
+  KD.publishTip(gh, KEYS_DOC);
   const w = await committedCase({ over: { scope_digest: sha("marker") } });
   gh.seed(PINS, C.withdrawnMarkerPath(w.id), { case_id: w.id });
   const reads = gh.getLog.length;

@@ -324,6 +324,8 @@ test("R-N3 N3: the offline receipt check is partial: it prints ok false, offline
     }
     return { code, out: JSON.parse(lines.join("")) };
   };
+  // since unit R-WIDE (B2) ok also needs the carried document at the tip of the published branch
+  KD.publishTip(gh, S.PUBLISHED_KEYS);
   assert.deepEqual(await run({ ok: true }), { code: 0, out: { ok: true } });
   assert.deepEqual(await run({ ok: false, reason: "signer_unlisted" }), { code: 1, out: { ok: false, reason: "signer_unlisted" } });
   // the header comment and the README say what offline proves, and what it does not

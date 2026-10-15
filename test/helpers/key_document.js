@@ -44,10 +44,21 @@ const commitOf = (doc) => crypto.createHash("sha1").update(canonicalBytes(doc)).
 function serve(gh, doc, commit = commitOf(doc)) {
   const text = `${JSON.stringify(doc, null, 2)}\n`;
   gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, text);
+  // since unit R-WIDE (B2) the sealer and the online checker read the
+  // document at the tip of the published branch: the document served last
+  publishTip(gh, doc);
   // the commit carries no text of its own: the raw host serves only what
   // seedRaw planted, so a test can still take the file away
   gh.seedCommit(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE);
   return commit;
+}
+
+// `doc` at the tip of the key document's published branch, as the raw host
+// serves a branch name (lib/_case_seal.js carriedDocumentPublished; unit
+// R-WIDE, B2). `branch` is the mock's branch name for the repository unless
+// given.
+function publishTip(gh, doc, branch = (gh.branches && gh.branches.get(S.KEY_DOCUMENT_REPO)) || "main") {
+  gh.seedRaw(S.KEY_DOCUMENT_REPO, branch, S.CASE_KEYS_FILE, `${JSON.stringify(doc, null, 2)}\n`);
 }
 
 // `doc` served at `commit` by the raw host but on no branch of the
@@ -80,4 +91,4 @@ function signedUnder(gh, doc) {
   return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc) };
 }
 
-module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, serveOffBranch, deployed, deployedFor, signedUnder, sha256 };
+module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, publishTip, serveOffBranch, deployed, deployedFor, signedUnder, sha256 };

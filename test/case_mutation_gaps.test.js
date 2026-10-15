@@ -423,6 +423,7 @@ async function withListingFailure(dirPath, fn) {
 test("S39 (caseTreeIndex; since unit R-L4 every case file is a candidate, by its root): a case holding one registration file is read once, as a candidate, and nothing is written", async () => {
   await openCase();
   assert.equal((await commit("a", commitmentFor("a", "tape a")))._status, 201);
+  KD.publishTip(gh, S.PUBLISHED_KEYS); // since unit R-WIDE (B2) the pass reads the tip first: the document it carries
   const from = gh.getLog.length;
   const r = await S.anchorPending({ now: NOW });
   assert.equal(r.ok, true);

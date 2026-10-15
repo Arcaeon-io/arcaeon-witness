@@ -32,6 +32,14 @@ function esc(s) {
   }[c]));
 }
 
+// One line (unit R-WIDE, B1): whether the case page reads with its own
+// token. Never prints the token or names the variable.
+function readTokenLine() {
+  return store.readTokenConfigured()
+    ? '<p class="muted">The case page reads the pins repository with its own read token.</p>'
+    : '<p class="muted">This deployment has no separate read token: the case page reads the pins repository with the token it writes with.</p>';
+}
+
 // One line (unit R-WIDE, A6): the key document this deployment carries,
 // confirmed at the commit it was built from, or why not.
 function deploymentDocumentLine(d) {
@@ -372,6 +380,7 @@ ${brandMark.FAVICON_LINK}
     </table>
     ${casePartialHtml}
     ${deploymentDocumentLine(deploymentDocument)}
+    ${readTokenLine()}
   </div>
 
   <h2>Conflict observations</h2>
