@@ -165,7 +165,8 @@
   "file": "lib/_case_page.js",
   "find": "opts.env || process.env, { sha256: sha256hex(raw.bytes), blob: raw.sha });",
   "replace": "opts.env || process.env, { sha256: sha256hex(Buffer.from(raw.text, \"utf8\")), blob: raw.sha });",
-  "what": "P5: the sha256 of the text re-encoded, not of the bytes read"
+  "what": "P5: the sha256 of the text re-encoded, not of the bytes read",
+  "gap": "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
  },
  {
   "id": "PG25",
@@ -200,21 +201,24 @@
   "file": "lib/_case_page.js",
   "find": "      kept.set(id, { at: clock(), status: out.status, html: out.html, json: out.json });",
   "replace": "      kept.set(id, { at: clock(), status: out.status, html: out.html });",
-  "what": "P5: the page cache keeps no JSON twin"
+  "what": "P5: the page cache keeps no JSON twin",
+  "gap": "MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin"
  },
  {
   "id": "PG30",
   "file": "lib/_case_page.js",
   "find": "    } catch {\n      return unreadable(\"not_json\");\n    }",
   "replace": "    } catch {\n      return refusal(503, \"Could not look\", \"The case record could not be read when this page was read. That is not a no; try again.\", \"could_not_look\");\n    }",
-  "what": "P5: a case file that is not JSON is could_not_look, not case_unreadable"
+  "what": "P5: a case file that is not JSON is could_not_look, not case_unreadable",
+  "gap": "MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look"
  },
  {
   "id": "PG31",
   "file": "lib/_case_page.js",
   "find": "    const pinJson = { state: pin.pin, ...(pin.reason ? { reason: pin.reason } : {}),",
   "replace": "    const pinJson = { state: kase.status === \"VERDICT\" ? \"pinned\" : pin.pin, ...(pin.reason ? { reason: pin.reason } : {}),",
-  "what": "P5: the JSON pin state from the status, not the read"
+  "what": "P5: the JSON pin state from the status, not the read",
+  "gap": "MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned"
  },
  {
   "id": "PG32",
@@ -263,7 +267,8 @@
   "file": "lib/_case_page.js",
   "find": "    rows.push([`role ${r} registered at`, `${whenHtml(e.registered_at, nowMs)} <span class=\"muted\">",
   "replace": "    rows.push([`role ${r} registered at`, `${esc(e.registered_at)} <span class=\"muted\">",
-  "what": "P6: registered at absolute only"
+  "what": "P6: registered at absolute only",
+  "gap": "MUST-FAIL GAP (PG38): a registration time row prints relative and absolute"
  },
  {
   "id": "PG39",
@@ -326,7 +331,8 @@
   "file": "lib/_case_page.js",
   "find": "  const judged = live.rows.length + live.invalid.length;",
   "replace": "  const judged = live.rows.length;",
-  "what": "P8: an invalid row is not counted as read"
+  "what": "P8: an invalid row is not counted as read",
+  "gap": "MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid"
  },
  {
   "id": "PG48",
@@ -354,13 +360,15 @@
   "file": "lib/_store.js",
   "find": "  const bytes = Buffer.from(body.content, \"base64\");\n  return { text: bytes.toString(\"utf-8\"), sha: body.sha, bytes };",
   "replace": "  const bytes = Buffer.from(body.content, \"base64\");\n  return { text: bytes.toString(\"utf-8\"), sha: body.sha, bytes: Buffer.from(bytes.toString(\"utf-8\"), \"utf-8\") };",
-  "what": "P5: the bytes handed back are the text re-encoded"
+  "what": "P5: the bytes handed back are the text re-encoded",
+  "gap": "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
  },
  {
   "id": "PG52",
   "file": "README.md",
   "find": "`/case/<case_id>?format=json`\n(`op=case-page&format=json`) answers the same facts as JSON.",
   "replace": "`/case/<case_id>?format=json`\n(`op=case-page&format=json`) is not offered.",
-  "what": "P5: the README says there is no JSON twin"
+  "what": "P5: the README says there is no JSON twin",
+  "gap": "MUST-FAIL GAP (PG52): the README names the JSON twin"
  }
 ]

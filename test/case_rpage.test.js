@@ -640,3 +640,11 @@ test("MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it 
   assert.notEqual(sha(bytes), sha(Buffer.from(bytes.toString("utf8"), "utf8")), "fixture: the two differ");
   assert.ok(html.includes(`<code>${sha(bytes)}</code>`), html.slice(html.indexOf("<h1>"), html.indexOf("<h1>") + 300));
 });
+
+test("MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned", async () => {
+  const c = await sealedCase("RPAGE gap json pin");
+  unpinned(c.id);
+  const j = await viewAs(c.id, { format: "json" });
+  assert.deepEqual(j.body.pin, { state: "not_pinned" });
+  assert.equal(j.body.checks.find((x) => x.check === "pin").code, "not_pinned");
+});
