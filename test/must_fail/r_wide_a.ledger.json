@@ -749,6 +749,26 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "56909e5bebed7984cda0395640fa4f212c08933ef361d17aac218887047260a6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 9,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-PAGEf m2: the withdrawal's time, each stamped time and each recorded time print relative and absolute",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, <when> (T)', never that the role proved itself; the README says t",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDE A2: the withdrawn page says 'withdra",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9d414fad937d527c158dafedec072aaa94bd4f56",
+        "porcelain": "",
+        "defect_sha256": "77e07752735959e090bef92b5c1f2a660889968ee4c5852de0d5013c05f86d4f"
       }
     ]
   },

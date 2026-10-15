@@ -67,7 +67,7 @@
   "file": "lib/_case_http.js",
   "find": "          known = { notJson: true };",
   "replace": "          known = { gone: true };",
-  "what": "G1: a row that is not JSON is kept as gone (expected equivalent: the reference answers only records_live, 2 whenever it answers a row)"
+  "what": "G1: a row that is not JSON is kept as gone (expected equivalent: notJson and gone change only `whole`, which never decides the records_live a reference answers)"
  },
  {
   "id": "GG11",

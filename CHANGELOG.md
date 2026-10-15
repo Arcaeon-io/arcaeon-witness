@@ -1,5 +1,128 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-PAGEf: the twin shows only what the page shows; the key document's read time is the read's (branch `case-protocol-2026-10-10`, NOT deployed)
+
+The R-PAGE reader's findings, as the architect ruled them. The reader said DO NOT MERGE on B1 and B2. R-FGg counts: the operator's Windows run at 81b4da8 read 1646 tests, 1638 pass, 0 fail, three times. Each new test fails on 81b4da8. They were run there in a worktree with this unit's two test files, and all 9 of 9 fail. Eight fail on the behaviour this unit changes. m5's fails because `jsFilesUnder` is not in the helper at 81b4da8 (the walk is the fix). R-PAGE P2, rewritten for m1, fails there too.
+
+- **Commits.**
+  - b5c28c5: tests and code.
+  - 9af3ae8: the defect list, committed before the run, with one comment reworded.
+  - 82db746 (the pass's ledger part way through the run, committed so the tree was clean), 0cf56e5 (the pass's first ledger, the gap tests, named in the defect list), 9d414fa (the re-seed's ledger), and this entry's commit (Group A's WA11 ledger, the GG10 correction, the change log).
+- **B1. The twin carries only what the page shows.**
+  - Before, `renderCase`'s `twin()` put `case_sha256` on every JSON answer, refusals included. Now it comes from `bytes`, which is set only where the page prints "The record this page read" (`bytesReadHtml`). Those pages are:
+    - OPEN, COMMITTED and COMMITTED (EXPIRED …);
+    - the verdict;
+    - both could-not-look pages (the sealed record and the withdrawal record);
+    - WITHDRAWN;
+    - SEALED RECORD DOES NOT VERIFY.
+  - These pages print nothing from the record, and their twins carry no `case_sha256`:
+    - both SIGNED BY A REVOKED KEY pages;
+    - WITHDRAWAL RECORD DOES NOT VERIFY;
+    - SINGLE PARTY;
+    - the unread could-not-look page;
+    - `case_record_inconsistent`.
+  - The `case_record_inconsistent` twin is now `{ok: false, error_code: "case_record_inconsistent"}`, the code only, as R-L4e rules for every body with that code. B1's tests drove that twin for the first time, and the every-body audit (R-N2 B2) read it carrying the case id and the read time.
+- **B2. When the key document was read.**
+  - `fetchNamedDocument` keeps `fetched_at` with each cached document. This is the time the read was made, by the reader's clock (`nowMs`, which the case page passes) or `Date.now()`. A kept answer says `from_cache: true`.
+  - `namedDocumentOf`, `signedUnderReason` and `sealedRecordReason` (the latter with `{nowMs}`) pass these through. A valid answer carries `document_read_at` and `document_from_cache`.
+  - The key-document row prints "last read <fetched_at>", or "from cache, last read <T>" when this request took the document from the instance's cache. It prints nothing when no read time is known (the offline path).
+- **M1. The bytes, hashed.**
+  - `projectedRegistrations` compares `sha256(got.bytes)` with the projected `registration_sha256`. Before, it hashed the decoded text re-encoded.
+  - It also answers `shas: {a, b}`, the sha256 of each file's bytes as read. The page's registration check line prints `proj.shas[r]` and no longer hashes the text itself.
+- **M2. A row gone on one attempt is read again on the next.** `sentRow` no longer keeps a seq listed and then read 404 in the request's `seen` map. A later attempt reads it again: one more call, and only in that case. A row that is not JSON is still kept, as `{notJson: true}`.
+- **Minors.**
+  - **m1:** the pinned case file's time cell says "time not given". The not-pinned row's cell, the same `notRead` cell, says it too.
+  - **m2:** these times print relative then absolute, through `whenHtml` like the other time rows:
+    - the withdrawal row: "withdrawn on presentation of role a's commitment preimage, 1 hour ago (T)";
+    - each role's "stamped" time;
+    - the "recorded" times of the reveal's cross-reference and of each row.
+
+    The README's withdrawal sentence now ends "then the time written, relative and absolute". Group A's WA11 (`test/must_fail/r_wide_a.json`) targeted the withdrawal line's old form. It is retargeted at the new line with the same meaning and run again at this unit's tip (below).
+  - **m3:** R-FGg's GG10 reason is corrected (below, in that entry's table). The old reason ("2 whenever it answers a row") was wrong.
+  - **m4:** the case page's 405 is `{ok: false, error_code: "method_not_allowed"}`, with the allow header.
+  - **m5:** the G5 tools scan walks subdirectories through `jsFilesUnder` in `test/helpers/js_strings.js` (`.js`, `.mjs`, `.cjs`).
+- **Line counts.**
+  - `lib/_case_page.js`: 1097 to 1117.
+  - `lib/_case_seal.js`: 2490 to 2509.
+  - `lib/_case_http.js`: 2540 to 2540 (the same count).
+  - `README.md`: 1119 to 1119.
+- **Tests.**
+  - New in `test/case_rpage.test.js`:
+    - R-PAGEf B1 (three: the states, the revoked twin field by field, and the `case_record_inconsistent` twin);
+    - B2, M1, M2, m2 and m4;
+    - the gap tests below for PF11, PF13, PF20 and PF40.
+
+    New in `test/response_bodies.test.js`: m5. New in `test/case_rfg.test.js`: the gap test for PF37, beside R-FGg G1's row-call counter.
+  - Rewritten, each with a note:
+    - R-PAGE P2 (m1's words) and P3, which now clears the document cache so the row's read is this page's;
+    - the withdrawal-time assertions in `case_item2c` PAGE, `case_redteam` GPT-5.6 §2B and `case_rwide` R-WIDE A2;
+    - `case_rrvf` R-RVf M2 (the stamped time);
+    - `case_signed_under` VALID UNDER THE DOCUMENT IT NAMES, whose answer now says when the document was read.
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_pagef.ledger.json`). 40 defects over the lines this unit changed, at 9af3ae8.
+  - 34 were caught on their first run. 6 survived. Five got gap tests (0cf56e5), and their re-seed at 0cf56e5 caught all five, each by its gap test:
+    - PF11 and PF13: the projection's sha256, and the check line's, taken from the text re-encoded. An honest registration is ASCII, so the two hashes differ only for a file that still validates with a byte that is not UTF-8. The gap tests plant one through a duplicate `kind` key.
+    - PF20: the reveal's cross-reference recorded time, absolute only.
+    - PF37: a row that is not JSON is not kept, so it is read again. The answer is the same.
+    - PF40: the README's withdrawal sentence.
+
+    PF14 is equivalent (the table gives the reason).
+  - 39 of 40 caught; PF14 equivalent.
+  - Not planted: the comments.
+
+  | id | file | planted defect | first run (date, at commit) | last re-seeded and caught (date, at commit) |
+  |---|---|---|---|---|
+  | PF01 | `lib/_case_seal.js` | B2: a kept document is not said to come from the cache | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF02 | `lib/_case_seal.js` | B2: the read time is the machine's clock, not the reader's | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF03 | `lib/_case_seal.js` | B2: a kept document's read time is refreshed to now | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF04 | `lib/_case_seal.js` | B2: namedDocumentOf drops when the document was read | caught (5 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF05 | `lib/_case_seal.js` | B2: namedDocumentOf drops the reader's clock | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF06 | `lib/_case_seal.js` | B2: signedUnderReason drops the reader's clock | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF07 | `lib/_case_seal.js` | B2: sealedRecordReason drops the reader's clock | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF08 | `lib/_case_seal.js` | B2: the answer carries no read time | caught (5 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF09 | `lib/_case_seal.js` | B2: the answer never says from cache | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF10 | `lib/_case_seal.js` | M1: the registration file's text re-encoded is hashed, not its bytes | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF11 | `lib/_case_seal.js` | M1: the projection answers the text's sha256, not the bytes' | survived; caught on re-seed by MUST-FAIL GAP (PF11): a registration that validates with a byte that is not UTF-8 in it: the projection answers its bytes' sha256, and a file whose text is the projected file's but whose bytes are not is not the file projected, 2026-10-15, at 9af3ae8 | 2026-10-15, at 0cf56e5 |
+  | PF12 | `lib/_case_seal.js` | M1: the projection answers no sha256 | caught (124 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF13 | `lib/_case_page.js` | M1: the page's registration check hashes the text re-encoded | survived; caught on re-seed by MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded, 2026-10-15, at 9af3ae8 | 2026-10-15, at 0cf56e5 |
+  | PF14 | `lib/_case_page.js` | M1: a registration with no sha256 still gets a check line | survived; equivalent: registrationChecks is handed either null (it returns no line) or an ok projection, whose shas[r] is set with texts[r] for every role with an entry, so the typeof guard never decides anything, 2026-10-15, at 9af3ae8 | never (equivalent) |
+  | PF15 | `lib/_case_page.js` | B2: a cached document's read is not said to be from cache | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF16 | `lib/_case_page.js` | B2: the key-document row prints no read time | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF17 | `lib/_case_page.js` | B2: the key-document row prints the page's read time (R-PAGE's form) | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF18 | `lib/_case_page.js` | m1: the pinned case file's time cell says it was not read | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF19 | `lib/_case_page.js` | m2: the stamped time is absolute only | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF20 | `lib/_case_page.js` | m2: the reveal's cross-reference recorded time is absolute only | survived; caught on re-seed by MUST-FAIL GAP (PF20): the cross-reference sent with the reveal prints its recorded time relative and absolute, 2026-10-15, at 9af3ae8 | 2026-10-15, at 0cf56e5 |
+  | PF21 | `lib/_case_page.js` | m2: a row's recorded time is absolute only | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF22 | `lib/_case_page.js` | m2: the recorded rows get no clock | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF23 | `lib/_case_page.js` | m2: the withdrawal time is absolute only (R-WIDE A2's form) | caught (8 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF24 | `lib/_case_page.js` | B1: no twin carries case_sha256 | caught (5 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF25 | `lib/_case_page.js` | B1: every twin carries case_sha256 (R-PAGE's form) | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF26 | `lib/_case_page.js` | B1: the sealed twins drop case_sha256 | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF27 | `lib/_case_page.js` | B1: the does-not-verify twin drops case_sha256 | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF28 | `lib/_case_page.js` | B1: the withdrawal's could-not-look twin drops case_sha256 | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF29 | `lib/_case_page.js` | B1: the withdrawn twin drops case_sha256 | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF30 | `lib/_case_page.js` | B1: the open and committed twins drop case_sha256 | caught (5 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF31 | `lib/_case_page.js` | B1 (R-L4e): the inconsistent twin carries the case id and read time | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF32 | `lib/_case_page.js` | B2: the page does not hand its clock to the reader | caught (4 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF33 | `lib/_case_page.js` | m4: the 405 carries prose | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF34 | `lib/_case_http.js` | M2: a seq listed then 404 is kept, never read again (R-FGg's form) | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF35 | `lib/_case_http.js` | M2: a not-JSON row is read as a row | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF36 | `lib/_case_http.js` | M2: nothing read is kept for a later attempt | caught (3 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF37 | `lib/_case_http.js` | M2: a not-JSON row is not kept, read again on each attempt | survived; caught on re-seed by MUST-FAIL GAP (PF37): a row that is not JSON is read once a request: kept, as every row read is, and read again neither by a later attempt nor by the live count, 2026-10-15, at 9af3ae8 | 2026-10-15, at 0cf56e5 |
+  | PF38 | `test/helpers/js_strings.js` | m5: the tools/ scan does not walk subdirectories | caught (1 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF39 | `test/helpers/js_strings.js` | m5: the scan reads .js files only | caught (1 failing), 2026-10-15, at 9af3ae8 | 2026-10-15, at 9af3ae8 |
+  | PF40 | `README.md` | m2: the README says the withdrawal time is absolute (R-WIDE A2's words) | survived; caught on re-seed by MUST-FAIL GAP (PF40): the README says the withdrawal time prints relative and absolute, 2026-10-15, at 9af3ae8 | 2026-10-15, at 0cf56e5 |
+
+- **Group A's WA11, run at this unit's tip** (`test/must_fail/r_wide_a.ledger.json`): WA11 caught (9 failing), 2026-10-15, at 9d414fa.
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1660 tests, 1653 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - **m2: "at" is gone from the withdrawal row.** R-WIDE A2's ruled form was "…, at T". With the time relative then absolute, the row reads "withdrawn on presentation of role a's commitment preimage, 1 hour ago (T)". "at 1 hour ago" would not read, so "at" is dropped. The README says "then the time written, relative and absolute".
+  - **m1 also reaches the not-pinned row.** Its time cell is the same `notRead`, so it says "time not given" too. That page read the blob on the branch, and the read gives no time.
+  - **The `case_record_inconsistent` twin is the code only.** It has no case id and no read time, unlike the other refusal twins. R-L4e's rule (a body with that code is the code alone) and the standing line ("bodies are codes only") are read as reaching the page's JSON twin. B1 allows a twin to show less than the page.
+  - **M1 cannot fail on an honest file.** A registration has no free-text field (every field is checked against a pattern), so an honest file is ASCII. Its bytes and its text re-encoded hash alike. They differ only for bytes that are not UTF-8, which the gap tests plant through a duplicate key: `JSON.parse` keeps the last value of a duplicate key, so the record still validates.
+  - **B2's clock reaches only the page.** `nowMs` is passed only on the case page's path. Every other caller of `sealedRecordReason` (the reveal, the reference, the sealer, the tools) records `Date.now()` as the read time, and none of them prints it.
+  - **The twin does not carry the document's read time.** The key-document row prints it, but the twin's `document` field names only the commit. B1 is read as an upper bound: the twin shows no field the page does not.
+
 ## 2026-10-15: Unit R-PAGE: the case page prints what the record proves, and the checks that ran (branch `case-protocol-2026-10-10`, NOT deployed)
 
 Part 2 of the brief (R-FGg was part 1). The shapes come from cosign/Rekor, OpenTimestamps, certificate transparency, GitHub's signature states, search.sigstore.dev and crt.sh, as the architect read them. Each new test fails on 0869c9d (run there in a worktree with this part's test file: 9 of 9 fail).
@@ -129,7 +252,7 @@ The R-FGf reader said MERGE. The operator's Windows run at 0869c9d read 1623 tes
   | GG07 | `lib/_case_http.js` | G1: the row putFile's re-read found is not kept | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
   | GG08 | `lib/_case_http.js` | G1: the row this request wrote is not handed to the live count | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
   | GG09 | `lib/_case_http.js` | G1: the live count's listing leaves out the row this request wrote | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
-  | GG10 | `lib/_case_http.js` | G1: a row that is not JSON is kept as gone (expected equivalent: the reference answers only records_live, 2 whenever it answers a row) | survived; equivalent: the reference answers only records_live, which is 2 whenever it answers a row (its own or the one it found is valid), so how another row is kept changes nothing it answers, 2026-10-15, at e1fb702 | never (equivalent) |
+  | GG10 | `lib/_case_http.js` | G1: a row that is not JSON is kept as gone (expected equivalent: notJson and gone change only `whole`, which never decides the records_live a reference answers) | survived; equivalent: kept as gone, a row that is not JSON is passed over by the live count instead of counted unreadable. That changes only `whole` (every listed row read), and `whole` decides records_live only when no valid row was read and the reveal carried no cross_reference. A reference answers once its own row is written or found valid. With 20 rows or fewer that row is among those the live count reads, so records_live is 2 either way. With more than 20, records_live can be null (none of the first 20 valid, no cross_reference), but then rows are left unread and `whole` is false either way. (Corrected by unit R-PAGEf, m3: this said records_live is 2 whenever the reference answers a row, which is not so past 20 rows.), 2026-10-15, at e1fb702 | never (equivalent) |
   | GG11 | `lib/_case_http.js` | G1: a row that is not JSON is read as a row | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
   | GG12 | `lib/_case_seal.js` | G1: the live count lists again though handed the listing | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
   | GG13 | `lib/_case_seal.js` | G1: the live count reads the handed rows again | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
