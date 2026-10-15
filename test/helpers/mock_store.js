@@ -9,6 +9,10 @@
 //
 //   GET  /repos/<repo>/contents/<path>?ref=<branch>
 //        -> 200 {content:<base64>, sha:<hex>}   | 404 if missing
+//        With ref a branch a file was planted on by seedAtBranch(repo,
+//        branch, path, text) (unit R-WIDEf, F3-c: the key document at the
+//        head of a branch, read through this API), that text; a ref that is
+//        not the repository's branch and has no such file, 404.
 //        With ref a commit of <repo> (unit R-RVf, M1: lib/_store.js
 //        getRawFileAt), the file as that commit left it, as the raw host
 //        serves it below (404 when none had written it); its sha is the
@@ -142,6 +146,7 @@ class MockGitHubStore {
     this._forced = new Map(); // "repo::path" -> remaining forced-conflict count
     this._forcedFailure = new Map(); // "repo::path" -> {remaining, status}
     this._forcedGetFailure = new Map(); // "repo::path" -> {remaining, status}
+    this.branchFiles = new Map(); // "repo@branch:path" -> text (seedAtBranch)
     this._droppedCommit = new Map(); // "repo::path" -> remaining PUT answers with no commit
     // GET /repos/<repo>/git/trees/<branch>?recursive=1 -> {tree:[{path,type}], truncated}
     // Added 2026-09-20 for tools/reconcile_batches.js: the reconciler walks the
@@ -181,6 +186,14 @@ class MockGitHubStore {
   // A public file's text at one commit, served on the raw host.
   seedRaw(repo, ref, path, text) {
     this.raw.set(`${repo}@${ref}:${path}`, String(text));
+  }
+
+  // A file's text at the head of `branch`, served by the contents API
+  // (unit R-WIDEf, F3-c); null takes it away.
+  seedAtBranch(repo, branch, path, text) {
+    const key = `${repo}@${branch}:${path}`;
+    if (text === null) this.branchFiles.delete(key);
+    else this.branchFiles.set(key, String(text));
   }
 
   // A commit with the given sha on `repo`'s branch, writing `text` at
@@ -493,6 +506,14 @@ class MockGitHubStore {
         return fakeResponse(forcedGet.status, { message: "mock: forced read failure" });
       }
       const ref = u.searchParams.get("ref");
+      const atBranch = ref ? this.branchFiles.get(`${repo}@${ref}:${path}`) : undefined;
+      if (atBranch !== undefined) {
+        return fakeResponse(200, { content: Buffer.from(atBranch, "utf-8").toString("base64"), sha: crypto.createHash("sha1").update(atBranch).digest("hex") });
+      }
+      if (ref && [...this.branchFiles.keys()].some((k) => k.startsWith(`${repo}@`)) && !this._commitsOf(repo).some((c) => c.sha === ref) &&
+        ref !== ((this.branches && this.branches.get(repo)) || "main")) {
+        return fakeResponse(404, { message: "Not Found" });
+      }
       if (ref && this._commitsOf(repo).some((c) => c.sha === ref)) {
         const text = this._textAt(repo, ref, path);
         if (text === undefined) return fakeResponse(404, { message: "Not Found" });

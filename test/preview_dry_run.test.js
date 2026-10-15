@@ -924,7 +924,7 @@ test("R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one 
   const stale = await dryRun(t, { pinToken: PIN_TOKEN, preview: after(() => KD.publishTip(gh, other)) });
   assert.equal(word(stale, "f"), "BROKEN", stale.show);
   assert.match(stale.by.f.line, /the case pass failed \(carried_document_not_published: published_document_differs\)$/);
-  const unread = await dryRun(t, { pinToken: PIN_TOKEN, preview: after(() => gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@main:${S.CASE_KEYS_FILE}`)) });
+  const unread = await dryRun(t, { pinToken: PIN_TOKEN, preview: after(() => KD.unpublishTip(gh)) }); // the contents API's tip since unit R-WIDEf (F3-c)
   assert.equal(word(unread, "f"), "COULD NOT LOOK", unread.show);
   assert.match(unread.by.f.line, /the key document at the tip of the published branch could not be read \(http_404\), so the case pass pinned nothing$/);
 });

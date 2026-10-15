@@ -182,3 +182,14 @@ test("R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's
   const got = R.reconcileTapes(bytesOf(mixed.a_b64), bytesOf(mixed.b_b64));
   assert.deepEqual(Object.keys(got.counts).sort(), Object.keys(JSON.parse(mixed.python).counts).sort());
 });
+
+// unit R-WIDEf (F3-e, the architect's ruling): the counts are keyed by
+// (name, label, index in the batch): by name when that is unique, by label
+// when only the names collide, and by all three when the labels collide too
+test("R-WIDEf F3-e: two tapes that share a name and a label keep both counts, keyed by name, label and index; the usual keys stay as they were", () => {
+  const tape = (name, label, n) => ({ name, label, rows: Array.from({ length: n }, (_, i) => i) });
+  assert.deepEqual(R.countsOf([tape("agent", "tape_a", 2), tape("tool", "tape_b", 3)]), { agent: 2, tool: 3 });
+  assert.deepEqual(R.countsOf([tape("agent", "tape_a", 2), tape("agent", "tape_b", 3)]), { tape_a: 2, tape_b: 3 });
+  assert.deepEqual(R.countsOf([tape("agent", "same", 2), tape("agent", "same", 3)]), { "agent/same/0": 2, "agent/same/1": 3 });
+  assert.deepEqual(R.countsOf([tape("tape_a", "tape_a", 4)]), { tape_a: 4 });
+});

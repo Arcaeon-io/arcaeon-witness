@@ -59,6 +59,13 @@ function serve(gh, doc, commit = commitOf(doc)) {
 // given.
 function publishTip(gh, doc, branch = (gh.branches && gh.branches.get(S.KEY_DOCUMENT_REPO)) || "main") {
   gh.seedRaw(S.KEY_DOCUMENT_REPO, branch, S.CASE_KEYS_FILE, `${JSON.stringify(doc, null, 2)}\n`);
+  // since unit R-WIDEf (F3-c) the tip is read through the contents API
+  gh.seedAtBranch(S.KEY_DOCUMENT_REPO, branch, S.CASE_KEYS_FILE, `${JSON.stringify(doc, null, 2)}\n`);
+}
+// The tip taken away: a branch whose head has no key document.
+function unpublishTip(gh, branch = (gh.branches && gh.branches.get(S.KEY_DOCUMENT_REPO)) || "main") {
+  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@${branch}:${S.CASE_KEYS_FILE}`);
+  gh.seedAtBranch(S.KEY_DOCUMENT_REPO, branch, S.CASE_KEYS_FILE, null);
 }
 
 // `doc` served at `commit` by the raw host but on no branch of the
@@ -99,4 +106,4 @@ function signedUnder(gh, doc) {
   return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc) };
 }
 
-module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, publishTip, serveOffBranch, serveAhead, deployed, deployedFor, signedUnder, sha256 };
+module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, publishTip, unpublishTip, serveOffBranch, serveAhead, deployed, deployedFor, signedUnder, sha256 };

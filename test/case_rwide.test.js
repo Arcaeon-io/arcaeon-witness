@@ -795,7 +795,7 @@ test("R-WIDE B2: a sealer carrying a document that is not the one at the tip of 
   assert.equal(gh.putLog.length, puts, "nothing written");
   assert.equal(gh.has(PINS, pinFile(s.id)), false, "not pinned");
   // a tip that cannot be read is could-not-look, and nothing is written
-  gh.raw.delete(`${S.KEY_DOCUMENT_REPO}@main:${S.CASE_KEYS_FILE}`);
+  KD.unpublishTip(gh); // since unit R-WIDEf (F3-c) the tip is read through the contents API
   const unread = await sealerRun();
   assert.deepEqual([unread.ok, unread.reason], [false, "published_document_unreadable"], JSON.stringify(unread).slice(0, 400));
   assert.equal(gh.has(PINS, pinFile(s.id)), false);
@@ -846,7 +846,8 @@ test("MUST-FAIL GAP (WB02): inside a reader, a call for another repository's tar
 
 test("MUST-FAIL GAP (WB10): the page cache keeps at most its bound, dropping the oldest page first", () => {
   const c = CP.pageCache({ max: 2, clock: () => 0 });
-  for (const id of ["one", "two", "three"]) c.put(id, "0".repeat(40), { status: 200, html: id });
+  // since unit R-WIDEf (F3-b) put takes no root sha
+  for (const id of ["one", "two", "three"]) c.put(id, { status: 200, html: id });
   assert.equal(c.size(), 2);
   assert.equal(c.get("one"), null, "the oldest is dropped");
   assert.deepEqual([c.get("two").html, c.get("three").html], ["two", "three"]);

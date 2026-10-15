@@ -503,7 +503,8 @@ test("R-PINf f2: the status page and the README claim no more than the tree show
   const page = String(res._body).replace(/\s+/g, " ");
   assert.ok(page.includes("<thead><tr><th>where</th><th>case files</th><th>pin files</th><th>withdrawal markers</th></tr></thead>"), "the column heads");
   assert.ok(page.includes("<em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists, " +
-    "and no withdrawal marker; whether a pin holds its case, only the case's own page reads."), "pin files (the minors from the small-three read: and no withdrawal marker)");
+    // "is its case's" since unit R-WIDEf (F3-a; it said "holds its case")
+    "and no withdrawal marker; whether a pin is its case's, only the case's own page reads."), "pin files (the minors from the small-three read: and no withdrawal marker)");
   assert.ok(page.includes("<em>withdrawal markers</em> counts the case files whose withdrawal marker the tree lists."), "markers");
   for (const said of ["is pinned by its own pin", "<em>Pinned</em> means", "cases carry the withdrawal marker"]) assert.equal(page.includes(said), false, said);
   assert.equal(S.ANCHOR_NOTE, "A sealed case's pin, when it has one, is pins/case/<case_id>/00000001.json, written once by this service. It is its own " +

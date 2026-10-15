@@ -414,3 +414,174 @@ test("R-WIDEf F1-b: in the off state the status line says only what is always tr
   await H.handleCaseReveal(req("case-reveal", ownOpening(x, "a")), g, { now: REVEAL_AT, env: offEnv, keyDocument: NO_RECONCILE });
   assert.deepEqual([g._status, parsed(g)], [409, { ok: false, error_code: "sealing_not_offered", case_id: x.id, status: "WITHDRAWN" }]);
 });
+
+// =============================================================================
+// GROUP F3: page words and small truths
+// =============================================================================
+
+// F3-a. The words a page must not print (the reader's overrule of R-WIDE's
+// A1 UNSURE): "holds" and "second operator".
+const FORBIDDEN = [/\bholds\b/i, /second operator/i];
+const refuseWords = (html, what) => {
+  for (const re of FORBIDDEN) assert.doesNotMatch(html, re, `${what}: ${(html.match(new RegExp(`.{0,80}${re.source}.{0,40}`, "i")) || [""])[0]}`);
+};
+const chainOf = (id) => S.caseChain(storedCase(id));
+function plantPin(id, chain, caseCommit) {
+  gh.seed(PINS, S.pinPaths(id).seq, S._internal.pinRecord(id, chain, REVEAL_AT, caseCommit));
+}
+
+test("R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin conflict, a pin naming a commit with no case file), every pin and conflict word, the withdrawal claim, the status page and the reconcile page", async () => {
+  const early = gh.seedText(PINS, "notes/rwidef-before.txt", "x\n");
+  const open = await openCase("RWIDEf F3-a open");
+  refuseWords((await casePage(open, NOW + 1000)).html, "OPEN");
+  const committed = await committedCase("RWIDEf F3-a committed");
+  const cpage = (await casePage(committed.id, NOW + 1000)).html;
+  assert.ok(cpage.includes("this service records it and never checks who has it."), "the parties sentence");
+  refuseWords(cpage, "COMMITTED");
+  const w = await withdrawnBy("RWIDEf F3-a withdrawn", "a");
+  const wpage = (await casePage(w.id)).html;
+  assert.ok(wpage.includes(esc(S.WITHDRAWAL_CLAIM).slice(0, 80)), "the withdrawal claim is on the page");
+  refuseWords(wpage, "WITHDRAWN");
+  const s = await sealedCase("RWIDEf F3-a sealed");
+  await sealerRun();
+  refuseWords((await casePage(s.id)).html, "sealed and pinned");
+  // a conflict: the pin file now names another chain
+  const seq = S.pinPaths(s.id).seq;
+  gh.seed(PINS, seq, { ...gh.read(PINS, seq), chain: sha("another chain") }, { keepHistory: true });
+  S._internal.clearCommitFiles();
+  const conflict = (await casePage(s.id)).html;
+  assert.ok(conflict.includes(`conflict: ${esc("the pin file under this case's namespace names another chain")} (pin_holds_another_chain).`), "the conflict words");
+  refuseWords(conflict, "conflict");
+  // a pin naming a commit at which the pins repository has no case file
+  const t = await sealedCase("RWIDEf F3-a absent");
+  plantPin(t.id, chainOf(t.id), early);
+  S._internal.clearCommitFiles();
+  const absent = (await casePage(t.id)).html;
+  assert.ok(absent.includes("the pins repository has no case file at that commit (case_absent_at_commit)"), "the absent words");
+  refuseWords(absent, "absent at commit");
+  // every word table a page draws from
+  for (const reason of ["pin_holds_another_chain", "pin_at_its_commit_holds_another_chain", "pin_at_its_commit_not_a_pin", "pin_at_its_commit_not_json", "other"]) {
+    refuseWords(S.conflictWords(reason), reason);
+  }
+  for (const r of ["case_at_commit_differs", "case_absent_at_commit", "row_absent_at_commit", "case_commit_not_found", "case_commit_off_branch", "other"]) {
+    for (const file of ["case file", "row"]) refuseWords(CP._internal.mismatchWords(r, file), `${r} ${file}`);
+  }
+  assert.ok(S.WITHDRAWAL_CLAIM.includes("a tape a counterparty already has"), S.WITHDRAWAL_CLAIM);
+  refuseWords(S.WITHDRAWAL_CLAIM, "WITHDRAWAL_CLAIM");
+  refuseWords(await statusHtml(), "the status page");
+  const rp = makeRes();
+  RECONCILE.handlePage(makeReq({ method: "GET", query: { op: "reconcile-page" }, headers: { "x-forwarded-for": nextIp() } }), rp);
+  refuseWords(String(rp._body), "the reconcile page");
+});
+
+// F3-b. The page cache keeps no root sha, and no page whose case deadline
+// falls inside the next 60 seconds.
+// Every request `fn` sends to the store: their URLs.
+async function storeCalls(fn) {
+  const viaMock = global.fetch;
+  const seen = [];
+  global.fetch = async (url, o) => {
+    seen.push(String(url));
+    return viaMock(url, o);
+  };
+  try {
+    await fn();
+  } finally {
+    global.fetch = viaMock;
+  }
+  return seen;
+}
+test("R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page records no root sha", async () => {
+  const id = await openCase("RWIDEf F3-b");
+  const deadline = Date.parse(DEADLINE);
+  const viewAt = (cache, now) => async () => {
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
+      { now, keyDocument: DOC, env: {}, cache });
+    assert.equal(res._status, 200, String(res._body).slice(0, 200));
+    return String(res._body);
+  };
+  for (const [ahead, kept] of [[30000, false], [60000, false], [60001, true], [120000, true], [-10000, true]]) {
+    const cache = CP.pageCache({ clock: () => 0 });
+    const view = viewAt(cache, deadline - ahead);
+    await view();
+    assert.equal(cache.size(), kept ? 1 : 0, `deadline ${ahead / 1000} s away`);
+    const again = await storeCalls(view);
+    assert.equal(again.length === 0, kept, `deadline ${ahead / 1000} s away: the second view ${kept ? "makes no store call" : "reads again"}`);
+    if (kept) assert.equal("root_sha" in cache.get(id), false, "no root sha is kept");
+  }
+  // the footer still says it may be up to 60 seconds old
+  const cache = CP.pageCache({ clock: () => 0 });
+  assert.ok((await viewAt(cache, deadline - 120000)()).includes("may be up to 60 seconds old"));
+});
+
+// F3-c. The document at the tip, read through the contents API at the
+// branch head, not from the raw host's cache.
+const NEWER = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked" }), KD.reconcileEntry(RECEIPT_KEY)));
+async function spyFetch(fn) {
+  const viaMock = global.fetch;
+  const seen = [];
+  global.fetch = async (url, o) => {
+    seen.push({ url: decodeURIComponent(String(url)), auth: (o && o.headers && (o.headers.authorization || o.headers.Authorization)) || null });
+    return viaMock(url, o);
+  };
+  try {
+    return { out: await fn(), seen };
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+test("R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw host, whose copy of a branch may be minutes old", async () => {
+  // the branch now carries a revocation; the raw host still serves the copy before it
+  KD.publishTip(gh, NEWER);
+  gh.seedRaw(S.KEY_DOCUMENT_REPO, "main", S.CASE_KEYS_FILE, `${JSON.stringify(DOC, null, 2)}\n`);
+  const r = await spyFetch(() => S.carriedDocumentPublished(DOC, {}));
+  assert.deepEqual(r.out, { ok: false, code: "carried_document_not_published", reason: "published_document_differs" });
+  assert.deepEqual(r.seen.map((x) => x.url), [`https://api.github.com/repos/${S.KEY_DOCUMENT_REPO}/contents/${S.CASE_KEYS_FILE}?ref=main`]);
+  assert.equal(r.seen[0].auth, `Bearer ${process.env.GITHUB_PIN_TOKEN}`, "the pin token, as the compare");
+  // the branch it names, and the carried document there: ok
+  KD.publishTip(gh, DOC, "preview-branch");
+  const p = await spyFetch(() => S.carriedDocumentPublished(DOC, { KEY_DOCUMENT_BRANCH: "preview-branch" }));
+  assert.deepEqual(p.out, { ok: true });
+  assert.ok(p.seen[0].url.endsWith(`/contents/${S.CASE_KEYS_FILE}?ref=preview-branch`), p.seen[0].url);
+  // a read that fails is could-not-look, with its status
+  gh.forceGetFailure(S.KEY_DOCUMENT_REPO, S.CASE_KEYS_FILE, 1, 502);
+  assert.deepEqual(await S.carriedDocumentPublished(DOC, {}), { ok: false, code: "published_document_unreadable", reason: "http_502" });
+  assert.deepEqual(await S.carriedDocumentPublished(DOC, { KEY_DOCUMENT_BRANCH: "no-such-branch" }), { ok: false, code: "published_document_unreadable", reason: "http_404" });
+  // README: the tip is read through the API
+  assert.ok(README().includes("read once through the contents API at the head of the published branch"), "README");
+});
+
+// F3-d. The status page's view of the deployment's document is kept 60
+// seconds, as "on the branch" is (C2).
+test("R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again", async () => {
+  KD.serveOffBranch(gh, S.PUBLISHED_KEYS, OFF_COMMIT);
+  let t0 = 5_000_000;
+  const before = S._internal.onBranchClock.now;
+  S._internal.onBranchClock.now = () => t0;
+  try {
+    await withDeployCommit(OFF_COMMIT, async () => {
+      const n = gh.compareLog.length;
+      const first = await statusHtml();
+      assert.ok(first.includes("<code>deployment_document_off_branch</code>"), "fixture: the off state");
+      assert.equal(gh.compareLog.length, n + 1, "the first view compares once");
+      t0 += 59_999;
+      const second = await statusHtml();
+      assert.ok(second.includes("<code>deployment_document_off_branch</code>"));
+      assert.equal(gh.compareLog.length, n + 1, "within 60 seconds: no compare");
+      t0 += 1;
+      await statusHtml();
+      assert.equal(gh.compareLog.length, n + 2, "at 60 seconds: compared again");
+    });
+  } finally {
+    S._internal.onBranchClock.now = before;
+  }
+});
+
+// F3-f. The README's stamp section names the retired refusal.
+test("R-WIDEf F3-f: the README's stamp section says stamp_size_mismatch is retired: no new stamp carries a size, and old stamps keep theirs and are never deleted", () => {
+  const r = read("README.md");
+  const a = r.indexOf("### Stamps");
+  const section = r.slice(a, r.indexOf("\n### ", a + 5)).replace(/\s+/g, " ");
+  assert.ok(section.includes("The case registration's `stamp_size_mismatch` refusal is retired: no new stamp carries a size, and old stamps keep theirs and are never deleted."), section);
+});

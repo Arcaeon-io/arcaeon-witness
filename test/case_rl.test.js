@@ -230,7 +230,8 @@ function jsFiles(dir) {
   return out;
 }
 
-const CLAIM = "Withdrawal before the reveal closes that case; it does not recall a tape a counterparty already holds, and no verdict ever " +
+// since unit R-WIDEf (F3-a): "already has" (it said "already holds")
+const CLAIM = "Withdrawal before the reveal closes that case; it does not recall a tape a counterparty already has, and no verdict ever " +
   "binds a key that did not sign in the case that produced it.";
 const LEGACY = "Files under withdrawn_commitments/ that a pins repository may hold from before this release are ignored: no code reads " +
   "or writes them.";

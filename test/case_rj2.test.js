@@ -254,13 +254,14 @@ test("B2 (since unit R-SIG): a row carrying version 3 reads as row_note_v3; one 
 // B1: a conflict is worded by its reason
 // =============================================================================
 
+// since unit R-WIDEf (F3-a): "names another chain" and "has no", never "holds"
 const CONFLICT_WORDS = {
-  pin_holds_another_chain: "the pin file under this case's namespace holds another chain",
-  pin_at_its_commit_holds_another_chain: "the pin record, read at the commit that wrote it, holds another chain",
+  pin_holds_another_chain: "the pin file under this case's namespace names another chain",
+  pin_at_its_commit_holds_another_chain: "the pin record, read at the commit that wrote it, names another chain",
   pin_at_its_commit_not_json: "the pin record at the commit that wrote it could not be read as a pin",
 };
 
-test("B1: the page says 'holds another chain' only for the two *_holds_another_chain reasons (unit R-PIN: the pin file's and the pin record's at its commit); a record that is not JSON is said as what it is", async () => {
+test("B1: the page says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons (unit R-PIN: the pin file's and the pin record's at its commit); a record that is not JSON is said as what it is", async () => {
   const fixtures = {
     pin_holds_another_chain: async () => {
       const c = await sealedCase("RJ2 B1 pin file");
@@ -290,7 +291,7 @@ test("B1: the page says 'holds another chain' only for the two *_holds_another_c
     assert.deepEqual([st.pin, st.reason], ["conflict", reason], reason);
     const html = (await casePage(c.id)).html;
     assert.ok(html.includes(`conflict: ${esc(CONFLICT_WORDS[reason])} (${reason}).`), `${reason}: ${html.slice(html.indexOf("conflict:"), html.indexOf("conflict:") + 200)}`);
-    if (!reason.endsWith("_holds_another_chain")) assert.doesNotMatch(html, /holds another chain/, reason);
+    if (!reason.endsWith("_holds_another_chain")) assert.doesNotMatch(html, /another chain/, reason);
   }
 });
 const esc = (s) => CP._internal.esc(s);
@@ -329,7 +330,7 @@ test("n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for 
   assert.ok((await casePage(id)).html.includes("the case file at that commit is not this case file in canonical form (json-c14n:v1) (case_at_commit_differs)"));
   for (const [commit, words, reason] of [
     ["f".repeat(40), "that commit is not shown by the repository", "case_commit_not_found"], // unit R-J3 (F2); unit R-L (g4)
-    [early, "the pins repository holds no case file at that commit", "case_absent_at_commit"],
+    [early, "the pins repository has no case file at that commit", "case_absent_at_commit"], // "has", unit R-WIDEf (F3-a)
   ]) {
     plantPin(id, chainOf(id), commit);
     const html = (await casePage(id)).html;

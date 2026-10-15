@@ -280,7 +280,7 @@ function fill(t, x) {
 // What a pin_commit_mismatch reason says (lib/_case_page.js mismatchWords).
 const MISMATCH = {
   differs: (f) => `the ${f} at that commit is not this ${f} in canonical form (json-c14n:v1)`,
-  absent: (f) => `the pins repository holds no ${f} at that commit`,
+  absent: (f) => `the pins repository has no ${f} at that commit`, // "has", unit R-WIDEf (F3-a)
   not_found: "that commit is not shown by the repository", // unit R-L (g4): one wording, and "yet" only for could_not_look
   off_branch: "that commit is not on the published branch of the pins repository",
   other: (f) => `the ${f} there is not shown to be this ${f} in canonical form (json-c14n:v1)`,
@@ -300,8 +300,9 @@ const CNL = {
 };
 // What a conflict's reason says (lib/_case_seal.js conflictWords).
 const CONFLICT_WORDS = {
-  pin_holds_another_chain: "the pin file under this case's namespace holds another chain",
-  pin_at_its_commit_holds_another_chain: "the pin record, read at the commit that wrote it, holds another chain",
+  // since unit R-WIDEf (F3-a): "names another chain" and "has no", never "holds"
+  pin_holds_another_chain: "the pin file under this case's namespace names another chain",
+  pin_at_its_commit_holds_another_chain: "the pin record, read at the commit that wrote it, names another chain",
   pin_at_its_commit_not_a_pin: "the record at this case's pin path, read at the commit that wrote it, is not a pin record for this case",
   pin_at_its_commit_not_json: "the pin record at the commit that wrote it could not be read as a pin",
 };
@@ -675,7 +676,7 @@ async function tableRow(t, f) {
 // BL2: the words the table's rows use
 // =============================================================================
 
-test("BL2: conflictWords says 'holds another chain' only for the two *_holds_another_chain reasons; *_not_a_pin says the record there is not a pin record for this case", () => {
+test("BL2: conflictWords says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons; *_not_a_pin says the record there is not a pin record for this case", () => {
   for (const [reason, words] of Object.entries(CONFLICT_WORDS)) {
     assert.equal(S.conflictWords(reason), words, reason);
     if (!reason.endsWith("_holds_another_chain")) assert.doesNotMatch(S.conflictWords(reason), /another chain/, reason);

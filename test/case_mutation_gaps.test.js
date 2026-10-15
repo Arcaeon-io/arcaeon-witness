@@ -481,7 +481,8 @@ test("P08 (pinnedHtml): a pin file holding another chain reads as a conflict on 
   const pg = await page();
   assert.equal(pg.status, 200);
   // unit R-J2 (B1): worded by the reason (unit R-PIN: the one pin file)
-  assert.match(pg.html, /conflict: the pin file under this case&#39;s namespace holds another chain \(pin_holds_another_chain\)/);
+  // since unit R-WIDEf (F3-a): "names another chain" and "has no", never "holds"
+  assert.match(pg.html, /conflict: the pin file under this case&#39;s namespace names another chain \(pin_holds_another_chain\)/);
   assert.ok(!pg.html.includes("Pinned at commit"), "not pinned");
 });
 

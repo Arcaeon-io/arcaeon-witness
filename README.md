@@ -457,6 +457,8 @@ A stamp records the fingerprint and the time, and nothing else: no size, no
 filename, no label. A request may still send a size; it is checked for form
 and not stored (unit R-WIDE, D1). A stamp written before 2026-10-15 may carry
 the size its stamper sent; it is returned as stored, and nothing reads it.
+The case registration's `stamp_size_mismatch` refusal is retired: no new
+stamp carries a size, and old stamps keep theirs and are never deleted.
 
 A stamp costs 0.25 credit, after the free allowance: 3 stamps per address per
 UTC day (STAMP_FREE_PER_DAY), past which a stamp needs a witness key. The
@@ -907,7 +909,7 @@ and exits 3. Only the full online check prints `signature_valid: true` and
 exits 0 (it never prints a key named `ok`, and it names what no receipt
 shows: whether the case reads WITHDRAWN now, and the projection its record
 keeps), and only when the key document this checkout carries is the one at
-the tip of the published branch, read once from the raw host: an older copy could
+the tip of the published branch, read once through the contents API at the head of the published branch (not from the raw host, which caches a branch's file for minutes): an older copy could
 vouch for a key a newer document revokes, so the answer is then
 `carried_document_not_published` (or `published_document_unreadable`). The
 sealer makes the same read before it pins, and pins nothing on either
@@ -916,7 +918,7 @@ answer.
 ### Withdrawal
 
 Withdrawal before the reveal closes that case; it does not recall a tape a
-counterparty already holds, and no verdict ever binds a key that did not
+counterparty already has, and no verdict ever binds a key that did not
 sign in the case that produced it.
 
 A withdrawal (`?op=case-withdraw`) is accepted on presentation of a role's commitment preimage, takes the case's lock, writes the signed withdrawal

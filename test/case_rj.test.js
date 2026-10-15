@@ -389,7 +389,8 @@ test("MUST-FAIL GAP (D04, D05, D06): the case commit row says the commit does no
   const { id: id2 } = await sealedCase("RJ gap mismatch page");
   plantPin(id2, chainOf(id2), early);
   const mismatch = (await casePage(id2)).html;
-  assert.ok(mismatch.includes("the pins repository holds no case file at that commit (case_absent_at_commit), so the case is not shown as pinned."), "the pin line (unit R-J2, n6 and n7; unit R-J3, its reason)");
+  // since unit R-WIDEf (F3-a): "names another chain" and "has no", never "holds"
+  assert.ok(mismatch.includes("the pins repository has no case file at that commit (case_absent_at_commit), so the case is not shown as pinned."), "the pin line (unit R-J2, n6 and n7; unit R-J3, its reason)");
   assert.ok(mismatch.includes(`href="${PINS_URL}/blob/${store.BRANCH}/${C.casePath(id2)}"`), "the branch's file");
   assert.ok(!mismatch.includes(`/blob/${early}/`));
 });
