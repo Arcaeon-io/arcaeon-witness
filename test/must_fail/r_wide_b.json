@@ -1,0 +1,268 @@
+[
+ {
+  "id": "WB01",
+  "file": "lib/_store.js",
+  "find": "  const reading = readers.getStore() && target.tokenEnv === PINS_TARGET.tokenEnv && readTokenConfigured();",
+  "replace": "  const reading = false;",
+  "what": "B1: a reader's calls carry the pin token"
+ },
+ {
+  "id": "WB02",
+  "file": "lib/_store.js",
+  "find": "  const reading = readers.getStore() && target.tokenEnv === PINS_TARGET.tokenEnv && readTokenConfigured();",
+  "replace": "  const reading = readers.getStore() && readTokenConfigured();",
+  "what": "B1: a reader's call to another repository's target carries the read token"
+ },
+ {
+  "id": "WB03",
+  "file": "lib/_store.js",
+  "find": "  if (readers.getStore()) throw new Error(`a reader writes nothing (store.asReader): PUT ${path} refused`);\n",
+  "replace": "",
+  "what": "B1: a reader may write"
+ },
+ {
+  "id": "WB04",
+  "file": "lib/_store.js",
+  "find": "  return typeof env[READ_TOKEN_ENV] === \"string\" && env[READ_TOKEN_ENV].length > 0;",
+  "replace": "  return false;",
+  "what": "B1: the read token is never seen as set"
+ },
+ {
+  "id": "WB05",
+  "file": "lib/_case_page.js",
+  "find": "  return store.asReader(async () => {",
+  "replace": "  return ((fn) => fn())(async () => {",
+  "what": "B1: the page reads outside the reader scope"
+ },
+ {
+  "id": "WB06",
+  "file": "lib/_case_page.js",
+  "find": "      if (out.status !== 200) return;\n",
+  "replace": "",
+  "what": "B1: a 503 page is kept"
+ },
+ {
+  "id": "WB07",
+  "file": "lib/_case_page.js",
+  "find": "      if (clock() - e.at >= ttlMs) {",
+  "replace": "      if (clock() - e.at > ttlMs) {",
+  "what": "B1: a page is kept one millisecond past 60 seconds"
+ },
+ {
+  "id": "WB08",
+  "file": "lib/_case_page.js",
+  "find": "  if (hit) return sendHtml(res, hit.status, hit.html);",
+  "replace": "  if (false) return sendHtml(res, hit.status, hit.html);",
+  "what": "B1: a kept page is never served"
+ },
+ {
+  "id": "WB09",
+  "file": "lib/_case_page.js",
+  "find": "    if (cache) cache.put(id, got.sha, out);\n",
+  "replace": "",
+  "what": "B1: no page is kept"
+ },
+ {
+  "id": "WB10",
+  "file": "lib/_case_page.js",
+  "find": "      if (kept.size >= max) kept.delete(kept.keys().next().value);\n",
+  "replace": "",
+  "what": "B1: the cache has no bound"
+ },
+ {
+  "id": "WB11",
+  "file": "lib/_case_page.js",
+  "find": "case page &middot; may be up to 60 seconds old &middot; the witness",
+  "replace": "case page &middot; the witness",
+  "what": "B1: the page does not say it may be up to 60 seconds old"
+ },
+ {
+  "id": "WB12",
+  "file": "api/verify.js",
+  "find": "    return casePage.handleCasePage(req, res, { cache: casePage.PAGE_CACHE });",
+  "replace": "    return casePage.handleCasePage(req, res, {});",
+  "what": "B1: the dispatch keeps no page"
+ },
+ {
+  "id": "WB13",
+  "file": "api/status.js",
+  "find": "  return store.readTokenConfigured()\n    ?",
+  "replace": "  return !store.readTokenConfigured()\n    ?",
+  "what": "B1: the status line says the opposite"
+ },
+ {
+  "id": "WB14",
+  "file": "api/status.js",
+  "find": "    ${readTokenLine()}",
+  "replace": "",
+  "what": "B1: the status page drops the read-token line"
+ },
+ {
+  "id": "WB15",
+  "file": "lib/_case_seal.js",
+  "find": "  if (!pub.ok) return { ok: false, reason: pub.code, detail: pub.reason };",
+  "replace": "",
+  "what": "B2: the sealer pins under a document that is not the published one"
+ },
+ {
+  "id": "WB16",
+  "file": "lib/_case_seal.js",
+  "find": "  return tip === mine ? { ok: true } : { ok: false, code: \"carried_document_not_published\", reason: \"published_document_differs\" };",
+  "replace": "  return { ok: true };",
+  "what": "B2: the tip is read and not compared"
+ },
+ {
+  "id": "WB17",
+  "file": "lib/_case_seal.js",
+  "find": "    r = await fetch(`${RAW_BASE}/${KEY_DOCUMENT_REPO}/${branch}/${CASE_KEYS_FILE}`,",
+  "replace": "    r = await fetch(`${RAW_BASE}/${KEY_DOCUMENT_REPO}/main/${CASE_KEYS_FILE}`,",
+  "what": "B2: the tip is read on main whatever branch is published"
+ },
+ {
+  "id": "WB18",
+  "file": "lib/_case_seal.js",
+  "find": "  if (r.status !== 200) return unreadable(`http_${r.status}`);\n  let tip;",
+  "replace": "  if (r.status !== 200) return { ok: true };\n  let tip;",
+  "what": "B2: a tip that could not be read passes"
+ },
+ {
+  "id": "WB19",
+  "file": "tools/check_refusal_receipt.js",
+  "find": "    if (!pub.ok) out = { ok: false, reason: pub.code, detail: pub.reason };",
+  "replace": "",
+  "what": "B2: the checker says ok under a stale document"
+ },
+ {
+  "id": "WB20",
+  "file": "tools/check_refusal_receipt.js",
+  "find": "    out = await S.verifyRefusalReceipt(JSON.parse(fs.readFileSync(file, \"utf8\")), keyDocument);",
+  "replace": "    out = await S.verifyRefusalReceipt(JSON.parse(fs.readFileSync(file, \"utf8\")));",
+  "what": "B2: the checker checks under another document than the one it holds to the tip"
+ },
+ {
+  "id": "WB21",
+  "file": "tools/preview_dry_run.js",
+  "find": "  if (!ctx.store) {",
+  "replace": "  if (false) {",
+  "what": "B3: (f) runs with no --store"
+ },
+ {
+  "id": "WB22",
+  "file": "tools/preview_dry_run.js",
+  "find": "  if (ctx.store !== store.REPO) {",
+  "replace": "  if (false) {",
+  "what": "B3: (f) runs when --store names another repository"
+ },
+ {
+  "id": "WB23",
+  "file": "tools/preview_dry_run.js",
+  "find": "  ctx.log(`(f) target repository: ${target}; the case pass writes here`);\n",
+  "replace": "",
+  "what": "B3: the target is not printed before any write"
+ },
+ {
+  "id": "WB24",
+  "file": "tools/preview_dry_run.js",
+  "find": "      if (rep.reason === \"published_document_unreadable\") {",
+  "replace": "      if (false) {",
+  "what": "B2: a tip that could not be read is BROKEN in (f)"
+ },
+ {
+  "id": "WB25",
+  "file": "tools/preview_dry_run.js",
+  "find": "    else if (t === \"--store\") a.store = next();\n",
+  "replace": "",
+  "what": "B3: the CLI has no --store"
+ },
+ {
+  "id": "WB26",
+  "file": "test/must_fail/run.js",
+  "find": "  if (baseline.timedOut || baseline.code !== 0 || baseline.failing.length) {",
+  "replace": "  if (false) {",
+  "what": "B4: the runner plants over a suite that already fails"
+ },
+ {
+  "id": "WB27",
+  "file": "test/must_fail/run.js",
+  "find": "  return code === 1 && failing.length > 0 ? \"caught\" : \"error\";",
+  "replace": "  return code !== 0 && failing.length > 0 ? \"caught\" : \"error\";",
+  "what": "B4: any non-zero exit with a failing test is a catch"
+ },
+ {
+  "id": "WB28",
+  "file": "test/must_fail/run.js",
+  "find": "  if (tree.porcelain) {",
+  "replace": "  if (false) {",
+  "what": "B4: the runner plants over a tree that is not clean"
+ },
+ {
+  "id": "WB29",
+  "file": "test/must_fail/run.js",
+  "find": "porcelain: tree.porcelain, defect_sha256: defectSha256(d) });",
+  "replace": "porcelain: tree.porcelain, defect_sha256: null });",
+  "what": "B4: no defect sha256 recorded"
+ },
+ {
+  "id": "WB30",
+  "file": "test/must_fail/run.js",
+  "find": "      const verified = lastCaught && testsOf(lastCaught).map(kept).includes(kept(d.gap));",
+  "replace": "      const verified = true;",
+  "what": "B4: a named gap test is printed as verified"
+ },
+ {
+  "id": "WB31",
+  "file": "test/must_fail/run.js",
+  "find": "    if (k === \"NODE_TEST_CONTEXT\" || /^(WITNESS_|GITHUB_)/.test(k) || /(_TOKEN|_SECRET)$/.test(k)) continue;",
+  "replace": "    if (k === \"NODE_TEST_CONTEXT\" || /^(WITNESS_)/.test(k) || /(_SECRET)$/.test(k)) continue;",
+  "what": "B4: GITHUB_* variables and tokens reach the suite"
+ },
+ {
+  "id": "WB32",
+  "file": "test/must_fail/run.js",
+  "find": "  out.NODE_OPTIONS = `${out.NODE_OPTIONS ? `${out.NODE_OPTIONS} ` : \"\"}--require ${JSON.stringify(NO_NETWORK)}`;\n",
+  "replace": "",
+  "what": "B4: the suite may reach the network"
+ },
+ {
+  "id": "WB33",
+  "file": "test/must_fail/run.js",
+  "find": "  if (platform === \"win32\") {",
+  "replace": "  if (false) {",
+  "what": "B5: no taskkill on Windows"
+ },
+ {
+  "id": "WB34",
+  "file": "test/must_fail/run.js",
+  "find": "      const orig = fs.readFileSync(target, \"utf8\");",
+  "replace": "      const orig = fs.readFileSync(path.join(root, d.file), \"utf8\");",
+  "what": "found in R-WIDE A: a defect's file read from the live tree, not the copy"
+ },
+ {
+  "id": "WB35",
+  "file": "test/must_fail/run.js",
+  "find": "    else if (a === \"--root\") out.root = path.resolve(argv[++i]);",
+  "replace": "    else if (a === \"--root\") ++i;",
+  "what": "B4: --root ignored"
+ },
+ {
+  "id": "WB36",
+  "file": "test/must_fail/run.js",
+  "find": "    process.kill(-p.pid, \"SIGKILL\");",
+  "replace": "    p.kill(\"SIGKILL\");",
+  "what": "B5: the kill reaches the suite only, not its group"
+ },
+ {
+  "id": "WB37",
+  "file": "test/must_fail/no_network.js",
+  "find": "  if (LOOPBACK.has(host)) return real(input, opts);\n",
+  "replace": "",
+  "what": "B4: the suite's fetch refuses this machine too"
+ },
+ {
+  "id": "WB38",
+  "file": "test/must_fail/no_network.js",
+  "find": "  throw new TypeError(`must-fail run: no network (${host || \"an unparsable URL\"})`);",
+  "replace": "  return real(input, opts);",
+  "what": "B4: the suite's fetch reaches the network"
+ }
+]
