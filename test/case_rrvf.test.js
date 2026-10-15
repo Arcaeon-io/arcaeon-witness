@@ -507,7 +507,8 @@ test("R-RVf M2: the registrations panel prints the ruled sentence exactly, keeps
   assert.ok(!p.html.includes("stamped first as a public, dated commit"));
   assert.ok(!read("lib/_case_page.js").includes("stamped first as a public, dated commit"));
   const e = storedCase(c.id).commitments.a;
-  assert.ok(p.html.includes(`(stamped ${e.stamped_at})`));
+  // (since unit R-PAGEf, m2: the stamped time is relative then absolute, "(stamped T)" until then)
+  assert.match(p.html, new RegExp(`\\(stamped \\d+ \\w+ ago \\(${e.stamped_at.replace(/[.]/g, "\\.")}\\)\\)`));
   assert.ok(p.html.includes(`stamp commit ${e.stamp_commit.slice(0, 12)}`) || p.html.includes(e.stamp_commit));
 });
 

@@ -688,7 +688,8 @@ test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which
   assert.equal((await withdraw(proofOf(id, b))).status, 201);
   assert.equal(storedCase(id).withdrawal.by_role, "b");
   const page = await casePage(id);
-  assert.match(page.html, /withdrawn on presentation of role b&#39;s commitment preimage, at /);
+  // (since unit R-PAGEf, m2: the time after it is relative then absolute, ", at T" until then)
+  assert.match(page.html, /withdrawn on presentation of role b&#39;s commitment preimage, \d+ \w+ ago \(/);
 });
 
 // unit R-N (T1): the redacted root carries no label (design:

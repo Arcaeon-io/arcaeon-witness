@@ -164,4 +164,18 @@ function stringLiterals(src) {
   return out;
 }
 
-module.exports = { stringLiterals };
+// Every .js, .mjs and .cjs file under `dir`, its subdirectories included
+// (unit R-PAGEf, m5: the tools/ scan walks them). -> absolute paths.
+function jsFilesUnder(dir) {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...jsFilesUnder(p));
+    else if (/\.(js|mjs|cjs)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+module.exports = { stringLiterals, jsFilesUnder };

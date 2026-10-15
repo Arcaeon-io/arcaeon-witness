@@ -381,13 +381,17 @@ test("R-WIDE A1: the README says what a reference row and a typed cross-referenc
 });
 
 // A2. A withdrawal is accepted on presentation of a preimage, not of a party.
-test("R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the same", async () => {
+test("R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, <when> (T)', never that the role proved itself; the README says the same", async () => {
   const c = await committedCase("RWIDE A2");
   assert.equal((await withdraw(c.id, c.a)).status, 201);
   const at = storedCase(c.id).withdrawal.at;
   const p = await casePage(c.id);
   assert.equal(p.status, 200);
-  assert.ok(p.html.includes(esc(`withdrawn on presentation of role a's commitment preimage, at ${at}`)), p.html);
+  // (since unit R-PAGEf, m2: the time is relative then absolute, as the
+  // other time rows print it; ", at T" until then)
+  const cellAt = p.html.indexOf(esc("withdrawn on presentation of role a's commitment preimage, "));
+  assert.ok(cellAt > 0, p.html);
+  assert.match(p.html.slice(cellAt), new RegExp(`^${esc("withdrawn on presentation of role a's commitment preimage, ").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d+ \\w+ ago \\(${at.replace(/[.]/g, "\\.")}\\)</td>`));
   assert.doesNotMatch(p.html, /proved itself|by role a,/);
   const r = README();
   assert.doesNotMatch(r, /proves the requesting role|proved itself with its commitment preimage/);

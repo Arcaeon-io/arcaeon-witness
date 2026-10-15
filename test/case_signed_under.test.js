@@ -372,7 +372,11 @@ test("VALID UNDER THE DOCUMENT IT NAMES: the reader fetches the named document f
   } finally {
     global.fetch = viaMock;
   }
-  assert.deepEqual(got, { code: "valid_under_document", ...k.signed_under });
+  // (since unit R-PAGEf, B2: the answer also says when the document was read,
+  // and whether from the cache; a fresh reader reads it now)
+  assert.equal(typeof got.document_read_at, "string");
+  assert.ok(Math.abs(Date.parse(got.document_read_at) - Date.now()) < 60000, got.document_read_at);
+  assert.deepEqual(got, { code: "valid_under_document", ...k.signed_under, document_read_at: got.document_read_at, document_from_cache: false });
   const raw = heard.filter((h) => h.url.startsWith("https://raw.githubusercontent.com/"));
   assert.deepEqual(raw.map((h) => h.url), [`https://raw.githubusercontent.com/${S.KEY_DOCUMENT_REPO}/${k.signed_under.document_commit}/${S.CASE_KEYS_FILE}`]);
   assert.equal(Object.keys(raw[0].headers).some((h) => /^authorization$/i.test(h)), false, "no credentials");

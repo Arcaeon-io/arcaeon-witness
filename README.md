@@ -951,8 +951,8 @@ of the case and its write makes the withdrawal write nothing and answer
 request wrote nothing." The record carries a reason only when the request
 names one (`party_choice`, `deadline` or `other`); otherwise it has none,
 and the case page says "No reason was given." The page says the case was
-withdrawn on presentation of role a's commitment preimage (or b's), at the
-time written: it names what was presented, never a party, since whoever
+withdrawn on presentation of role a's commitment preimage (or b's), then
+the time written, relative and absolute: it names what was presented, never a party, since whoever
 holds a role's opening can present it, and the sender of a joint reveal
 holds both.
 

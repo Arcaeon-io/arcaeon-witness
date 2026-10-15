@@ -112,7 +112,7 @@ test("R-N2 B2 (since unit R-N3, N8, every body): every response the case and rec
 // split by a word boundary, and a comment is never in a body.
 // =============================================================================
 const REFUSED = /\bhold(s|ing)\b|second operator/i;
-const { stringLiterals } = require("./helpers/js_strings.js");
+const { stringLiterals, jsFilesUnder } = require("./helpers/js_strings.js");
 
 test("R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read", () => {
   const { names, rows } = auditRows();
@@ -188,8 +188,19 @@ test("MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${,
 test("R-FGg G5: no string literal in tools/ says holds, holding or second operator; comments and identifiers are exempt", () => {
   const root = path.join(__dirname, "..");
   const hits = [];
-  for (const f of fs.readdirSync(path.join(root, "tools")).filter((x) => /\.(js|mjs|cjs)$/.test(x))) {
-    for (const s of stringLiterals(fs.readFileSync(path.join(root, "tools", f), "utf8"))) if (REFUSED.test(s.text)) hits.push(`tools/${f}:${s.line}: ${s.text.slice(0, 120)}`);
+  // (since unit R-PAGEf, m5, its subdirectories too)
+  for (const f of jsFilesUnder(path.join(root, "tools"))) {
+    for (const s of stringLiterals(fs.readFileSync(f, "utf8"))) if (REFUSED.test(s.text)) hits.push(`${path.relative(root, f)}:${s.line}: ${s.text.slice(0, 120)}`);
   }
   assert.deepEqual(hits, []);
+});
+
+test("R-PAGEf m5: the tools/ scan walks subdirectories", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scan-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, "nested", "deeper"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "top.js"), "");
+  fs.writeFileSync(path.join(dir, "nested", "deeper", "inner.mjs"), "");
+  fs.writeFileSync(path.join(dir, "nested", "notes.md"), "");
+  assert.deepEqual(jsFilesUnder(dir).map((f) => path.relative(dir, f)).sort(), [path.join("nested", "deeper", "inner.mjs"), "top.js"]);
 });

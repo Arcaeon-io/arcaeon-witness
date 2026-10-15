@@ -1067,8 +1067,10 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.equal((await withdraw(proofOf(w.id, w.a))).status, 201);
   const pw = await casePage(w.id);
   assert.match(pw.html, /<h1>Case: WITHDRAWN<\/h1>/);
-  // unit R-WIDE (A2): what was presented, never a party ("by role a, at T" until then)
-  assert.ok(pw.html.includes("withdrawn on presentation of role a&#39;s commitment preimage, at 2026-10-10T09:00:00Z"));
+  // unit R-WIDE (A2): what was presented, never a party ("by role a, at T" until then);
+  // since unit R-PAGEf (m2) the time prints relative then absolute, as the
+  // other time rows do (", at T" until then)
+  assert.match(pw.html, /withdrawn on presentation of role a&#39;s commitment preimage, \d+ \w+ ago \(2026-10-10T09:00:00Z\)/);
   assert.ok(pw.html.includes(S.WITHDRAWN_REGISTRATIONS_NOTE), "registrations remain public, in words");
   // (the first limit itself says "Labels are recorded, never verified"; the
   // page's own labels sentence, beside the labels, is what must be absent)

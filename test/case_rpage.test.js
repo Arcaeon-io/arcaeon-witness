@@ -453,7 +453,8 @@ test("R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file
   const r0 = gh.rawLog.length;
   const html = (await viewAs(c.id)).html;
   assert.deepEqual(whereRows(html), [
-    ["pins repository: the case file", `commit ${pin.case_commit.slice(0, 12)}, named by the pin`, "not read by this page", `${OWNER} on GitHub`, "the case file"],
+    // "time not given" since unit R-PAGEf (m1): the file was read, and the read gives no time
+    ["pins repository: the case file", `commit ${pin.case_commit.slice(0, 12)}, named by the pin`, "time not given", `${OWNER} on GitHub`, "the case file"],
     ["pins repository: the pin", `commit ${pin.pin_commit.sha.slice(0, 12)}`, `${pin.pin_commit.date} (the pins repository&#39;s commit time)`, `${OWNER} on GitHub`, "the pin commit"],
     stampRow(kase, "a"), stampRow(kase, "b"),
   ]);
@@ -473,7 +474,7 @@ test("R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file
   const uk = storedCase(u.id);
   const rows = whereRows((await viewAs(u.id)).html);
   assert.deepEqual(rows, [
-    ["pins repository: the case file", `blob ${caseBlob(u.id).sha.slice(0, 12)} on main, the bytes this page read`, "not read by this page", `${OWNER} on GitHub`, "the case file"],
+    ["pins repository: the case file", `blob ${caseBlob(u.id).sha.slice(0, 12)} on main, the bytes this page read`, "time not given", `${OWNER} on GitHub`, "the case file"],
     stampRow(uk, "a"), stampRow(uk, "b"),
   ]);
   for (const row of rows) for (const v of row) assert.ok(v.trim() !== "", "no empty cell");
@@ -481,6 +482,10 @@ test("R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file
 
 test("R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were last read", async () => {
   const c = await sealedCase("RPAGE P3");
+  // (since unit R-PAGEf, B2, the key-document row prints when the document
+  // was read: the reveal kept it, so the page reads it again only once the
+  // instance's cache is cleared)
+  S._internal.clearDocumentCache();
   const html = (await viewAs(c.id)).html;
   assert.ok(html.includes(`may be up to 60 seconds old &middot; ${readAt(AT)}`), html.slice(html.indexOf("<footer>")));
   assert.ok(cell(html, "pin").endsWith(`<span class="muted">last read ${iso(AT)}</span>`), cell(html, "pin"));
@@ -647,4 +652,190 @@ test("MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a seale
   const j = await viewAs(c.id, { format: "json" });
   assert.deepEqual(j.body.pin, { state: "not_pinned" });
   assert.equal(j.body.checks.find((x) => x.check === "pin").code, "not_pinned");
+});
+
+// =============================================================================
+// UNIT R-PAGEf (2026-10-15; the architect's rulings on the R-PAGE reader's
+// findings). Each test fails on 81b4da8.
+// =============================================================================
+
+const REVOKED = Object.freeze(KD.docWith(KD.entry(CASE_KEY, { status: "revoked" }), KD.reconcileEntry(RECEIPT_KEY)));
+// A case one key registered both roles of (test/case_fix_mutation_gaps.test.js
+// racedSingleParty's fixture): role a registers while role b's request reads
+// its stamp, and the root is written by hand over the race's files.
+async function singlePartyCase(scope) {
+  const id = await openCase(scope);
+  const a = party(id, "a", AGENT_TAPE, REG.KEYS.a);
+  const b = party(id, "b", TOOL_TAPE, REG.KEYS.a);
+  plantStamp(a.commitment_sha256);
+  plantStamp(b.commitment_sha256);
+  const stampGet = (u, m) => m === "GET" && decodeURIComponent(u).includes(`/repos/${STAMPS}/contents/${stamp.stampPath(b.commitment_sha256)}`);
+  const r = await during(stampGet, () => commit(id, a), () => commit(id, b));
+  assert.equal(r.inner.status, 201, "fixture: a registers");
+  const text = gh._repoMap(PINS).get(REG.pathOf(gh, id, "b")).content;
+  gh.seed(PINS, C.casePath(id), C.applyRegistration(storedCase(id), JSON.parse(text), sha(Buffer.from(text, "utf8"))), { keepHistory: true });
+  assert.equal(C.singleParty(storedCase(id)), true, "fixture: single party");
+  return { id, a, b };
+}
+// The page and its JSON twin, each read with `arm` run first (a read made
+// to fail, a cache cleared) and undone after.
+async function bothViews(id, { opts = {}, arm = () => {}, disarm = () => {} } = {}) {
+  const one = async (format) => {
+    S._internal.clearDocumentCache();
+    arm();
+    try {
+      return await viewAs(id, { ...opts, ...(format ? { format } : {}) });
+    } finally {
+      disarm();
+    }
+  };
+  const h = await one(null);
+  const j = await one("json");
+  return { status: h.status, html: h.html, jsonStatus: j.status, json: j.body };
+}
+const BYTES_PANEL = "<h2>The record this page read</h2>";
+
+test("R-PAGEf B1: the JSON twin carries case_sha256 exactly on the states whose page prints the bytes read; nothing on a refusal page", async () => {
+  const docDown = { arm: () => gh.forceRawFailure(1000, 503), disarm: () => gh.forceRawFailure(0) };
+  const states = [];
+  const add = async (name, prints, id, view = {}) => states.push({ name, prints, id, view });
+  await add("OPEN", true, await openCase("RPAGEf B1 open"));
+  await add("COMMITTED", true, (await committedCase("RPAGEf B1 committed")).id);
+  await add("EXPIRED", true, (await committedCase("RPAGEf B1 expired")).id, { opts: { now: Date.parse(DEADLINE) + 1000 } });
+  const s = await sealedCase("RPAGEf B1 sealed");
+  await add("VERDICT", true, s.id);
+  await add("COULD NOT LOOK (the sealed record)", true, s.id, docDown);
+  await add("SIGNED BY A REVOKED KEY (verdict)", false, s.id, { opts: { doc: REVOKED } });
+  const w = await withdrawnBy("RPAGEf B1 withdrawn", "a");
+  await add("WITHDRAWN", true, w.id);
+  await add("COULD NOT LOOK (the withdrawal record)", true, w.id, docDown);
+  await add("SIGNED BY A REVOKED KEY (withdrawal record)", false, w.id, { opts: { doc: REVOKED } });
+  const wt = await withdrawnBy("RPAGEf B1 withdrawal tampered", "b");
+  gh.seed(PINS, C.casePath(wt.id), flipSig(storedCase(wt.id)), { keepHistory: true });
+  await add("WITHDRAWAL RECORD DOES NOT VERIFY", false, wt.id);
+  const t = await sealedCase("RPAGEf B1 tampered");
+  gh.seed(PINS, C.casePath(t.id), flipSig(storedCase(t.id)), { keepHistory: true });
+  await add("SEALED RECORD DOES NOT VERIFY", true, t.id);
+  const inc = await committedCase("RPAGEf B1 inconsistent");
+  gh._repoMap(PINS).delete(REG.pathOf(gh, inc.id, "b"));
+  await add("case_record_inconsistent", false, inc.id);
+  const sp = await singlePartyCase("RPAGEf B1 single party");
+  await add("SINGLE PARTY", false, sp.id);
+  const ur = await singlePartyCase("RPAGEf B1 unread");
+  const ra = REG.pathOf(gh, ur.id, "a");
+  await add("could_not_look (a registration file unread)", false, ur.id, { arm: () => gh.forceGetFailure(PINS, ra, 1, 503), disarm: () => gh.forceGetFailure(PINS, ra, 0) });
+  for (const st of states) {
+    const v = await bothViews(st.id, st.view);
+    assert.equal(v.jsonStatus, v.status, st.name);
+    assert.equal(v.html.includes(BYTES_PANEL), st.prints, `${st.name}: the page ${st.prints ? "prints" : "does not print"} the bytes read`);
+    assert.equal(v.json.case_sha256 !== undefined, st.prints, `${st.name}: ${JSON.stringify(v.json).slice(0, 200)}`);
+  }
+});
+
+test("R-PAGEf B1: on a signer_revoked page every field of the JSON twin is on the page, field by field", async () => {
+  const s = await sealedCase("RPAGEf B1 revoked fields");
+  const v = await bothViews(s.id, { opts: { doc: REVOKED } });
+  assert.equal(v.json.error_code, "signer_revoked");
+  for (const [k, val] of Object.entries(v.json)) {
+    if (k === "ok") continue;
+    assert.ok(v.html.includes(esc(String(val))), `${k}: ${val} is not on the page`);
+  }
+});
+
+// R-L4e's rule (a case_record_inconsistent body is the one code) reaches the
+// twin: B1's states drove it to JSON for the first time, and the every-body
+// audit read it with the case id and the read time in it.
+test("R-PAGEf B1 (R-L4e): the JSON twin of a case_record_inconsistent page is the code only, at 503", async () => {
+  const inc = await committedCase("RPAGEf B1 inconsistent twin");
+  gh._repoMap(PINS).delete(REG.pathOf(gh, inc.id, "b"));
+  const v = await bothViews(inc.id);
+  assert.deepEqual([v.status, v.jsonStatus], [503, 503]);
+  assert.ok(v.html.includes("<code>case_record_inconsistent</code>"));
+  assert.deepEqual(v.json, { ok: false, error_code: "case_record_inconsistent" });
+});
+
+test("R-PAGEf B2: the key-document row prints when the document was read, and says so when it came from this instance's cache", async () => {
+  const c1 = await sealedCase("RPAGEf B2 one");
+  const c2 = await sealedCase("RPAGEf B2 two");
+  assert.equal(storedCase(c1.id).signed_under.document_commit, storedCase(c2.id).signed_under.document_commit, "fixture: one commit");
+  S._internal.clearDocumentCache();
+  const T1 = AT;
+  const T2 = AT + 4 * 3600000;
+  const first = cell((await viewAs(c1.id, { now: T1 })).html, "key document");
+  assert.ok(first.endsWith(`<span class="muted">last read ${iso(T1)}</span>`), first);
+  const second = cell((await viewAs(c2.id, { now: T2 })).html, "key document");
+  assert.ok(second.endsWith(`<span class="muted">from cache, last read ${iso(T1)}</span>`), second);
+  assert.ok(!second.includes(`last read ${iso(T2)}`));
+});
+
+test("R-PAGEf M1: a registration file is held to its projection by the sha256 of its bytes: the projected bytes that are not a registration are projection_differs_from_file, never registration_file_differs; the projection answers the bytes' sha256", async () => {
+  const c = await committedCase("RPAGEf M1");
+  const p = REG.pathOf(gh, c.id, "a");
+  const text = gh._repoMap(PINS).get(p).content;
+  const at = text.indexOf(c.id);
+  const bytes = Buffer.concat([Buffer.from(text.slice(0, at), "utf8"), Buffer.from([0xff]), Buffer.from(text.slice(at), "utf8")]);
+  assert.notEqual(sha(bytes), sha(Buffer.from(bytes.toString("utf8"), "utf8")), "fixture: the planted text's sha256 is not the bytes'");
+  gh.seedBytes(PINS, p, bytes);
+  // the (unsigned, COMMITTED) root projects exactly those bytes
+  const k = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, a: { ...k.commitments.a, registration_sha256: sha(bytes) } } }, { keepHistory: true });
+  const proj = await S.projectedRegistrations(storedCase(c.id));
+  assert.deepEqual([proj.ok, proj.role, proj.reason], [false, "a", "projection_differs_from_file"]);
+  // an honest case: the projection answers each file's bytes' sha256
+  const h = await committedCase("RPAGEf M1 honest");
+  const hk = storedCase(h.id);
+  const honest = await S.projectedRegistrations(hk);
+  for (const r of ["a", "b"]) {
+    assert.equal(honest.shas[r], sha(Buffer.from(gh._repoMap(PINS).get(REG.pathOf(gh, h.id, r)).content, "utf8")), r);
+    assert.equal(honest.shas[r], hk.commitments[r].registration_sha256, r);
+  }
+});
+
+test("R-PAGEf M2: a row listed but read 404 is read again on the next attempt: the sender's own row, missed on attempt 1, is found on attempt 2, and no second row is written", async () => {
+  const c = await sealedCase("RPAGEf M2");
+  const first = await reference(c);
+  assert.deepEqual([first.status, first.body.seq], [201, 1]);
+  const p1 = C.referencePath(c.id, 1);
+  const p2 = C.referencePath(c.id, 2);
+  // attempt 1: seq 1 reads 404 (a replica behind the listing), and the write
+  // at seq 2 loses to another sender's row
+  gh.forceGetFailure(PINS, p1, 1, 404);
+  gh.forceConflict(PINS, p2, 1);
+  const viaMock = global.fetch;
+  let raced = false;
+  global.fetch = async (url, o) => {
+    if (!raced && ((o && o.method) || "GET") === "PUT" && decodeURIComponent(String(url)).endsWith(`/contents/${p2}`)) {
+      raced = true;
+      gh.seed(PINS, p2, { planted: 2, appended_by: "preimage:b", cross_reference: { ...XREF, reference: "the other sender's row" } });
+    }
+    return viaMock(url, o);
+  };
+  let again;
+  try {
+    again = await reference(c);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(raced, true, "fixture: attempt 1 wrote at seq 2 and lost it");
+  assert.deepEqual([again.status, again.body.existing, again.body.seq], [200, true, 1], JSON.stringify(again.body).slice(0, 300));
+  assert.equal(gh.has(PINS, C.referencePath(c.id, 3)), false, "no second row");
+});
+
+test("R-PAGEf m2: the withdrawal's time, each stamped time and each recorded time print relative and absolute", async () => {
+  const w = await withdrawnBy("RPAGEf m2 withdrawn", "a");
+  const at = storedCase(w.id).withdrawal.at;
+  assert.equal(cell((await viewAs(w.id)).html, "withdrawal"), `${esc("withdrawn on presentation of role a's commitment preimage, ")}1 hour ago (${at})`);
+  const c = await sealedCase("RPAGEf m2 sealed");
+  assert.equal((await reference(c)).status, 201);
+  const html = (await viewAs(c.id)).html;
+  const k = storedCase(c.id);
+  assert.ok(cell(html, "role a registered at").startsWith(`2 hours ago (${k.commitments.a.registered_at}) <span class="muted">(stamped 2 hours ago (${k.commitments.a.stamped_at}))</span>`), cell(html, "role a registered at"));
+  const row = gh.read(PINS, C.referencePath(c.id, 1));
+  assert.ok(cell(html, "reference row 1").includes(`<span class="muted">(recorded 30 minutes ago (${row.recorded_at}), `), cell(html, "reference row 1"));
+});
+
+test("R-PAGEf m4: a case page asked for with another method is 405 method_not_allowed, codes only", async () => {
+  const res = makeRes();
+  await CP.handleCasePage(makeReq({ method: "POST", query: { op: "case-page", case_id: "1".repeat(64) }, headers: { "x-forwarded-for": nextIp() } }), res, { now: AT });
+  assert.deepEqual([res._status, res._body, res._headers.allow], [405, { ok: false, error_code: "method_not_allowed" }, "GET, HEAD"]);
 });
