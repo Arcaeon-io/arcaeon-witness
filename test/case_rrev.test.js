@@ -421,12 +421,14 @@ test("R-REV: the key document's prose says two statuses, and the README says mar
   const doc = JSON.parse(read("public/.well-known/arcaeon/case-signing-keys.json"));
   assert.deepEqual(doc.status_meaning, {
     active: "Listed for its role. A record this key signed verifies under a document that lists it active.",
-    revoked: "Its private half is believed exposed. A record this key signed is not shown as holding, whenever it was signed: this document does not order a signature against a revocation.",
+    // "verified", since unit R-FGf (M1): no served file says "holding"
+    revoked: "Its private half is believed exposed. A record this key signed is not shown as verified, whenever it was signed: this document does not order a signature against a revocation.",
   });
   assert.equal(doc.rotation, "Rotation adds a new key with status active. The previous key stays listed active with a note that it no longer signs, " +
     "so the records it signed keep verifying. A key is marked revoked only if its private half is believed exposed. Dates in this document are " +
-    // "keeps", since unit R-WIDEg (G2): no served file says "holds"
-    "information and are not enforced. A reader keeps a record to the document it names, at a commit on this repository's published branch, and " +
+    // "keeps", since unit R-WIDEg (G2): no served file says "holds"; "checks
+    // a record against", since unit R-FGf (the reader's G2 suggestion)
+    "information and are not enforced. A reader checks a record against the document it names, at a commit on this repository's published branch, and " +
     "each key that signed it must also be listed here, in its role, when the record is read. The service signs only with a key listed here as " +
     "active in its role, and before it seals it confirms that this document is the one at the commit it names.");
   assert.equal(S.checkKeyDocument(doc).ok, true);

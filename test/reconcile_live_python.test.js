@@ -18,6 +18,7 @@ const { spawnSync } = require("node:child_process");
 
 const T = require("../lib/_reconcile_tapes.js");
 const fixtures = require("./fixtures/reconcile/cases.json");
+const { inPythonWords } = require("./helpers/reconcile_words.js");
 
 function lfSha(p) {
   return crypto.createHash("sha256").update(fs.readFileSync(p).toString("latin1").replace(/\r\n/g, "\n"), "latin1").digest("hex");
@@ -107,7 +108,8 @@ test("LIVE DIFFERENTIAL: 150 fresh byte-level mutations, judged by reconcile.py 
       // the reference to report, not a case to excuse.
       assert.ok(!out[i].startsWith("RAISES "), `case ${i}: reconcile.py ${out[i]}`);
       if (out[i].includes(dir.replace(/\\/g, "\\\\")) || out[i].includes("jsonl")) continue; // names a local path
-      assert.equal(T.conformanceJson(mine), out[i], `case ${i}`);
+      // THE SECOND DIVERGENCE (unit R-FGf, M1): test/helpers/reconcile_words.js
+      assert.equal(inPythonWords(T.conformanceJson(mine), out[i]), out[i], `case ${i}`);
       compared += 1;
     }
     assert.ok(compared > 100, `only ${compared} compared`);

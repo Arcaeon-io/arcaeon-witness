@@ -600,7 +600,7 @@ function holdsVerdict(answer) {
   // unit R-REVf: a revoked key is the carried document's answer, not the named one's
   if (answer.code === "signer_revoked") {
     return broken(`one of the keys it is signed with (${answer.key_id}) is listed as revoked in the key document this checkout carries, so it is ` +
-      "not shown as holding, whenever it was signed");
+      "not shown as verified, whenever it was signed");
   }
   return broken(`its sealed record does not hold under the key document it names (${answer.code}${answer.reason ? `: ${answer.reason}` : ""})`);
 }

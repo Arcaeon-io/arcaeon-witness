@@ -373,6 +373,8 @@ async function roleReference(c, role, ref, { now = REVEAL_AT + 1800000 } = {}) {
 }
 const plantRows = (id, seqs) => { for (const n of seqs) gh.seed(PINS, C.referencePath(id, n), { planted: n }); };
 const usagePaths = () => [...gh._repoMap(USAGE).keys()];
+// unit R-FGf (B1): the architect's ruled sentence
+const RULED_ROW_LIMIT = "This case takes no further reference row: its listing has reached the limit of 40.";
 
 test("R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, with the listed count and the limit", async () => {
   assert.equal(S.MAX_REFERENCE_ROWS, CAP);
@@ -489,10 +491,188 @@ test("MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 ro
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 200));
 });
 
-test("MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed", async () => {
+// (rewritten in unit R-FGf, B1: the ruled sentence, which claims the
+// listing fact only; it was CP.ROW_LIMIT_SENTENCE, which said "has reached
+// 40 reference rows" of a case with one)
+test("MUST-FAIL GAP (RF05, RF15): the page says the listing has reached the limit when the highest seq is 40, with one file listed", async () => {
   const c = await sealedCase("RFG gap page high seq");
   plantRows(c.id, [CAP]);
   const live = await S.liveRecords(storedCase(c.id), { keyDocument: DOC });
   assert.deepEqual([live.listed, live.highest], [1, CAP]);
-  assert.ok((await casePage(c.id)).html.includes(esc(CP.ROW_LIMIT_SENTENCE)), "the page's sentence");
+  assert.ok((await casePage(c.id)).html.includes(esc(RULED_ROW_LIMIT)), "the ruled sentence");
+});
+
+// =============================================================================
+// UNIT R-FGf (2026-10-15; the architect's rulings on the R-FG reader's
+// findings). Each test fails on 6c385cb.
+// =============================================================================
+
+// Another sender's row, as the store has it (unit R-FGf, B2).
+const otherRow = (seq) => ({ planted: seq, appended_by: "preimage:b", cross_reference: { ...XREF, reference: "the other sender's row" } });
+// Every store.putFile answer while `fn` runs: the test shows which path the
+// write took (B2, reader m3: the abandoned one).
+async function putAnswers(fn) {
+  const real = store.putFile;
+  const answers = [];
+  store.putFile = async (...a) => {
+    const out = await real(...a);
+    answers.push({ path: a[0], out });
+    return out;
+  };
+  try {
+    return { out: await fn(), answers };
+  } finally {
+    store.putFile = real;
+  }
+}
+// The next PUT to `p` is answered 409 (GitHub's "the ref moved"), and
+// before it is answered another sender's row lands at `p`.
+function raceAt(p, row) {
+  gh.forceConflict(PINS, p, 1);
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if (((o && o.method) || "GET") === "PUT" && decodeURIComponent(String(url)).endsWith(`/contents/${p}`)) {
+      global.fetch = viaMock;
+      gh.seed(PINS, p, row);
+    }
+    return viaMock(url, o);
+  };
+  return () => {
+    global.fetch = viaMock;
+  };
+}
+// The next PUT to `p` lands, and its answer is lost: the caller is
+// answered `status` (M2).
+function landsThenFails(p, status = 502) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if (((o && o.method) || "GET") === "PUT" && decodeURIComponent(String(url)).endsWith(`/contents/${p}`)) {
+      global.fetch = viaMock;
+      await viaMock(url, o);
+      return new Response(JSON.stringify({ message: "mock: the write landed; its answer was lost" }), { status, headers: { "content-type": "application/json" } });
+    }
+    return viaMock(url, o);
+  };
+  return () => {
+    global.fetch = viaMock;
+  };
+}
+const firstRows = (n) => Array.from({ length: n }, (_, i) => i + 1);
+
+test("R-FGf B1: the page claims the listing fact only, in the ruled sentence: one row at seq 40 and nothing else, and 39 rows and one stray file, each print it, and neither claims a count", async () => {
+  assert.equal(CP.ROW_LIMIT_SENTENCE, RULED_ROW_LIMIT);
+  const high = await sealedCase("RFGf B1 one row at 40");
+  plantRows(high.id, [CAP]);
+  const stray = await sealedCase("RFGf B1 39 and a stray");
+  plantRows(stray.id, firstRows(CAP - 1));
+  gh.seed(PINS, `${C.referencesDir(stray.id)}/not-a-row.json`, { stray: true });
+  for (const [name, id] of [["one row at seq 40", high.id], ["39 rows and a stray file", stray.id]]) {
+    const html = (await casePage(id)).html;
+    assert.ok(html.includes(`<span class="muted">${esc(RULED_ROW_LIMIT)}</span>`), name);
+    assert.doesNotMatch(html, /reached \d+ reference rows|\d+ reference rows, the most/, name);
+  }
+  assert.ok(README().includes(`it in a sentence that claims the listing fact only, never a number of rows: "${RULED_ROW_LIMIT}"`), "README");
+});
+
+test("R-FGf B2: a row PUT answered 409 whose re-read finds another sender's row at that seq is not taken as written: the sender gets 201 at the next seq with its own row", async () => {
+  const c = await sealedCase("RFGf B2 next seq");
+  const p1 = C.referencePath(c.id, 1);
+  const theirs = otherRow(1);
+  const undo = raceAt(p1, theirs);
+  let r;
+  let answers;
+  try {
+    ({ out: r, answers } = await putAnswers(() => roleReference(c, "a", "my own row")));
+  } finally {
+    undo();
+  }
+  // the store took the abandoned path (reader m3)
+  assert.deepEqual(answers.filter((x) => x.path === p1).map((x) => !!(x.out && x.out.abandoned)), [true]);
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual([r.body.seq, r.body.path, r.body.appended_by], [2, C.referencePath(c.id, 2), "preimage:a"]);
+  assert.deepEqual([r.body.row.appended_by, r.body.row.cross_reference.reference], ["preimage:a", "my own row"]);
+  assert.deepEqual(gh.read(PINS, C.referencePath(c.id, 2)), r.body.row, "the row answered is the row written");
+  assert.deepEqual(gh.read(PINS, p1), theirs, "the other sender's row is untouched");
+});
+
+test("R-FGf B2: when the other sender's row was the 40th, the sender is refused 409 row_limit, codes only; never a 201 for a row it did not write", async () => {
+  const c = await sealedCase("RFGf B2 full");
+  plantRows(c.id, firstRows(CAP - 1));
+  const p40 = C.referencePath(c.id, CAP);
+  const theirs = otherRow(CAP);
+  const undo = raceAt(p40, theirs);
+  let r;
+  let answers;
+  try {
+    ({ out: r, answers } = await putAnswers(() => roleReference(c, "a", "my own fortieth")));
+  } finally {
+    undo();
+  }
+  assert.deepEqual(answers.filter((x) => x.path === p40).map((x) => !!(x.out && x.out.abandoned)), [true]);
+  assert.deepEqual([r.status, r.body], [409, { ok: false, error_code: "row_limit", case_id: c.id, count: CAP, limit: CAP }]);
+  assert.deepEqual(gh.read(PINS, p40), theirs);
+  assert.equal(gh.has(PINS, C.referencePath(c.id, CAP + 1)), false);
+});
+
+test("R-FGf M2: a row PUT that lands but is answered 5xx, then the same send again: no second row; 200 with the row the record has, naming its seq", async () => {
+  const c = await sealedCase("RFGf M2 lost answer");
+  const p1 = C.referencePath(c.id, 1);
+  const undo = landsThenFails(p1);
+  let first;
+  try {
+    first = await roleReference(c, "a", "sent twice");
+  } finally {
+    undo();
+  }
+  assert.deepEqual([first.status, first.body.error_code], [503, "store_error"]);
+  assert.equal(gh.has(PINS, p1), true, "the write landed");
+  const stored = gh.read(PINS, p1);
+  const puts = gh.putLog.length;
+  const again = await roleReference(c, "a", "sent twice");
+  assert.equal(again.status, 200, JSON.stringify(again.body).slice(0, 300));
+  assert.deepEqual([again.body.ok, again.body.seq, again.body.path, again.body.appended_by], [true, 1, p1, "preimage:a"]);
+  assert.deepEqual(again.body.row, stored);
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  assert.equal(gh.has(PINS, C.referencePath(c.id, 2)), false, "no second row");
+  // the same cross_reference by the other role, or another one by this
+  // role, is a new row
+  const byB = await roleReference(c, "b", "sent twice");
+  assert.deepEqual([byB.status, byB.body.seq], [201, 2]);
+  const another = await roleReference(c, "a", "another reference");
+  assert.deepEqual([another.status, another.body.seq], [201, 3]);
+  // a stored file that names this appender and this cross_reference but is
+  // not a valid row is not the record's: a new row is written
+  gh.seed(PINS, C.referencePath(c.id, 4), { appended_by: "preimage:a", cross_reference: { ...XREF, reference: "a planted copy" } });
+  const past = await roleReference(c, "a", "a planted copy");
+  assert.deepEqual([past.status, past.body.seq], [201, 5]);
+  assert.equal(again.body.existing, true);
+  assert.equal(past.body.existing, false);
+  assert.ok(README().includes("when there is one, the answer is 200, `existing: true`, with that row and its seq, and nothing is written."), "README");
+});
+
+test("R-FGf M2: the lost write was the 40th: the same send again is answered 200 with that row, never 409 row_limit", async () => {
+  const c = await sealedCase("RFGf M2 fortieth");
+  plantRows(c.id, firstRows(CAP - 1));
+  const p40 = C.referencePath(c.id, CAP);
+  const undo = landsThenFails(p40);
+  let first;
+  try {
+    first = await roleReference(c, "a", "the fortieth, sent twice");
+  } finally {
+    undo();
+  }
+  assert.deepEqual([first.status, first.body.error_code], [503, "store_error"]);
+  const again = await roleReference(c, "a", "the fortieth, sent twice");
+  assert.deepEqual([again.status, again.body.seq, again.body.path], [200, CAP, p40], JSON.stringify(again.body).slice(0, 300));
+  assert.deepEqual(again.body.row, gh.read(PINS, p40));
+  // another send is still refused at the cap
+  const next = await roleReference(c, "b", "the forty-first");
+  assert.deepEqual([next.status, next.body.error_code], [409, "row_limit"]);
+});
+
+test("R-FGf m4: 503 reference_seq_contended is codes only", async () => {
+  const c = await sealedCase("RFGf m4 contended");
+  gh.forceConflict(PINS, C.referencePath(c.id, 1), 100000);
+  const r = await roleReference(c, "a", "contended");
+  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "reference_seq_contended", case_id: c.id }]);
 });

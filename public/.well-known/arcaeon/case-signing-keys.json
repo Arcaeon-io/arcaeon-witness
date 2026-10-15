@@ -5,9 +5,9 @@
   "matching": "Match on key_id, then use verifier: <key name>+<8 lowercase hex of sha256(name || 0x0a || 0x01 || public key)[0:4]>+<base64(0x01 || 32-byte Ed25519 public key)>, the signed-note verifier format of the witness log. key_id is the verifier without its base64 tail. Compare key bytes, not names.",
   "status_meaning": {
     "active": "Listed for its role. A record this key signed verifies under a document that lists it active.",
-    "revoked": "Its private half is believed exposed. A record this key signed is not shown as holding, whenever it was signed: this document does not order a signature against a revocation."
+    "revoked": "Its private half is believed exposed. A record this key signed is not shown as verified, whenever it was signed: this document does not order a signature against a revocation."
   },
-  "rotation": "Rotation adds a new key with status active. The previous key stays listed active with a note that it no longer signs, so the records it signed keep verifying. A key is marked revoked only if its private half is believed exposed. Dates in this document are information and are not enforced. A reader keeps a record to the document it names, at a commit on this repository's published branch, and each key that signed it must also be listed here, in its role, when the record is read. The service signs only with a key listed here as active in its role, and before it seals it confirms that this document is the one at the commit it names.",
+  "rotation": "Rotation adds a new key with status active. The previous key stays listed active with a note that it no longer signs, so the records it signed keep verifying. A key is marked revoked only if its private half is believed exposed. Dates in this document are information and are not enforced. A reader checks a record against the document it names, at a commit on this repository's published branch, and each key that signed it must also be listed here, in its role, when the record is read. The service signs only with a key listed here as active in its role, and before it seals it confirms that this document is the one at the commit it names.",
   "updated": "2026-10-15",
   "keys": [
     {

@@ -929,7 +929,9 @@ test('GPT-5.6 §5 (REFERENCE_ANCHOR_NOTE): "No reference row stores its write co
 // =============================================================================
 
 test('GPT-5.6 §4: "Each accepted request does at least a root read, reference-directory listing, reference-row write, then liveRecords() listing and up to 20 row reads"',
-  { todo: "CONFIRMED: with 21 rows present, one accepted reference reads the root, lists twice, writes one row and reads 20 rows (the assertion 'an accepted reference reads fewer than 20 rows' fails)" }, async () => {
+  // (unit R-FGf, M2: before it builds a row, a reference reads the listed
+  // rows for the same send, at most 40; 21 more reads here)
+  { todo: "CONFIRMED: with 21 rows present, one accepted reference reads the root, lists twice, reads the 21 rows for the same send (unit R-FGf), writes one row and reads 20 rows for the live count, 41 row reads (the assertion 'an accepted reference reads fewer than 20 rows' fails)" }, async () => {
     const { id, a, b } = await sealedCase({ scope_digest: sha("4 cost") });
     // 21 rows, both roles (FIX G's per-role 20 is gone since unit R-FG)
     for (let i = 0; i < 21; i += 1) assert.equal((await reference({ ...proofOf(id, i % 2 ? b : a), cross_reference: { ...XREF, reference: `row-${i}` } })).status, 201);

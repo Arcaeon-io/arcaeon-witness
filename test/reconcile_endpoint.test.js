@@ -19,6 +19,7 @@ const H = require("../lib/_reconcile_http.js");
 const checkpoint = require("../lib/_checkpoint.js");
 const receipts = require("../lib/_reconcile_receipt.js");
 const fixtures = require("./fixtures/reconcile/cases.json");
+const { inPythonWords } = require("./helpers/reconcile_words.js");
 
 // The deployment's reconcile signer, a throwaway key made here: since
 // red-team fix B the endpoint compares nothing without one (503
@@ -117,7 +118,10 @@ test("CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict
     const { status, raw } = await call(req);
     assert.equal(status, 200, c.name);
     const verdict = pyLoads(raw, false).get("verdict");
-    const mine = pyDumps(verdict, { sortKeys: true, itemSep: ",", keySep: ":", ascii: true, allowNan: false });
+    // THE SECOND DIVERGENCE (unit R-FGf, M1): "has a duplicate key" where
+    // reconcile.py says "holds" (test/helpers/reconcile_words.js)
+    const mine = inPythonWords(pyDumps(verdict, { sortKeys: true, itemSep: ",", keySep: ":", ascii: true, allowNan: false }), c.python);
+    assert.notEqual(mine, null, `${c.name}: the port says "holds"`);
     // THE ONE DIVERGENCE (unit R-WIDE, C8): two tapes of one side keep both
     // counts, by tape; reconcile.py keeps the second's, by side. The rest is
     // byte for byte.

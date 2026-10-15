@@ -20,6 +20,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fixtures = require("./fixtures/reconcile/cases.json");
 const R = require("../lib/_reconcile_tapes.js");
+const { inPythonWords, PORT_DUPLICATE } = require("./helpers/reconcile_words.js");
 
 function bytesOf(b64) {
   return Buffer.from(b64, "base64");
@@ -55,7 +56,14 @@ function disagreements(reconcileFn, cases = fixtures.cases) {
       bad.push({ name: c.name, why: "fixture case has no reconcile.py answer" });
       continue;
     }
-    const mine = R.conformanceJson(got);
+    // THE SECOND DIVERGENCE (unit R-FGf, M1): the port says a line "has" a
+    // duplicate key where reconcile.py says it "holds" one
+    // (test/helpers/reconcile_words.js); the port never says "holds"
+    const mine = inPythonWords(R.conformanceJson(got), c.python);
+    if (mine === null) {
+      bad.push({ name: c.name, why: "the port says \"holds\"" });
+      continue;
+    }
     if (mine === c.python) continue;
     // THE ONE DIVERGENCE (unit R-WIDE, C8, the architect's ruling): for two
     // tapes of one side, reconcile.py keys counts by side and keeps one; the
@@ -121,7 +129,10 @@ test("CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COUL
     assert.equal(py.verdict, "COULD_NOT_LOOK", name);
     assert.match(py.reason, re, name);
     const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
-    assert.equal(R.conformanceJson(got), c.python, name);
+    // (unit R-FGf, M1: the port's words for the duplicate key, the second
+    // divergence; it said reconcile.py's "holds")
+    if (name === "dup_key_then_junk") assert.equal(got.reason, `tape_a line 2${PORT_DUPLICATE}`, name);
+    assert.equal(inPythonWords(R.conformanceJson(got), c.python), c.python, name);
   }
   // inside the bound nothing is refused
   for (const name of ["line_arrays_512", "line_objects_512", "nested_510_both", "line_brackets_in_string_600",

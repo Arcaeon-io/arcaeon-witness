@@ -367,8 +367,10 @@ test("R-REVf 5: the preview tool names the key document this checkout carries, l
   const TOOL = require("../tools/preview_dry_run.js");
   const v = TOOL._internal.holdsVerdict({ code: "signer_revoked", reason: "key_revoked", key_id: CASE_ID });
   assert.equal(v.word, "BROKEN");
+  // (unit R-FGf, M1: in step with the key document's status_meaning, which
+  // said "not shown as holding")
   assert.equal(v.text, `one of the keys it is signed with (${CASE_ID}) is listed as revoked in the key document this checkout carries, so it is ` +
-    "not shown as holding, whenever it was signed");
+    "not shown as verified, whenever it was signed");
   assert.doesNotMatch(v.text, /the key document it names/);
 });
 

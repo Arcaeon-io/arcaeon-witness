@@ -447,8 +447,9 @@ test("MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other 
   gh.seed(USAGE, H._internal.caseLockPath(id), { kind: "case-lock", v: 1, case_id: id, holder: "someone-else", op: "commit",
     acquired_at: C.utcSeconds(NOW), expires_at: new Date(NOW + 600000).toISOString(), state: "held" });
   const busy = await commit(id, a);
+  // (unit R-FGf, M1: "has", never "holds", in a body)
   assert.equal(busy.body.error,
-    "another request holds this case's lock (a registration or a withdrawal is being written); try again shortly; nothing was registered");
+    "another request has this case's lock (a registration or a withdrawal is being written); try again shortly; nothing was registered");
   gh.forceGetFailure(USAGE, H._internal.caseLockPath(id), 1, 503);
   const unreachable = await commit(id, a);
   assert.equal(unreachable.body.error, "this case's lock could not be read or written; this is not a 'no', and nothing was registered");

@@ -342,7 +342,7 @@ stored record, and on every `/api/latest` read. It means exactly this, and the
 same sentence ships in the API responses themselves (`auth_note`):
 
 > Bearer-key auth only. This is NOT owner-signature auth: the witness verifies
-> that the caller holds a key bound to this namespace prefix, not that the
+> that the caller has a key bound to this namespace prefix, not that the
 > log's owner authorized this record. Anyone who obtains the key can pin or
 > renew. Owner-signature auth — a detached signature over `{namespace, rows,
 > chain, timestamp}` verified against a public key registered to the namespace
@@ -471,7 +471,7 @@ store) holds across instances, and the free tier's share of it is lower than
 the paid tier's.
 
 What a stamp proves: A file with exactly this SHA-256 fingerprint was recorded
-no later than the time of the public commit that holds this stamp.
+no later than the time of the public commit that has this stamp.
 
 What it does not prove: Who made the file. That anything the file says is
 true. That no other version of it exists. That the file is older than this
@@ -1054,10 +1054,21 @@ case takes at most 40 reference rows, for every appender, the operator too;
 the 41st is refused 409 `row_limit`. The limit is judged from the listing of
 the case's rows: a reference is refused when the highest listed seq plus one
 would pass 40, or when 40 files or more are listed, and its 409 body carries
-`count` (the files listed) and `limit`, and no sentence; the case page says
-when a case has reached it. No counter is kept, and no refusal spends
-anything, so a reference answered 503 `reference_seq_contended` finishes when
-it is sent again. A row is never
+`count` (the files listed) and `limit`, and no sentence. The case page says
+it in a sentence that claims the listing fact only, never a number of rows:
+"This case takes no further reference row: its listing has reached the limit
+of 40." No counter is kept, and no refusal spends anything, so a reference
+answered 503 `reference_seq_contended` (codes only) finishes when it is sent
+again. A row write that GitHub answers 409 and whose path then has another
+sender's file is not taken as written: the reference lists again and takes
+the next seq, or is refused 409 `row_limit` when the listing is now full.
+Before it builds a row, a reference reads the listed rows (seqs 1 to 40) for
+one with its `appended_by` and its cross_reference (the same json-c14n:v1
+sha256) that is a valid row; when there is one, the answer is 200,
+`existing: true`, with that row and its seq, and nothing is written. So a
+reference whose row landed but whose answer was lost (a 503 `store_error`,
+say) is answered with that row when it is sent again, never written twice,
+and never refused `row_limit` for its own 40th row. A row is never
 refused for its case's pin or anchoring: no pin and no anchor is read for a
 row, and its answer names no commit. The case page shows each row with a
 link to it and the commit that wrote it, and says nothing of its pin or its
