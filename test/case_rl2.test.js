@@ -255,21 +255,22 @@ test("R-L2 M2: a withdrawal whose root write kept losing while the case read fin
 });
 
 // =============================================================================
-// M3: at most 500 reference rows a case
+// M3: at most 40 reference rows a case (500 until unit R-FG)
 // =============================================================================
 
-test("R-L2 M3: a case holds at most 500 reference rows: the 500th is written, the 501st is refused 409 row_limit in a plain sentence, and the README states the cap", async () => {
-  assert.equal(S.MAX_REFERENCE_ROWS, 500);
+// Rewritten by unit R-FG (the architect's ruling): the cap is 40, for every
+// appender, and the 409 is codes only (it carried a sentence).
+test("R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the cap", async () => {
+  assert.equal(S.MAX_REFERENCE_ROWS, 40);
   const c = await sealedCase("RL2 M3 cap");
-  for (let n = 1; n <= 499; n += 1) gh.seed(PINS, C.referencePath(c.id, n), { seeded: n });
-  const at500 = await reference(c, { role: "a" });
-  assert.equal(at500.status, 201, JSON.stringify(at500.body).slice(0, 300));
-  assert.equal(gh.has(PINS, C.referencePath(c.id, 500)), true);
-  const at501 = await reference(c, { role: "b" });
-  assert.deepEqual([at501.status, at501.body.error_code, at501.body.error, at501.body.case_id],
-    [409, "row_limit", "this case holds 500 reference rows, the most one case holds; no row was written", c.id], JSON.stringify(at501.body));
-  assert.equal(gh.has(PINS, C.referencePath(c.id, 501)), false);
-  assert.ok(README().includes("A case holds at most 500 reference rows; the 501st is refused 409 `row_limit`."));
+  for (let n = 1; n <= 39; n += 1) gh.seed(PINS, C.referencePath(c.id, n), { seeded: n });
+  const at40 = await reference(c, { role: "a" });
+  assert.equal(at40.status, 201, JSON.stringify(at40.body).slice(0, 300));
+  assert.equal(gh.has(PINS, C.referencePath(c.id, 40)), true);
+  const at41 = await reference(c, { role: "b" });
+  assert.deepEqual([at41.status, at41.body], [409, { ok: false, error_code: "row_limit", case_id: c.id, count: 40, limit: 40 }], JSON.stringify(at41.body));
+  assert.equal(gh.has(PINS, C.referencePath(c.id, 41)), false);
+  assert.ok(README().includes("A case takes at most 40 reference rows, for every appender, the operator too; the 41st is refused 409 `row_limit`."));
 });
 
 // =============================================================================

@@ -1050,8 +1050,14 @@ page says "appended on presentation of role a's commitment preimage" or
 was read: "N reference rows were appended", and for each row the preimage
 or the operator key that appended it. When the reveal carried a cross_reference, the page says "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names":
 whoever sent the reveal typed it, and the service contacts no operator. A
-case holds at most 500
-reference rows; the 501st is refused 409 `row_limit`. A row is never
+case takes at most 40 reference rows, for every appender, the operator too;
+the 41st is refused 409 `row_limit`. The limit is judged from the listing of
+the case's rows: a reference is refused when the highest listed seq plus one
+would pass 40, or when 40 files or more are listed, and its 409 body carries
+`count` (the files listed) and `limit`, and no sentence; the case page says
+when a case has reached it. No counter is kept, and no refusal spends
+anything, so a reference answered 503 `reference_seq_contended` finishes when
+it is sent again. A row is never
 refused for its case's pin or anchoring: no pin and no anchor is read for a
 row, and its answer names no commit. The case page shows each row with a
 link to it and the commit that wrote it, and says nothing of its pin or its

@@ -342,7 +342,8 @@ test("R-N N1: an unsigned reference row is not a record: the reference refuses 5
   assert.deepEqual([r.status, r.body.error_code], [503, "signer_unavailable"], JSON.stringify(r.body));
   assert.doesNotMatch(JSON.stringify(r.body), /WITNESS_|is not set/);
   assert.equal(gh.has(PINS, C.referencePath(c.id, 1)), false, "no row");
-  assert.equal(gh.has(USAGE, H._internal.referenceQuotaPath(c.id, "a")), false, "no unit of the quota spent");
+  // since unit R-FG no reference counter exists: nothing in the usage repository
+  assert.deepEqual([...gh._repoMap(USAGE).keys()].filter((p) => p.startsWith("case_references/")), [], "nothing counted");
   // a row stored unsigned (planted): since unit R-SIG none is built (the
   // seal module throws), and the schema refuses one with sig null
   const signed = S.referenceRow({ caseId: c.id, seq: 1, crossReference: XREF, recordedAt: C.utcSeconds(REVEAL_AT + 1800000), appendedBy: "preimage:a",
