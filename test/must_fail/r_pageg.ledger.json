@@ -1,0 +1,57 @@
+{
+  "PH03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGEg B1: a registration file at its claim's path, not projected, that validates with a byte that is not UTF-8 in it: the re-send projects the sha256 of its b",
+          "R-PAGEg B1: the lost create-only race: the file that landed first at the claim's path validates with a byte that is not UTF-8 in it; the projection is the sha25",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
+        "porcelain": "",
+        "defect_sha256": "e7ad2c7732501c7f22b575a97218fd9dcf6dcabee063db5ae12194ecdfdb2aa9"
+      }
+    ]
+  },
+  "PH02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGEg B1: the lost create-only race: the file that landed first at the claim's path validates with a byte that is not UTF-8 in it; the projection is the sha25",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
+        "porcelain": "",
+        "defect_sha256": "b4ec97dbfdbff369c35cf918c6566f9021ebb3d4ef9bdf1e31c860c6bac86b73"
+      }
+    ]
+  },
+  "PH01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGEg B1: a registration file at its claim's path, not projected, that validates with a byte that is not UTF-8 in it: the re-send projects the sha256 of its b",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
+        "porcelain": "",
+        "defect_sha256": "bd40d3db92d71625465cf08785aa8b4277b0f3e54e6787605c116985d72cd8c1"
+      }
+    ]
+  }
+}
