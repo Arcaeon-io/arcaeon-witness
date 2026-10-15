@@ -1,0 +1,313 @@
+{
+  "GG02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "f7a3dd4a42218f81fe8f40b73b11a4f8214019e80ce3eb0721fd915d78d183ff"
+      }
+    ]
+  },
+  "GG01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "637ad39c48a91ef2a8cab0cef0dc6d5b730b7ab322ad9229db8bf39903061f82"
+      }
+    ]
+  },
+  "GG03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G2: a rows listing that cannot be read is 503 store_unreachable, codes only, with case_id, as a row read is; nothing is written, and the same send finishe",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "dda902f4b6d92a5aa73bc5759468a54fa3dd19315e35902d6f7493d263870f44"
+      }
+    ]
+  },
+  "GG04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G2: a rows listing that cannot be read is 503 store_unreachable, codes only, with case_id, as a row read is; nothing is written, and the same send finishe",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "ec26f45763b9fbda1f44e421e638bb31e4b676f416cbfa6f420e7b6f98855162"
+      }
+    ]
+  },
+  "GG05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "5cd9cfb00de0d8502126ad5dadb9edbec1eae9b62fe41789a0733bd2ddf59eb5"
+      }
+    ]
+  },
+  "GG06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "f03e9543f4e32299f19b4cfaddd7b388a91af9a5bdf21179a0d20127fff43c0b"
+      }
+    ]
+  },
+  "GG07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "0a96042583d5d761ff1ac576e05c591991828752297b5cda9a0decf56cd6b5f3"
+      }
+    ]
+  },
+  "GG09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "TEST 11: records is 2 only when a valid cross-reference row exists; an addendum appends a signed create-only row and never rewrites the sealed case; it has no p",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "8bd2005235477dd147892a02360f3738333f40cc67f9c78d5fc44c092a950e06"
+      }
+    ]
+  },
+  "GG08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "7f6b98fbcec20d0bd43b457f7bed9a682d86bac395cdfded3ae6992179898f56"
+      }
+    ]
+  },
+  "GG10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "edba37463ff16861911ef65d7d0b8663a17667745d98257fff3034922d803f0e"
+      }
+    ]
+  },
+  "GG11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF13): a file at a row's path that is not JSON is not this send's row: the reference takes the next seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "f6559327ef5a5c394c1eb5708c24ce8454949ad2e7f4ab877bdcff248894d728"
+      }
+    ]
+  },
+  "GG12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "ba6b9504d85950b6f8314b6a534c3c077b99b8c1c82ebcd61d9b099ac1789d9d"
+      }
+    ]
+  },
+  "GG13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 1",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "5923ba1b57681a0eeb2303fc166327555a42f3027acf7e7da1f4c4016066b197"
+      }
+    ]
+  },
+  "GG14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "a41e41581ce3d1c606eebcac83490f1830b4f8d63479704ce5a23e63790f0e02"
+      }
+    ]
+  },
+  "GG15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "584f30c8067eb9c77affe071c84a217a72d385bf2ae6ecb9d9883c77f7bee7c3"
+      }
+    ]
+  },
+  "GG18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-FGg G5: no string literal in tools/ says holds, holding or second operator; comments and identifiers are exempt"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "6b510f19ac2844296cd94a32d458d5c285c1afa705462ff36a65f8ec956e6b7c"
+      }
+    ]
+  },
+  "GG16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FGg G4: the README says two deliberate references with the same cross_reference from the same appender become one row",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "67e9b63163c24c9da056afe9a6d10cb2f276dbc4029206895838e7c8b892078f"
+      }
+    ]
+  },
+  "GG17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-FGg G5: the genesis record the tool builds says \"the commit that records this\"",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read",
+          "R-FGg G5: no string literal in tools/ says holds, holding or second operator; comments and identifiers are exempt"
+        ],
+        "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
+        "porcelain": "",
+        "defect_sha256": "69b9e6cf5b5b7d9fdffeac510cba6ddf7c31dc00b484fda173ef6a29c1e6aec5"
+      }
+    ]
+  }
+}

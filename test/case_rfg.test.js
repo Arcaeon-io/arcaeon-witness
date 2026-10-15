@@ -871,3 +871,16 @@ test("R-FGg G5: the genesis record the tool builds says \"the commit that record
   const rec = G.buildGenesisRecord({ repo: "o/stamps", branch: "main", sha: "a".repeat(40), date: "2026-10-01T00:00:00Z", observedAt: "2026-10-02T00:00:00Z", pinsRepo: "o/pins" });
   assert.ok(rec.scope.shows.includes("existed no later than the time of the commit that records this. "), rec.scope.shows);
 });
+
+// R-FGg's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over", async () => {
+  const c = await sealedCase("RFGg gap handed rows");
+  const kase = storedCase(c.id);
+  const listing = { seqs: [1], files: 1 };
+  const g0 = gh.getLog.length;
+  const notJson = await S.liveRecords(kase, { keyDocument: DOC, listing, read: new Map([[1, { notJson: true }]]) });
+  assert.deepEqual([notJson.records, notJson.indeterminate, notJson.unreadable], [null, true, [1]]);
+  const gone = await S.liveRecords(kase, { keyDocument: DOC, listing, read: new Map([[1, { gone: true }]]) });
+  assert.deepEqual([gone.records, gone.indeterminate, gone.unreadable, gone.invalid], [1, false, [], []]);
+  assert.deepEqual(gh.getLog.slice(g0).filter((p) => p.startsWith(C.referencesDir(c.id))), [], "nothing read: the listing and the rows were handed in");
+});

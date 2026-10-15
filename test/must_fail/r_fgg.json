@@ -67,7 +67,7 @@
   "file": "lib/_case_http.js",
   "find": "          known = { notJson: true };",
   "replace": "          known = { gone: true };",
-  "what": "G1: a row that is not JSON is kept as gone"
+  "what": "G1: a row that is not JSON is kept as gone (expected equivalent: the reference answers only records_live, 2 whenever it answers a row)"
  },
  {
   "id": "GG11",
@@ -95,14 +95,16 @@
   "file": "lib/_case_seal.js",
   "find": "      if (known.gone) continue; // listed, then gone\n",
   "replace": "",
-  "what": "G1: a handed row listed then gone is read as unreadable"
+  "what": "G1: a handed row listed then gone is read as unreadable",
+  "gap": "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over"
  },
  {
   "id": "GG15",
   "file": "lib/_case_seal.js",
   "find": "        unreadable.push(seq); // not JSON: as a getFile that cannot parse it\n",
   "replace": "",
-  "what": "G1: a handed row that is not JSON is passed over, not unreadable"
+  "what": "G1: a handed row that is not JSON is passed over, not unreadable",
+  "gap": "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over"
  },
  {
   "id": "GG16",
