@@ -1,5 +1,97 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-PAGE: the case page prints what the record proves, and the checks that ran (branch `case-protocol-2026-10-10`, NOT deployed)
+
+Part 2 of the brief (R-FGg was part 1). The shapes come from cosign/Rekor, OpenTimestamps, certificate transparency, GitHub's signature states, search.sigstore.dev and crt.sh, as the architect read them. Each new test fails on 0869c9d (run there in a worktree with this part's test file: 9 of 9 fail).
+
+- **Commits.** 7e1e2a3 (tests and code), 9678ed8 (the defect list, committed before the run), 874a6d8 (the gap tests, and the mock store's `seedBytes`), b4fdedc (the pass's ledger part way through the run, committed so the tree was clean), f405a6d (the pass's first ledger, the gap test for PG31, the gap tests named), 4e0516b (the re-seed's ledger), and this entry's commit (Group A's ledger and the change log).
+- **P1. A code on every refusal page.** `lib/_case_page.js` `notice(title, text, code, nowMs)` renders `<code>` with the code: `not_a_case_id` (400), `rate_limited` (429), `no_such_case` (404), `could_not_look` (503, the case read failed), `case_unreadable` (503, a record is there and is not a valid case: since this part a file that is not JSON is `case_unreadable` too, where the read used to fail). The could-not-look page names its state's code (`document_unavailable`, `document_off_branch`) beside its reason, and the revoked page `signer_revoked`; the single-party, inconsistent, unread and withdrawal-does-not-verify pages named theirs already. `api/status.js`'s 429 is codes only: `{ok: false, error_code: "rate_limited", retry_after_seconds}` (the prose, "rate limit exceeded" and the limiter's note, is now the comment above it).
+- **P2. "Where this is recorded"** on the sealed page (`whereRecordedHtml`): location, commit or entry, time, operator, link. Rows: the case file (pinned: the commit its pin names; not pinned: the blob this page read on the branch), the pin once pinned (its commit and the pins repository's commit time), and each role's stamp commit with the stamped_at the case record has. Built only from the reads the page already makes (the test lists them: the case file, the two registration files, the pin file, the rows listing; and, raw, the pin and the case file at their commits). No anchor is read, so no anchor has a row (UNSURE).
+- **P3. The read time.** The footer: "This page was read at <time datetime="T">T</time> (UTC)" beside "may be up to 60 seconds old" (T as the status page prints its render time, `toISOString()`); the pin row and the key-document row end with "last read T".
+- **P4. Expired keeps the stored status.** The heading and the status row: "COMMITTED (EXPIRED by this service's clock)", or OPEN; never EXPIRED alone. `EXPIRED_PENDING_SENTENCE` for COMMITTED only, as before.
+- **P5. The bytes read.** The page reads the case file's bytes (`store.getRawFile` now hands back `bytes`, the base64-decoded content) and prints their sha256 and a link to the raw file on the branch, on every page that shows the case record (not on the one-sentence pages or the refusals). `?format=json` (`op=case-page&format=json`, so `/case/<id>?format=json`) answers the same facts as JSON, at the same HTTP status: `ok`, `case_id`, `read_at`, `case_sha256`, `state`, `status_as_stored` and, by state, the verdict, `records` (valid, invalid, unreadable, unread, at_row_limit), `pin`, `checks`, or `error_code` on a refusal. The page cache keeps both.
+- **P6. Report a problem.** Every page's footer, the refusals included: "Report a problem with this case to the operator: hello@arcaeon.io" (a mailto link; the address `public/PRACTICES.md` publishes, UNSURE). Time rows (opened at, deadline, revealed at, each role's registered at, the withdrawn page's opened at) print relative then absolute: "2 hours ago (2026-10-10T07:30:00Z)", "in 10 hours (...)", whole units rounded down, against the page's read time.
+- **P7.** Beside "Labels are recorded, not verified.": "Presence in this record is not meaning: a public record keeps what was submitted to it." The README says it in the same words. The ruled sentence says "holds"; nothing this service serves may (UNSURE).
+- **P8. The checks that ran.** "The following checks were performed on this record:" on the sealed page, the does-not-verify page and the withdrawn page: one line per check that ran on that request, each made from its result object and naming what it covers, its code last: the sealed (or withdrawal) record, with the sha256 of the bytes read and the key document's commit; each registration file read, with its sha256; the pin, from `pinState`'s answer (pinned with both commits, or its state and reason); the reference rows, from `liveRecords`' answer (listed, read, valid). A check that did not run has no line (the anchor is never read, the stamps are not read, a withdrawn case reads no pin, row or registration, a record that does not verify reads no pin or row); one that failed carries its code. Each commit in it is a link (every commit on the page is). The JSON twin carries the same checks, by code.
+- **Group A's list.** WA07 to WA10, WA12 and WA13 (`test/must_fail/r_wide_a.json`) targeted the withdrawn branch's one-line returns, which this part rewrote; each is retargeted at the new lines with the same meaning (R-WIDEg G1's test holds Group A's list to the tree). They are run again at this part's tip (below).
+- **Line counts.** `lib/_case_page.js` 859 to 1097, `api/status.js` 419 to 418, `lib/_store.js` 970 to 972, `README.md` 1101 to 1119.
+- **Tests.**
+  - New: `test/case_rpage.test.js`, R-PAGE P1 (two), P2 to P8, and the gap tests below. The mock store gains `seedBytes` (a file whose bytes are not UTF-8).
+  - Rewritten, each with a note: the EXPIRED heading (`case_item2c` PAGE, `case_redteam` Gemini §2, `case_rrvf` R-RVf2 and R-RVf3 1) and the revealed-at row's helper (`case_rrvf`, the absolute time in its parentheses); the pages compared before and after a deadline, but for when they were read (`case_fix_mutation_gaps` P03/P04, `case_rj2` P31); the pin table's cell reader, which leaves out the last-read line (`case_rj3`).
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_page.ledger.json`). 52 defects over the lines this part changed, at 9678ed8; several print a line from a flag rather than a check's result (PG15, PG31, PG42, PG43).
+  - 44 were caught on their first run. 8 survived and got gap tests (874a6d8, and f405a6d for PG31): PG24 and PG51 (the sha256 of the text re-encoded, not of the bytes read: the mock store could not hold bytes that are not UTF-8 until `seedBytes`), PG29 (the page cache keeps no JSON twin), PG30 (a case file that is not JSON read as could_not_look), PG31 (the JSON pin state from the status, not the pin read), PG38 (registered at, absolute only), PG47 (an invalid row not counted as read), PG52 (the README's JSON sentence). Their re-seed, at f405a6d, caught all eight, each by its gap test.
+  - 52 of 52 caught.
+  - Not planted: the `table.facts.where` style line, and the comments.
+
+  | id | file | planted defect | first run (date, at commit) | last re-seeded and caught (date, at commit) |
+  |---|---|---|---|---|
+  | PG01 | `lib/_case_page.js` | P1: a refusal page names no code | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG02 | `lib/_case_page.js` | P1: not_a_case_id named otherwise | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG03 | `lib/_case_page.js` | P1: rate_limited named otherwise | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG04 | `lib/_case_page.js` | P1: no_such_case named otherwise | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG05 | `lib/_case_page.js` | P1: could_not_look named otherwise | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG06 | `lib/_case_page.js` | P1: case_unreadable named could_not_look | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG07 | `lib/_case_page.js` | P1: the could-not-look page names no code | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG08 | `lib/_case_page.js` | P1: the revoked page names no code | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG09 | `api/status.js` | P1: the status 429 carries prose, no code | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG10 | `lib/_case_page.js` | P2: no where-recorded table | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG11 | `lib/_case_page.js` | P2: a pinned case's rows as if not pinned | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG12 | `lib/_case_page.js` | P2: the pin row's time not printed | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG13 | `lib/_case_page.js` | P2: no case-file row for a case not pinned | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG14 | `lib/_case_page.js` | P2: no stamp rows | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG15 | `lib/_case_page.js` | P2: an anchor row printed from the status, not a read | caught (52 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG16 | `lib/_case_page.js` | P2: the operator is the repository, not its owner | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG17 | `lib/_case_page.js` | P3: the footer does not say when the page was read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG18 | `lib/_case_page.js` | P3: the read time in another shape | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG19 | `lib/_case_page.js` | P3: the pin row says nothing of when it was read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG20 | `lib/_case_page.js` | P3: the key-document row says nothing of when it was read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG21 | `lib/_case_page.js` | P4: the heading says EXPIRED alone | caught (10 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG22 | `lib/_case_page.js` | P4: the status row says EXPIRED alone | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG23 | `lib/_case_page.js` | P5: no sha256 of the bytes read | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG24 | `lib/_case_page.js` | P5: the sha256 of the text re-encoded, not of the bytes read | survived; caught on re-seed by MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG25 | `lib/_case_page.js` | P5: the raw link is the blob page | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG26 | `lib/_case_page.js` | P5: ?format=json answers HTML | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG27 | `lib/_case_page.js` | P5: the JSON twin carries no sha256 | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG28 | `lib/_case_page.js` | P5: a refusal's JSON says not when it was read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG29 | `lib/_case_page.js` | P5: the page cache keeps no JSON twin | survived; caught on re-seed by MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG30 | `lib/_case_page.js` | P5: a case file that is not JSON is could_not_look, not case_unreadable | survived; caught on re-seed by MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG31 | `lib/_case_page.js` | P5: the JSON pin state from the status, not the read | survived; caught on re-seed by MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG32 | `lib/_case_page.js` | P6: no report line | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG33 | `lib/_case_page.js` | P6: hours rounded, not whole | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG34 | `lib/_case_page.js` | P6: past and future swapped | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG35 | `lib/_case_page.js` | P6: one hour is 1 hours | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG36 | `lib/_case_page.js` | P6: opened at absolute only | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG37 | `lib/_case_page.js` | P6: the deadline absolute only | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG38 | `lib/_case_page.js` | P6: registered at absolute only | survived; caught on re-seed by MUST-FAIL GAP (PG38): a registration time row prints relative and absolute, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG39 | `lib/_case_page.js` | P6: revealed at absolute only | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG40 | `lib/_case_page.js` | P7: no presence sentence | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG41 | `README.md` | P7: the README leaves the presence sentence out | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG42 | `lib/_case_page.js` | P8: the pin line printed from the status, not the pin read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG43 | `lib/_case_page.js` | P8: an anchor check line printed though no anchor was read | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG44 | `lib/_case_page.js` | P8: the failed sealed-record check not listed | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG45 | `lib/_case_page.js` | P8: the sealed-record line names no bytes | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG46 | `lib/_case_page.js` | P8: the document commit is bare text | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG47 | `lib/_case_page.js` | P8: an invalid row is not counted as read | survived; caught on re-seed by MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG48 | `lib/_case_page.js` | P8: the list's sentence claims every check passed | caught (4 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG49 | `lib/_case_page.js` | P8: the withdrawn page lists no check | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG50 | `lib/_case_page.js` | P8: not_pinned listed with the code pinned | caught (3 failing), 2026-10-15, at 9678ed8 | 2026-10-15, at 9678ed8 |
+  | PG51 | `lib/_store.js` | P5: the bytes handed back are the text re-encoded | survived; caught on re-seed by MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+  | PG52 | `README.md` | P5: the README says there is no JSON twin | survived; caught on re-seed by MUST-FAIL GAP (PG52): the README names the JSON twin, 2026-10-15, at 9678ed8 | 2026-10-15, at f405a6d |
+
+- **Group A's six retargeted defects, run at this part's tip** (`test/must_fail/r_wide_a.ledger.json`): WA07 caught (5 failing), WA08 (4), WA09 (4), WA10 (6), WA12 (4), WA13 (4), each 2026-10-15, at 4e0516b.
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1646 tests, 1639 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - P7's ruled sentence ends "a public record holds what was submitted to it". The standing line says "holds" is in nothing served, and the refuse-words test enforces it, so the page and the README say "keeps". One word to change if the ruling is to print "holds".
+  - P2's "each anchor" and P8's "anchor found": the page reads no daily anchor record today, and P2 forbids new reads, so no anchor row and no anchor check line is printed; the anchors sentence under the pin line still says the page does not check them. "A case with no anchor shows the pins row only" is read as: no row for what was not read; the stamp rows stay, since the record names them.
+  - P2's stamp rows come from the case record (the stamp commit and stamped_at the service recorded at registration), not from a read of the stamps repository; the time cell says "as the case record has it".
+  - P2's "operator" is read as the account that owns the repository ("test-owner on GitHub").
+  - P6's contact: the status page itself prints no address; it links `/PRACTICES.md`, which publishes hello@arcaeon.io. The page uses that address (`OPERATOR_CONTACT`), and a test holds PRACTICES.md to it.
+  - P8's "the sealed and verdict pages": read as the pages that show a signed record's check: the sealed page, the does-not-verify page and the withdrawn page.
+  - P5's raw link is the case file on the branch now; the hash is of the bytes this page read, which a later write to the branch can change.
+  - P1: a case file that is not JSON was `could_not_look` (the read threw); it is `case_unreadable` now, since the bytes were read and are not a record.
+  - P3: the read time of a page served from the page cache is the time it was first read (the cache keeps the page as rendered), which the footer's "may be up to 60 seconds old" already says.
+
 ## 2026-10-15: Unit R-FGg: the R-FGf reader's minors; each row read once a request (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The R-FGf reader said MERGE. The operator's Windows run at 0869c9d read 1623 tests, 1615 pass, 0 fail, three times, so the fix sequence through R-FGf counts. This is part 1 of the brief's two commit sets (R-FGg, then R-PAGE). Each new test fails on 0869c9d but G3's, which the brief expected to pass there (no code change).

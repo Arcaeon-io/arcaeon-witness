@@ -432,6 +432,22 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "f01133be6f69cb3a6d2684dda374ca01d3c235ae28909ec1151c6b51fc86b2b0"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "aebaea73b1f0c61f8ce0c04d3efa9dc2c455c1952f41d503f89de3ff98e5aa79"
       }
     ]
   },
@@ -498,6 +514,21 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "a810157cb85abb10ab4dc28ce68afd6c48bbf81f784acb6e1a0534c62df19ffc"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "58d024a6f9ade590dcc98213509b3c394ff020befc36c768dd1dcba9ba52d1cc"
       }
     ]
   },
@@ -554,6 +585,21 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "f48dddc64cc40cbd3273c215f566d281c7f029716a0fa7f860c30f81efbf0ab4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "776cb3f2665aaa8d2a12f86c70f544f3d45ba524f9ac05d99c27e0f528a5f5d8"
       }
     ]
   },
@@ -618,6 +664,23 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "0f81ec95c37bdf764119880eb1bdf7a4d78b597e8571e39e49086c5278137a96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "7a37f7ef01618919a609396942c3096c35f67b2152b09b563307a7e6c6a77b5e"
       }
     ]
   },
@@ -742,6 +805,21 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "cbb6170ed3f93833413437d4d77be6ce75caefab453449b559a3a4ab7a995c61"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "8bcec79776342dc2cfe9d457892808840d662be97fcb2a62fa5c16f6cf681bcb"
       }
     ]
   },
@@ -1400,6 +1478,21 @@
         "head": "588cac4873b974a258723b27a18854086a140f2d",
         "porcelain": "",
         "defect_sha256": "4053f496f6cacfe4421123ba0b8f6091c33082f31a4a484800e7052dc92a96c2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "e2cfa149bb893640a9e6e94b657029450b82c50620987398272ceb4ac9ce46cf"
       }
     ]
   },
