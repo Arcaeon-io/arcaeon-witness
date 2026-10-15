@@ -350,6 +350,21 @@
         "exit": 0,
         "failing": 0,
         "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (RN3): an absolute path inside the repository is refused by name, before the inside-the-repository check"
+        ],
+        "head": "83b89880b01e9d274ae1ca37c9e6ecd23cedb058",
+        "porcelain": "",
+        "defect_sha256": "591cccdf180dabe9fad97ece069a3356f0359958363c95d03669f13f6207b8da",
+        "caught_by": [
+          "MUST-FAIL GAP (RN3): an absolute path inside the repository is refused by name, before the inside-the-repository check"
+        ]
       }
     ]
   },

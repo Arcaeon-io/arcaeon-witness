@@ -1,5 +1,84 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDE, Group C: small truth fixes (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** db80faf (tests and code), 56e10f4 (the defect list, committed before the run), 83b8988 (the ledger, and WC30's check removed: see the pass below), and this entry's commit (the RN3 re-seed's ledger and the change log).
+- **C1. The carried key document's commit on every sealed page.** `lib/_case_page.js` `carriedDocumentHtml`: a row, "key document carried", says "the key document this service carries, at commit <link>" (the deployment's own commit, `sealingDocument`), or "at a commit this deployment does not know". It is on the sealed page, the does-not-verify page and the could-not-look page of a sealed record (not on the could-not-look page of a reference).
+- **C2. "On the branch" is kept 60 seconds.** `lib/_case_seal.js` `commitOnBranch`: an answer that is on is kept 60 seconds (`ON_BRANCH_KEEP_MS`), then the branch is read again, so a rewritten branch is seen. Off, a 404 and a failed read are read again every time, as before. The clock is `_internal.onBranchClock`, which tests hand their own.
+- **C3. Four 503s no re-send can finish are 409s, codes only.** A registration sent again whose stamp is gone (a replay, or a held file): 409 `stamp_record_unreadable`, reason `stamp_missing`. A file at the registration's path holding another registration: 409 `registration_record_unreadable`. A stamp whose history names no commit: 409 `stamp_history_unreadable`, reason `no_commit_touches_path`. A root that fails its schema on the confirming read: 409 `registration_unconfirmed` (`registration_recorded: null`). Each carries its code and fields and no sentence. A root that could not be read stays 503. `tools/preview_dry_run.js` reads the new 409. README says so.
+- **C4.** README: "When two roles show one key id, compare their `key_fp`, never their `key_id`", with why (a key id is a name and a 32-bit hash; `key_fp` is the sha256 of the key's bytes).
+- **C5.** `tools/check_refusal_receipt.js`'s online check prints `{signature_valid, [reason, detail,] not_checked}`, never a key named `ok`, and `not_checked` names "whether the case reads WITHDRAWN now" and "the projection the withdrawal record keeps". Exit 0 only for `signature_valid: true`. README says so. The file is 76 lines (R-N2 m6: under 80).
+- **C6.** The sealed check (`sealedRecordReason`) holds the receipt's signer name to the name in the key id of the entry its verifier matches: another name is `receipt_unsigned`, reason `signer_name_mismatch`.
+- **C7.** `lib/_reconcile_receipt.js` `verifyReceiptText`: with no verifier named, `unknown_signer`, never ok. A saved answer whose receipt has no verdict digest (a tape's lone surrogate) and carries a verdict is `signed_partial`, never ok.
+- **C8.** `lib/_reconcile_tapes.js`: two tapes of one side keep both counts, keyed by tape label when their names collide. This is a divergence from `reconcile.py`, whose dict keeps only the second; the conformance and endpoint tests name it.
+- **C9.** `lib/_case.js` `checkText`: a label, an operator or a reference holding a Unicode format character (category Cf: zero-width and directional marks, the byte order mark) is refused `malformed_field`.
+- **C10.** The stamp lookup (GET `?op=stamp`) is bounded by the shared per-address limiter (`ratelimit.check`): 429 with `retry-after` past it.
+- **C11.** `tools/seal_batch.js` refuses a `--claim-ttl` that is not a whole number of seconds from 1 to 3600 (`MAX_CLAIM_TTL_SECONDS`), and an empty `--margin=` (it was read as 0), each with exit 64.
+- **C12.** `tools/mint_case_key.js`: when the Windows ACL step fails (icacls refuses, or `USERNAME` is unset), the tool removes the key file, prints no entry and exits 2. `restrictOnWindows` and `main` take the platform, environment and spawner, so a test asserts it here.
+- **C13.** README: how credits arrive is said once, in one true sentence (the fulfilment page applies them; the webhook backstop is not configured, so a buyer who never reaches the page is credited by hand), and the pack list refers to it.
+- **C14 (carry-over).** A named commit AHEAD of the published branch (not merged yet, which a fast-forward may bring in) is could-not-look, not `document_off_branch`. `commitOnBranch` answers `{on: false, ahead: true}` for it; `namedDocumentOf` and `confirmSealingDocument` set `off` only for a commit that has diverged. Every comment that said "no re-read changes it" now says "not on the branch when read", and the readers read it again. The R-ABf entry below is corrected in place. Test helpers: `gh.seedAheadCommit`, `KD.serveAhead`.
+- **C15.** The sealed check's second read of the named document keeps `off`, as the first does: a diverged commit there is `document_off_branch`, not `document_unavailable`.
+- **C16.** The R-ABf entry's reason for RN3 was wrong (it said the inside-the-repository check refuses every absolute path; an absolute path inside the repository passes it). Corrected in place. The gap test, MUST-FAIL GAP (RN3), gives such a path; RN3 was re-seeded over 83b8988 and caught (1 failing), and the R-ABf table's row says so.
+- **C17.** `test/case_rab.test.js`'s B1 test named "the reference 503" and asserted nothing, over a COMMITTED fixture. It now has a single-key VERDICT whose projected file cannot be read: the reference answers 503 `could_not_look` (role b), codes only, writes nothing, and once the file reads, 409 `single_party`.
+- **C18. Codes only.** `projectionRefusal` (the reference, the reveal, the commit path) answers 503 `could_not_look` with `{case_id, role, reason}` and no sentence. The withdrawn root's 409 `document_off_branch` (`unconfirmedWithdrawal`) is codes only: `{case_id, status: "WITHDRAWN", reason}`.
+- **C19.** The return-list comment on `sealedRecordReason` names `document_off_branch` (and `signer_name_mismatch`). The R-ABf entry's reader list names `tools/preview_dry_run.js` `holdsVerdict`.
+- **Not taken:** the optional heading "NOT ON THE PUBLISHED BRANCH" for the off-branch page. The page keeps "COULD NOT LOOK" at 200, as R-ABf left it.
+- **Line counts.** `lib/_case.js` 1489 to 1496, `lib/_case_http.js` 2492 to 2490, `lib/_case_page.js` 828 to 844, `lib/_case_seal.js` 2403 to 2427, `lib/_reconcile_receipt.js` 235 to 244, `lib/_reconcile_tapes.js` 1003 to 1007, `lib/_stamp.js` 682 to 690, `tools/check_refusal_receipt.js` 78 to 76, `tools/mint_case_key.js` 204 to 214, `tools/seal_batch.js` 133 to 144, `tools/preview_dry_run.js` 1025 to 1026.
+- **Tests.**
+  - New: 22. `test/case_rwide.test.js` Group C (17: C1, C2, C3 four, C4, C5, C6, C9, C10, C11, C13, C14 and C19, C14, C15, C18), `test/mint_case_key.test.js` (C12), `test/reconcile_receipt.test.js` (C7, two), `test/reconcile_conformance.test.js` (C8), and `test/must_fail_runner.test.js` (the RN3 gap test). The 21 C tests fail on 7cb5699, the Group B tip. The RN3 gap test passes there, since the check it guards was already in place; it fails with RN3 planted (the re-seed).
+  - Rewritten, each with a note: `case_rab` B1 (C17) and R-ABf M2 (the withdrawn root's 409 is codes only, C18); `case_rl4` H34's gone stamp, `case_rn2`, `case_rn3`, `case_rn4` and `case_protocol` (C3's 409s, C5's `signature_valid`, C18's codes only); `reconcile_endpoint` (C8's divergence); `preview_dry_run` (the 409).
+
+- **The must-fail pass** (the repository's runner; dates from the ledger, `test/must_fail/r_wide_c.ledger.json`, whose runs record the commit they planted against). 35 defects were planted over the lines Group C changed, each alone with the whole suite run, over 56e10f4: `lib/_case_page.js` 4, `lib/_case_seal.js` 6, `lib/_case_http.js` 7, `tools/check_refusal_receipt.js` 2, `lib/_reconcile_receipt.js` 2, `lib/_reconcile_tapes.js` 2, `lib/_case.js` 2, `lib/_stamp.js` 1, `tools/seal_batch.js` 4, `tools/mint_case_key.js` 2, `tools/preview_dry_run.js` 1, `README.md` 2.
+  - 34 were caught. WC30 survived: the planted line read an empty `--claim-ttl=` as 0, and the bound (1 to 3600) refuses 0 with the same message and exit as the NaN the check gave, for every input. So the check changed nothing. It is removed (83b8988), the line is back to `Number(...)`, and no line of it is left to plant. The C11 test still refuses `--claim-ttl=`. `--margin=`'s check stays, since 0 is a valid margin (WC29, caught).
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | WC01 | `lib/_case_page.js` | C1: the carried document's commit is never printed | caught (2 failing) | 2026-10-15 |
+  | WC02 | `lib/_case_page.js` | C1: the sealed page drops the carried document | caught (2 failing) | 2026-10-15 |
+  | WC03 | `lib/_case_page.js` | C1: the does-not-verify page drops the carried document | caught (2 failing) | 2026-10-15 |
+  | WC04 | `lib/_case_page.js` | C1: the could-not-look page drops the carried document | caught (2 failing) | 2026-10-15 |
+  | WC05 | `lib/_case_seal.js` | C2: on the branch is kept for the instance's life | caught (2 failing) | 2026-10-15 |
+  | WC06 | `lib/_case_seal.js` | C14: a named commit ahead of the branch is off-branch | caught (2 failing) | 2026-10-15 |
+  | WC07 | `lib/_case_seal.js` | C14: a deployment commit ahead of the branch is off-branch | caught (2 failing) | 2026-10-15 |
+  | WC08 | `lib/_case_seal.js` | C14: the ancestry read does not say ahead | caught (2 failing) | 2026-10-15 |
+  | WC09 | `lib/_case_seal.js` | C15: the second read drops off | caught (2 failing) | 2026-10-15 |
+  | WC10 | `lib/_case_seal.js` | C6: the receipt's signer name is not compared | caught (2 failing) | 2026-10-15 |
+  | WC11 | `lib/_case_http.js` | C3: a replay's missing stamp is 503 | caught (2 failing) | 2026-10-15 |
+  | WC12 | `lib/_case_http.js` | C3: a held file's missing stamp is 503 | caught (3 failing) | 2026-10-15 |
+  | WC13 | `lib/_case_http.js` | C3: a file holding another registration is 503 | caught (4 failing) | 2026-10-15 |
+  | WC14 | `lib/_case_http.js` | C3: a history naming no commit is 503 | caught (4 failing) | 2026-10-15 |
+  | WC15 | `lib/_case_http.js` | C3: a root failing its schema on the confirming read is 503 | caught (3 failing) | 2026-10-15 |
+  | WC16 | `lib/_case_http.js` | C18: could_not_look carries a sentence | caught (6 failing) | 2026-10-15 |
+  | WC17 | `lib/_case_http.js` | C18: the withdrawn root's document_off_branch carries a sentence | caught (3 failing) | 2026-10-15 |
+  | WC18 | `tools/check_refusal_receipt.js` | C5: the checker prints a key named ok | caught (3 failing) | 2026-10-15 |
+  | WC19 | `tools/check_refusal_receipt.js` | C5: the checker does not name what it did not check | caught (3 failing) | 2026-10-15 |
+  | WC20 | `lib/_reconcile_receipt.js` | C7: a receipt checked with no verifier named verifies | caught (1 failing) | 2026-10-15 |
+  | WC21 | `lib/_reconcile_receipt.js` | C7: a saved answer with no verdict digest is ok | caught (1 failing) | 2026-10-15 |
+  | WC22 | `lib/_reconcile_tapes.js` | C8: two same-side tapes keep one count | caught (3 failing) | 2026-10-15 |
+  | WC23 | `lib/_reconcile_tapes.js` | C8: every pair is keyed by tape | caught (10 failing) | 2026-10-15 |
+  | WC24 | `lib/_case.js` | C9: a format character is accepted | caught (2 failing) | 2026-10-15 |
+  | WC25 | `lib/_case.js` | C9: only the zero-width space is refused | caught (2 failing) | 2026-10-15 |
+  | WC26 | `lib/_stamp.js` | C10: the stamp lookup is not limited | caught (2 failing) | 2026-10-15 |
+  | WC27 | `tools/seal_batch.js` | C11: --claim-ttl has no upper bound | caught (2 failing) | 2026-10-15 |
+  | WC28 | `tools/seal_batch.js` | C11: a fractional --claim-ttl is accepted | caught (2 failing) | 2026-10-15 |
+  | WC29 | `tools/seal_batch.js` | C11: an empty --margin= is zero | caught (2 failing) | 2026-10-15 |
+  | WC30 | `tools/seal_batch.js` | C11: an empty --claim-ttl= is zero | survived; equivalent (the bound refuses 0 as it refused NaN), so the check was removed in 83b8988 | — (no line left to plant) |
+  | WC31 | `tools/mint_case_key.js` | C12: a failed Windows ACL step is printed and ignored | caught (1 failing) | 2026-10-15 |
+  | WC32 | `tools/mint_case_key.js` | C12: the key file is kept when the ACL step fails | caught (1 failing) | 2026-10-15 |
+  | WC33 | `tools/preview_dry_run.js` | C3: the preview reads the old 503 | caught (1 failing) | 2026-10-15 |
+  | WC34 | `README.md` | C4: the README says to compare key ids | caught (2 failing) | 2026-10-15 |
+  | WC35 | `README.md` | C13: the README says credits are added by hand | caught (2 failing) | 2026-10-15 |
+
+- Counts: as `npm test` prints them at 83b8988 (both environment-dependent tests skip): 1576 tests, 1569 pass, 2 skipped, 0 fail, 5 todo. The three runs are on the final tree, after Group D.
+- **UNSURE.**
+  - C2: 60 seconds is this unit's choice of how long "on" is kept; the ruling names the rule, not the number. Keeping it per instance means a rewrite is seen by an instance within a minute of its last read, not at once.
+  - C3: a root that could not be read on the confirming read stays 503 (a re-send may find it); only one that read and failed its schema is 409.
+  - C8: keying by label only when the two names collide keeps the usual answer's keys (`agent`, `tool`) as they were; an answer for two same-side tapes is keyed by their labels, which a reader of `reconcile.py`'s answer does not expect. The divergence is named in both conformance tests.
+  - C9: category Cf is refused and nothing else is: other invisible or confusable characters (a combining mark, a homoglyph) are not.
+  - C10: the lookup shares the per-address budget the other public reads spend; a page that looks up many stamps runs into it.
+  - C12: the Windows path is asserted with the platform and spawner handed in; this session has no Windows machine.
+  - C14: a commit ahead of the branch now reads could-not-look for as long as it stays ahead: a deployment that serves an unmerged document is a 503 to every reader until it is merged (and then on) or the branch moves past it.
+
 ## 2026-10-15: Unit R-WIDE, Group B: fail closed, and the read budget (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** d659aa1 (tests and code), ece9165 (the defect list, committed before the run, since the runner now plants only over a clean checkout), 2007c30 (the gap tests, and two runner fixes the pass found), and this entry's commit (the ledger and the change log).
@@ -253,7 +332,7 @@
   | HT7 | `lib/_case_http.js` | M2: no words for document_off_branch in the withdrawn root's answer | caught (2 failing) | 2026-10-15 |
   | RN1 | `test/must_fail/run.js` | M1: caught on any non-zero exit (the reader's defect) | caught (1 failing) | 2026-10-15 |
   | RN2 | `test/must_fail/run.js` | M1: a timeout classified by its exit | caught (1 failing) | 2026-10-15 |
-  | RN3 | `test/must_fail/run.js` | m-d: an absolute path accepted | survived | never |
+  | RN3 | `test/must_fail/run.js` | m-d: an absolute path accepted | survived; caught on re-seed by MUST-FAIL GAP (RN3): an absolute path inside the repository is refused by name, before the inside-the-repository check (unit R-WIDE, C16) | 2026-10-15 |
   | RN4 | `test/must_fail/run.js` | m-d: a '..' path accepted | caught (1 failing) | 2026-10-15 |
   | RN5 | `test/must_fail/run.js` | m-d: an interrupt leaves the copies | caught (1 failing) | 2026-10-15 |
   | RN6 | `test/must_fail/run.js` | m-e: a re-seed's catch records no gap test | caught (1 failing) | 2026-10-15 |
