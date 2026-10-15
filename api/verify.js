@@ -1,6 +1,23 @@
 // GET /api/verify?ns=<namespace>&rows=<n>&chain=<hex>  (&digest= is an alias for chain)
 // POST /api/verify?op=bulk  { "items": [{ns, rows, chain|digest}, ...] }
 //
+// THE MODES (unit R-WIDE, D3). This one function answers every ?op= below,
+// because this deployment is at the Vercel Hobby 12-function cap. Without an
+// op it is the single-item read above. Which write, and which charges:
+//   op=bulk            POST  reads: many heads checked at once (weighted rate limit)
+//   op=stamp           POST  WRITES a stamp to the stamps repository; CHARGES 0.25 credit
+//                            past the free allowance (lib/_stamp.js); GET reads one
+//   op=reconcile       POST  reads no store: the two-tapes verdict; writes nothing
+//   op=reconcile-page  GET   reads: the reconcile page
+//   op=case-open       POST  WRITES an OPEN case and the key's open-quota counter
+//   op=case-commit     POST  WRITES a role's registration and its projection
+//   op=case-reveal     POST  WRITES the sealed case and its pin
+//   op=case-withdraw   POST  WRITES the withdrawal
+//   op=case-reference  POST  WRITES a signed reference row
+//   op=case-page       GET   reads: the public case page
+// The stamp is the one mode that charges; the case modes take a key or a
+// preimage and charge nothing.
+//
 // One-call public proof-of-inclusion (board item 20): "does this exact head
 // exist in the witness record?" No auth, no metering — this is a funnel and
 // a trust surface, not a write path, and the answer leaks nothing beyond

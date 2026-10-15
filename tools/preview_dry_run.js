@@ -416,7 +416,7 @@ function openFailed(o, n) {
 
 async function stampIt(ctx, sha) {
   ctx.log("stamp");
-  const ans = await postJson(ctx, "/api/stamp", { sha256: sha, size: C.COMMITMENT_BYTES_LENGTH }, { bearer: ctx.key });
+  const ans = await postJson(ctx, "/api/stamp", { sha256: sha }, { bearer: ctx.key }); // no size since R-WIDE D1
   const json = ans.error ? null : tryJson(ans.body);
   if (ans.status === 201 && json && typeof json.commit === "string") return { ok: true, commit: json.commit, ans };
   if (ans.status === 200 && json && json.existing === true) {

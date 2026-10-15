@@ -675,9 +675,16 @@ test("MUST-FAIL GAP (H23, H29): a projection another send made first is answered
 test("MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a written file rechecks the stamp without its history, and says so when the stamp is gone", async () => {
   const c = await committedCase("RL4 gap replay stamp");
   const spath = stamp.stampPath(c.a.commitment_sha256);
-  gh.seed(STAMPS, spath, { kind: "file-stamp", v: 1, sha256: c.a.commitment_sha256, size: 64, stamped_at: "2026-10-10T07:45:00.123Z" });
+  // Rewritten by unit R-WIDE (D1, the architect's ruling): a stamp's size is
+  // not read, so the replay's recheck is shown with a record that is not a
+  // file-stamp (it was a size of 64, refused stamp_size_mismatch); a size of
+  // 64 now replays.
+  gh.seed(STAMPS, spath, { kind: "not-a-stamp", v: 1, sha256: c.a.commitment_sha256, stamped_at: "2026-10-10T07:45:00.123Z" });
   const r = await commit(c.id, c.a, NOW + 1500);
-  assert.deepEqual([r.status, r.body.error_code], [409, "stamp_size_mismatch"], JSON.stringify(r.body).slice(0, 200));
+  assert.deepEqual([r.status, r.body.error_code], [503, "stamp_record_unreadable"], JSON.stringify(r.body).slice(0, 200));
+  gh.seed(STAMPS, spath, { kind: "file-stamp", v: 1, sha256: c.a.commitment_sha256, size: 64, stamped_at: "2026-10-10T07:45:00.123Z" });
+  const sized = await commit(c.id, c.a, NOW + 1500);
+  assert.deepEqual([sized.status, sized.body.existing], [200, true], JSON.stringify(sized.body).slice(0, 200));
   const u = await unconfirmedA("RL4 gap held stamp history");
   gh.addCommit(STAMPS, stamp.stampPath(u.a.commitment_sha256), "mock: a second commit touching the stamp");
   const again = await commit(u.id, u.a, NOW + 1500);

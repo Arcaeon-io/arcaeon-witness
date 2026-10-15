@@ -290,7 +290,8 @@ const noTapeDigest = (c, body) => {
 // UNIT R-RVf
 // =============================================================================
 
-const ADVICE = `Draw a new salt, compute a new commitment, stamp it with size ${C.COMMITMENT_BYTES_LENGTH} and register that hash. Nothing was registered.`;
+// Since unit R-WIDE (D1, the architect's ruling) a stamp records no size, and the advice names none.
+const ADVICE = "Draw a new salt, compute a new commitment, stamp it and register that hash. Nothing was registered.";
 // The EXPIRED page's sentence (unit R-RVf2, the architect's ruling, which
 // corrects R-RVf's M2-era sentence: the page reads one root, and arrival is
 // known only to the compare-and-swap).

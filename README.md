@@ -442,6 +442,43 @@ A historical (superseded) match sets `is_current_head:false` and its
 cadence fields describe that old record, not the namespace's live status —
 read `is_current_head` before reading `cadence_status` on a hit.
 
+### Stamps
+
+`POST /api/stamp {"sha256": "<64 hex>"}` stamps a file's fingerprint; `GET
+/api/stamp?sha256=<64 hex>` reads one. (`/api/stamp` is a `vercel.json`
+rewrite to `/api/verify?op=stamp`: the 12-function cap.) The page that sends
+it hashes the file in the browser, so the file never leaves the machine. A
+stamp is one JSON file per fingerprint in the public stamps repository,
+written as its own commit; the first write wins, forever, and stamping a
+fingerprint that already has a stamp returns that stamp (`existing: true`),
+writes nothing and charges nothing.
+
+A stamp records the fingerprint and the time, and nothing else: no size, no
+filename, no label. A request may still send a size; it is checked for form
+and not stored (unit R-WIDE, D1). A stamp written before 2026-10-15 may carry
+the size its stamper sent; it is returned as stored, and nothing reads it.
+
+A stamp costs 0.25 credit, after the free allowance: 3 stamps per address per
+UTC day (STAMP_FREE_PER_DAY), past which a stamp needs a witness key. The
+credit comes from the same prepaid balance the pins spend: one balance per
+key, shared by pins and stamps. The price is one constant in
+`lib/_stamp.js` (`STAMP_PRICE_CREDITS`), ratified 2026-10-15, and not an
+environment variable. A failed write charges nothing. The free allowance is
+per instance and soft; a global daily cap (`STAMP_DAILY_CAP`, kept in the
+store) holds across instances, and the free tier's share of it is lower than
+the paid tier's.
+
+What a stamp proves: A file with exactly this SHA-256 fingerprint was recorded
+no later than the time of the public commit that holds this stamp.
+
+What it does not prove: Who made the file. That anything the file says is
+true. That no other version of it exists. That the file is older than this
+stamp by any particular amount. The stamper's statements about the bytes are
+not checked.
+
+The outside witness is the public commit history of the stamps repository,
+not this service: check the stamp's commit there.
+
 ### GET /api/status.json (no auth)
 
 Machine-readable twin of `GET /status` — same underlying data (both call
@@ -690,7 +727,17 @@ the log proves they have not changed since the genesis date, not before it.
 api/pin.js            POST /api/pin       — auth, validate, metering, credit decrement, monotonic guard, commit
 api/renew.js          POST /api/renew     — publisher heartbeat: refresh the deadline, never claim an advance (thin wrapper over pin.js); deadline-owner gated
 api/latest.js          GET /api/latest    — public read via raw + cache-busting
-api/verify.js           GET /api/verify   — one-call public proof-of-inclusion (no auth, no metering)
+api/verify.js           GET /api/verify   — one-call public proof-of-inclusion (no auth, no metering); its ?op= modes (the 12-function cap):
+                          op=bulk            POST  — many heads checked at once; reads
+                          op=stamp           POST  — WRITES a stamp; CHARGES 0.25 credit past the free allowance (GET reads one)
+                          op=reconcile       POST  — the two-tapes verdict; reads no store, writes nothing
+                          op=reconcile-page  GET   — the reconcile page; reads
+                          op=case-open       POST  — WRITES an OPEN case and the key's open-quota counter
+                          op=case-commit     POST  — WRITES a role's registration and its projection
+                          op=case-reveal     POST  — WRITES the sealed case and its pin
+                          op=case-withdraw   POST  — WRITES the withdrawal
+                          op=case-reference  POST  — WRITES a signed reference row
+                          op=case-page       GET   — the public case page; reads
 api/health.js           GET /api/health   — live store reachability
 api/status.js            GET /status      — public trust-surface page
                           — /api/status.json is a vercel.json REWRITE to /api/status?format=json, not its own file (a prior version of this table listed api/status.json.js, which has never existed — confirmed live, pre-invite audit 2026-08-23)

@@ -548,41 +548,26 @@ test("TEST 3: a stored stamp that is not a file-stamp for this hash is refused, 
   assert.equal(gh.putLog.length, writes);
 });
 
-test("TEST 3, ITEM 1B: a file-stamp of the matching hash whose size is not a commitment's (64, a tape's byte length, none) is refused stamp_size_mismatch and writes nothing", async () => {
-  const id = await openCase();
+test("TEST 3, ITEM 1B (RETIRED BY R-WIDE D1): a file-stamp of the matching hash registers whatever size it records (64, a tape's byte length, none, absent); no size is read", async () => {
+  // Rewritten by unit R-WIDE (D1, the architect's ruling): a stamp is
+  // {sha256, stamped_at}, and the size a stamp written before D1 records is
+  // the stamper's own statement, which nothing checks. This test asserted
+  // 409 stamp_size_mismatch for each of these; each now registers, and the
+  // reveal's recomputation is what catches a stamp of the wrong bytes.
   const TAPE = '{"seq":1,"event":"call","tool":"search"}\n'.repeat(12);
-  const a = party(id, "a", TAPE);
   const tapeBytes = Buffer.byteLength(TAPE, "utf-8");
   assert.notEqual(tapeBytes, C.COMMITMENT_BYTES_LENGTH, "fixture: the tape's length is not a commitment's");
-  assert.equal(C.COMMITMENT_BYTES_LENGTH, 272);
-  // valid-looking file-stamps of the matching commitment hash: only the size is wrong
-  const plant = (size) => ({ kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size, stamped_at: "2026-10-10T07:45:00.123Z" });
-
-  // MUST-FAIL ARM: the item-one judgement (kind, v, hash, time) passes every
-  // one of these, so without the size check each would have registered.
-  for (const size of [64, tapeBytes, null]) {
-    assert.equal(H._internal.judgeStampRecord({ json: plant(size), sha: "x" }, a.commitment_sha256).ok, true, `size ${size}`);
-  }
-
-  const writes = gh.putLog.length;
-  for (const size of [64, tapeBytes, null]) {
-    gh.seed(STAMPS, stamp.stampPath(a.commitment_sha256), plant(size));
+  for (const size of [64, tapeBytes, null, undefined]) {
+    const id = await openCase({ scope_digest: sha(`D1 size ${size}`) });
+    const a = party(id, "a", TAPE);
+    const rec = { kind: "file-stamp", v: 1, sha256: a.commitment_sha256, stamped_at: "2026-10-10T07:45:00.123Z" };
+    if (size !== undefined) rec.size = size;
+    gh.seed(STAMPS, stamp.stampPath(a.commitment_sha256), rec);
     const res = await commit(reg(id, a));
-    assert.equal(res._status, 409, `size ${size}: ${JSON.stringify(res._body)}`);
-    assert.equal(res._body.ok, false);
-    assert.equal(res._body.error_code, "stamp_size_mismatch", `size ${size}`);
-    assert.equal(res._body.stamped_size, size);
-    assert.equal(res._body.expected_size, C.COMMITMENT_BYTES_LENGTH);
+    assert.equal(res._status, 201, `size ${size}: ${JSON.stringify(res._body)}`);
+    assert.equal(storedCase(id).commitments.a.commitment_sha256, a.commitment_sha256, `size ${size}`);
+    assert.equal(JSON.stringify(res._body).includes("size"), false, `size ${size}: the answer names no size`);
   }
-  assert.equal(gh.putLog.length, writes, "neither the registration nor the case update was written");
-  assert.equal(gh.has(PINS, REG.pathOf(gh, id, "a")), false);
-  assert.deepEqual(storedCase(id).commitments, { a: null, b: null });
-  assert.equal(storedCase(id).status, "OPEN");
-
-  // control: the same hash stamped with a commitment's canonical length registers
-  plantStamp(a.commitment_sha256);
-  const ok = await commit(reg(id, a));
-  assert.equal(ok._status, 201, JSON.stringify(ok._body));
 });
 
 test("TEST 3: a role not a or b, an unknown case, a case not OPEN or COMMITTED, a damaged case: each typed, none writes", async () => {
@@ -1263,7 +1248,10 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's r
   assert.throws(() => C.sameEntry(withdrawn.commitments[a.role], C.commitmentEntry(res._body.registration)), TypeError);
 });
 
-test("TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp's size and projects nothing if it fails", async () => {
+test("TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp and projects nothing if it fails", async () => {
+  // Rewritten by unit R-WIDE (D1, the architect's ruling): no stamp's size is
+  // read, so the recheck is shown with a record that is not a file-stamp (it
+  // was a size of 64, refused stamp_size_mismatch), and a size of 64 projects.
   const id = await openCase();
   const a = party(id, "a", "agent tape\n");
   plantStamp(a.commitment_sha256);
@@ -1274,21 +1262,21 @@ test("TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rec
   assert.equal(broken._body.error_code, "registration_unconfirmed");
   assert.equal(storedCase(id).commitments.a, null);
 
-  // the stamp record now says a size that is not a commitment's
-  gh.seed(STAMPS, spath, { kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size: 64, stamped_at: "2026-10-10T07:45:00.123Z" });
+  // the stamp record is now not a file-stamp
+  gh.seed(STAMPS, spath, { kind: "not-a-stamp", v: 1, sha256: a.commitment_sha256, stamped_at: "2026-10-10T07:45:00.123Z" });
   const writes = gh.putLog.length;
   const reads = gh.getLog.length;
   const retry = await commit(reg(id, a));
   assert.ok(gh.getLog.slice(reads).includes(spath), "the retry read the stamp");
-  assert.equal(retry._status, 409, JSON.stringify(retry._body));
-  assert.equal(retry._body.error_code, "stamp_size_mismatch");
-  assert.equal(retry._body.stamped_size, 64);
+  assert.equal(retry._status, 503, JSON.stringify(retry._body));
+  assert.equal(retry._body.error_code, "stamp_record_unreadable");
   assert.equal(gh.putLog.length, writes, "nothing projected");
   assert.equal(storedCase(id).commitments.a, null);
 
   // MUST-FAIL ARM: item one's completion read no stamp at all, so it would
-  // have projected here. The same retry with a commitment-sized stamp does.
-  plantStamp(a.commitment_sha256);
+  // have projected here. The same retry with a stamp recording a size of 64
+  // (not read since D1) does.
+  gh.seed(STAMPS, spath, { kind: "file-stamp", v: 1, sha256: a.commitment_sha256, size: 64, stamped_at: "2026-10-10T07:45:00.123Z" });
   const done = await commit(reg(id, a));
   assert.equal(done._status, 200, JSON.stringify(done._body));
   assert.deepEqual(done._body.projected, ["a"]);
