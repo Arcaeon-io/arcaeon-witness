@@ -28,10 +28,22 @@
 // defect.
 //
 // THE SUITE'S ENVIRONMENT (unit R-WIDE, B4): no WITNESS_* or GITHUB_*
-// variable, and nothing named *_TOKEN or *_SECRET, reaches it, and every
-// test process loads test/must_fail/no_network.js first, which refuses any
-// fetch to a host that is not this machine's: a test's own mock replaces it,
-// and a test that would have reached the network fails instead.
+// variable, and nothing named *_TOKEN, *_SECRET or (unit R-WIDEf, F2-d)
+// *_KEY, reaches it, and every test process loads
+// test/must_fail/no_network.js first, which refuses a fetch, an http or
+// https request, and a net or tls connection to any host that is not this
+// machine's: a test's own mock replaces fetch, and a test that would have
+// reached the network fails instead.
+//
+// THE REPORTER IS NAMED (unit R-WIDEf, F2-a, the architect's ruling): the
+// suite runs with --test-reporter=tap --test-reporter-destination=stdout,
+// and its failing tests are read from those `not ok` lines. The parse never
+// depends on node's default reporter, which on Node 24 is spec even on a
+// pipe: there it printed no `not ok` line, every exit 1 read as error, and
+// no catch could be counted. An `error` run keeps the last 30 lines of the
+// suite's stderr (`stderr_tail`, F2-b), and the table prints the first. A
+// run recorded with no `head` (the runner before unit R-WIDE, B4) is printed
+// "pre-B4, not vouched" (F2-c).
 //
 // A defects file is a JSON array of {id, file, find, replace, what[, gap]}:
 // in `file`, a relative path inside the repository (never absolute, never
@@ -80,6 +92,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const ROOT = path.join(__dirname, "..", "..");
 const SUITE_TIMEOUT_MS = 300000;
 const GAP_PREFIX = "MUST-FAIL GAP";
+const STDERR_TAIL_LINES = 30;
 const NO_NETWORK = path.join(__dirname, "no_network.js");
 
 function args(argv) {
@@ -159,6 +172,8 @@ function treeState(root) {
 function runRecord(prev, outcome, date = today(), extra = {}) {
   const result = classify(outcome);
   const rec = { date, result, exit: outcome.timedOut ? null : outcome.code, failing: outcome.failing.length, failing_tests: outcome.failing.slice(), ...extra };
+  // an error says why only on stderr: its last lines are kept (F2-b)
+  if (result === "error") rec.stderr_tail = tailLines(outcome.stderr, STDERR_TAIL_LINES);
   const last = prev.length ? resultOf(prev[prev.length - 1]) : null;
   if (result === "caught" && last !== null && last !== "caught") {
     const gap = outcome.failing.filter((t) => t.startsWith(GAP_PREFIX));
@@ -173,6 +188,15 @@ const testsOf = (r) => r.failing_tests || r.first_failing || [];
 const caughtByOf = (r) => r.caught_by || (testsOf(r).some((t) => t.startsWith(GAP_PREFIX)) ? testsOf(r).filter((t) => t.startsWith(GAP_PREFIX)) : testsOf(r));
 // A failing test's name as the ledger keeps it: at most 160 characters.
 const kept = (name) => String(name).slice(0, 160);
+// The last `n` lines of `text`, trailing blank lines dropped.
+function tailLines(text, n) {
+  const lines = String(text || "").split(/\r?\n/);
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+  return lines.slice(-n);
+}
+// A run is vouched for only when it records the commit it planted against.
+const vouched = (r) => typeof r.head === "string" && r.head !== "";
+const PRE_B4 = " (pre-B4, not vouched)";
 
 // The must-fail table, from the defects and their ledger, and nothing else.
 function table(defects, ledger) {
@@ -190,11 +214,16 @@ function table(defects, ledger) {
     const lastCaught = caughtRuns[caughtRuns.length - 1];
     const latest = runs[runs.length - 1];
     let result;
+    const preB4 = vouched(first) ? "" : PRE_B4;
     switch (resultOf(first)) {
-      case "caught": result = `caught (${first.failing} failing)`; break;
-      case "timeout": result = "timeout"; break;
-      case "error": result = `error (exit ${first.exit})`; break;
-      default: result = lastCaught ? `survived; caught on re-seed by ${cellText(caughtByOf(lastCaught).join("; "))}` : "survived";
+      case "caught": result = `caught (${first.failing} failing)${preB4}`; break;
+      case "timeout": result = `timeout${preB4}`; break;
+      case "error": {
+        const why = (first.stderr_tail || []).find((l) => l.trim() !== "");
+        result = `error (exit ${first.exit})${why ? `: ${cellText(why.trim())}` : ""}${preB4}`;
+        break;
+      }
+      default: result = lastCaught ? `survived${preB4}; caught on re-seed by ${cellText(caughtByOf(lastCaught).join("; "))}` : `survived${preB4}`;
     }
     if (resultOf(first) !== "caught" && resultOf(first) !== "survived" && lastCaught) {
       result += `; caught on re-seed by ${cellText(caughtByOf(lastCaught).join("; "))}`;
@@ -205,7 +234,8 @@ function table(defects, ledger) {
       const verified = lastCaught && testsOf(lastCaught).map(kept).includes(kept(d.gap));
       if (!verified) result += `; ${cellText(d.gap)} (named, not verified)`;
     }
-    const when = !lastCaught ? "never" : resultOf(latest) === "caught" ? lastCaught.date : `${lastCaught.date} (then ${resultOf(latest)} ${latest.date})`;
+    const caughtOn = lastCaught ? `${lastCaught.date}${vouched(lastCaught) ? "" : PRE_B4}` : null;
+    const when = !lastCaught ? "never" : resultOf(latest) === "caught" ? caughtOn : `${caughtOn} (then ${resultOf(latest)} ${latest.date})`;
     rows.push(`| ${d.id} | \`${d.file}\` | ${what} | ${result} | ${when} |`);
   }
   return `${rows.join("\n")}\n`;
@@ -218,7 +248,7 @@ function table(defects, ledger) {
 function scrubbedEnv(env = process.env) {
   const out = {};
   for (const [k, v] of Object.entries(env)) {
-    if (k === "NODE_TEST_CONTEXT" || /^(WITNESS_|GITHUB_)/.test(k) || /(_TOKEN|_SECRET)$/.test(k)) continue;
+    if (k === "NODE_TEST_CONTEXT" || /^(WITNESS_|GITHUB_)/.test(k) || /(_TOKEN|_SECRET|_KEY)$/.test(k)) continue;
     out[k] = v;
   }
   out.NODE_OPTIONS = `--require ${JSON.stringify(NO_NETWORK)}`;
@@ -239,14 +269,19 @@ function killGroup(p, { platform = process.platform, run = spawnSync } = {}) {
     p.kill("SIGKILL");
   }
 }
-function runSuite(dir, suite = "test/*.test.js") {
+// The suite's command line: the reporter named, never node's default (F2-a).
+const suiteArgs = (suite) => ["--test", "--test-reporter=tap", "--test-reporter-destination=stdout", suite];
+// -> {code, timedOut, failing, stderr}. `env` is the scrubbed environment
+// unless a test hands another.
+function runSuite(dir, suite = "test/*.test.js", { env = scrubbedEnv() } = {}) {
   return new Promise((resolve) => {
-    const p = spawn(process.execPath, ["--test", suite], { cwd: dir, env: scrubbedEnv(), detached: true });
+    const p = spawn(process.execPath, suiteArgs(suite), { cwd: dir, env, detached: true });
     children.add(p);
     let out = "";
+    let err = "";
     let timedOut = false;
     p.stdout.on("data", (d) => { out += d; });
-    p.stderr.on("data", () => {});
+    p.stderr.on("data", (d) => { err += d; });
     const t = setTimeout(() => {
       timedOut = true;
       killGroup(p);
@@ -255,7 +290,7 @@ function runSuite(dir, suite = "test/*.test.js") {
       clearTimeout(t);
       children.delete(p);
       const failing = out.split("\n").filter((l) => /^\s*not ok /.test(l) && !/# TODO/.test(l)).map((l) => kept(l.trim().replace(/^not ok \d+ - /, "")));
-      resolve({ code, timedOut, failing: [...new Set(failing)] });
+      resolve({ code, timedOut, failing: [...new Set(failing)], stderr: err });
     });
   });
 }
@@ -334,4 +369,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { classify, checkDefects, runRecord, table, defectSha256, scrubbedEnv, killGroup, treeState };
+module.exports = { classify, checkDefects, runRecord, table, defectSha256, scrubbedEnv, killGroup, treeState, runSuite, suiteArgs };

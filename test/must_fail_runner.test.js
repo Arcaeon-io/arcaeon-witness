@@ -36,11 +36,15 @@ test("R-ABf M1: caught only on a non-zero exit with a failing test; a timeout is
   assert.equal(R.classify({ code: null, timedOut: false, failing: [] }), "error");
 });
 
+// Since unit R-WIDEf (F2-c) a run with no head prints "pre-B4, not
+// vouched": the table tests below give their runs the commit a run of the
+// fixed runner records (HEAD_OF), except the one that reads an old ledger.
+const HEAD_OF = { head: "c".repeat(40), porcelain: "", defect_sha256: "d".repeat(64) };
 test("R-ABf M1: the table prints a timeout and an error as such, with no date of a catch", () => {
   const defects = [{ id: "X1", file: "lib/x.js", what: "a defect" }, { id: "X2", file: "lib/x.js", what: "another" }];
   const ledger = {
-    X1: { runs: [{ date: "2026-10-15", result: "timeout", exit: null, failing: 0, failing_tests: [] }] },
-    X2: { runs: [{ date: "2026-10-15", result: "error", exit: 1, failing: 0, failing_tests: [] }] },
+    X1: { runs: [{ date: "2026-10-15", result: "timeout", exit: null, failing: 0, failing_tests: [], ...HEAD_OF }] },
+    X2: { runs: [{ date: "2026-10-15", result: "error", exit: 1, failing: 0, failing_tests: [], ...HEAD_OF }] },
   };
   const t = R.table(defects, ledger);
   assert.ok(t.includes("| X1 | `lib/x.js` | a defect | timeout | never |"), t);
@@ -79,7 +83,7 @@ test("R-ABf m-e: a re-seed that catches a defect its earlier run missed records 
   assert.deepEqual([reseed.result, reseed.caught_by], ["caught", ["MUST-FAIL GAP (X1): the gap test"]]);
   const first = R.runRecord([], { code: 1, timedOut: false, failing: ["a test"] }, "2026-10-15");
   assert.equal("caught_by" in first, false);
-  const t = R.table([{ id: "X1", file: "lib/x.js", what: "a defect" }], { X1: { runs: [survived, reseed] } });
+  const t = R.table([{ id: "X1", file: "lib/x.js", what: "a defect" }], { X1: { runs: [{ ...survived, ...HEAD_OF }, { ...reseed, ...HEAD_OF }] } });
   assert.ok(t.includes("| X1 | `lib/x.js` | a defect | survived; caught on re-seed by MUST-FAIL GAP (X1): the gap test | 2026-10-15 |"), t);
   assert.equal(R.table.length, 2, "the table takes the defects and the ledger, and no operator's words");
 });
@@ -88,7 +92,8 @@ test("R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, fir
   const ledger = { K07: { runs: [{ date: "2026-10-14", caught: false, failing: 0, first_failing: [] },
     { date: "2026-10-14", caught: true, failing: 2, first_failing: ["MUST-FAIL GAP (K07): singleParty", "R-N2 B2: the body audit"] }] } };
   const t = R.table([{ id: "K07", file: "lib/_case.js", what: "a guard" }], ledger);
-  assert.ok(t.includes("| K07 | `lib/_case.js` | a guard | survived; caught on re-seed by MUST-FAIL GAP (K07): singleParty | 2026-10-14 |"), t);
+  // and, recording no head, as a run before unit R-WIDE, B4 (R-WIDEf, F2-c)
+  assert.ok(t.includes("| K07 | `lib/_case.js` | a guard | survived (pre-B4, not vouched); caught on re-seed by MUST-FAIL GAP (K07): singleParty | 2026-10-14 (pre-B4, not vouched) |"), t);
 });
 
 // The interrupt tests send SIGINT, which Windows does not deliver to a
@@ -251,9 +256,9 @@ test("R-WIDE B4: the runner refuses a tree that is not clean, and every ledger r
 
 test("R-WIDE B4: the table prints a gap test the defects file names as 'named, not verified' unless the latest catch failed it", () => {
   const d = { id: "G1", file: "lib/x.js", what: "a defect", gap: "MUST-FAIL GAP (G1): the gap test" };
-  const survived = { date: "2026-10-15", result: "survived", exit: 0, failing: 0, failing_tests: [] };
-  const caughtOther = { date: "2026-10-15", result: "caught", exit: 1, failing: 1, failing_tests: ["another test"], caught_by: ["another test"] };
-  const caughtGap = { date: "2026-10-16", result: "caught", exit: 1, failing: 1, failing_tests: ["MUST-FAIL GAP (G1): the gap test"], caught_by: ["MUST-FAIL GAP (G1): the gap test"] };
+  const survived = { date: "2026-10-15", result: "survived", exit: 0, failing: 0, failing_tests: [], ...HEAD_OF };
+  const caughtOther = { date: "2026-10-15", result: "caught", exit: 1, failing: 1, failing_tests: ["another test"], caught_by: ["another test"], ...HEAD_OF };
+  const caughtGap = { date: "2026-10-16", result: "caught", exit: 1, failing: 1, failing_tests: ["MUST-FAIL GAP (G1): the gap test"], caught_by: ["MUST-FAIL GAP (G1): the gap test"], ...HEAD_OF };
   assert.ok(R.table([d], { G1: { runs: [survived] } }).includes("| survived; MUST-FAIL GAP (G1): the gap test (named, not verified) | never |"));
   assert.ok(R.table([d], { G1: { runs: [survived, caughtOther] } }).includes("survived; caught on re-seed by another test; MUST-FAIL GAP (G1): the gap test (named, not verified) |"));
   const v = R.table([d], { G1: { runs: [survived, caughtOther, caughtGap] } });
@@ -345,4 +350,108 @@ test("MUST-FAIL GAP (RN3): an absolute path inside the repository is refused by 
   assert.equal(path.isAbsolute(inside.file), true, "fixture: absolute");
   assert.equal(path.resolve(ROOT_DIR, inside.file).startsWith(path.resolve(ROOT_DIR) + path.sep), true, "fixture: and inside the repository");
   assert.throws(() => R.checkDefects([inside], ROOT_DIR), /IN: file must be a relative path inside the repository/);
+});
+
+// =============================================================================
+// UNIT R-WIDEf, F2: the runner reads the reporter it asked for
+// =============================================================================
+
+// A fixture whose suite has one passing and one failing test, not a git
+// checkout: runSuite needs only a directory.
+function failingSuiteDir(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-reporter-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, "test"));
+  fs.writeFileSync(path.join(dir, "test", "x.test.js"), "\"use strict\";\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+    "test(\"passes\", () => {});\ntest(\"fails\", () => assert.equal(1, 2));\n");
+  return dir;
+}
+
+test("R-WIDEf F2-a: runSuite asks for the tap reporter on stdout by name, so a failing test is counted whatever reporter the node it runs under defaults to (spec, as Node 24 does on a pipe)", async (t) => {
+  const argv = R.suiteArgs("test/*.test.js");
+  assert.ok(argv.includes("--test-reporter=tap"), argv.join(" "));
+  assert.ok(argv.includes("--test-reporter-destination=stdout"), argv.join(" "));
+  assert.equal(argv[argv.length - 1], "test/*.test.js");
+  const dir = failingSuiteDir(t);
+  // a node whose default reporter is spec on stdout: NODE_OPTIONS names it
+  const base = R.scrubbedEnv();
+  const specDefault = { ...base, NODE_OPTIONS: `${base.NODE_OPTIONS} --test-reporter=spec --test-reporter-destination=stdout` };
+  const fixture = spawnSync(process.execPath, ["--test", "test/x.test.js"], { cwd: dir, env: specDefault, encoding: "utf8" });
+  assert.equal(fixture.status, 1, "fixture: the suite fails");
+  assert.equal(fixture.stdout.split("\n").filter((l) => /^\s*not ok /.test(l)).length, 0, "fixture: under spec, no line says not ok");
+  const out = await R.runSuite(dir, "test/x.test.js", { env: specDefault });
+  assert.deepEqual([out.code, out.failing], [1, ["fails"]], out.stderr);
+  assert.equal(R.classify(out), "caught");
+});
+
+test("R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none", async (t) => {
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
+  const err = R.runRecord([], { code: 2, timedOut: false, failing: [], stderr: `${lines.join("\n")}\n` }, "2026-10-15");
+  assert.equal(err.result, "error");
+  assert.deepEqual(err.stderr_tail, lines.slice(10));
+  const caught = R.runRecord([], { code: 1, timedOut: false, failing: ["a test"], stderr: "noise\n" }, "2026-10-15");
+  assert.equal("stderr_tail" in caught, false);
+  const survived = R.runRecord([], { code: 0, timedOut: false, failing: [], stderr: "noise\n" }, "2026-10-15");
+  assert.equal("stderr_tail" in survived, false);
+  const tbl = R.table([{ id: "E1", file: "lib/x.js", what: "a defect" }], { E1: { runs: [{ ...err, head: "a".repeat(40) }] } });
+  assert.ok(tbl.includes("| E1 | `lib/x.js` | a defect | error (exit 2): line 11 | never |"), tbl);
+  // runSuite hands the stderr on: a suite that cannot start
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-stderr-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const out = await R.runSuite(dir, "--no-such-node-flag-r-widef");
+  assert.notEqual(out.code, 0);
+  assert.match(out.stderr, /no-such-node-flag-r-widef/);
+});
+
+test("R-WIDEf F2-c: the table prints a run with no head (a run of the runner before unit R-WIDE, B4) as 'pre-B4, not vouched'", () => {
+  const d = [{ id: "P1", file: "lib/x.js", what: "a defect" }, { id: "P2", file: "lib/x.js", what: "another" }];
+  const old = { date: "2026-10-15", result: "caught", exit: 1, failing: 2, failing_tests: ["a", "b"] };
+  const survivedOld = { date: "2026-10-15", result: "survived", exit: 0, failing: 0, failing_tests: [] };
+  const reseedOld = { date: "2026-10-15", result: "caught", exit: 1, failing: 1, failing_tests: ["MUST-FAIL GAP (P2): x"], caught_by: ["MUST-FAIL GAP (P2): x"] };
+  const tbl = R.table(d, { P1: { runs: [old] }, P2: { runs: [survivedOld, reseedOld] } });
+  assert.ok(tbl.includes("| P1 | `lib/x.js` | a defect | caught (2 failing) (pre-B4, not vouched) | 2026-10-15 (pre-B4, not vouched) |"), tbl);
+  assert.ok(tbl.includes("| P2 | `lib/x.js` | another | survived (pre-B4, not vouched); caught on re-seed by MUST-FAIL GAP (P2): x | 2026-10-15 (pre-B4, not vouched) |"), tbl);
+  // a run with its head is vouched for
+  const now = R.table([d[0]], { P1: { runs: [{ ...old, head: "a".repeat(40), porcelain: "", defect_sha256: "b".repeat(64) }] } });
+  assert.doesNotMatch(now, /not vouched/);
+});
+
+test("R-WIDEf F2-d: the suite's environment drops every name ending _KEY as well (STRIPE_SECRET_KEY, *_API_KEY)", () => {
+  const env = R.scrubbedEnv({ STRIPE_SECRET_KEY: "sk", OPENAI_API_KEY: "k", WITNESS_ADMIN_KEY: "a", SOME_KEY: "x", PATH: "/bin", KEYBOARD: "us" });
+  assert.deepEqual(Object.keys(env).sort(), ["KEYBOARD", "NODE_OPTIONS", "PATH"]);
+});
+
+test("R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-shim-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const probe = path.join(dir, "probe.js");
+  fs.writeFileSync(probe, `"use strict";
+const http = require("node:http"); const https = require("node:https"); const net = require("node:net"); const tls = require("node:tls");
+const refused = (fn) => { try { fn(); return "allowed"; } catch (e) { return /must-fail run: no network/.test(e.message) ? "refused" : "other: " + e.message; } };
+const out = {
+  https_request: refused(() => https.request("https://api.github.com/").on("error", () => {})),
+  https_get: refused(() => https.get({ host: "api.github.com", path: "/" }).on("error", () => {})),
+  http_request: refused(() => http.request({ hostname: "example.com", path: "/" }).on("error", () => {})),
+  net_connect: refused(() => net.connect(443, "93.184.216.34").on("error", () => {})),
+  net_create: refused(() => net.createConnection({ host: "api.github.com", port: 443 }).on("error", () => {})),
+  tls_connect: refused(() => tls.connect({ host: "api.github.com", port: 443 }).on("error", () => {})),
+};
+const server = http.createServer((q, r) => r.end("here"));
+server.listen(0, "127.0.0.1", () => {
+  const port = server.address().port;
+  http.get({ host: "127.0.0.1", port, path: "/" }, (r) => {
+    let b = ""; r.on("data", (d) => { b += d; });
+    r.on("end", () => {
+      out.loopback_http = b;
+      const s = net.connect(port, "localhost", () => { out.loopback_net = "connected"; s.destroy(); server.close(); console.log(JSON.stringify(out)); });
+    });
+  }).on("error", (e) => { out.loopback_http = "error: " + e.message; server.close(); console.log(JSON.stringify(out)); });
+});
+`);
+  const r = spawnSync(process.execPath, ["--require", path.join(__dirname, "must_fail", "no_network.js"), probe], { encoding: "utf8", timeout: 20000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), {
+    https_request: "refused", https_get: "refused", http_request: "refused", net_connect: "refused", net_create: "refused", tls_connect: "refused",
+    loopback_http: "here", loopback_net: "connected",
+  });
 });
