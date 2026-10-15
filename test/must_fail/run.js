@@ -59,7 +59,10 @@
 //
 // The copies are made under the system's temporary directory and removed
 // when the run ends, or is interrupted (SIGINT, SIGTERM; unit R-ABf, m-d).
-// Each defect is planted into its worker's own copy, read from that copy.
+// Every copy is taken right after the clean-tree check, before the
+// unplanted suite runs, and each defect is planted into its worker's own
+// copy, read from that copy: nothing changed in the tree during a run is
+// planted against.
 // Each suite runs in its own process group, without the NODE_TEST_CONTEXT a
 // runner started from a test inherits (a node --test that inherits it
 // exits at once, its tests unrun); a timeout or an interrupt kills the whole
@@ -209,14 +212,16 @@ function table(defects, ledger) {
 }
 
 // THE SUITE'S ENVIRONMENT, above: `env` without the names a suite must not
-// see, and with the no-network preload.
+// see, and with the no-network preload as its only NODE_OPTIONS (an
+// inherited preload, a runner's own among them, is not carried: it would
+// run before this one and could answer for it).
 function scrubbedEnv(env = process.env) {
   const out = {};
   for (const [k, v] of Object.entries(env)) {
     if (k === "NODE_TEST_CONTEXT" || /^(WITNESS_|GITHUB_)/.test(k) || /(_TOKEN|_SECRET)$/.test(k)) continue;
     out[k] = v;
   }
-  out.NODE_OPTIONS = `${out.NODE_OPTIONS ? `${out.NODE_OPTIONS} ` : ""}--require ${JSON.stringify(NO_NETWORK)}`;
+  out.NODE_OPTIONS = `--require ${JSON.stringify(NO_NETWORK)}`;
   return out;
 }
 
@@ -281,8 +286,14 @@ async function plantAll(opts) {
     fs.cpSync(root, dir, { recursive: true, filter: (s) => path.basename(s) !== ".git" });
     return dir;
   };
+  // Every copy is taken now, from the clean tree the commit names, before
+  // anything runs: a file changed in the tree during the run is never
+  // planted against (found by this unit's own pass).
+  const nWorkers = Math.max(1, Math.min(opts.workers, defects.length));
+  const unplanted = copy("unplanted");
+  const dirs = Array.from({ length: nWorkers }, (_, w) => copy(`w${w}`));
   // THE UNPLANTED SUITE FIRST (above)
-  const baseline = await runSuite(copy("unplanted"), opts.suite);
+  const baseline = await runSuite(unplanted, opts.suite);
   if (baseline.timedOut || baseline.code !== 0 || baseline.failing.length) {
     cleanup();
     throw new Error(`the unplanted suite does not pass (${baseline.timedOut ? "timed out" : `exit ${baseline.code}`}, ${baseline.failing.length} failing` +
@@ -291,7 +302,7 @@ async function plantAll(opts) {
   const queue = defects.slice();
   const ledger = readLedger(opts.file);
   async function worker(w) {
-    const dir = copy(`w${w}`);
+    const dir = dirs[w];
     for (;;) {
       const d = queue.shift();
       if (!d) return;
@@ -308,7 +319,7 @@ async function plantAll(opts) {
       process.stderr.write(`${d.id} ${rec.result.toUpperCase()} (${rec.failing} failing)\n`);
     }
   }
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.workers, defects.length)) }, (_, i) => worker(i)));
+  await Promise.all(dirs.map((_, i) => worker(i)));
   cleanup();
   const missed = defects.filter((d) => resultOf(ledger[d.id].runs[ledger[d.id].runs.length - 1]) !== "caught").map((d) => d.id);
   process.stderr.write(`\n${defects.length} planted, ${defects.length - missed.length} caught, ${missed.length} not caught${missed.length ? `: ${missed.join(", ")}` : ""}\n`);

@@ -831,3 +831,30 @@ test("R-WIDE B2: the online refusal-receipt checker refuses to say the signature
   assert.equal(fresh.code, 0, JSON.stringify(fresh.json));
   assert.ok(README().includes("the answer is then `carried_document_not_published` (or `published_document_unreadable`). The sealer makes the same read before it pins"));
 });
+
+// Group B's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (WB02): inside a reader, a call for another repository's target (the stamps repository) carries that target's own token, never the read token", async () => {
+  const stampStore = require("../lib/_stamp_store.js");
+  const seen = await withEnv({ GITHUB_READ_TOKEN: READ_TOKEN }, () => spyAuth(() => store.asReader(() => stampStore.getFile("stamps/none.json"))));
+  assert.ok(seen.length >= 1, "fixture: the stamps repository was read");
+  assert.deepEqual([...new Set(seen.map((x) => x.auth))], [`Bearer ${process.env.STAMP_TOKEN}`]);
+});
+
+test("MUST-FAIL GAP (WB10): the page cache keeps at most its bound, dropping the oldest page first", () => {
+  const c = CP.pageCache({ max: 2, clock: () => 0 });
+  for (const id of ["one", "two", "three"]) c.put(id, "0".repeat(40), { status: 200, html: id });
+  assert.equal(c.size(), 2);
+  assert.equal(c.get("one"), null, "the oldest is dropped");
+  assert.deepEqual([c.get("two").html, c.get("three").html], ["two", "three"]);
+  assert.equal(CP.pageCache().size(), 0);
+});
+
+test("MUST-FAIL GAP (WB17): the document at the tip is read on the published branch KEY_DOCUMENT_BRANCH names, not on main", async () => {
+  KD.publishTip(gh, NEWER, "main");
+  KD.publishTip(gh, DOC, "preview-branch");
+  assert.deepEqual(await S.carriedDocumentPublished(DOC, { KEY_DOCUMENT_BRANCH: "preview-branch" }), { ok: true });
+  assert.equal((await S.carriedDocumentPublished(DOC, {})).reason, "published_document_differs", "control: main holds another");
+  KD.publishTip(gh, NEWER, "preview-branch");
+  KD.publishTip(gh, DOC, "main");
+  assert.equal((await S.carriedDocumentPublished(DOC, { KEY_DOCUMENT_BRANCH: "preview-branch" })).reason, "published_document_differs");
+});

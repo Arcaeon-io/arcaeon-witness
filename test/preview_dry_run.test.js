@@ -927,3 +927,9 @@ test("R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one 
   assert.equal(word(unread, "f"), "COULD NOT LOOK", unread.show);
   assert.match(unread.by.f.line, /the key document at the tip of the published branch could not be read \(http_404\), so the case pass pinned nothing$/);
 });
+
+test("MUST-FAIL GAP (WB25): the CLI takes --store, and refuses an empty one", async () => {
+  const empty = await runCli(["--base", "https://x.example", "--key", KEY, "--store", ""]);
+  assert.equal(empty.code, 1);
+  assert.match(empty.stderr, /usage: --store must not be empty/);
+});

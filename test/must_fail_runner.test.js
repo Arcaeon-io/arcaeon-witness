@@ -288,3 +288,50 @@ test("R-WIDE B5: on Windows the runner kills the suite's process tree with taskk
   }
   assert.deepEqual(killed, [[-4242, "SIGKILL"]]);
 });
+
+// R-WIDE Group B's must-fail gap tests (the runner): each fails with its planted defect
+test("MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and each defect is read from its copy", (t) => {
+  // the unplanted suite edits the repository's lib/x.js once, as an operator might mid-run
+  const editing = "\"use strict\";\nconst fs = require(\"node:fs\");\nconst path = require(\"node:path\");\nconst { test } = require(\"node:test\");\n" +
+    "const assert = require(\"node:assert/strict\");\n" +
+    "test(\"x adds one\", () => assert.equal(require(\"../lib/x.js\")(1), 2));\n" +
+    "test(\"an edit in the tree mid-run\", () => {\n" +
+    "  const root = process.env.MUST_FAIL_FIXTURE_ROOT;\n" +
+    "  const mark = path.join(root, \".edited\");\n" +
+    "  if (root && !fs.existsSync(mark)) {\n" +
+    "    fs.writeFileSync(path.join(root, \"lib\", \"x.js\"), \"\\\"use strict\\\";\\nmodule.exports = (a) => 1 + a;\\n\");\n" +
+    "    fs.writeFileSync(mark, \"\");\n" +
+    "  }\n" +
+    "});\n";
+  const fx = fixtureRepo({ suite: editing });
+  t.after(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+  const r = runOver(fx, { env: { MUST_FAIL_FIXTURE_ROOT: fx.root } });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(fx.root, ".edited")), true, "fixture: the tree was edited during the run");
+  assert.equal(r.ledger.F1.runs[0].result, "caught", JSON.stringify(r.ledger.F1.runs[0]));
+});
+
+test("MUST-FAIL GAP (WB37): the suite's fetch reaches this machine: a fixture that serves itself on 127.0.0.1 passes unplanted", (t) => {
+  const loopback = "\"use strict\";\nconst http = require(\"node:http\");\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+    "test(\"x adds one\", () => assert.equal(require(\"../lib/x.js\")(1), 2));\n" +
+    "test(\"this machine answers\", async () => {\n" +
+    "  const server = http.createServer((req, res) => res.end(\"here\"));\n" +
+    "  await new Promise((r) => server.listen(0, \"127.0.0.1\", r));\n" +
+    "  try {\n" +
+    "    const got = await fetch(`http://127.0.0.1:${server.address().port}/`);\n" +
+    "    assert.equal(await got.text(), \"here\");\n" +
+    "  } finally {\n" +
+    "    server.close();\n" +
+    "  }\n" +
+    "});\n";
+  const fx = fixtureRepo({ suite: loopback });
+  t.after(() => fs.rmSync(fx.root, { recursive: true, force: true }));
+  const r = runOver(fx);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.ledger.F1.runs[0].result, "caught");
+});
+
+test("MUST-FAIL GAP (WB38, WB39): the suite's only preload is the runner's own no-network shim: an inherited NODE_OPTIONS is not carried", () => {
+  const env = R.scrubbedEnv({ NODE_OPTIONS: "--require /somewhere/else.js", PATH: "/bin" });
+  assert.equal(env.NODE_OPTIONS, `--require ${JSON.stringify(path.join(__dirname, "must_fail", "no_network.js"))}`);
+});

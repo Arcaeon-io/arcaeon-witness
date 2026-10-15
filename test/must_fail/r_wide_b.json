@@ -219,7 +219,7 @@
  {
   "id": "WB32",
   "file": "test/must_fail/run.js",
-  "find": "  out.NODE_OPTIONS = `${out.NODE_OPTIONS ? `${out.NODE_OPTIONS} ` : \"\"}--require ${JSON.stringify(NO_NETWORK)}`;\n",
+  "find": "  out.NODE_OPTIONS = `--require ${JSON.stringify(NO_NETWORK)}`;\n",
   "replace": "",
   "what": "B4: the suite may reach the network"
  },
@@ -264,5 +264,19 @@
   "find": "  throw new TypeError(`must-fail run: no network (${host || \"an unparsable URL\"})`);",
   "replace": "  return real(input, opts);",
   "what": "B4: the suite's fetch reaches the network"
+ },
+ {
+  "id": "WB39",
+  "file": "test/must_fail/run.js",
+  "find": "  out.NODE_OPTIONS = `--require ${JSON.stringify(NO_NETWORK)}`;",
+  "replace": "  out.NODE_OPTIONS = `${env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ` : \"\"}--require ${JSON.stringify(NO_NETWORK)}`;",
+  "what": "found in this pass: an inherited NODE_OPTIONS preload is carried before the no-network shim"
+ },
+ {
+  "id": "WB40",
+  "file": "test/must_fail/run.js",
+  "find": "    const dir = dirs[w];",
+  "replace": "    const dir = copy(`late${w}`);",
+  "what": "found in this pass: a worker's copy is taken after the unplanted suite has run"
  }
 ]
