@@ -585,3 +585,14 @@ test("R-WIDEf F3-f: the README's stamp section says stamp_size_mismatch is retir
   const section = r.slice(a, r.indexOf("\n### ", a + 5)).replace(/\s+/g, " ");
   assert.ok(section.includes("The case registration's `stamp_size_mismatch` refusal is retired: no new stamp carries a size, and old stamps keep theirs and are never deleted."), section);
 });
+
+// R-WIDEf's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503", () => {
+  assert.ok(branchParagraph().includes("(the reveal and the refusal receipt answer it too, unless the document it carries lists no active reconcile key: " +
+    "then they answer 409 `sealing_not_offered` first)"), branchParagraph());
+});
+
+test("MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json", async () => {
+  gh.seedAtBranch(S.KEY_DOCUMENT_REPO, "main", S.CASE_KEYS_FILE, "not json\n");
+  assert.deepEqual(await S.carriedDocumentPublished(DOC, {}), { ok: false, code: "published_document_unreadable", reason: "not_json" });
+});

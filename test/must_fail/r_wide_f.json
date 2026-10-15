@@ -25,7 +25,8 @@
   "file": "README.md",
   "find": " (the reveal and the refusal receipt answer it too, unless the\ndocument it carries lists no active reconcile key: then they answer 409\n`sealing_not_offered` first)",
   "replace": "",
-  "what": "F1-b: the README drops when the reveal and the receipt answer 409 sealing_not_offered first"
+  "what": "F1-b: the README drops when the reveal and the receipt answer 409 sealing_not_offered first",
+  "gap": "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503"
  },
  {
   "id": "WF05",
@@ -74,7 +75,8 @@
   "file": "test/must_fail/run.js",
   "find": "    const p = spawn(process.execPath, suiteArgs(suite), { cwd: dir, env, detached: true });",
   "replace": "    const p = spawn(process.execPath, suiteArgs(suite), { cwd: dir, env: scrubbedEnv(), detached: true });",
-  "what": "F2-a: runSuite ignores the environment it is handed"
+  "what": "F2-a: runSuite ignores the environment it is handed",
+  "gap": "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
  },
  {
   "id": "WF12",
@@ -144,77 +146,88 @@
   "file": "test/must_fail/no_network.js",
   "find": "for (const mod of [http, https]) {",
   "replace": "for (const mod of [http]) {",
-  "what": "F2-d: https is not guarded"
+  "what": "F2-d: https is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF22",
   "file": "test/must_fail/no_network.js",
   "find": "guard(net, \"connect\", connectHost);\n",
   "replace": "",
-  "what": "F2-d: net.connect is not guarded"
+  "what": "F2-d: net.connect is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF23",
   "file": "test/must_fail/no_network.js",
   "find": "guard(net, \"createConnection\", connectHost);\n",
   "replace": "",
-  "what": "F2-d: net.createConnection is not guarded"
+  "what": "F2-d: net.createConnection is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF24",
   "file": "test/must_fail/no_network.js",
   "find": "guard(tls, \"connect\", connectHost);\n",
   "replace": "",
-  "what": "F2-d: tls.connect is not guarded"
+  "what": "F2-d: tls.connect is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF25",
   "file": "test/must_fail/no_network.js",
   "find": "    if (!LOOPBACK.has(host)) throw refuse(host);",
   "replace": "    if (false) throw refuse(host);",
-  "what": "F2-d: the guard lets every host through"
+  "what": "F2-d: the guard lets every host through",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF26",
   "file": "test/must_fail/no_network.js",
   "find": "    if (opts.hostname) host = String(opts.hostname);",
   "replace": "    if (false) host = String(opts.hostname);",
-  "what": "F2-d: a request's hostname option is not read"
+  "what": "F2-d: a request's hostname option is not read",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF27",
   "file": "test/must_fail/no_network.js",
   "find": "    else if (opts.host) host = String(opts.host);",
   "replace": "    else if (false) host = String(opts.host);",
-  "what": "F2-d: a request's host option is not read"
+  "what": "F2-d: a request's host option is not read",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF28",
   "file": "test/must_fail/no_network.js",
   "find": "  if (isObject(a0)) return a0.path ? \"localhost\" : String(a0.host || \"localhost\");",
   "replace": "  if (isObject(a0)) return \"localhost\";",
-  "what": "F2-d: a connection's host option is not read"
+  "what": "F2-d: a connection's host option is not read",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF29",
   "file": "test/must_fail/no_network.js",
   "find": "return typeof a1 === \"string\" ? a1 : \"localhost\";",
   "replace": "return \"localhost\";",
-  "what": "F2-d: connect(port, host) is taken as this machine"
+  "what": "F2-d: connect(port, host) is taken as this machine",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
  },
  {
   "id": "WF30",
   "file": "test/must_fail/no_network.js",
   "find": "    if (opts.socketPath) return \"localhost\";",
   "replace": "    if (opts.socketPath) return \"a socket\";",
-  "what": "F2-d: a request over a Unix socket is refused"
+  "what": "F2-d: a request over a Unix socket is refused",
+  "gap": "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
  },
  {
   "id": "WF31",
   "file": "test/must_fail/no_network.js",
   "find": "a0.path ? \"localhost\" : String(a0.host || \"localhost\")",
   "replace": "a0.path ? \"a path\" : String(a0.host || \"localhost\")",
-  "what": "F2-d: a connection to a path is refused"
+  "what": "F2-d: a connection to a path is refused",
+  "gap": "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
  },
  {
   "id": "WF32",
@@ -340,7 +353,8 @@
   "file": "lib/_case_seal.js",
   "find": "    if (e instanceof SyntaxError) return unreadable(\"not_json\");\n",
   "replace": "",
-  "what": "F3-c: a tip that is not JSON reads as a failed fetch"
+  "what": "F3-c: a tip that is not JSON reads as a failed fetch",
+  "gap": "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json"
  },
  {
   "id": "WF50",

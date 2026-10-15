@@ -421,6 +421,12 @@ test("R-WIDEf F2-d: the suite's environment drops every name ending _KEY as well
   assert.deepEqual(Object.keys(env).sort(), ["KEYBOARD", "NODE_OPTIONS", "PATH"]);
 });
 
+// A probe's environment: this process's, with no NODE_OPTIONS preload.
+function probeEnv() {
+  const env = { ...process.env };
+  delete env.NODE_OPTIONS;
+  return env;
+}
 test("R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-shim-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -448,10 +454,55 @@ server.listen(0, "127.0.0.1", () => {
   }).on("error", (e) => { out.loopback_http = "error: " + e.message; server.close(); console.log(JSON.stringify(out)); });
 });
 `);
-  const r = spawnSync(process.execPath, ["--require", path.join(__dirname, "must_fail", "no_network.js"), probe], { encoding: "utf8", timeout: 20000 });
+  // the probe loads this tree's shim and no other: under the runner the
+  // suite's NODE_OPTIONS preloads the runner's own, which would answer for a
+  // planted one (found by this unit's pass: WF21 to WF31 survived)
+  const r = spawnSync(process.execPath, ["--require", path.join(__dirname, "must_fail", "no_network.js"), probe], { encoding: "utf8", timeout: 20000, env: probeEnv() });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), {
     https_request: "refused", https_get: "refused", http_request: "refused", net_connect: "refused", net_create: "refused", tls_connect: "refused",
     loopback_http: "here", loopback_net: "connected",
   });
+});
+
+// R-WIDEf's must-fail gap tests (the runner): each fails with its planted defect
+test("MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-env-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, "test"));
+  fs.writeFileSync(path.join(dir, "test", "x.test.js"), "\"use strict\";\nconst { test } = require(\"node:test\");\nconst assert = require(\"node:assert/strict\");\n" +
+    "test(\"the handed environment\", () => assert.equal(process.env.MUST_FAIL_HANDED, \"yes\"));\n");
+  const out = await R.runSuite(dir, "test/x.test.js", { env: { ...R.scrubbedEnv(), MUST_FAIL_HANDED: "yes" } });
+  assert.deepEqual([out.code, out.failing], [0, []], out.stderr);
+});
+
+test("MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-socket-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const sock = process.platform === "win32" ? `\\\\.\\pipe\\must-fail-${process.pid}-${Date.now()}` : path.join(dir, "s.sock");
+  const probe = path.join(dir, "probe.js");
+  fs.writeFileSync(probe, `"use strict";
+const http = require("node:http"); const net = require("node:net");
+const sock = ${JSON.stringify(sock)};
+const out = {};
+const server = http.createServer((q, r) => r.end("here"));
+server.listen(sock, () => {
+  http.get({ socketPath: sock, path: "/" }, (r) => {
+    let b = ""; r.on("data", (d) => { b += d; });
+    r.on("end", () => {
+      out.request = b;
+      const s = net.connect({ path: sock }, () => { out.connect = "connected"; s.destroy(); server.close(); console.log(JSON.stringify(out)); });
+      s.on("error", (e) => { out.connect = "error: " + e.message; server.close(); console.log(JSON.stringify(out)); });
+    });
+  }).on("error", (e) => { out.request = "error: " + e.message; server.close(); console.log(JSON.stringify(out)); });
+});
+`);
+  let r;
+  try {
+    r = spawnSync(process.execPath, ["--require", path.join(__dirname, "must_fail", "no_network.js"), probe], { encoding: "utf8", timeout: 20000, env: probeEnv() });
+  } catch (e) {
+    assert.fail(String(e));
+  }
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { request: "here", connect: "connected" });
 });
