@@ -695,8 +695,17 @@ async function bothViews(id, { opts = {}, arm = () => {}, disarm = () => {} } = 
 }
 const BYTES_PANEL = "<h2>The record this page read</h2>";
 
-test("R-PAGEf B1: the JSON twin carries case_sha256 exactly on the states whose page prints the bytes read; nothing on a refusal page", async () => {
+// EVERY PAGE STATE (unit R-PAGEf, B1; since unit R-PAGEg, m2, both
+// document_off_branch pages at 200 and the unread page on a case that is not
+// single party, COMMITTED and VERDICT): {name, prints (the page prints the
+// bytes read), id, view (bothViews' arm and opts)}.
+const caseSigner = () => S.loadCaseSigner(KEYS, { keyDocument: DOC });
+async function pageStates() {
   const docDown = { arm: () => gh.forceRawFailure(1000, 503), disarm: () => gh.forceRawFailure(0) };
+  const unreadA = (id) => {
+    const ra = REG.pathOf(gh, id, "a");
+    return { arm: () => gh.forceGetFailure(PINS, ra, 1, 503), disarm: () => gh.forceGetFailure(PINS, ra, 0) };
+  };
   const states = [];
   const add = async (name, prints, id, view = {}) => states.push({ name, prints, id, view });
   await add("OPEN", true, await openCase("RPAGEf B1 open"));
@@ -724,9 +733,31 @@ test("R-PAGEf B1: the JSON twin carries case_sha256 exactly on the states whose 
   const ur = await singlePartyCase("RPAGEf B1 unread");
   const ra = REG.pathOf(gh, ur.id, "a");
   await add("could_not_look (a registration file unread)", false, ur.id, { arm: () => gh.forceGetFailure(PINS, ra, 1, 503), disarm: () => gh.forceGetFailure(PINS, ra, 0) });
+  // unit R-PAGEg, m2: both document_off_branch pages, at 200
+  const side = KD.serveOffBranch(gh, DOC, "7".repeat(40));
+  const offSealed = await sealedCase("RPAGEg m2 off branch sealed");
+  const os = storedCase(offSealed.id);
+  gh.seed(PINS, C.casePath(offSealed.id), signByHand({ ...withoutSig(os), signed_under: { ...os.signed_under, document_commit: side } }, caseSigner()), { keepHistory: true });
+  await add("COULD NOT LOOK, off the branch (the sealed record)", true, offSealed.id);
+  const offWithdrawn = await withdrawnBy("RPAGEg m2 off branch withdrawn", "a");
+  const ow = storedCase(offWithdrawn.id);
+  gh.seed(PINS, C.casePath(offWithdrawn.id), signByHand({ ...withoutSig(ow), signed_under: { ...ow.signed_under, document_commit: side } }, caseSigner()), { keepHistory: true });
+  await add("COULD NOT LOOK, off the branch (the withdrawal record)", true, offWithdrawn.id);
+  // unit R-PAGEg, m2: role a's file unread on a case that is not single party
+  const uc = await committedCase("RPAGEg m2 unread committed");
+  await add("COMMITTED, role a's file unread", true, uc.id, unreadA(uc.id));
+  const uv = await sealedCase("RPAGEg m2 unread verdict");
+  await add("VERDICT, role a's file unread", true, uv.id, unreadA(uv.id));
+  return states;
+}
+
+test("R-PAGEf B1: the JSON twin carries case_sha256 exactly on the states whose page prints the bytes read; nothing on a refusal page", async () => {
+  // (since unit R-PAGEg, m2: the states are pageStates(), above)
+  const states = await pageStates();
   for (const st of states) {
     const v = await bothViews(st.id, st.view);
     assert.equal(v.jsonStatus, v.status, st.name);
+    if (/off the branch/.test(st.name)) assert.equal(v.status, 200, `${st.name}: a refusal, not a 503`);
     assert.equal(v.html.includes(BYTES_PANEL), st.prints, `${st.name}: the page ${st.prints ? "prints" : "does not print"} the bytes read`);
     assert.equal(v.json.case_sha256 !== undefined, st.prints, `${st.name}: ${JSON.stringify(v.json).slice(0, 200)}`);
   }
@@ -899,4 +930,168 @@ test("MUST-FAIL GAP (PF20): the cross-reference sent with the reveal prints its 
   assert.equal(typeof x.recorded_at, "string", "fixture: the reveal recorded it");
   const row = cell((await viewAs(c.id)).html, "with the reveal");
   assert.ok(row.endsWith(`<span class="muted">(recorded 1 hour ago (${x.recorded_at}))</span>`), row);
+});
+
+// =============================================================================
+// UNIT R-PAGEg (2026-10-15; the architect's rulings on the R-PAGEf reader's
+// findings). Each test fails on a94c96d.
+// =============================================================================
+
+// B1. A writer and its readers hash the same bytes: the commit path projects
+// the sha256 of the bytes of the file at the claim's path, however it came
+// to be there.
+test("R-PAGEg B1: a registration file at its claim's path, not projected, that validates with a byte that is not UTF-8 in it: the re-send projects the sha256 of its bytes and answers 200, and the page reads the case (not 503); a fresh write projects the bytes it wrote", async () => {
+  const id = await openCase("RPAGEg B1 held");
+  const before = storedCase(id);
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  // the fresh write projects the sha256 of the bytes it wrote
+  assert.equal((await commit(id, a)).status, 201);
+  const rpath = REG.pathOf(gh, id, "a");
+  const written = Buffer.from(gh._repoMap(PINS).get(rpath).content, "utf8");
+  assert.equal(storedCase(id).commitments.a.registration_sha256, sha(written));
+  // the root as it stood before the projection, and the file at the claim's
+  // path holding 0xFF in a duplicate key (the record is the same record)
+  const planted = dupKindBytes(written.toString("utf8"), [0xff]);
+  assert.notEqual(sha(planted), sha(Buffer.from(planted.toString("utf8"), "utf8")), "fixture: the text's sha256 is not the bytes'");
+  gh.seed(PINS, C.casePath(id), before, { keepHistory: true });
+  gh.seedBytes(PINS, rpath, planted);
+  const again = await commit(id, a);
+  assert.equal(again.status, 200, JSON.stringify(again.body).slice(0, 300));
+  assert.equal(storedCase(id).commitments.a.registration_sha256, sha(planted));
+  const p = await viewAs(id);
+  assert.equal(p.status, 200, p.html.slice(p.html.indexOf("<h1>"), p.html.indexOf("<h1>") + 300));
+  assert.ok(cell(p.html, "role a registered at"), "role a's row, from its read");
+});
+
+test("R-PAGEg B1: the lost create-only race: the file that landed first at the claim's path validates with a byte that is not UTF-8 in it; the projection is the sha256 of its bytes, and the page reads the case", async () => {
+  const id = await openCase("RPAGEg B1 won");
+  const before = storedCase(id);
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  assert.equal((await commit(id, a)).status, 201);
+  const rpath = REG.pathOf(gh, id, "a");
+  const planted = dupKindBytes(gh._repoMap(PINS).get(rpath).content, [0xff]);
+  // the root before the projection and no file at the claim's path: the
+  // next write loses to one that lands first, holding the planted bytes
+  gh.seed(PINS, C.casePath(id), before, { keepHistory: true });
+  gh._repoMap(PINS).delete(rpath);
+  const viaMock = global.fetch;
+  let raced = false;
+  global.fetch = async (url, o) => {
+    if (!raced && ((o && o.method) || "GET") === "PUT" && decodeURIComponent(String(url)).endsWith(`/contents/${rpath}`)) {
+      raced = true;
+      gh.seedBytes(PINS, rpath, planted);
+      gh.forceConflict(PINS, rpath, 1);
+    }
+    return viaMock(url, o);
+  };
+  let r;
+  try {
+    r = await commit(id, a);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.equal(raced, true, "fixture: the write lost the race");
+  assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 300));
+  assert.equal(storedCase(id).commitments.a.registration_sha256, sha(planted));
+  assert.equal((await viewAs(id)).status, 200);
+});
+
+// B2. THE TWIN, FIELD BY FIELD: each string or number the JSON twin carries,
+// with its path. `ok`, a check's kind (`check`) and a role's letter (`role`,
+// `by_role`) are the twin's structure, not facts the page prints in those
+// words, and a boolean is not a word.
+function twinLeaves(v, at = "") {
+  if (v === null || v === undefined || typeof v === "boolean") return [];
+  if (typeof v === "string" || typeof v === "number") return [[at, v]];
+  if (Array.isArray(v)) return v.flatMap((x, i) => twinLeaves(x, `${at}[${i}]`));
+  return Object.entries(v).flatMap(([k, x]) => (["ok", "check", "role", "by_role"].includes(k) ? [] : twinLeaves(x, at ? `${at}.${k}` : k)));
+}
+test("R-PAGEg B2: on every page state every field of the JSON twin is on the page, field by field; a role whose registration file could not be read has no registered_at in the twin", async () => {
+  const states = await pageStates();
+  assert.ok(states.some((st) => /role a's file unread/.test(st.name)), "fixture: the unread states");
+  let unreadRows = 0;
+  for (const st of states) {
+    const v = await bothViews(st.id, st.view);
+    for (const [k, val] of twinLeaves(v.json)) assert.ok(v.html.includes(esc(String(val))), `${st.name}: ${k} = ${val} is not on the page`);
+    for (const r of ["a", "b"]) {
+      const row = cell(v.html, `role ${r}`);
+      if (!row || !row.includes("could not be read")) continue;
+      unreadRows += 1;
+      if (v.json.registered_at === undefined) continue;
+      assert.equal(v.json.registered_at[r], null, `${st.name}: role ${r}'s file was not read, and the twin gives its time`);
+    }
+  }
+  assert.ok(unreadRows >= 2, "the unread rows were among the states");
+});
+
+// M1. Every role read before the page prints a row of it.
+test("R-PAGEg M1: role a's registration file unread, role b's readable: the page reads b's file and prints b's row from that read; a's row says it could not be read, with no time; the checks list both reads; the twin matches", async () => {
+  const c = await sealedCase("RPAGEg M1");
+  const ra = REG.pathOf(gh, c.id, "a");
+  const rb = REG.pathOf(gh, c.id, "b");
+  const k = storedCase(c.id);
+  const g0 = gh.getLog.length;
+  const v = await bothViews(c.id, { arm: () => gh.forceGetFailure(PINS, ra, 1, 503), disarm: () => gh.forceGetFailure(PINS, ra, 0) });
+  assert.equal(gh.getLog.slice(g0).filter((p) => p === rb).length, 2, "role b's file read on each view");
+  assert.equal(v.status, 200);
+  assert.equal(cell(v.html, "role a"), esc("its registration file could not be read when this page was read (registration_unreadable)"));
+  assert.equal(cell(v.html, "role a registered at"), null);
+  const rowB = cell(v.html, "role b registered at");
+  assert.ok(rowB && rowB.includes(`(${k.commitments.b.registered_at})`) && rowB.includes("stamp commit"), rowB);
+  const reg = checkLines(v.html).filter((l) => l.text.startsWith(esc("role ")));
+  assert.deepEqual(reg.map((l) => l.code), ["registration_unreadable", "matches_projection"], JSON.stringify(reg));
+  assert.ok(reg[1].text.includes(`sha256 ${k.commitments.b.registration_sha256}`), reg[1].text);
+  assert.deepEqual(v.json.registered_at, { a: null, b: k.commitments.b.registered_at });
+  assert.deepEqual(v.json.checks.filter((x) => x.check === "registration_file").map((x) => [x.role, x.code, x.sha256 || null]),
+    [["a", "registration_unreadable", null], ["b", "matches_projection", k.commitments.b.registration_sha256]]);
+});
+
+test("R-PAGEg M1: a row whose file this page did not read says 'not checked by this page', with no time and no link, and the twin gives no time for it", async () => {
+  const c = await committedCase("RPAGEg M1 unchecked");
+  const real = S.projectedRegistrations;
+  // a reader that read role a's file and skipped role b's
+  S.projectedRegistrations = async (kase) => {
+    const p = await real(kase);
+    return { ...p, texts: { ...p.texts, b: null }, shas: { ...p.shas, b: null } };
+  };
+  let v;
+  try {
+    v = await bothViews(c.id);
+  } finally {
+    S.projectedRegistrations = real;
+  }
+  const row = cell(v.html, "role b");
+  assert.ok(row && row.includes("not checked by this page") && !row.includes("<a "), row);
+  assert.equal(cell(v.html, "role b registered at"), null);
+  assert.ok(cell(v.html, "role a registered at"), "role a's row, from its read");
+  assert.deepEqual(v.json.registered_at, { a: storedCase(c.id).commitments.a.registered_at, b: null });
+});
+
+// m1. On the real clock the read time is taken when the read completes.
+test("R-PAGEg m1: on the real clock the key document's read time is taken when its read completes, not when the page began", async () => {
+  const c = await sealedCase("RPAGEg m1");
+  S._internal.clearDocumentCache();
+  const realNow = Date.now;
+  const viaMock = global.fetch;
+  let clock = AT;
+  Date.now = () => clock;
+  global.fetch = async (url, o) => {
+    // the key document's read takes five seconds
+    if (String(url).startsWith(`https://raw.githubusercontent.com/${S.KEY_DOCUMENT_REPO}/`)) clock += 5000;
+    return viaMock(url, o);
+  };
+  let html;
+  try {
+    const res = makeRes();
+    await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: c.id }, headers: { "x-forwarded-for": nextIp() } }), res, { keyDocument: DOC, env: {} });
+    html = String(res._body);
+  } finally {
+    Date.now = realNow;
+    global.fetch = viaMock;
+  }
+  assert.ok(html.includes(readAt(AT)), "the page began at AT");
+  const row = cell(html, "key document");
+  assert.ok(row && row.endsWith(`<span class="muted">last read ${iso(AT + 5000)}</span>`), row);
 });

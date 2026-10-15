@@ -903,3 +903,24 @@ test("MUST-FAIL GAP (PF37): a row that is not JSON is read once a request: kept,
   assert.deepEqual([got.out.status, got.out.body.seq], [201, 3], JSON.stringify(got.out.body).slice(0, 300));
   assert.deepEqual(got.calls.filter((x) => x === "GET /00000001.json"), ["GET /00000001.json"], JSON.stringify(got.calls));
 });
+
+// =============================================================================
+// UNIT R-PAGEg (m3): the gone row's cost, pinned
+// =============================================================================
+
+// the listing, seq 1 (404), the write at seq 2, and seq 1 again (the live
+// count): the gone seq's cost is that one more read, on this 201 path
+const GONE_COST_CALLS = Object.freeze(["GET (listing)", "GET /00000001.json", "PUT /00000002.json", "GET /00000001.json"]);
+// (m3 asks the change log to say this cost, or a test to hold it: this one
+// holds it, and passes on a94c96d, where the cost is the same)
+test("R-PAGEg m3: a row listed and read 404 is read again by the live count on the same request's 201: one more read, of that seq only", async () => {
+  const c = await sealedCase("RPAGEg m3 gone cost");
+  gh.seed(PINS, C.referencePath(c.id, 1), otherRow(1));
+  gh.forceGetFailure(PINS, C.referencePath(c.id, 1), 1, 404);
+  const got = await rowCalls(c.id, () => roleReference(c, "a", "past a row gone on its first read"));
+  assert.deepEqual([got.out.status, got.out.body.seq], [201, 2], JSON.stringify(got.out.body).slice(0, 300));
+  // sentRow reads seq 1 (404, not kept: unit R-PAGEf, M2); the live count,
+  // handed the request's reads, reads it again
+  assert.deepEqual(got.calls.filter((x) => x === "GET /00000001.json"), ["GET /00000001.json", "GET /00000001.json"], JSON.stringify(got.calls));
+  assert.deepEqual(got.calls, GONE_COST_CALLS, JSON.stringify(got.calls));
+});
