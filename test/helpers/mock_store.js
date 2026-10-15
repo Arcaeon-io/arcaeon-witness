@@ -183,6 +183,14 @@ class MockGitHubStore {
     this._forcedCommitFailure = { remaining: n, status };
   }
 
+  // A file whose bytes are exactly `bytes` (a Buffer), on the branch the
+  // contents API serves: bytes that are not UTF-8 included (unit R-PAGE, the
+  // case page hashes the bytes it read). `content` is their text, as a read
+  // that decodes them would see it.
+  seedBytes(repo, path, bytes) {
+    this._repoMap(repo).set(path, { content: bytes.toString("utf8"), sha: this._newSha(), bytes: Buffer.from(bytes) });
+  }
+
   // A public file's text at one commit, served on the raw host.
   seedRaw(repo, ref, path, text) {
     this.raw.set(`${repo}@${ref}:${path}`, String(text));
@@ -522,7 +530,8 @@ class MockGitHubStore {
       const rec = map.get(path);
       if (rec) {
         return fakeResponse(200, {
-          content: Buffer.from(rec.content, "utf-8").toString("base64"),
+          // the bytes seedBytes planted, when it did (unit R-PAGE)
+          content: (rec.bytes || Buffer.from(rec.content, "utf-8")).toString("base64"),
           sha: rec.sha,
         });
       }

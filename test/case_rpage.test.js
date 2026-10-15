@@ -586,3 +586,57 @@ test("R-PAGE P8: the checks that ran on this request, each from its result and b
   assert.ok(tl[0].text.startsWith("the sealed record: does not verify ("), tl[0].text);
   assert.ok(!tl.some((l) => /^the (pin|reference rows):/.test(l.text)), JSON.stringify(tl));
 });
+
+// R-PAGE's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin", async () => {
+  const c = await sealedCase("RPAGE gap cache");
+  const cache = CP.pageCache({ clock: () => AT });
+  const first = await viewAs(c.id, { cache, format: "json" });
+  const g0 = gh.getLog.length;
+  const again = await viewAs(c.id, { cache, format: "json" });
+  assert.equal(gh.getLog.length, g0, "fixture: the second view is the cache's");
+  assert.deepEqual([again.status, again.body], [first.status, first.body]);
+  assert.equal(again.body.case_sha256, sha(caseBytes(c.id)));
+});
+
+test("MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look", async () => {
+  const id = "7".repeat(64);
+  gh._repoMap(PINS).set(C.casePath(id), { content: "not json\n", sha: "e".repeat(40) });
+  const r = await viewAs(id);
+  assert.equal(r.status, 503);
+  assert.ok(r.html.includes("<code>case_unreadable</code>") && r.html.includes("(not_json)"), r.html.slice(r.html.indexOf("<h1>"), r.html.indexOf("<h1>") + 400));
+  assert.deepEqual((await viewAs(id, { format: "json" })).body, { ok: false, error_code: "case_unreadable", read_at: iso(AT) });
+});
+
+test("MUST-FAIL GAP (PG38): a registration time row prints relative and absolute", async () => {
+  const c = await committedCase("RPAGE gap registered");
+  const html = (await viewAs(c.id)).html;
+  const at = storedCase(c.id).commitments.a.registered_at;
+  assert.ok(cell(html, "role a registered at").startsWith(`2 hours ago (${at}) <span class="muted">(stamped `), cell(html, "role a registered at"));
+});
+
+test("MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid", async () => {
+  const c = await sealedCase("RPAGE gap rows");
+  gh.seed(PINS, C.referencePath(c.id, 1), { planted: 1 });
+  const line = checkLines((await viewAs(c.id)).html).find((l) => l.text.startsWith("the reference rows:"));
+  assert.deepEqual(line, { text: "the reference rows: 1 listed, 1 read, 0 valid read", code: "read" });
+});
+
+test("MUST-FAIL GAP (PG52): the README names the JSON twin", () => {
+  assert.ok(README().includes("`/case/<case_id>?format=json` (`op=case-page&format=json`) answers the same facts as JSON."));
+});
+
+test("MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it", async () => {
+  const c = await sealedCase("RPAGE gap bytes");
+  const rec = caseBlob(c.id);
+  // the receipt's claim with one byte that is not UTF-8: the bytes read and
+  // their text re-encoded differ (the record no longer verifies)
+  const text = rec.content;
+  const at = text.indexOf("compared like this at this time.");
+  assert.ok(at > 0, "fixture: the receipt's claim");
+  const bytes = Buffer.concat([Buffer.from(text.slice(0, at), "utf8"), Buffer.from([0xff]), Buffer.from(text.slice(at), "utf8")]);
+  gh.seedBytes(PINS, C.casePath(c.id), bytes);
+  const html = (await viewAs(c.id)).html;
+  assert.notEqual(sha(bytes), sha(Buffer.from(bytes.toString("utf8"), "utf8")), "fixture: the two differ");
+  assert.ok(html.includes(`<code>${sha(bytes)}</code>`), html.slice(html.indexOf("<h1>"), html.indexOf("<h1>") + 300));
+});
