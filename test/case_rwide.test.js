@@ -601,7 +601,10 @@ test("R-WIDE A6: the status page says in one line that the deployment's document
   const lines = html.split("\n").filter((l) => l.includes("deployment_document_off_branch"));
   assert.equal(lines.length, 1, html.slice(0, 200));
   assert.ok(lines[0].includes(OFF_COMMIT.slice(0, 12)), lines[0]);
-  assert.ok(lines[0].includes("an operator fault, not a sender&#39;s") || lines[0].includes("an operator fault, not a sender's"), lines[0]);
+  // since unit R-WIDEf (F1-b) the line says only what is always true, ending
+  // "an operator fault" (it said "an operator fault, not a sender's, and no
+  // request can finish it ..."); the README keeps the longer sentence
+  assert.ok(lines[0].includes("; an operator fault.</p>"), lines[0]);
   assert.ok(README().includes("503 `deployment_document_off_branch`, codes only"), "README");
   assert.ok(README().includes("This is an operator fault, not a sender's"), "README");
 });

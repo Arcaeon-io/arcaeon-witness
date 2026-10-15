@@ -46,7 +46,10 @@ function deploymentDocumentLine(d) {
   const at = d.commit ? `<code>${esc(d.commit.slice(0, 12))}</code>` : "a commit this deployment does not know";
   if (d.state === "confirmed") return `<p class="muted">The key document this deployment carries is confirmed at commit ${at} on the published branch.</p>`;
   if (d.state === "deployment_document_off_branch") {
-    return `<p class="muted"><code>deployment_document_off_branch</code>: the commit this deployment was built from (${at}) is not on the published branch of the key document's repository, so every reveal, withdrawal, reference and refusal receipt is answered 503 and nothing is signed; this is an operator fault, not a sender's, and no request can finish it until the deployment is rebuilt from the published branch.</p>`;
+    // only what is always true (unit R-WIDEf, F1-b): a reveal or a refusal
+    // receipt under a document with no active reconcile key answers 409
+    // sealing_not_offered before this is read
+    return `<p class="muted"><code>deployment_document_off_branch</code>: the commit this deployment was built from (${at}) is not on the published branch of the key document's repository, so this deployment signs nothing: withdrawals and references are answered 503 deployment_document_off_branch; an operator fault.</p>`;
   }
   return `<p class="muted"><code>document_unavailable</code>: the key document this deployment carries could not be named and confirmed at ${at} when this page was read (${esc(d.reason)}).</p>`;
 }

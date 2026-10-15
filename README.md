@@ -833,13 +833,16 @@ commit of the key document it was sealed under, and every reader holds that
 commit to this branch (`lib/_case_seal.js` `commitOnBranch`): a commit that
 is not on it is not a published document, and the case reads as could not
 look. The joint reveal refuses to seal from a deployment whose own commit is
-not on it. A deployment whose own commit is ahead of the branch or diverged
-from it answers every reveal, withdrawal, reference and refusal receipt
-503 `deployment_document_off_branch`, codes only, and the status page says
-so in one line. This is an operator fault, not a sender's: no request can
-finish it until the deployment is rebuilt from the published branch. A
-commit the repository does not show yet is 503 `document_unavailable`,
-which a re-send can finish. A preview deployment of another branch sets it to that branch.
+not on it. A deployment whose own commit has diverged from the branch signs
+nothing: withdrawals and references are answered 503
+`deployment_document_off_branch`, codes only, and the status page says so in
+one line (the reveal and the refusal receipt answer it too, unless the
+document it carries lists no active reconcile key: then they answer 409
+`sealing_not_offered` first). This is an operator fault, not a sender's: no
+request can finish it until the deployment is rebuilt from the published
+branch. A deployment whose own commit is ahead of the branch answers 503
+`document_unavailable` until the branch reaches it. A commit the repository
+does not show yet is 503 `document_unavailable`, which a re-send can finish. A preview deployment of another branch sets it to that branch.
 The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
 steps (e) and (f). Step (f) runs the sealer's case pass, which writes to the
