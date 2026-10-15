@@ -1,0 +1,247 @@
+[
+ {
+  "id": "WC01",
+  "file": "lib/_case_page.js",
+  "find": "  return sealing.ok\n    ? `the key document this service carries, at commit",
+  "replace": "  return false\n    ? `the key document this service carries, at commit",
+  "what": "C1: the carried document's commit is never printed"
+ },
+ {
+  "id": "WC02",
+  "file": "lib/_case_page.js",
+  "find": "    [\"key document\", sealedUnderHtml(answer)],\n    [\"key document carried\", carriedDocumentHtml(doc, env)],",
+  "replace": "    [\"key document\", sealedUnderHtml(answer)],",
+  "what": "C1: the sealed page drops the carried document"
+ },
+ {
+  "id": "WC03",
+  "file": "lib/_case_page.js",
+  "find": "\"the case key document\")})</span>`],\n      [\"key document carried\", carriedDocumentHtml(doc, env)],",
+  "replace": "\"the case key document\")})</span>`],",
+  "what": "C1: the does-not-verify page drops the carried document"
+ },
+ {
+  "id": "WC04",
+  "file": "lib/_case_page.js",
+  "find": "      ...(what === \"sealed record\" ? [[\"key document carried\", carriedDocumentHtml(doc, env)]] : []),\n",
+  "replace": "",
+  "what": "C1: the could-not-look page drops the carried document"
+ },
+ {
+  "id": "WC05",
+  "file": "lib/_case_seal.js",
+  "find": "  if (seen !== undefined && onBranchClock.now() - seen < ON_BRANCH_KEEP_MS) return { on: true };",
+  "replace": "  if (seen !== undefined) return { on: true };",
+  "what": "C2: on the branch is kept for the instance's life"
+ },
+ {
+  "id": "WC06",
+  "file": "lib/_case_seal.js",
+  "find": "off: !on.unknown && !on.not_found && !on.ahead };",
+  "replace": "off: !on.unknown && !on.not_found };",
+  "what": "C14: a named commit ahead of the branch is off-branch"
+ },
+ {
+  "id": "WC07",
+  "file": "lib/_case_seal.js",
+  "find": "off: !on.not_found && !on.ahead };",
+  "replace": "off: !on.not_found };",
+  "what": "C14: a deployment commit ahead of the branch is off-branch"
+ },
+ {
+  "id": "WC08",
+  "file": "lib/_case_seal.js",
+  "find": "  return cmp.status === \"ahead\" ? { on: false, ahead: true } : { on };",
+  "replace": "  return { on };",
+  "what": "C14: the ancestry read does not say ahead"
+ },
+ {
+  "id": "WC09",
+  "file": "lib/_case_seal.js",
+  "find": "    return { code: nc.off ? \"document_off_branch\" : \"document_unavailable\",",
+  "replace": "    return { code: \"document_unavailable\",",
+  "what": "C15: the second read drops off"
+ },
+ {
+  "id": "WC10",
+  "file": "lib/_case_seal.js",
+  "find": "  if (r.signer.name !== re.key_id.slice(0, re.key_id.lastIndexOf(\"+\"))) return { code: \"receipt_unsigned\", reason: \"signer_name_mismatch\" };\n",
+  "replace": "",
+  "what": "C6: the receipt's signer name is not compared"
+ },
+ {
+  "id": "WC11",
+  "file": "lib/_case_http.js",
+  "find": "    if (!sc.ok && sc.missing) return refuse(res, new Refusal(409, \"stamp_record_unreadable\", \"\", { reason: \"stamp_missing\" }));",
+  "replace": "    if (!sc.ok && sc.missing) return refuse(res, new Refusal(503, \"stamp_record_unreadable\", \"\", { reason: \"stamp_missing\" }));",
+  "what": "C3: a replay's missing stamp is 503"
+ },
+ {
+  "id": "WC12",
+  "file": "lib/_case_http.js",
+  "find": "  if (!sc.ok && sc.missing && held) return refuse(res, new Refusal(409,",
+  "replace": "  if (!sc.ok && sc.missing && held) return refuse(res, new Refusal(503,",
+  "what": "C3: a held file's missing stamp is 503"
+ },
+ {
+  "id": "WC13",
+  "file": "lib/_case_http.js",
+  "find": "    return { refusal: new Refusal(409, \"registration_record_unreadable\", \"\",",
+  "replace": "    return { refusal: new Refusal(503, \"registration_record_unreadable\", \"\",",
+  "what": "C3: a file holding another registration is 503"
+ },
+ {
+  "id": "WC14",
+  "file": "lib/_case_http.js",
+  "find": "new Refusal(409, \"stamp_history_unreadable\", \"\", { reason: \"no_commit_touches_path\" })",
+  "replace": "new Refusal(503, \"stamp_history_unreadable\", \"\", { reason: \"no_commit_touches_path\" })",
+  "what": "C3: a history naming no commit is 503"
+ },
+ {
+  "id": "WC15",
+  "file": "lib/_case_http.js",
+  "find": "    return { ok: false, refusal: new Refusal(409, \"registration_unconfirmed\", \"\",",
+  "replace": "    return { ok: false, refusal: new Refusal(503, \"registration_unconfirmed\", \"\",",
+  "what": "C3: a root failing its schema on the confirming read is 503"
+ },
+ {
+  "id": "WC16",
+  "file": "lib/_case_http.js",
+  "find": "  return new Refusal(503, \"could_not_look\", \"\", { case_id: caseId, role: proj.role, reason: proj.reason });",
+  "replace": "  return new Refusal(503, \"could_not_look\", \"a file could not be read\", { case_id: caseId, role: proj.role, reason: proj.reason });",
+  "what": "C18: could_not_look carries a sentence"
+ },
+ {
+  "id": "WC17",
+  "file": "lib/_case_http.js",
+  "find": "  if (v.code === \"document_off_branch\") return new Refusal(409, v.code, \"\", { case_id: kase.case_id, status: \"WITHDRAWN\", reason: v.reason });\n",
+  "replace": "",
+  "what": "C18: the withdrawn root's document_off_branch carries a sentence"
+ },
+ {
+  "id": "WC18",
+  "file": "tools/check_refusal_receipt.js",
+  "find": "  const said = out.ok === true ? { signature_valid: true } :",
+  "replace": "  const said = out.ok === true ? { ok: true, signature_valid: true } :",
+  "what": "C5: the checker prints a key named ok"
+ },
+ {
+  "id": "WC19",
+  "file": "tools/check_refusal_receipt.js",
+  "find": "{ ...said, not_checked: NOT_CHECKED_ONLINE }",
+  "replace": "said",
+  "what": "C5: the checker does not name what it did not check"
+ },
+ {
+  "id": "WC20",
+  "file": "lib/_reconcile_receipt.js",
+  "find": "  if (expectVerifier === undefined || signer.get(\"verifier\") !== expectVerifier) {",
+  "replace": "  if (expectVerifier !== undefined && signer.get(\"verifier\") !== expectVerifier) {",
+  "what": "C7: a receipt checked with no verifier named verifies"
+ },
+ {
+  "id": "WC21",
+  "file": "lib/_reconcile_receipt.js",
+  "find": "    if (typeof d !== \"string\") return { ok: false, reason: \"signed_partial\", signer: signer.get(\"verifier\") };\n",
+  "replace": "",
+  "what": "C7: a saved answer with no verdict digest is ok"
+ },
+ {
+  "id": "WC22",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "  for (const t of tapes) counts[sameName ? t.label : t.name] = t.rows.length;",
+  "replace": "  for (const t of tapes) counts[t.name] = t.rows.length;",
+  "what": "C8: two same-side tapes keep one count"
+ },
+ {
+  "id": "WC23",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "  const sameName = tapes.length === 2 && tapes[0].name === tapes[1].name;",
+  "replace": "  const sameName = true;",
+  "what": "C8: every pair is keyed by tape"
+ },
+ {
+  "id": "WC24",
+  "file": "lib/_case.js",
+  "find": "  if (FORMAT_CHARACTER.test(v)) {",
+  "replace": "  if (false) {",
+  "what": "C9: a format character is accepted"
+ },
+ {
+  "id": "WC25",
+  "file": "lib/_case.js",
+  "find": "const FORMAT_CHARACTER = /\\p{Cf}/u;",
+  "replace": "const FORMAT_CHARACTER = /\\u200b/u;",
+  "what": "C9: only the zero-width space is refused"
+ },
+ {
+  "id": "WC26",
+  "file": "lib/_stamp.js",
+  "find": "    const rl = await ratelimit.check(req);\n    if (rl.limited) {",
+  "replace": "    const rl = await ratelimit.check(req);\n    if (false) {",
+  "what": "C10: the stamp lookup is not limited"
+ },
+ {
+  "id": "WC27",
+  "file": "tools/seal_batch.js",
+  "find": "args.claimTtl >= 1 && args.claimTtl <= MAX_CLAIM_TTL_SECONDS))",
+  "replace": "args.claimTtl >= 1))",
+  "what": "C11: --claim-ttl has no upper bound"
+ },
+ {
+  "id": "WC28",
+  "file": "tools/seal_batch.js",
+  "find": "!(Number.isInteger(args.claimTtl) &&",
+  "replace": "!(Number.isFinite(args.claimTtl) &&",
+  "what": "C11: a fractional --claim-ttl is accepted"
+ },
+ {
+  "id": "WC29",
+  "file": "tools/seal_batch.js",
+  "find": "out.margin = a.slice(9) === \"\" ? NaN : Number(a.slice(9));",
+  "replace": "out.margin = Number(a.slice(9));",
+  "what": "C11: an empty --margin= is zero"
+ },
+ {
+  "id": "WC30",
+  "file": "tools/seal_batch.js",
+  "find": "out.claimTtl = a.slice(12) === \"\" ? NaN : Number(a.slice(12));",
+  "replace": "out.claimTtl = Number(a.slice(12));",
+  "what": "C11: an empty --claim-ttl= is zero"
+ },
+ {
+  "id": "WC31",
+  "file": "tools/mint_case_key.js",
+  "find": "  if (acl.tried && !acl.ok) {",
+  "replace": "  if (false) {",
+  "what": "C12: a failed Windows ACL step is printed and ignored"
+ },
+ {
+  "id": "WC32",
+  "file": "tools/mint_case_key.js",
+  "find": "  if (acl.tried && !acl.ok) {\n    fs.rmSync(out, { force: true });\n",
+  "replace": "  if (acl.tried && !acl.ok) {\n",
+  "what": "C12: the key file is kept when the ACL step fails"
+ },
+ {
+  "id": "WC33",
+  "file": "tools/preview_dry_run.js",
+  "find": "  if (r.ans.status === 409 && code === \"stamp_history_unreadable\" && r.json.reason === \"no_commit_touches_path\") {",
+  "replace": "  if (r.ans.status === 503 && code === \"stamp_history_unreadable\" && r.json.reason === \"no_commit_touches_path\") {",
+  "what": "C3: the preview reads the old 503"
+ },
+ {
+  "id": "WC34",
+  "file": "README.md",
+  "find": "When two roles show one key id, compare their `key_fp`, never their `key_id`:",
+  "replace": "When two roles show one key id, compare their `key_id`:",
+  "what": "C4: the README says to compare key ids"
+ },
+ {
+  "id": "WC35",
+  "file": "README.md",
+  "find": "so a purchase whose buyer never reaches the fulfilment page is credited by hand (`/api/credit`).",
+  "replace": "so credits are added by hand after purchase.",
+  "what": "C13: the README says credits are added by hand"
+ }
+]
