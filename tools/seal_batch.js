@@ -43,7 +43,8 @@
 //                          It does NOT move the claim's clock: a lease measures
 //                          how long this run has really been alive, and a lease
 //                          that moved with a replay clock would measure nothing.
-//   --claim-ttl=<seconds>  override the claim lease length (default 120)
+//   --claim-ttl=<seconds>  override the claim lease length (default 120; a
+//                          whole number of seconds from 1 to 3600)
 //   --quiet                exit code only, no JSON on stdout
 //
 // EXIT CODES — distinct on purpose, so a scheduler's own alerting can tell a
@@ -74,12 +75,16 @@
 
 "use strict";
 
+// The longest claim lease --claim-ttl may ask for (unit R-WIDE, C11): an
+// hour. A lease past it would hold the batch from every other sealer.
+const MAX_CLAIM_TTL_SECONDS = 3600;
+
 function parseArgs(argv) {
   const out = { quiet: false };
   for (const a of argv) {
     if (a === "--quiet") out.quiet = true;
-    else if (a.startsWith("--margin=")) out.margin = Number(a.slice(9));
-    else if (a.startsWith("--claim-ttl=")) out.claimTtl = Number(a.slice(12));
+    else if (a.startsWith("--margin=")) out.margin = a.slice(9) === "" ? NaN : Number(a.slice(9));
+    else if (a.startsWith("--claim-ttl=")) out.claimTtl = a.slice(12) === "" ? NaN : Number(a.slice(12));
     else if (a.startsWith("--now=")) out.now = new Date(a.slice(6));
     else if (a === "--help" || a === "-h") out.help = true;
     else {
@@ -102,6 +107,11 @@ async function main() {
   }
   if (args.margin !== undefined && !Number.isFinite(args.margin)) {
     process.stderr.write("seal_batch: --margin must be a number of seconds\n");
+    return 64;
+  }
+  // unit R-WIDE (C11): a lease is a whole number of seconds, bounded
+  if (args.claimTtl !== undefined && !(Number.isInteger(args.claimTtl) && args.claimTtl >= 1 && args.claimTtl <= MAX_CLAIM_TTL_SECONDS)) {
+    process.stderr.write(`seal_batch: --claim-ttl must be a whole number of seconds from 1 to ${MAX_CLAIM_TTL_SECONDS}\n`);
     return 64;
   }
   if (args.now && !Number.isFinite(args.now.getTime())) {

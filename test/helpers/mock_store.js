@@ -165,6 +165,7 @@ class MockGitHubStore {
     this.compareLog = []; // ["repo:base...head"] — every compare read, in order
     this._forcedCompareFailure = null; // {remaining, status, match}
     this.sideCommits = new Map(); // repo -> Set of shas on no branch
+    this.aheadCommits = new Map(); // repo -> Set of shas ahead of the branch (unit R-WIDE, C14)
     this.branches = new Map(); // repo -> its branch's name ("main" unless set)
     this.branchLog = []; // ["repo:name"] — every branch read, in order
     this._forcedBranchFailure = null; // {remaining, status}
@@ -197,6 +198,15 @@ class MockGitHubStore {
   seedSideCommit(repo, sha) {
     if (!this.sideCommits.has(repo)) this.sideCommits.set(repo, new Set());
     this.sideCommits.get(repo).add(sha);
+    return sha;
+  }
+
+  // A commit ahead of `repo`'s branch: its branch head is an ancestor (a
+  // commit not merged yet, which a fast-forward would bring in), so compare
+  // reads answer `ahead` (unit R-WIDE, C14).
+  seedAheadCommit(repo, sha) {
+    if (!this.aheadCommits.has(repo)) this.aheadCommits.set(repo, new Set());
+    this.aheadCommits.get(repo).add(sha);
     return sha;
   }
 
@@ -418,6 +428,8 @@ class MockGitHubStore {
       const bi = at(base);
       const hi = at(head);
       if ((side.has(head) && bi >= 0) || (side.has(base) && hi >= 0)) return fakeResponse(200, { status: "diverged", ahead_by: 1, behind_by: 1 });
+      const ahead = this.aheadCommits.get(repo) || new Set();
+      if (ahead.has(head) && bi >= 0) return fakeResponse(200, { status: "ahead", ahead_by: 1, behind_by: 0 });
       if (bi < 0 || hi < 0) return fakeResponse(404, { message: "Not Found" });
       const status = hi < bi ? "behind" : hi === bi ? "identical" : "ahead";
       return fakeResponse(200, { status, ahead_by: Math.max(0, hi - bi), behind_by: Math.max(0, bi - hi) });

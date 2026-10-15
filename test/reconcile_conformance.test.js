@@ -25,6 +25,21 @@ function bytesOf(b64) {
   return Buffer.from(b64, "base64");
 }
 
+// A Python answer for two tapes of one side.
+const sameSide = (python) => /both tapes are (agent|tool)-side tapes/.test(python);
+// The port's answer and Python's differ only in counts, the port's holding
+// both tapes' counts by tape and Python's the second's by side.
+function sameButCounts(mine, python, got) {
+  const m = JSON.parse(mine);
+  const p = JSON.parse(python);
+  const pc = p.counts;
+  delete m.counts;
+  delete p.counts;
+  if (JSON.stringify(m) !== JSON.stringify(p)) return false;
+  const keys = Object.keys(got.counts).sort();
+  return keys.join() === "tape_a,tape_b" && Object.keys(pc).length === 1 && Object.values(pc)[0] === got.counts.tape_b;
+}
+
 // Returns the list of disagreements between a reconcile function and the fixture.
 function disagreements(reconcileFn, cases = fixtures.cases) {
   const bad = [];
@@ -41,7 +56,12 @@ function disagreements(reconcileFn, cases = fixtures.cases) {
       continue;
     }
     const mine = R.conformanceJson(got);
-    if (mine !== c.python) bad.push({ name: c.name, why: "differs", mine, python: c.python });
+    if (mine === c.python) continue;
+    // THE ONE DIVERGENCE (unit R-WIDE, C8, the architect's ruling): for two
+    // tapes of one side, reconcile.py keys counts by side and keeps one; the
+    // port keeps both, by tape. Everything else must still be the same.
+    if (sameSide(c.python) && sameButCounts(mine, c.python, got)) continue;
+    bad.push({ name: c.name, why: "differs", mine, python: c.python });
   }
   return bad;
 }
@@ -147,4 +167,18 @@ test("BREAK ARM: a port that parses with JSON.parse (floats lose their type) is 
   assert.equal(JSON.parse(c.python).verdict, "COULD_NOT_LOOK");
   const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
   assert.equal(R.conformanceJson(got), c.python);
+});
+
+test("R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side", () => {
+  const same = fixtures.cases.filter((c) => c.python && sameSide(c.python));
+  assert.ok(same.length >= 3, "fixture: same-side cases");
+  for (const c of same) {
+    const got = R.reconcileTapes(bytesOf(c.a_b64), bytesOf(c.b_b64));
+    assert.deepEqual(Object.keys(got.counts).sort(), ["tape_a", "tape_b"], c.name);
+    assert.equal(Object.keys(JSON.parse(c.python).counts).length, 1, `${c.name}: Python keeps one`);
+  }
+  // control: one tape of each side is keyed by side, as reconcile.py keys it
+  const mixed = fixtures.cases.find((c) => c.python && !sameSide(c.python) && Object.keys(JSON.parse(c.python).counts).length === 2);
+  const got = R.reconcileTapes(bytesOf(mixed.a_b64), bytesOf(mixed.b_b64));
+  assert.deepEqual(Object.keys(got.counts).sort(), Object.keys(JSON.parse(mixed.python).counts).sort());
 });

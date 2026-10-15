@@ -570,8 +570,9 @@ async function checkStampRead(ctx) {
   if (r.ans.status === 404 && code === "no_commitment") {
     return broken(`${stamped}; case-commit at once answered HTTP 404 no_commitment: the read did not see the stamp`);
   }
-  if (r.ans.status === 503 && code === "stamp_history_unreadable" && r.json.reason === "no_commit_touches_path") {
-    return broken(`${stamped}; case-commit at once answered HTTP 503 stamp_history_unreadable (no_commit_touches_path): the read did not see the stamp's commit`);
+  // 409 since unit R-WIDE (C3): no re-send finishes it
+  if (r.ans.status === 409 && code === "stamp_history_unreadable" && r.json.reason === "no_commit_touches_path") {
+    return broken(`${stamped}; case-commit at once answered HTTP 409 stamp_history_unreadable (no_commit_touches_path): the read did not see the stamp's commit`);
   }
   const why = unlooked(r.ans);
   if (why) return couldNotLook(`${stamped}; case-commit: ${why}`);

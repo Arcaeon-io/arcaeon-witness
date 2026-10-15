@@ -190,7 +190,7 @@
   - Nothing was run again: no run in the committed ledgers (`test/must_fail/r_ab.ledger.json`) is recorded caught with no failing test (each caught run there has 2 or more), and a test reads every committed ledger to say so.
 - **M2 (a named commit definitely off the published branch).** `off`, set and until now read by nothing, is read.
   - **Set:** in `lib/_case_seal.js` `namedDocumentOf`, at two returns: the branch read's (`off: !on.unknown && !on.not_found`, true for a commit ahead of or diverged from the branch) and a document read that failed (`off: false`).
-  - **Read:** in `signedUnderReason`, its one reader, which now answers `document_off_branch` (reason `commit_not_on_branch`) for it: a known refusal.
+  - **Read:** in `signedUnderReason`, its one reader, which now answers `document_off_branch` (reason `commit_not_on_branch`) for it: a refusal, of a commit not on the branch when read. (Unit R-WIDE, C14: a commit ahead of the branch, which a fast-forward may bring in, stays could-not-look, and the readers read it again.)
   - No body code existed for this state: the page showed the reason `commit_not_on_branch` under `document_unavailable`, at 503. So `document_off_branch` is new, and it is no new state.
   - Through the one reader:
     - the reference: 409 `document_off_branch`, codes only (`case_id`, `reason`);
@@ -199,7 +199,8 @@
     - the withdrawn root's answer (`unconfirmedWithdrawal`): 409 with words, `UNSEALED_WORDS.document_off_branch`;
     - the marker repair (`repairWithdrawn`): not repaired, logged;
     - a reference row (`judgeReferenceRow`): invalid, not unreadable;
-    - `verifyRefusalReceipt` and `tools/check_refusal_receipt.js`: reason `document_off_branch`.
+    - `verifyRefusalReceipt` and `tools/check_refusal_receipt.js`: reason `document_off_branch`;
+    - `tools/preview_dry_run.js` `holdsVerdict`, in (e): BROKEN, as for any refusal of the sealed check (added to this list by unit R-WIDE, C19).
   - A read that failed, a 404 commit among them, stays `document_unavailable` and 503 everywhere.
   - Not changed: `confirmSealingDocument`, for the deployment's own commit, still answers 503 `document_unavailable` with reason `commit_not_on_branch`; a redeploy, not a re-send, finishes it. The pin's own `commit_off_branch` was already a definite `pin_commit_mismatch`.
 - **Minors.**
@@ -228,7 +229,7 @@
 - **The must-fail pass** (the repository's runner; dates from the ledger, `test/must_fail/r_abf.ledger.json`). 26 defects were planted over the lines R-ABf changed, each alone with the whole suite run: `lib/_case_page.js` 7, `lib/_case_seal.js` 3, `lib/_case_http.js` 7, `test/must_fail/run.js` 9.
   - The reader's own defects were among them: PG1, SE1 and HT1 (judge before read), SE2 (`off` read by nothing) and RN1 (caught on any non-zero exit).
   - 21 were caught. Of the 5 that survived, 4 are caught by gap tests and were re-seeded the same day (PG4, PG6, RN8, RN9). One is equivalent:
-    - RN3, the absolute-path check removed. The inside-the-repository check that follows refuses every absolute path itself, so the explicit check changes nothing. It stays because it names the rule.
+    - RN3, the absolute-path check removed. (Corrected by unit R-WIDE, C16: this entry called it equivalent, saying the inside-the-repository check that follows refuses every absolute path itself. It does not: an absolute path inside the repository passes it. RN3 survived because no test gave such a path. R-WIDE adds the gap test, MUST-FAIL GAP (RN3), and re-seeded RN3, caught on 2026-10-15; its row below is this entry's run.)
   - During the RN9 re-seed, the interrupt test without the pid check left one fixture process. It ended within its minute.
 
   | id | file | planted defect | first run | last re-seeded and caught |

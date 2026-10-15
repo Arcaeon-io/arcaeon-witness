@@ -85,7 +85,7 @@ no CAS loop at all.
 
 ### Credit balance: the decrementing balance behind prepaid packs
 
-The credit packs are listed and Stripe checkout is live; credits are applied by the fulfilment page after checkout. The Stripe webhook backstop is not yet configured, and no real purchase has completed yet.
+The credit packs are listed and Stripe checkout is live. Credits are applied by the fulfilment page (`api/fulfill.js`) when the buyer lands on it after checkout; the Stripe webhook backstop (`api/stripe-webhook.js`) is not yet configured, so a purchase whose buyer never reaches the fulfilment page is credited by hand (`/api/credit`). No real purchase has completed yet.
 The packs are listed on https://arcaeon.io/pricing and in the site's offers
 note: Mini $5 for 1,000 pins, Starter $15 for 3,000, Standard $50 for 12,000,
 Bulk $150 for 40,000. Each pack's checkout lands on the fulfil page
@@ -157,7 +157,7 @@ logic itself is already built and tested via `/api/credit`.
 `{credit_balance, credit_ever_purchased, free_tier:{plan, used, cap, month}}`.
 Never consumes a pin (reads via `meter.peek()`, not `meter.check()`).
 
-Pack sizes (The credit packs are listed and Stripe checkout exists, but the Stripe webhook is not yet configured, so credits are added by hand after purchase, and no real purchase has completed yet): Mini $5/1,000 pins · Starter
+Pack sizes (how credits arrive is said once, at the top of this section): Mini $5/1,000 pins · Starter
 $15/3,000 pins · Standard $50/12,000 pins · Bulk $150/40,000 pins
 (`api/_balance.js` `PACKS`).
 
@@ -853,9 +853,11 @@ document is the published one (the commit on the published branch is the
 trust root, and it needs the network). So it never prints `ok: true`: it
 prints `{ok: false, reason: "offline_partial", signature_ok, signature_reason,
 not_checked}`
-and exits 3. Only the full online check prints `ok: true` and exits 0, and
-only when the key document this checkout carries is the one at the tip of
-the published branch, read once from the raw host: an older copy could
+and exits 3. Only the full online check prints `signature_valid: true` and
+exits 0 (it never prints a key named `ok`, and it names what no receipt
+shows: whether the case reads WITHDRAWN now, and the projection its record
+keeps), and only when the key document this checkout carries is the one at
+the tip of the published branch, read once from the raw host: an older copy could
 vouch for a key a newer document revokes, so the answer is then
 `carried_document_not_published` (or `published_document_unreadable`). The
 sealer makes the same read before it pins, and pins nothing on either
@@ -931,7 +933,9 @@ key can register a role whose commitment hash they know. When the opening
 names a party's `key_id`, a registration of that party's role under
 another key id is refused 409 `key_mismatch`, codes only, and nothing is
 written; a key id is a name and a 32-bit hash, so this compares names and
-binds no key.
+binds no key. When two roles show one key id, compare their `key_fp`, never their `key_id`: a key id is a name and a 32-bit hash, and two keys can share one; `key_fp` is the sha256 of the key's own bytes. The case root carries each role's `key_fp`; one public
+key registered under both roles is refused 409 `same_key_both_roles`, and a
+stored case whose two entries share a `key_fp` reads `single_party`.
 
 A registration file is a claim, and it stands only once the case root
 projects it. Each claim has its own file,
@@ -950,7 +954,12 @@ and the root, read once more, is the answer (`role_already_committed`,
 naming the projected sha256, when another claim holds the role). If the
 read or the write fails, nothing more is written and the answer is 503
 `registration_unconfirmed`: the registration file is written and is not yet
-confirmed; send the same registration again. Every answer after a file is
+confirmed; send the same registration again. A root that fails its schema on
+that read is 409 `registration_unconfirmed`, codes only, since no re-send
+makes it pass; so are a stamp that is gone when a registration is sent
+again (409 `stamp_record_unreadable`), a stamp whose history names no commit
+(409 `stamp_history_unreadable`) and a file at the registration's path that
+holds another registration (409 `registration_record_unreadable`). Every answer after a file is
 written names its path. A role the root projects for another claim is 409
 `role_already_committed` and nothing is written. A file the root does not
 project has no standing, and the case page neither lists nor links it: for

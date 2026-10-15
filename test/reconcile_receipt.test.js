@@ -119,3 +119,25 @@ test("RECEIPT: a verdict quoting a tape's lone surrogate still gets a signed rec
   assert.match(receipt.verdict_digest_note, /lone surrogate/);
   assert.equal(receipts.verifyReceiptText(T.wireJson(receipt), KEY.verifier).ok, true);
 });
+
+// unit R-WIDE (C7): a receipt is held to a key the caller names, and a saved
+// answer whose receipt binds no verdict text is partial, never ok
+test("R-WIDE C7: verifyReceiptText with no verifier named answers unknown_signer, never ok", () => {
+  const { receipt } = signedFor(A, B);
+  assert.deepEqual(receipts.verifyReceiptText(T.wireJson(receipt)), { ok: false, reason: "unknown_signer" });
+  assert.equal(receipts.verifyReceiptText(T.wireJson(receipt), KEY.verifier).ok, true, "control: the key named");
+});
+
+test("R-WIDE C7: a saved answer whose receipt has no verdict digest (a tape's lone surrogate) and carries a verdict is signed_partial, never ok", () => {
+  const c = fixtures.cases.find((x) => x.name === "lone_surrogate_in_req_altered");
+  const a = Buffer.from(c.a_b64, "base64");
+  const b = Buffer.from(c.b_b64, "base64");
+  const { result, receipt } = signedFor(a, b);
+  assert.equal(receipt.verdict_digest, null, "fixture");
+  const answer = T.wireJson({ ok: true, verdict: result, receipt });
+  assert.deepEqual(receipts.verifyReceiptText(answer, KEY.verifier), { ok: false, reason: "signed_partial", signer: KEY.verifier });
+  assert.equal(receipts.verifyReceiptText(T.wireJson(receipt), KEY.verifier).ok, true, "the receipt alone still verifies");
+  // control: a saved answer whose receipt binds its verdict is ok
+  const s = signedFor(A, B);
+  assert.equal(receipts.verifyReceiptText(T.wireJson({ ok: true, verdict: s.result, receipt: s.receipt }), KEY.verifier).ok, true);
+});

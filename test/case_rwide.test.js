@@ -661,6 +661,7 @@ test("MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the
 // =============================================================================
 
 const verifyHandler = require("../api/verify.js");
+const ratelimit = require("../lib/_ratelimit.js");
 // Every request to the GitHub API `fn` sends: its URL and its bearer.
 async function spyAuth(fn) {
   const viaMock = global.fetch;
@@ -857,4 +858,301 @@ test("MUST-FAIL GAP (WB17): the document at the tip is read on the published bra
   KD.publishTip(gh, NEWER, "preview-branch");
   KD.publishTip(gh, DOC, "main");
   assert.equal((await S.carriedDocumentPublished(DOC, { KEY_DOCUMENT_BRANCH: "preview-branch" })).reason, "published_document_differs");
+});
+
+// =============================================================================
+// GROUP C: small truth fixes
+// =============================================================================
+
+// C1. Every sealed page prints the commit of the key document this service carries.
+async function pageWithEnv(id, env, doc = DOC) {
+  const res = makeRes();
+  await CP.handleCasePage(makeReq({ method: "GET", query: { op: "case-page", case_id: id }, headers: { "x-forwarded-for": nextIp() } }), res,
+    { now: REVEAL_AT + 3600000, keyDocument: doc, env });
+  return { status: res._status, html: String(res._body) };
+}
+const carriedRow = (commit) => `the key document this service carries, at commit <a href="https://github.com/${S.KEY_DOCUMENT_REPO}/blob/${commit}/${S.CASE_KEYS_FILE}" ` +
+  `rel="nofollow noopener noreferrer">${commit.slice(0, 12)}</a>`;
+test("R-WIDE C1: every sealed page prints the commit of the key document this service carries: the sealed page, the does-not-verify page and the could-not-look page", async () => {
+  const commit = KD.commitOf(DOC);
+  const env = { [S.DEPLOY_COMMIT_ENV]: commit };
+  const s = await sealedCase("RWIDE C1 sealed");
+  const held = await pageWithEnv(s.id, env);
+  assert.equal(held.status, 200);
+  assert.ok(held.html.includes(carriedRow(commit)), held.html.slice(0, 200));
+  const bad = await sealedCase("RWIDE C1 does not verify");
+  gh.seed(PINS, C.casePath(bad.id), flipSig(storedCase(bad.id)));
+  const dnv = await pageWithEnv(bad.id, env);
+  assert.match(dnv.html, /SEALED RECORD DOES NOT VERIFY/);
+  assert.ok(dnv.html.includes(carriedRow(commit)));
+  const away = await sealedCase("RWIDE C1 could not look");
+  const v = storedCase(away.id);
+  gh.seed(PINS, C.casePath(away.id), signByHand(withoutSig({ ...v, signed_under: { ...v.signed_under, document_commit: "6".repeat(40) } }), caseSigner()));
+  const cnl = await pageWithEnv(away.id, env);
+  assert.equal(cnl.status, 503);
+  assert.ok(cnl.html.includes(carriedRow(commit)));
+  // a deployment that does not know its commit says so
+  assert.ok((await pageWithEnv(s.id, {})).html.includes("the key document this service carries, at a commit this deployment does not know"));
+});
+
+// C2. The ancestry cache keeps "on the branch" for 60 seconds.
+test("R-WIDE C2: a commit read as on the branch is kept 60 seconds, then the branch is read again; a branch rewritten in between is seen", async () => {
+  const commit = KD.serve(gh, KD.docWith(KD.entry(LATER)));
+  let t0 = 5_000_000;
+  const before = S._internal.onBranchClock.now;
+  S._internal.onBranchClock.now = () => t0;
+  try {
+    S._internal.clearDocumentCache();
+    assert.deepEqual(await S.commitOnBranch(commit), { on: true });
+    const n = gh.compareLog.length;
+    t0 += 59_999;
+    assert.deepEqual(await S.commitOnBranch(commit), { on: true });
+    assert.equal(gh.compareLog.length, n, "within 60 seconds: kept");
+    t0 += 1;
+    gh.seedSideCommit(S.KEY_DOCUMENT_REPO, commit); // the branch no longer holds it
+    assert.equal((await S.commitOnBranch(commit)).on, false, "read again at 60 seconds, and now off");
+    assert.equal(gh.compareLog.length, n + 1);
+  } finally {
+    S._internal.onBranchClock.now = before;
+  }
+});
+
+// C3. Four 503s no re-send could finish are 409s with their codes, codes only.
+const codesOnly = (body) => !has(body, "error");
+test("R-WIDE C3: a registration sent again whose stamp is gone is 409 stamp_record_unreadable, codes only, whether the root projects it or only its file is held", async () => {
+  const id = await openCase("RWIDE C3 replay");
+  const a = party(id, "a", AGENT_TAPE);
+  await register(id, a);
+  gh._repoMap(STAMPS).delete(stamp.stampPath(a.commitment_sha256));
+  const r = await commit(id, a);
+  assert.deepEqual([r.status, r.body], [409, { ok: false, error_code: "stamp_record_unreadable", reason: "stamp_missing" }], JSON.stringify(r.body));
+  // held: the file written, its projection failed
+  const b = party(id, "b", TOOL_TAPE);
+  plantStamp(b.commitment_sha256);
+  gh.forceFailure(PINS, C.casePath(id), 1, 500);
+  const first = await commit(id, b);
+  assert.equal(first.status, 503, JSON.stringify(first.body));
+  gh._repoMap(STAMPS).delete(stamp.stampPath(b.commitment_sha256));
+  const again = await commit(id, b);
+  assert.deepEqual([again.status, again.body], [409, { ok: false, error_code: "stamp_record_unreadable", reason: "stamp_missing" }], JSON.stringify(again.body));
+});
+
+test("R-WIDE C3: a file at the registration's path that holds another registration is 409 registration_record_unreadable, codes only", async () => {
+  const id = await openCase("RWIDE C3 record");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const rpath = REG.claimPath({ case_id: id, role: "a", commitment_sha256: a.commitment_sha256 });
+  gh.seed(PINS, rpath, { not: "this registration" });
+  const r = await commit(id, a);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error_code, "registration_record_unreadable");
+  assert.ok(codesOnly(r.body), JSON.stringify(r.body));
+  assert.deepEqual([r.body.registration_path, r.body.registration_recorded], [rpath, false]);
+});
+
+test("R-WIDE C3: a stamp whose history names no commit is 409 stamp_history_unreadable, codes only", async () => {
+  const id = await openCase("RWIDE C3 history");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((!o || !o.method || o.method === "GET") && new URL(String(url)).pathname === `/repos/${STAMPS}/commits`
+    ? { status: 200, ok: true, headers: { get: () => null }, json: async () => [], text: async () => "[]" }
+    : viaMock(url, o));
+  let r;
+  try {
+    r = await commit(id, a);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual([r.status, r.body], [409, { ok: false, error_code: "stamp_history_unreadable", reason: "no_commit_touches_path" }], JSON.stringify(r.body));
+});
+
+test("R-WIDE C3: a root that fails its schema on the confirming read is 409 registration_unconfirmed, codes only", async () => {
+  const id = await openCase("RWIDE C3 confirming");
+  const a = party(id, "a", AGENT_TAPE);
+  plantStamp(a.commitment_sha256);
+  const root = storedCase(id);
+  const { out: r, fired } = await during((u, m) => m === "PUT" && decodeURIComponent(u).includes(`/contents/registrations/${id}/`),
+    async () => gh.seed(PINS, C.casePath(id), { ...root, status: "BOGUS" }), () => commit(id, a));
+  assert.equal(fired, true, "fixture: the root changed before the confirming read");
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error_code, "registration_unconfirmed");
+  assert.ok(codesOnly(r.body), JSON.stringify(r.body));
+});
+
+// C4. key_fp, never key_id.
+test("R-WIDE C4: the README tells a stranger to compare key_fp, never key_id, when two roles show one key id", () => {
+  assert.ok(README().includes("When two roles show one key id, compare their `key_fp`, never their `key_id`: a key id is a name and a 32-bit hash, " +
+    "and two keys can share one; `key_fp` is the sha256 of the key's own bytes."));
+});
+
+// C5. The refusal-receipt checker says what it checked.
+test("R-WIDE C5: the online refusal-receipt checker answers signature_valid, never ok, and names what it did not check", async (t) => {
+  const c = await withdrawnBy("RWIDE C5", "b");
+  const r = await reveal(c, { body: ownOpening(c, "a") });
+  const dir = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "rwide-c5-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, "receipt.json"), JSON.stringify(r.body.refusal_receipt));
+  fs.writeFileSync(path.join(dir, "forged.json"), JSON.stringify({ ...r.body.refusal_receipt, role: "b" }));
+  const checker = require("../tools/check_refusal_receipt.js");
+  const run = async (file) => {
+    const out = [];
+    t.mock.method(process.stdout, "write", (s) => { out.push(String(s)); return true; });
+    let code;
+    try {
+      code = await checker.main([path.join(dir, file)], { keyDocument: DOC });
+    } finally {
+      process.stdout.write.mock.restore();
+    }
+    return { code, json: JSON.parse(out.join("")) };
+  };
+  const NOT_CHECKED = ["whether the case reads WITHDRAWN now", "the projection the withdrawal record keeps"];
+  KD.publishTip(gh, DOC);
+  const good = await run("receipt.json");
+  assert.deepEqual(good, { code: 0, json: { signature_valid: true, not_checked: NOT_CHECKED } });
+  const bad = await run("forged.json");
+  assert.equal(bad.code, 1);
+  assert.deepEqual([bad.json.signature_valid, bad.json.not_checked, has(bad.json, "ok")], [false, NOT_CHECKED, false]);
+});
+
+// C6. The receipt's signer name is the entry's.
+test("R-WIDE C6: the sealed check holds the receipt's signer name to the key id of the entry its verifier matches: another name is receipt_unsigned", async () => {
+  const s = await sealedCase("RWIDE C6");
+  const v = storedCase(s.id);
+  const r = JSON.parse(JSON.stringify(v.verdict));
+  delete r.sig;
+  const base = receipts.loadSigner({ [receipts.SIGNER_ENV]: RECEIPT_KEY.signer });
+  const renamed = receipts.signReceipt(r, { ...base, name: "another-reconcile-name" });
+  assert.equal(receipts.verifyReceiptText(TAPES.wireJson(renamed), RECEIPT_KEY.verifier).ok, true, "fixture: its signature holds");
+  const k = signByHand(withoutSig({ ...v, verdict: renamed }), caseSigner());
+  assert.deepEqual(C.validateCase(k), { ok: true });
+  const a = await S.sealedRecordReason(k, DOC);
+  assert.deepEqual([a.code, a.reason], ["receipt_unsigned", "signer_name_mismatch"]);
+  assert.equal((await S.sealedRecordReason(v, DOC)).code, "valid_under_document", "control");
+});
+
+// C9. No Unicode format character in a label, an operator or a reference.
+test("R-WIDE C9: a label, an operator or a reference holding a Unicode format character (category Cf) is refused", async () => {
+  for (const ch of ["​", "‎", "‮", "⁦", "﻿"]) {
+    const body = { ...opening(`RWIDE C9 ${ch.codePointAt(0)}`), party_a: { side: "agent", label: `agent${ch}operator@example.com` } };
+    const o = makeRes();
+    await H.handleCaseOpen(req("case-open", body, OPEN_AUTH), o, { now: NOW });
+    assert.deepEqual([o._status, parsed(o).error_code, parsed(o).field], [400, "malformed_field", "party_a.label"], `U+${ch.codePointAt(0).toString(16)}`);
+    for (const field of ["operator", "reference"]) {
+      const x = { operator: "second-operator.example", reference: "ref-1", url: "https://x.example/1", [field]: `in${ch}side` };
+      assert.throws(() => C.validateReferenceBody({ case_id: "a".repeat(64), cross_reference: x }),
+        (e) => e.code === "malformed_field" && e.field === `cross_reference.${field}`, `${field} U+${ch.codePointAt(0).toString(16)}`);
+    }
+  }
+  // control: other non-ASCII text stays
+  const ok = makeRes();
+  await H.handleCaseOpen(req("case-open", { ...opening("RWIDE C9 control"), party_a: { side: "agent", label: "agënt-öperator@example.com" } }, OPEN_AUTH), ok, { now: NOW });
+  assert.equal(ok._status, 201, JSON.stringify(ok._body));
+});
+
+// C10. The stamp lookup is rate limited.
+test("R-WIDE C10: the stamp lookup (GET ?op=stamp) is bounded by the shared per-address limiter", async () => {
+  const ip = "10.250.0.10";
+  const sha = "c".repeat(64);
+  let last;
+  for (let i = 0; i <= ratelimit.LIMIT; i += 1) {
+    const res = makeRes();
+    await verifyHandler(makeReq({ method: "GET", query: { op: "stamp", sha256: sha }, headers: { "x-forwarded-for": ip } }), res);
+    last = res;
+    if (i < ratelimit.LIMIT) assert.notEqual(res._status, 429, `call ${i + 1}`);
+  }
+  assert.equal(last._status, 429, JSON.stringify(last._body));
+  assert.ok(last._headers && (last._headers["retry-after"] || last._headers["Retry-After"]), "retry-after set");
+});
+
+// C11. tools/seal_batch.js validates its numbers.
+test("R-WIDE C11: tools/seal_batch.js refuses a --claim-ttl that is not a whole number of seconds from 1 to 3600, and an empty --margin=", () => {
+  const { spawnSync } = require("node:child_process");
+  const run = (arg) => spawnSync(process.execPath, [path.join(__dirname, "..", "tools", "seal_batch.js"), arg],
+    { env: { PATH: process.env.PATH, GITHUB_PIN_TOKEN: "x" }, encoding: "utf8", timeout: 20000 });
+  for (const bad of ["--claim-ttl=abc", "--claim-ttl=0", "--claim-ttl=-5", "--claim-ttl=1.5", "--claim-ttl=Infinity", "--claim-ttl=3601", "--claim-ttl="]) {
+    const r = run(bad);
+    assert.equal(r.status, 64, `${bad}: ${r.stderr}`);
+    assert.match(r.stderr, /seal_batch: --claim-ttl must be a whole number of seconds from 1 to 3600/, bad);
+  }
+  const m = run("--margin=");
+  assert.equal(m.status, 64, m.stderr);
+  assert.match(m.stderr, /seal_batch: --margin must be a number of seconds/);
+});
+
+// C13. How credits arrive, once.
+test("R-WIDE C13: the README says how credits arrive in one true sentence, and never that they are added by hand after every purchase", () => {
+  const r = README();
+  assert.doesNotMatch(r, /credits are added by hand after purchase/);
+  const SENTENCE = "Credits are applied by the fulfilment page (`api/fulfill.js`) when the buyer lands on it after checkout; the Stripe webhook " +
+    "backstop (`api/stripe-webhook.js`) is not yet configured, so a purchase whose buyer never reaches the fulfilment page is credited by hand " +
+    "(`/api/credit`).";
+  assert.equal(r.split(SENTENCE).length - 1, 1, "the sentence, once");
+});
+
+// C14, C19. What the comments and the change log claim about an off-branch commit.
+test("R-WIDE C14, C19: no comment says no re-read changes an off-branch commit; the sealed check's return list names document_off_branch", () => {
+  for (const f of ["lib/_case_seal.js", "lib/_case_page.js", "lib/_case_http.js"]) assert.doesNotMatch(read(f), /no re-read changes it/, f);
+  const seal = read("lib/_case_seal.js");
+  const doc = seal.slice(seal.indexOf("// THE SEALED CHECK (item 2d;"), seal.indexOf("const HOLDS = Object.freeze"));
+  assert.match(doc, /document_off_branch/);
+  const log = read("CHANGELOG.md");
+  const rabf = log.slice(log.indexOf("## 2026-10-15: Unit R-ABf"), log.indexOf("## 2026-10-14: Unit R-AB:"));
+  assert.match(rabf, /`tools\/preview_dry_run\.js` `holdsVerdict`/);
+});
+
+test("R-WIDE C14: a named document commit AHEAD of the published branch (not merged yet) stays could-not-look: the page 503, the reference 503 document_unavailable; diverged is document_off_branch", async () => {
+  const s = await sealedCase("RWIDE C14 ahead");
+  const v = storedCase(s.id);
+  const ahead = KD.serveAhead(gh, DOC, "a".repeat(40));
+  gh.seed(PINS, C.casePath(s.id), signByHand(withoutSig({ ...v, signed_under: { ...v.signed_under, document_commit: ahead } }), caseSigner()));
+  const a = await S.signedUnderReason(storedCase(s.id), "case", DOC);
+  assert.deepEqual([a.code, a.reason], ["document_unavailable", "commit_not_on_branch"]);
+  assert.equal((await casePage(s.id)).status, 503);
+  const ref = await reference(s);
+  assert.deepEqual([ref.status, ref.body.error_code], [503, "document_unavailable"], JSON.stringify(ref.body));
+  // and a deployment whose own commit is ahead is document_unavailable, not deployment_document_off_branch
+  const w = await committedCase("RWIDE C14 deployment ahead");
+  const dep = KD.serveAhead(gh, DOC, "b".repeat(40));
+  const res = makeRes();
+  await H.handleCaseWithdraw(req("case-withdraw", { case_id: w.id, role: "a", tape_sha256: w.a.tape_sha256, salt: w.a.salt }), res,
+    { now: NOW + 2000, env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: dep }, keyDocument: DOC });
+  assert.deepEqual([res._status, parsed(res).error_code], [503, "document_unavailable"], JSON.stringify(parsed(res)));
+});
+
+// C15. The sealed check's second read of the named document keeps off.
+test("R-WIDE C15: when the sealed check's second read of the named document finds its commit off the published branch, the answer is document_off_branch, not document_unavailable", async () => {
+  const s = await sealedCase("RWIDE C15");
+  const v = storedCase(s.id);
+  const commit = v.signed_under.document_commit;
+  S._internal.clearDocumentCache();
+  const { out: a, fired } = await during((u, m) => m === "GET" && String(u).startsWith(`https://raw.githubusercontent.com/${S.KEY_DOCUMENT_REPO}/${commit}/`),
+    async () => {
+      S._internal.clearDocumentCache();
+      gh.seedSideCommit(S.KEY_DOCUMENT_REPO, commit);
+    }, () => S.sealedRecordReason(v, DOC));
+  assert.equal(fired, true, "fixture: the branch moved between the two reads");
+  assert.deepEqual([a.code, a.reason, a.document], ["document_off_branch", "commit_not_on_branch", "named"]);
+});
+
+// C18. Codes only.
+test("R-WIDE C18: the operator's reference with a projected file it cannot read, and a withdrawn root naming an off-branch commit, answer codes only", async () => {
+  const s = await sealedCase("RWIDE C18 operator");
+  const rpath = REG.pathOf(gh, s.id, "b");
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((!o || !o.method || o.method === "GET") && decodeURIComponent(String(url)).includes(`/contents/${rpath}`)
+    ? { status: 502, ok: false, json: async () => ({}), text: async () => "{}" } : viaMock(url, o));
+  let op;
+  try {
+    op = await operatorReference(s);
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual([op.status, op.body.error_code, has(op.body, "error")], [503, "could_not_look", false], JSON.stringify(op.body));
+  const c = await withdrawnBy("RWIDE C18 withdrawn", "b");
+  const w = storedCase(c.id);
+  const side = KD.serveOffBranch(gh, DOC, "9".repeat(40));
+  gh.seed(PINS, C.casePath(c.id), signByHand({ ...withoutSig(w), signed_under: { ...w.signed_under, document_commit: side } }, caseSigner()));
+  const again = await withdraw(c.id, c.b);
+  assert.deepEqual([again.status, again.body.error_code, has(again.body, "error")], [409, "document_off_branch", false], JSON.stringify(again.body));
 });

@@ -848,6 +848,18 @@ test("R-ABf B1: a single-key root whose registration file cannot be read is coul
   assert.deepEqual([one.ok, one.code], [false, "could_not_look"]);
   // read again once the file reads: the single-party page
   assert.ok((await casePage(c.id)).html.includes(CP.SINGLE_PARTY_SENTENCE));
+  // unit R-WIDE (C17): the reference, which takes only a sealed case, on a
+  // single-key VERDICT whose file cannot be read: 503 could_not_look, codes
+  // only (C18), never single_party and never a row; read again once the
+  // file reads, 409 single_party
+  const v = await verdictOneKey("RABf B1 unread verdict");
+  const vpath = C.registrationPath(v.id, "b", storedCase(v.id).commitments.b.claim_sha256); // the file the root projects
+  const puts = gh.putLog.length;
+  const ref = await unreadable(vpath, () => reference(v));
+  assert.deepEqual([ref.status, ref.body.error_code, ref.body.role, has(ref.body, "error")], [503, "could_not_look", "b", false], JSON.stringify(ref.body));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  const after = await reference(v);
+  assert.deepEqual([after.status, after.body.error_code], [409, "single_party"], JSON.stringify(after.body));
 });
 
 test("R-ABf B1: the reference reads the projected files before the sealed check, for the operator too: a forged key_fp is 503 case_record_inconsistent, codes only, and nothing is written", async () => {
@@ -905,15 +917,17 @@ test("R-ABf M2: a named commit the repository does not have (404) stays a could-
   assert.equal((await casePage(s.id)).status, 503);
 });
 
-test("R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, with words, never the bare code; verifyRefusalReceipt says document_off_branch", async () => {
+// since unit R-WIDE (C18, the architect's ruling) the withdrawn root's 409
+// document_off_branch is codes only (with words until then)
+test("R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, codes only since R-WIDE C18; verifyRefusalReceipt says document_off_branch", async () => {
   const c = await withdrawnBy("RABf M2 withdrawn", "b");
   const w = storedCase(c.id);
   const named = KD.docWith(KD.entry(CASE_KEY, { note: "the off-branch document" }), KD.reconcileEntry(RECEIPT_KEY));
   const side = KD.serveOffBranch(gh, named, "8".repeat(40));
   gh.seed(PINS, C.casePath(c.id), signByHand(withoutSig({ ...w, signed_under: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side } }), caseSigner()));
   const r = await withdraw(c.id, c.b);
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "document_off_branch", "commit_not_on_branch"], JSON.stringify(r.body));
-  assert.ok(r.body.error.includes("the key document it names is at a commit that is not on the published branch"), r.body.error);
+  assert.deepEqual(r.body, { ok: false, error_code: "document_off_branch", case_id: c.id, status: "WITHDRAWN", reason: "commit_not_on_branch" });
+  assert.equal(r.status, 409);
   const rr = await reveal(c, { body: ownOpening(c, "a") });
   assert.deepEqual([rr.status, rr.body.error_code], [409, "document_off_branch"]);
   const good = await withdrawnBy("RABf M2 receipt", "b");

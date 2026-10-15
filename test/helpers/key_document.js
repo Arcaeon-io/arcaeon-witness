@@ -69,6 +69,14 @@ function serveOffBranch(gh, doc, commit = commitOf(doc)) {
   return commit;
 }
 
+// `doc` served at `commit` by the raw host, on a commit AHEAD of the
+// published branch (not merged yet; unit R-WIDE, C14). -> the commit.
+function serveAhead(gh, doc, commit = commitOf(doc)) {
+  gh.seedRaw(S.KEY_DOCUMENT_REPO, commit, S.CASE_KEYS_FILE, `${JSON.stringify(doc, null, 2)}\n`);
+  gh.seedAheadCommit(S.KEY_DOCUMENT_REPO, commit);
+  return commit;
+}
+
 // The environment of a deployment built with `doc` bundled: `env` plus
 // VERCEL_GIT_COMMIT_SHA, with `doc` served at that commit. A document that
 // is not an object is no deployment's: `env` comes back unchanged.
@@ -91,4 +99,4 @@ function signedUnder(gh, doc) {
   return { document_sha256: sha256(canonicalBytes(doc)), document_commit: serve(gh, doc) };
 }
 
-module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, publishTip, serveOffBranch, deployed, deployedFor, signedUnder, sha256 };
+module.exports = { keyIdOf, entry, reconcileEntry, docWith, commitOf, serve, publishTip, serveOffBranch, serveAhead, deployed, deployedFor, signedUnder, sha256 };

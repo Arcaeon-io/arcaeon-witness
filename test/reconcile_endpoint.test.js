@@ -118,7 +118,20 @@ test("CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict
     assert.equal(status, 200, c.name);
     const verdict = pyLoads(raw, false).get("verdict");
     const mine = pyDumps(verdict, { sortKeys: true, itemSep: ",", keySep: ":", ascii: true, allowNan: false });
-    assert.equal(mine, c.python, c.name);
+    // THE ONE DIVERGENCE (unit R-WIDE, C8): two tapes of one side keep both
+    // counts, by tape; reconcile.py keeps the second's, by side. The rest is
+    // byte for byte.
+    if (/both tapes are (agent|tool)-side tapes/.test(c.python)) {
+      const m = JSON.parse(mine);
+      const p = JSON.parse(c.python);
+      assert.deepEqual(Object.keys(m.counts).sort(), ["tape_a", "tape_b"], c.name);
+      assert.equal(Object.values(p.counts)[0], m.counts.tape_b, c.name);
+      delete m.counts;
+      delete p.counts;
+      assert.deepEqual(m, p, c.name);
+    } else {
+      assert.equal(mine, c.python, c.name);
+    }
     n += 1;
   }
   assert.ok(n > 400, `only ${n} cases went through the endpoint`);

@@ -187,3 +187,41 @@ test("refuses: an existing file (exit nonzero, left byte-identical, nothing on s
   assert.equal(run([]).status, 1);
   assert.equal(run(["--out"]).status, 1);
 });
+
+// unit R-WIDE (C12): on Windows a key file whose access could not be
+// restricted is removed, and the tool exits 2 printing no entry
+test("R-WIDE C12: when the Windows ACL step fails (icacls refuses, or USERNAME is unset) the tool exits 2, removes the key file and prints no entry", (t) => {
+  const tool = require("../tools/mint_case_key.js");
+  const dir = tmp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const err = [];
+  const out = [];
+  t.mock.method(process.stderr, "write", (s) => { err.push(String(s)); return true; });
+  t.mock.method(process.stdout, "write", (s) => { out.push(String(s)); return true; });
+  const cases = [
+    ["icacls refuses", { platform: "win32", env: { USERNAME: "someone" }, run: () => ({ status: 5, stderr: "Access is denied." }) }, /Access is denied\./],
+    ["USERNAME unset", { platform: "win32", env: {}, run: () => assert.fail("icacls is not run without a user") }, /USERNAME unset/],
+  ];
+  try {
+    for (const [what, opts, why] of cases) {
+      const file = path.join(dir, `${what.replace(/\W+/g, "-")}${tool.REQUIRED_SUFFIX}`);
+      err.length = 0;
+      out.length = 0;
+      const code = tool.main(["--out", file], opts);
+      assert.equal(code, 2, `${what}: ${err.join("")}`);
+      assert.equal(fs.existsSync(file), false, `${what}: the file is removed`);
+      assert.match(err.join(""), /REFUSED: the key file's access could not be restricted on Windows \(/, what);
+      assert.match(err.join(""), why, what);
+      assert.equal(out.join(""), "", `${what}: no entry printed`);
+    }
+    // control: icacls succeeds, the file stays and the entry is printed
+    const file = path.join(dir, `granted${tool.REQUIRED_SUFFIX}`);
+    out.length = 0;
+    assert.equal(tool.main(["--out", file], { platform: "win32", env: { USERNAME: "someone" }, run: () => ({ status: 0 }) }), 0);
+    assert.equal(fs.existsSync(file), true);
+    assert.ok(out.join("").includes("\"key_id\""));
+  } finally {
+    process.stderr.write.mock.restore();
+    process.stdout.write.mock.restore();
+  }
+});

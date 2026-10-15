@@ -408,7 +408,8 @@ test("R-N2 m10 (since unit R-L4, the root's projection): registration_recorded o
     },
     () => commit(id2, a2),
   );
-  assert.equal(r2.out.status, 503, JSON.stringify(r2.out.body));
+  // since unit R-WIDE (C3) 409, codes only (503 until then)
+  assert.equal(r2.out.status, 409, JSON.stringify(r2.out.body));
   // (since unit R-L4c: a file at the claim's path that is not the claim is never projected)
   assert.deepEqual([r2.out.body.error_code, r2.out.body.differs, r2.out.body.registration_path], ["registration_record_unreadable", "commitment_sha256", rpath2]);
   assert.equal(r2.out.body.registration_recorded, false, "this registration is not the one on file");

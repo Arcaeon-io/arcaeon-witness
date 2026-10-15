@@ -330,7 +330,8 @@ test("(d) BROKEN when the immediate read does not see the stamp's commit, or rea
   intercept((u) => (commitsOfStamps(u) ? answer(200, []) : undefined));
   const unseen = await dryRun(t);
   assert.equal(word(unseen, "d"), "BROKEN");
-  assert.match(unseen.by.d.line, /HTTP 503 stamp_history_unreadable \(no_commit_touches_path\): the read did not see the stamp's commit/);
+  // 409 since unit R-WIDE (C3)
+  assert.match(unseen.by.d.line, /HTTP 409 stamp_history_unreadable \(no_commit_touches_path\): the read did not see the stamp's commit/);
   assert.equal(word(unseen, "e"), "COULD NOT LOOK");
   assert.match(unseen.by.e.line, /role a was not registered in \(d\)/);
 

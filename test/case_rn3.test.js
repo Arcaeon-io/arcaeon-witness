@@ -326,8 +326,11 @@ test("R-N3 N3: the offline receipt check is partial: it prints ok false, offline
   };
   // since unit R-WIDE (B2) ok also needs the carried document at the tip of the published branch
   KD.publishTip(gh, S.PUBLISHED_KEYS);
-  assert.deepEqual(await run({ ok: true }), { code: 0, out: { ok: true } });
-  assert.deepEqual(await run({ ok: false, reason: "signer_unlisted" }), { code: 1, out: { ok: false, reason: "signer_unlisted" } });
+  // since unit R-WIDE (C5) the online answer is signature_valid, never a key
+  // named ok, and names what it did not check ({ok: true} until then)
+  const NOT_CHECKED_ONLINE = ["whether the case reads WITHDRAWN now", "the projection the withdrawal record keeps"];
+  assert.deepEqual(await run({ ok: true }), { code: 0, out: { signature_valid: true, not_checked: NOT_CHECKED_ONLINE } });
+  assert.deepEqual(await run({ ok: false, reason: "signer_unlisted" }), { code: 1, out: { signature_valid: false, reason: "signer_unlisted", not_checked: NOT_CHECKED_ONLINE } });
   // the header comment and the README say what offline proves, and what it does not
   const text = fs.readFileSync(tool, "utf8");
   const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");

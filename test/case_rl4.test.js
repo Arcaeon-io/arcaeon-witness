@@ -620,7 +620,8 @@ test("MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root
     async () => gh.seed(PINS, C.casePath(id), { not: "a case" }, { keepHistory: true }),
     () => commit(id, a),
   );
-  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.registration_recorded], [503, "registration_unconfirmed", null], JSON.stringify(r.out.body));
+  // since unit R-WIDE (C3, the architect's ruling) a 409 with its code, codes only: no re-send can finish it (503 until then)
+  assert.deepEqual([r.out.status, r.out.body.error_code, r.out.body.registration_recorded, r.out.body.error], [409, "registration_unconfirmed", null, undefined], JSON.stringify(r.out.body));
   // the projection loses to a withdrawal, and the read after it fails
   const d = await openCase("RL4 gap reread fails");
   const da = party(d, "a", AGENT_TAPE);
@@ -684,7 +685,8 @@ test("MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a
   const v = await unconfirmedA("RL4 gap held stamp gone");
   gh._repoMap(STAMPS).delete(stamp.stampPath(v.a.commitment_sha256));
   const gone = await commit(v.id, v.a, NOW + 1500);
-  assert.deepEqual([gone.status, gone.body.error_code, gone.body.reason], [503, "stamp_record_unreadable", "stamp_missing"]);
+  // since unit R-WIDE (C3, the architect's ruling) a 409 with its code, codes only: no re-send can finish it (503 until then)
+  assert.deepEqual([gone.status, gone.body.error_code, gone.body.reason, gone.body.error], [409, "stamp_record_unreadable", "stamp_missing", undefined]);
 });
 
 test("MUST-FAIL GAP (H36, H45): the file at the path that could not be read writes nothing; a write that kept losing to a file that is not there says the registration is not recorded", async () => {
@@ -749,7 +751,8 @@ test("MUST-FAIL GAP (X01, X06, X07; since unit R-L4c, c4, a file at the claim's 
     ["record", { ...gh.read(PINS, u.rpath), note: "a field no registration has" }]]) {
     gh.seed(PINS, u.rpath, rec);
     const r = await commit(u.id, u.a, NOW + 1500);
-    assert.deepEqual([r.status, r.body.error_code, r.body.differs, r.body.registration_path], [503, "registration_record_unreadable", differs, u.rpath],
+    // since unit R-WIDE (C3) 409, codes only (503 until then)
+    assert.deepEqual([r.status, r.body.error_code, r.body.differs, r.body.registration_path, r.body.error], [409, "registration_record_unreadable", differs, u.rpath, undefined],
       JSON.stringify(r.body).slice(0, 300));
   }
   assert.equal(storedCase(u.id).commitments.a, null);

@@ -335,3 +335,14 @@ test("MUST-FAIL GAP (WB38, WB39): the suite's only preload is the runner's own n
   const env = R.scrubbedEnv({ NODE_OPTIONS: "--require /somewhere/else.js", PATH: "/bin" });
   assert.equal(env.NODE_OPTIONS, `--require ${JSON.stringify(path.join(__dirname, "must_fail", "no_network.js"))}`);
 });
+
+// unit R-WIDE (C16): R-ABf called RN3 (the absolute-path check removed)
+// equivalent; it is not, since an absolute path inside the repository passes
+// the inside-the-repository check that follows
+test("MUST-FAIL GAP (RN3): an absolute path inside the repository is refused by name, before the inside-the-repository check", () => {
+  const ROOT_DIR = path.join(__dirname, "..");
+  const inside = { id: "IN", file: path.join(ROOT_DIR, "README.md"), find: "# ", replace: "#  ", what: "x" };
+  assert.equal(path.isAbsolute(inside.file), true, "fixture: absolute");
+  assert.equal(path.resolve(ROOT_DIR, inside.file).startsWith(path.resolve(ROOT_DIR) + path.sep), true, "fixture: and inside the repository");
+  assert.throws(() => R.checkDefects([inside], ROOT_DIR), /IN: file must be a relative path inside the repository/);
+});

@@ -1005,7 +1005,9 @@ test("TEST 3, ITEM 2A: a stamp history that cannot be read, cannot be parsed, or
   const kept = all.filter((c) => c.path !== spath);
   gh.commits.set(STAMPS, kept);
   const empty = await commit(reg(id, a));
-  assert.equal(empty._status, 503);
+  // since unit R-WIDE (C3, the architect's ruling) a 409 with its code, codes only: no re-send can finish it (503 until then)
+  assert.equal(empty._status, 409);
+  assert.equal(empty._body.error, undefined);
   assert.equal(empty._body.error_code, "stamp_history_unreadable");
   assert.equal(empty._body.reason, "no_commit_touches_path");
 

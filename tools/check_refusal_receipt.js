@@ -5,31 +5,28 @@
 //   node tools/check_refusal_receipt.js <receipt.json> [--document <file>]
 //
 // With --document <file>: offline, and partial (unit R-N3, N3). It checks
-// the receipt's form, then the one reader (lib/_case_seal.js
-// signedUnderReason, unit R-SIG) with the file in place of the named
-// document: the file's json-c14n:v1 sha256 against
-// signed_under.document_sha256, signed_by an active reconcile key in that
-// file, and the signature under it. That proves the signature against the
-// document you supplied and nothing about whether that document is the
-// published one: the trust root, that signed_under.document_commit is on
-// the published branch, needs the network, and so does whether the key is
-// still listed, not revoked, in the current document. So the offline check
-// never prints ok: true. It prints {ok: false, reason: "offline_partial",
-// signature_ok, signature_reason, not_checked} and exits 3, whatever it
-// found (an input it cannot read is signature_ok: false, signature_reason
-// "unreadable"). The exported offline() answers {signature_ok, reason},
-// never a key named ok (unit R-N4, R4); asynchronous since unit R-SIG.
-// Without --document: the readers' own check (verifyRefusalReceipt), which
-// reads the named document from GitHub's raw host, checks its commit is on
-// the published branch, and holds the key to the current document this
-// checkout carries, which (unit R-WIDE, B2) must be the document at the tip
-// of the published branch (lib/_case_seal.js carriedDocumentPublished).
-// Only this check prints ok: true and exits 0; else 1, as on a usage error.
+// the form, then the one reader (lib/_case_seal.js signedUnderReason) with
+// the file as the named document: its json-c14n:v1 sha256 against
+// signed_under.document_sha256, signed_by an active reconcile key in it, the
+// signature under it. That proves the signature against the document you
+// supplied and nothing about whether that document is the published one
+// (its commit on the published branch, and the key still listed, not
+// revoked, need the network). It prints {ok: false, reason:
+// "offline_partial", signature_ok, signature_reason, not_checked}, exit 3.
+// offline() answers {signature_ok, reason}, never a key named ok (R-N4, R4).
+// Without --document: the readers' own check (verifyRefusalReceipt) under
+// the document this checkout carries, which (unit R-WIDE, B2) must be the
+// one at the tip of the published branch (carriedDocumentPublished). Since
+// R-WIDE (C5) it prints {signature_valid, [reason, detail,] not_checked},
+// never a key named ok, and names what no receipt shows: whether the case
+// reads WITHDRAWN now, and the projection its record keeps. Exit 0 only for
+// signature_valid: true; 1 otherwise, and on a usage error.
 "use strict";
 
 const fs = require("fs");
 const S = require("../lib/_case_seal.js");
 
+const NOT_CHECKED_ONLINE = ["whether the case reads WITHDRAWN now", "the projection the withdrawal record keeps"];
 const NOT_CHECKED_OFFLINE = ["the document's commit is on the published branch", "the key is still listed, not revoked, in the current key document"];
 
 async function offline(rec, doc) {
@@ -69,8 +66,9 @@ async function main(argv, { keyDocument = S.PUBLISHED_KEYS, env = process.env } 
     const pub = await S.carriedDocumentPublished(keyDocument, env);
     if (!pub.ok) out = { ok: false, reason: pub.code, detail: pub.reason };
   }
-  process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
-  return out.ok === true ? 0 : 1;
+  const said = out.ok === true ? { signature_valid: true } : { signature_valid: false, reason: out.reason, ...(out.detail ? { detail: out.detail } : {}) };
+  process.stdout.write(`${JSON.stringify({ ...said, not_checked: NOT_CHECKED_ONLINE }, null, 2)}\n`);
+  return said.signature_valid ? 0 : 1;
 }
 
 if (require.main === module) main(process.argv.slice(2)).then((code) => process.exit(code));

@@ -19,8 +19,9 @@
 // but --out. The file is created exclusively (an existing file is refused and
 // left untouched, so a key is never silently replaced) with mode 0600; on
 // Windows, where the mode bits mean little, the tool also asks icacls to strip
-// inherited access and grant only the current user, and says whether that
-// worked.
+// inherited access and grant only the current user; when that fails (or the
+// user is not known) it removes the file and exits 2, printing no entry
+// (unit R-WIDE, C12).
 //
 // USAGE
 //
@@ -98,11 +99,12 @@ function parseArgs(argv) {
   return a;
 }
 
-function restrictOnWindows(file) {
-  if (process.platform !== "win32") return { tried: false };
-  const user = process.env.USERNAME;
+// `platform`, `env` and `run` are this process's unless a test hands others.
+function restrictOnWindows(file, { platform = process.platform, env = process.env, run = spawnSync } = {}) {
+  if (platform !== "win32") return { tried: false };
+  const user = env.USERNAME;
   if (!user) return { tried: true, ok: false, detail: "USERNAME unset" };
-  const r = spawnSync("icacls", [file, "/inheritance:r", "/grant:r", `${user}:F`], { encoding: "utf8" });
+  const r = run("icacls", [file, "/inheritance:r", "/grant:r", `${user}:F`], { encoding: "utf8" });
   return { tried: true, ok: r.status === 0, detail: r.status === 0 ? `icacls: only ${user}` : String(r.stderr || r.stdout).trim().slice(0, 200) };
 }
 
@@ -134,7 +136,8 @@ function entryFor(signerStr, { since, note, expect }) {
   return { entry };
 }
 
-function main(argv) {
+// opts {platform, env, run}: the Windows ACL step's (restrictOnWindows).
+function main(argv, opts = {}) {
   let a;
   try {
     a = parseArgs(argv);
@@ -192,13 +195,20 @@ function main(argv) {
     return 2;
   }
   const entry = got.entry;
-  const acl = restrictOnWindows(out);
+  const acl = restrictOnWindows(out, opts);
+  // unit R-WIDE (C12): on Windows the mode bits mean little, so a key file
+  // whose access could not be restricted is removed, and nothing is printed
+  if (acl.tried && !acl.ok) {
+    fs.rmSync(out, { force: true });
+    process.stderr.write(`REFUSED: the key file's access could not be restricted on Windows (${acl.detail}); file removed\n`);
+    return 2;
+  }
   process.stderr.write(`self-check: the entry passes checkKeyDocument in the committed document; with it published, loadCaseSigner loads ${entry.key_id}; it signs what the verifier accepts\n`);
-  process.stderr.write(`windows acl: ${acl.tried ? (acl.ok ? "restricted" : `NOT restricted: ${acl.detail}`) : "n/a (mode 0600)"}\n`);
+  process.stderr.write(`windows acl: ${acl.tried ? "restricted" : "n/a (mode 0600)"}\n`);
   process.stderr.write(`next: add the entry on stdout to the keys array of ${S.CASE_KEYS_FILE}; set ${S.CASE_SIGNER_ENV} from the file\n`);
   process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
   return 0;
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { main, REQUIRED_SUFFIX };
+module.exports = { main, REQUIRED_SUFFIX, restrictOnWindows };

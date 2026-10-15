@@ -341,7 +341,8 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
   // signer and the record
   const r1 = await committedCase("RN4 sweep reg read");
   gh.forceGetFailure(PINS, REG.pathOf(gh, r1.id, "a"), 1, 503);
-  await drive("registration read", "tail", 503, "could_not_look", () => withdraw(r1.id, r1.b));
+  // since unit R-WIDE (C18) could_not_look is codes only, so it carries no tail
+  await drive("registration read", "codes", 503, "could_not_look", () => withdraw(r1.id, r1.b));
   const r2 = await committedCase("RN4 sweep reg junk");
   gh.seed(PINS, REG.pathOf(gh, r2.id, "b"), { not: "a registration" });
   await drive("registration junk", "code", 503, "case_record_inconsistent", () => withdraw(r2.id, r2.b));
@@ -397,6 +398,8 @@ test("R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdraw
     assert.equal(has(r.body, "tape_listed"), false, label);
     // unit R-L4e: case_record_inconsistent is its code alone
     if (kind === "code") assert.deepEqual(r.body, { ok: false, error_code: "case_record_inconsistent" }, label);
+    // unit R-WIDE (C18): codes only, so no sentence and no tail
+    if (kind === "codes") assert.equal(has(r.body, "error"), false, label);
     if (kind === "tail") assert.ok(r.body.error.endsWith(`. ${TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lost") assert.ok(r.body.error.includes(` ${LOST_TAIL}`), `${label}: ${r.body.error}`);
     if (kind === "lock") assert.ok(r.body.error.endsWith(`. ${LOCK_TAIL}`), `${label}: ${r.body.error}`);
@@ -456,9 +459,10 @@ test("MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other 
   assert.deepEqual([caseRead.status, caseRead.body.error], [503, "the case record could not be read; this is not a 'no', and no row was written"]);
   gh.forceGetFailure(PINS, REG.pathOf(gh, c.id, "a"), 1, 503);
   const regRead = await reference(c);
-  // (since unit R-L4 the projection's file read, said by its role and reason)
-  assert.deepEqual([regRead.status, regRead.body.error],
-    [503, "role a's registration file could not be read (registration_unreadable); this is not a 'no', and no row was written"], JSON.stringify(regRead.body));
+  // (since unit R-L4 the projection's file read, said by its role and
+  // reason; since unit R-WIDE, C18, codes only: no sentence, so no tail)
+  assert.deepEqual([regRead.status, regRead.body.error_code, regRead.body.role, regRead.body.reason, has(regRead.body, "error")],
+    [503, "could_not_look", "a", "registration_unreadable", false], JSON.stringify(regRead.body));
 });
 
 // =============================================================================
