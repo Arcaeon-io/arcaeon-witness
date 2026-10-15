@@ -128,6 +128,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "42153361d0af0d26dd77e29f3b19e5222a7e74ad57c161b2500e8caaca724b59"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF09): a listed row that could not be read in the look for the same send is 503 store_unreachable, codes only, and nothing is written; sent again",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "42153361d0af0d26dd77e29f3b19e5222a7e74ad57c161b2500e8caaca724b59",
+        "caught_by": [
+          "MUST-FAIL GAP (FF09): a listed row that could not be read in the look for the same send is 503 store_unreachable, codes only, and nothing is written; sent again"
+        ]
       }
     ]
   },
@@ -179,6 +196,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "37093c5764379534e5bb8be11111682c42f5c35b189b57bb4a07c7b71900c978"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF10): the same send's row whose named document could not be read is 503 document_unavailable, codes only, never passed over for a second row",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "37093c5764379534e5bb8be11111682c42f5c35b189b57bb4a07c7b71900c978",
+        "caught_by": [
+          "MUST-FAIL GAP (FF10): the same send's row whose named document could not be read is 503 document_unavailable, codes only, never passed over for a second row"
+        ]
       }
     ]
   },
@@ -193,6 +227,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "18653ecd058cac5f82bf3ee2088d7c2d1e71c63c08028c7ee438b07278a32262"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF11): the look for the same send reads no row past seq 40 (rows a deployment before R-FG wrote)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "18653ecd058cac5f82bf3ee2088d7c2d1e71c63c08028c7ee438b07278a32262",
+        "caught_by": [
+          "MUST-FAIL GAP (FF11): the look for the same send reads no row past seq 40 (rows a deployment before R-FG wrote)"
+        ]
       }
     ]
   },
@@ -207,6 +258,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "be4e1a0b0f3507ccc28689c4301cc8e73450e7c069b09f4faddaa2aab7c0a559"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF13): a file at a row's path that is not JSON is not this send's row: the reference takes the next seq",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "be4e1a0b0f3507ccc28689c4301cc8e73450e7c069b09f4faddaa2aab7c0a559",
+        "caught_by": [
+          "MUST-FAIL GAP (FF13): a file at a row's path that is not JSON is not this send's row: the reference takes the next seq"
+        ]
       }
     ]
   },
@@ -752,6 +820,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "93d6b00862699917eff25bfdf3aea304388b6137a49648c4571aa8dd77c264dd"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF42): the README quotes auth_note as the API sends it",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "93d6b00862699917eff25bfdf3aea304388b6137a49648c4571aa8dd77c264dd",
+        "caught_by": [
+          "MUST-FAIL GAP (FF42): the README quotes auth_note as the API sends it"
+        ]
       }
     ]
   },
@@ -782,6 +867,21 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "ce599e12acb3f17f26df7e230bb48d2579df82221cef51b532f4081bdf0b9863"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "ce599e12acb3f17f26df7e230bb48d2579df82221cef51b532f4081bdf0b9863",
+        "caught_by": [
+          "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
+        ]
       }
     ]
   },
@@ -828,6 +928,21 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "2fd1b12ba44c186dc187f08f3f760830b8f1b642904da6e06ad1888cd084b70b"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "2fd1b12ba44c186dc187f08f3f760830b8f1b642904da6e06ad1888cd084b70b",
+        "caught_by": [
+          "MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${, and lexes an expression with braces inside it as code"
+        ]
       }
     ]
   },
@@ -842,6 +957,23 @@
         "head": "95efb1f135775cb1359caf85bee979b9b5c9f45d",
         "porcelain": "",
         "defect_sha256": "e8d4022023c6408e29ff1488aecdb4c4790e598d66ca85e23c7552fc87d01da1"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (FF48): BREAK ARM: a port that says reconcile.py's \"holds a duplicate key\" is caught on every case that says it",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "b4e0e685b773c3520d52b7d9ac407c1203b89a6a",
+        "porcelain": "",
+        "defect_sha256": "e8d4022023c6408e29ff1488aecdb4c4790e598d66ca85e23c7552fc87d01da1",
+        "caught_by": [
+          "MUST-FAIL GAP (FF48): BREAK ARM: a port that says reconcile.py's \"holds a duplicate key\" is caught on every case that says it"
+        ]
       }
     ]
   },
