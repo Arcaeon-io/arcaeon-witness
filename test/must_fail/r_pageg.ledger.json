@@ -65,6 +65,23 @@
         "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
         "porcelain": "",
         "defect_sha256": "6bb4ddf4574b458732dea4d91193fdeb1e1673a37fbbf91a369763067ac4f961"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PH06): a JSON file's bytes are its text's (fileText, with its closing newline), and a fresh registration's file is written as those bytes, its pr",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "924744e76a8a1222f38ef9e81bd7dd9af1a7659c",
+        "porcelain": "",
+        "defect_sha256": "6bb4ddf4574b458732dea4d91193fdeb1e1673a37fbbf91a369763067ac4f961",
+        "caught_by": [
+          "MUST-FAIL GAP (PH06): a JSON file's bytes are its text's (fileText, with its closing newline), and a fresh registration's file is written as those bytes, its pr"
+        ]
       }
     ]
   },
@@ -2007,6 +2024,23 @@
         "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
         "porcelain": "",
         "defect_sha256": "f097303cae2fd670130a3e5148c36057189f65d6b7774d3e1dc6a9c4d26cbe31"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PH13): role a's file unreadable and role b's missing: the record is inconsistent, whatever role a's read found: the page 503 case_record_inconsis",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "924744e76a8a1222f38ef9e81bd7dd9af1a7659c",
+        "porcelain": "",
+        "defect_sha256": "f097303cae2fd670130a3e5148c36057189f65d6b7774d3e1dc6a9c4d26cbe31",
+        "caught_by": [
+          "MUST-FAIL GAP (PH13): role a's file unreadable and role b's missing: the record is inconsistent, whatever role a's read found: the page 503 case_record_inconsis"
+        ]
       }
     ]
   },
@@ -2278,6 +2312,23 @@
         "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
         "porcelain": "",
         "defect_sha256": "42a8200cd0b9fd6bb117b21e400b1254196fcd440aa1e03187dcb6ae4d626a8b"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PH18): both registration files unreadable: each row says its file could not be read, and the twin gives neither time",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "924744e76a8a1222f38ef9e81bd7dd9af1a7659c",
+        "porcelain": "",
+        "defect_sha256": "42a8200cd0b9fd6bb117b21e400b1254196fcd440aa1e03187dcb6ae4d626a8b",
+        "caught_by": [
+          "MUST-FAIL GAP (PH18): both registration files unreadable: each row says its file could not be read, and the twin gives neither time"
+        ]
       }
     ]
   },
@@ -2426,6 +2477,23 @@
         "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
         "porcelain": "",
         "defect_sha256": "1ef84e6400d0c0e61313d1047fcf45dd0dedde5606ff35576db76f4adf863671"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PH27): a role whose file this page did not read has no check line: a sealed case read by a reader that skipped role b",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "924744e76a8a1222f38ef9e81bd7dd9af1a7659c",
+        "porcelain": "",
+        "defect_sha256": "1ef84e6400d0c0e61313d1047fcf45dd0dedde5606ff35576db76f4adf863671",
+        "caught_by": [
+          "MUST-FAIL GAP (PH27): a role whose file this page did not read has no check line: a sealed case read by a reader that skipped role b"
+        ]
       }
     ]
   },
@@ -2472,6 +2540,23 @@
         "head": "94ba74a8d618885971c874f2f5e2a749b8f47a80",
         "porcelain": "",
         "defect_sha256": "fce5ada27c0353e476af89f0f46a8faeb4f1dab791c6b57147caa6c5eb3a3449"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PH29): renderCase handed a clock takes it as the key document's read time (the tests' clock), as the page does when one is handed in",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "924744e76a8a1222f38ef9e81bd7dd9af1a7659c",
+        "porcelain": "",
+        "defect_sha256": "fce5ada27c0353e476af89f0f46a8faeb4f1dab791c6b57147caa6c5eb3a3449",
+        "caught_by": [
+          "MUST-FAIL GAP (PH29): renderCase handed a clock takes it as the key document's read time (the tests' clock), as the page does when one is handed in"
+        ]
       }
     ]
   },
