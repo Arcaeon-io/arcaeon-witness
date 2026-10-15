@@ -378,6 +378,21 @@
         "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
         "porcelain": "",
         "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
       }
     ]
   },
@@ -518,6 +533,21 @@
         "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
         "porcelain": "",
         "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
       }
     ]
   },
@@ -542,6 +572,21 @@
         "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
         "porcelain": "",
         "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
       }
     ]
   },

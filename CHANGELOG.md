@@ -1,5 +1,159 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDEf: the fixes for the R-WIDE reader's findings (branch `case-protocol-2026-10-10`, NOT deployed)
+
+The reader's verdict on R-WIDE was DO NOT MERGE, on two false sentences (F1). This unit fixes them, the runner (F2) and the reader's other findings (F3), as the architect ruled.
+
+- **Commits.** eb37abe (F1), 6d3bef6 (F2: the runner), 2aa6b8a (F2: Group A's pass run again), e64633b (F3), 6a7ff6d (the defect list, committed before the run), a9c1dc4 (the pass's first ledger, the gap tests, and the shim test's probe fixed), a3385f9 (the re-seed's ledger, and the gap test for WF21, WF26 and WF27), and this entry's commit (the last re-seed's ledger and the change log).
+
+### F1, the two false sentences
+
+- **F1-a.** The README's KEY_DOCUMENT_BRANCH paragraph said a deployment whose commit is "ahead of the branch or diverged" answers 503 `deployment_document_off_branch`. Since R-WIDE C14, `off` is set only for a diverged commit. The paragraph now says "diverged", and adds: "A deployment whose own commit is ahead of the branch answers 503 `document_unavailable` until the branch reaches it." The comment on `deploymentOffBranch` (`lib/_case_http.js`) says the same. The Group A entry's A6 bullet is corrected in place.
+- **F1-b.** The status page's off-branch line said "every reveal, withdrawal, reference and refusal receipt is answered 503". With no active reconcile entry in the carried document, the reveal and the refusal receipt answer 409 `sealing_not_offered` first. The line now says only what is always true: "... so this deployment signs nothing: withdrawals and references are answered 503 deployment_document_off_branch; an operator fault." The README says withdrawals and references, and names the 409 the reveal and the receipt answer first. The Group A entry's status-line bullet is corrected in place. The test asserts the line's exact text, and the 409 ordering next to it.
+
+### F2, the runner
+
+- **F2-a. The reporter is named.** `runSuite` runs `node --test --test-reporter=tap --test-reporter-destination=stdout <suite>` (`suiteArgs`). It parsed `not ok` lines from node's default reporter, which on Node 24 is spec even on a pipe: there no line said `not ok`, every exit 1 read as error, the unplanted-suite gate said "(exit 1, 0 failing)", and no catch could be counted. That is the cause of the four B4 tests that failed on the operator's Windows run. The test forces spec on this machine's Node 22 through `NODE_OPTIONS` (`--test-reporter=spec --test-reporter-destination=stdout`, as Node 24 defaults), shows the fixture then prints no `not ok` line, and that `runSuite` still counts its one failing test. `runSuite` takes the environment as an option for that test (the scrubbed one unless handed another).
+- **F2-b.** An `error` run keeps the last 30 lines of the suite's stderr in the ledger as `stderr_tail` (trailing blank lines dropped). The table prints "error (exit N): <its first line>". A catch or a survival keeps none.
+- **F2-c.** The table prints a run that records no `head` (the runner before R-WIDE B4) as "pre-B4, not vouched", on the first run's cell and on the date of a catch. Group A's ledger was all such runs, and its four gap re-seeds ran before 7cfb55f committed their gap tests. Group A's 30 defects were run again under the fixed runner, at 6d3bef6: 30 caught. WA15 was replanted as a pure not-compared (`if (false && ...)`), and was caught by 2 failing tests; the inverted condition it replaced broke 548. WA23's text follows C14's line (`off: !on.not_found && !on.ahead`), with the 404 taken as off. The Group A entry says so in place.
+
+  | id | file | planted defect | first run (pre-B4, not vouched) | run again under the fixed runner |
+  |---|---|---|---|---|
+  | WA01 | `lib/_case_page.js` | the records line drops the typed cross-reference sentence | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA02 | `lib/_case_page.js` | a read that did not see every row says no row was appended | caught (2 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA03 | `lib/_case_page.js` | every row is said to be appended with the operator key | caught (3 failing) | caught (4 failing), 2026-10-15, at 6d3bef6 |
+  | WA04 | `lib/_case_page.js` | a failed rows read says no row was appended | survived; caught on its gap test | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA05 | `lib/_case_page.js` | rows whose read failed are taken as seen | survived; caught on its gap test | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA06 | `lib/_case_page.js` | invalid rows are counted as appended | survived; caught on its gap test | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA07 | `lib/_case_page.js` | a withdrawn root whose document could not be read is not the 503 could-not-look page | caught (3 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA08 | `lib/_case_page.js` | a withdrawn root naming an off-branch document is not the could-not-look page | survived; caught on its gap test | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA09 | `lib/_case_page.js` | a withdrawn root signed by a revoked key is not the revoked page | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA10 | `lib/_case_page.js` | a withdrawal record that does not verify shows its detail | caught (4 failing) | caught (4 failing), 2026-10-15, at 6d3bef6 |
+  | WA11 | `lib/_case_page.js` | the withdrawn row names a role, not the preimage presented | caught (5 failing) | caught (5 failing), 2026-10-15, at 6d3bef6 |
+  | WA12 | `lib/_case_page.js` | the withdrawn could-not-look page speaks of a sealed record | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA13 | `lib/_case_page.js` | the withdrawn revoked page speaks of a verdict | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA14 | `lib/_case_page.js` | the registration sentence names a party as the signer | caught (3 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA15 | `lib/_case_http.js` | the opening's named key id is not compared (replanted by unit R-WIDEf, F2-d: a pure not-compared; it was the inverted condition) | caught (548 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA16 | `lib/_case_http.js` | the pre-write bar is not given the registering key id | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA17 | `lib/_case_seal.js` | a revoked reconcile entry offers sealing | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA18 | `lib/_case_http.js` | the reveal does not answer sealing_not_offered | caught (4 failing) | caught (5 failing), 2026-10-15, at 6d3bef6 |
+  | WA19 | `lib/_case_http.js` | the refusal receipt does not answer sealing_not_offered | caught (3 failing) | caught (5 failing), 2026-10-15, at 6d3bef6 |
+  | WA20 | `lib/_case_http.js` | the withdrawal and the reference answer an off-branch deployment document_unavailable | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA21 | `lib/_case_http.js` | the reveal answers an off-branch deployment document_unavailable | caught (4 failing) | caught (4 failing), 2026-10-15, at 6d3bef6 |
+  | WA22 | `lib/_case_http.js` | the refusal receipt answers an off-branch deployment document_unavailable | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA23 | `lib/_case_seal.js` | a commit the repository does not show is taken as off the branch (its text follows R-WIDE C14's line, unit R-WIDEf) | caught (3 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA24 | `lib/_case_seal.js` | the status state never says the deployment's document is off the branch | caught (2 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA25 | `api/status.js` | the status page drops the deployment document line | caught (2 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+  | WA26 | `tools/preview_dry_run.js` | the preview does not call an off-branch deployment BROKEN | caught (1 failing) | caught (1 failing), 2026-10-15, at 6d3bef6 |
+  | WA27 | `tools/preview_dry_run.js` | the preview does not call a document with no reconcile key BROKEN | caught (1 failing) | caught (1 failing), 2026-10-15, at 6d3bef6 |
+  | WA28 | `lib/_case_http.js` | the not-a-party refusal says a receipt is issued to a party | caught (2 failing) | caught (2 failing), 2026-10-15, at 6d3bef6 |
+  | WA29 | `lib/_case_http.js` | the refusal receipt's sealing_not_offered does not say the case is WITHDRAWN | caught (2 failing) | caught (4 failing), 2026-10-15, at 6d3bef6 |
+  | WA30 | `public/.well-known/arcaeon/case-signing-keys.json` | the key document's description describes a reconcile key it does not list | caught (3 failing) | caught (3 failing), 2026-10-15, at 6d3bef6 |
+
+  (WA15's first run is the inverted condition's, the defect before its replant.)
+- **F2-d.** The suite's environment also drops every name ending `_KEY` (STRIPE_SECRET_KEY, *_API_KEY). The no-network preload also refuses `http.request` and `http.get`, `https.request` and `https.get`, `net.connect` (`net.createConnection`) and `tls.connect` to any host but this machine's; a Unix socket or a named pipe (a path, no host) is this machine's.
+- Tests whose table fixtures recorded no `head` now give their runs one (a note says why); the one that reads a ledger from before R-ABf prints "pre-B4, not vouched".
+
+### F3, page words and small truths
+
+- **F3-a.** No page prints "holds": "who has it" (the parties sentence), "the pins repository has no ... at that commit", "a tape a counterparty already has" (the withdrawal claim, also on the withdrawal's answer and in the README), "names another chain" (the two conflict words), and on the status page "whether a pin is its case's". The reconcile page says "has two sides at once, or has something". The codes keep their names (`pin_holds_another_chain`). The test renders the case page OPEN, COMMITTED, WITHDRAWN, sealed and pinned, with a pin conflict, and with a pin naming a commit with no case file; it renders every conflict and mismatch word, the withdrawal claim, the status page and the reconcile page, and refuses "holds" and "second operator" in each.
+- **F3-b.** The page cache keeps no root sha (it was stored and never compared). It keeps no page whose case deadline falls inside the next 60 seconds of the page's clock; a deadline more than 60 seconds away, or already past, is kept. The footer still says "may be up to 60 seconds old".
+- **F3-c.** The document at the tip (`carriedDocumentPublished`) is read through the contents API at the head of the published branch, with the pin token the compare uses, not from the raw host, which caches a branch's file for minutes. A branch or file the API does not show is `http_404`; a failed read keeps its status. README says so. Test helpers: `gh.seedAtBranch` (a file at a branch head, for the contents API) and `KD.unpublishTip`.
+- **F3-d.** The status page keeps the deployment document's answer 60 seconds per instance, on the clock "on the branch" is kept by (C2), when that answer is confirmed or off; a could-not-look answer is read again.
+- **F3-e.** The tape counts are keyed by (name, label, index in the batch) (`countsOf`): by name when no other tape has it, by label when only the names collide (C8's two same-side tapes, keyed `tape_a` and `tape_b` as before), and by `name/label/index` when the labels collide too. The labels this port gives are always `tape_a` and `tape_b`, so the third key is not reached through `reconcileTapes`; `countsOf` is exported and tested directly.
+- **F3-f.** The README's stamp section: "The case registration's `stamp_size_mismatch` refusal is retired: no new stamp carries a size, and old stamps keep theirs and are never deleted."
+
+- **Line counts.** `README.md` 1074 to 1079, `api/status.js` 416 to 419, `lib/_case_http.js` 2469 to 2471, `lib/_case_page.js` 844 to 849, `lib/_case_seal.js` 2427 to 2450, `lib/_reconcile_page.js` 396, `lib/_reconcile_tapes.js` 1007 to 1020, `test/must_fail/run.js` 337 to 372, `test/must_fail/no_network.js` 21 to 77.
+- **Tests.**
+  - New: `test/case_rwide_f.test.js` (F1-a, F1-b, F3-a, F3-b, F3-c, F3-d, F3-f), `test/must_fail_runner.test.js` (F2-a, F2-b, F2-c, F2-d two), `test/reconcile_conformance.test.js` (F3-e). The 13 fail on 40e0473.
+  - Gap tests, from the pass: MUST-FAIL GAP (WF04) and (WF49) in `test/case_rwide_f.test.js`; (WF11), (WF30, WF31) and (WF21, WF26, WF27) in `test/must_fail_runner.test.js`. The F2-d shim test's probe runs with no `NODE_OPTIONS` preload.
+  - Rewritten, each with a note: `case_rwide` A6's status line (it now ends "an operator fault"), WB10 (`put` takes no root sha), B2's tip taken away (`KD.unpublishTip`); `case_rj`, `case_rj2` (B1, n6/n7), `case_rj3` (the table's words, BL2), `case_mutation_gaps` P08, `case_rl` (the claim), `case_rpin` f2 (the status page's sentence): the words without "holds"; `preview_dry_run` B2's tip taken away; the four runner table tests' fixtures.
+
+- **The must-fail pass** (the repository's runner, F2-a's; dates from the ledger, `test/must_fail/r_wide_f.ledger.json`, whose runs record the commit they planted against). 59 defects were planted over the lines this unit changed, each alone with the whole suite run, over 6a7ff6d: `README.md` 6, `lib/_case_http.js` 2, `api/status.js` 2, `CHANGELOG.md` 1, `test/must_fail/run.js` 12, `test/must_fail/no_network.js` 11, `lib/_case_page.js` 8, `lib/_case_seal.js` 12, `lib/_reconcile_page.js` 1, `lib/_reconcile_tapes.js` 4.
+  - 45 were caught on their first run. 14 survived:
+    - WF04 (the README's 409 clause), WF11 (`runSuite` ignores the environment it is handed) and WF49 (a tip that is not JSON) each got a gap test.
+    - **Found by this pass:** WF21 to WF31, every defect in the no-network shim, survived because the F2-d shim test's probe inherited the suite's `NODE_OPTIONS`, which preloads the runner's own shim; it answered for the planted one (WB38's masking, one process down). The probe now runs with no preload. The suite itself keeps the runner's shim as its preload: a planted shim must never open the suite to the network. WF30 and WF31 (a path is this machine's) got a gap test.
+    - The re-seed of the 14 caught 11. WF21 (https not guarded), WF26 (a request's `hostname` not read) and WF27 (its `host` not read) survived again: the http and https guards are backed by the net and tls guards under them, so the same calls were refused a layer down. A request whose connection the caller makes itself (`createConnection`) reaches no net or tls socket, and only its own guard refuses it: that gap test caught all three on their re-seed.
+  - 59 of 59 caught.
+  - Not planted: the key of the status page's kept answer (`branch:commit:document sha256`). Every part of it is fixed for a deployment's life, so a defect there changes nothing a deployment does.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | WF01 | `README.md` | F1-a: the README says ahead of the branch or diverged | caught (2 failing) | 2026-10-15 |
+  | WF02 | `README.md` | F1-a: the README drops the ahead sentence | caught (2 failing) | 2026-10-15 |
+  | WF03 | `README.md` | F1-b: the README says every reveal and refusal receipt is answered 503 | caught (2 failing) | 2026-10-15 |
+  | WF04 | `README.md` | F1-b: the README drops when the reveal and the receipt answer 409 sealing_not_offered first | survived; caught on re-seed by MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503 | 2026-10-15 |
+  | WF05 | `lib/_case_http.js` | F1-a: the comment says ahead or diverged | caught (2 failing) | 2026-10-15 |
+  | WF06 | `lib/_case_http.js` | F1-a: the comment drops the ahead sentence | caught (2 failing) | 2026-10-15 |
+  | WF07 | `api/status.js` | F1-b: the status line says every reveal and refusal receipt is answered 503 | caught (3 failing) | 2026-10-15 |
+  | WF08 | `CHANGELOG.md` | F1-a: the A6 bullet is not corrected in place | caught (2 failing) | 2026-10-15 |
+  | WF09 | `test/must_fail/run.js` | F2-a: the suite runs under node's default reporter | caught (1 failing) | 2026-10-15 |
+  | WF10 | `test/must_fail/run.js` | F2-a: the reporter is named and its destination is not | caught (1 failing) | 2026-10-15 |
+  | WF11 | `test/must_fail/run.js` | F2-a: runSuite ignores the environment it is handed | survived; caught on re-seed by MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed | 2026-10-15 |
+  | WF12 | `test/must_fail/run.js` | F2-b: the suite's stderr is discarded | caught (1 failing) | 2026-10-15 |
+  | WF13 | `test/must_fail/run.js` | F2-b: every run keeps a stderr tail | caught (1 failing) | 2026-10-15 |
+  | WF14 | `test/must_fail/run.js` | F2-b: the tail is 40 lines | caught (1 failing) | 2026-10-15 |
+  | WF15 | `test/must_fail/run.js` | F2-b: trailing blank lines are kept in the tail | caught (1 failing) | 2026-10-15 |
+  | WF16 | `test/must_fail/run.js` | F2-b: the table prints no stderr line for an error | caught (1 failing) | 2026-10-15 |
+  | WF17 | `test/must_fail/run.js` | F2-c: every run is vouched for | caught (2 failing) | 2026-10-15 |
+  | WF18 | `test/must_fail/run.js` | F2-c: the date of a pre-B4 catch is not marked | caught (2 failing) | 2026-10-15 |
+  | WF19 | `test/must_fail/run.js` | F2-c: a pre-B4 survival is not marked when a catch follows | caught (2 failing) | 2026-10-15 |
+  | WF20 | `test/must_fail/run.js` | F2-d: names ending _KEY reach the suite | caught (1 failing) | 2026-10-15 |
+  | WF21 | `test/must_fail/no_network.js` | F2-d: https is not guarded | survived; caught on re-seed by MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu | 2026-10-15 |
+  | WF22 | `test/must_fail/no_network.js` | F2-d: net.connect is not guarded | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF23 | `test/must_fail/no_network.js` | F2-d: net.createConnection is not guarded | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF24 | `test/must_fail/no_network.js` | F2-d: tls.connect is not guarded | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF25 | `test/must_fail/no_network.js` | F2-d: the guard lets every host through | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF26 | `test/must_fail/no_network.js` | F2-d: a request's hostname option is not read | survived; caught on re-seed by MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu | 2026-10-15 |
+  | WF27 | `test/must_fail/no_network.js` | F2-d: a request's host option is not read | survived; caught on re-seed by MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu | 2026-10-15 |
+  | WF28 | `test/must_fail/no_network.js` | F2-d: a connection's host option is not read | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF29 | `test/must_fail/no_network.js` | F2-d: connect(port, host) is taken as this machine | survived; caught on re-seed by R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro | 2026-10-15 |
+  | WF30 | `test/must_fail/no_network.js` | F2-d: a request over a Unix socket is refused | survived; caught on re-seed by MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's) | 2026-10-15 |
+  | WF31 | `test/must_fail/no_network.js` | F2-d: a connection to a path is refused | survived; caught on re-seed by MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's) | 2026-10-15 |
+  | WF32 | `lib/_case_page.js` | F3-a: the parties sentence says holds | caught (2 failing) | 2026-10-15 |
+  | WF33 | `lib/_case_page.js` | F3-a: the absent-at-commit words say holds | caught (5 failing) | 2026-10-15 |
+  | WF34 | `lib/_case_seal.js` | F3-a: the pin file's conflict words say holds | caught (7 failing) | 2026-10-15 |
+  | WF35 | `lib/_case_seal.js` | F3-a: the pin record's conflict words say holds | caught (6 failing) | 2026-10-15 |
+  | WF36 | `lib/_case_seal.js` | F3-a: the withdrawal claim says holds | caught (4 failing) | 2026-10-15 |
+  | WF37 | `api/status.js` | F3-a: the status page says holds | caught (3 failing) | 2026-10-15 |
+  | WF38 | `lib/_reconcile_page.js` | F3-a: the reconcile page says holds | caught (2 failing) | 2026-10-15 |
+  | WF39 | `lib/_case_page.js` | F3-b: a page whose deadline is near is kept | caught (2 failing) | 2026-10-15 |
+  | WF40 | `lib/_case_page.js` | F3-b: a deadline exactly 60 seconds away is kept | caught (2 failing) | 2026-10-15 |
+  | WF41 | `lib/_case_page.js` | F3-b: a deadline just past is not kept | caught (2 failing) | 2026-10-15 |
+  | WF42 | `lib/_case_page.js` | F3-b: the kept page records a root sha | caught (2 failing) | 2026-10-15 |
+  | WF43 | `lib/_case_page.js` | F3-b: the handler gives the cache no deadline | caught (2 failing) | 2026-10-15 |
+  | WF44 | `lib/_case_page.js` | F3-b: the deadline is held to the service clock, not the page's | caught (2 failing) | 2026-10-15 |
+  | WF45 | `lib/_case_seal.js` | F3-c: the tip is read on main whatever branch is published | caught (3 failing) | 2026-10-15 |
+  | WF46 | `lib/_case_seal.js` | F3-c: the tip is read with another token than the compare's | caught (2 failing) | 2026-10-15 |
+  | WF47 | `lib/_case_seal.js` | F3-c: a tip the API does not show passes | caught (4 failing) | 2026-10-15 |
+  | WF48 | `lib/_case_seal.js` | F3-c: a failed read loses its status | caught (2 failing) | 2026-10-15 |
+  | WF49 | `lib/_case_seal.js` | F3-c: a tip that is not JSON reads as a failed fetch | survived; caught on re-seed by MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json | 2026-10-15 |
+  | WF50 | `lib/_case_seal.js` | F3-d: the status page's answer is never kept | caught (2 failing) | 2026-10-15 |
+  | WF51 | `lib/_case_seal.js` | F3-d: an answer is kept one millisecond past 60 seconds | caught (2 failing) | 2026-10-15 |
+  | WF52 | `lib/_case_seal.js` | F3-d: an off answer is not kept | caught (5 failing) | 2026-10-15 |
+  | WF53 | `lib/_case_seal.js` | F3-d: the cache reset leaves the status answers | caught (2 failing) | 2026-10-15 |
+  | WF54 | `lib/_reconcile_tapes.js` | F3-e: two tapes sharing a name and a label share a key | caught (1 failing) | 2026-10-15 |
+  | WF55 | `lib/_reconcile_tapes.js` | F3-e: two same-side tapes are keyed by side | caught (4 failing) | 2026-10-15 |
+  | WF56 | `lib/_reconcile_tapes.js` | F3-e: a tape with its own side is keyed by label | caught (11 failing) | 2026-10-15 |
+  | WF57 | `lib/_reconcile_tapes.js` | F3-e: a tape is taken to share its name with itself | caught (11 failing) | 2026-10-15 |
+  | WF58 | `README.md` | F3-f: the README does not name the retired refusal | caught (2 failing) | 2026-10-15 |
+  | WF59 | `README.md` | F3-c: the README says the tip is read from the raw host | caught (2 failing) | 2026-10-15 |
+
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1598 tests, 1591 pass, 2 skipped, 0 fail, 5 todo. The operator runs it on Windows at this tip.
+- **UNSURE.**
+  - F1-b: the README keeps "This is an operator fault, not a sender's: no request can finish it until the deployment is rebuilt from the published branch." For a diverged commit that holds unless the branch is rewritten to contain it; the status line no longer says it.
+  - F2-a: Node 24 is not on this machine. The fix is shown with spec forced through `NODE_OPTIONS` on Node 22, and the operator's Windows run at this unit's tip is the check the ruling names.
+  - F2-d: the shim guards the module functions a test would call. A socket made another way (a raw `net.Socket().connect`, `dgram`, a child process) is not refused.
+  - F3-a: "page" is read as every HTML page this service renders: the case page, the status page and the reconcile page. The reconcile verdict's `cannot` reasons ("line N holds a duplicate key"), which the reconcile page shows when a tape cannot be read, are reconcile.py's words, held byte for byte by the conformance tests, and are unchanged. So are the API's own sentences (a lock "another request holds", the 409 at 500 reference rows), which no page prints. "second operator" is refused as words; the test fixtures' host name `second-operator.example` is data.
+  - F3-b: a page within 60 seconds of its deadline is read on every view until the deadline passes, so a busy case costs a read per view for that minute.
+  - F3-c: the contents API read uses the pin token's rate budget (a call per sealer pass and per online receipt check), where the raw host used none.
+  - F3-d: a could-not-look answer is not kept, so a status page whose compare keeps failing reads it on every view.
+  - F3-e: "index in the batch" is read as the tape's place in the pair `reconcileTapes` is given; with this port's fixed labels the third key is reached only through `countsOf` directly.
+- **LATER** (named by the architect, not built here):
+  - The reader's `stamp_record_unreadable` 503 for a record at a stamp's path that is not a file-stamp: first write wins, so no re-send finishes it.
+  - The other public reads (the status page, `api/latest.js`, the badge, the `?op=` reads) still read with the pin token, not `GITHUB_READ_TOKEN`.
+- **The architect's notes.** The 1b tell's ending (`stamp_size_mismatch` retired, R-WIDE D1) is CONFIRMED. The operator, not the builder, runs the suite on Windows at this unit's tip and records the counts; R-AB, R-ABf and R-WIDE count together when that run reads 0 fail.
+
 ## 2026-10-15: Unit R-WIDE, Group D: stamps (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 6466231 (tests and code), 4861d8c (the defect list, committed before the run), and this entry's commit (the ledger and the change log).
