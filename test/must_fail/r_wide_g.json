@@ -1,0 +1,86 @@
+[
+ {
+  "id": "WG01",
+  "file": "public/PRACTICES.md",
+  "find": "a single operator has it. That",
+  "replace": "single operator holds it. That",
+  "what": "G2: PRACTICES.md says holds"
+ },
+ {
+  "id": "WG02",
+  "file": "public/.well-known/arcaeon/case-signing-keys.json",
+  "find": "A reader keeps a record to the document it names",
+  "replace": "A reader holds a record to the document it names",
+  "what": "G2: the key document says holds"
+ },
+ {
+  "id": "WG03",
+  "file": "lib/_store.js",
+  "find": "    { headers: ghHeaders(target), ...(signal ? { signal } : {}) }",
+  "replace": "    { headers: ghHeaders(target) }",
+  "what": "G4: getFile drops the signal it is handed"
+ },
+ {
+  "id": "WG04",
+  "file": "lib/_case_seal.js",
+  "find": "      { signal: AbortSignal.timeout(documentFetch.timeoutMs) });",
+  "replace": "      {});",
+  "what": "G4: the tip is read with no timeout"
+ },
+ {
+  "id": "WG05",
+  "file": "lib/_case_seal.js",
+  "find": "const documentFetch = { timeoutMs: DOCUMENT_FETCH_TIMEOUT_MS };",
+  "replace": "const documentFetch = { timeoutMs: 10 * DOCUMENT_FETCH_TIMEOUT_MS };",
+  "what": "G4: the tip's timeout is not the raw read's 8 seconds"
+ },
+ {
+  "id": "WG06",
+  "file": "lib/_case_seal.js",
+  "find": "// kept 60 seconds per instance (unit R-WIDEf, F3-d: each status view in the",
+  "replace": "// kept 60 seconds per instance (unit R-WIDE, F3-d: each status view in the",
+  "what": "G5: the comment names R-WIDE"
+ },
+ {
+  "id": "WG07",
+  "file": "README.md",
+  "find": " The status page's line about this deployment's\nkey document may be up to about 120 seconds old: a confirmed or off answer is\nkept 60 seconds, and a commit read as on the branch is kept 60 seconds before\nthat.",
+  "replace": "",
+  "what": "G5: the README does not say how old the status line can be"
+ },
+ {
+  "id": "WG08",
+  "file": "lib/_case_seal.js",
+  "find": "  const key = `${keyDocumentBranch(env)}:${sealing.document_commit}:${sealing.document_sha256}`;",
+  "replace": "  const key = `${sealing.document_commit}`;",
+  "what": "G5: the status cache's key is the commit alone (expected equivalent: branch and document are fixed for a deployment's life)"
+ },
+ {
+  "id": "WG09",
+  "file": "CHANGELOG.md",
+  "find": "    - The real registration binding: the opening names the parties' keys, so a registration is bound to a key the opening named, not only to whoever registered first.\n",
+  "replace": "",
+  "what": "G3: the LATER list drops the registration binding"
+ },
+ {
+  "id": "WG10",
+  "file": "CHANGELOG.md",
+  "find": "    - The pin lane's outage marking: a deadline missed while the store answered 5xx is `service_outage`, not a sender's miss.\n",
+  "replace": "",
+  "what": "G3: the LATER list drops the outage marking"
+ },
+ {
+  "id": "WG11",
+  "file": "CHANGELOG.md",
+  "find": "    - The status page's case count is truncated past 1,000: the tree read lists at most that many, and the count past it is not shown as a count.\n",
+  "replace": "",
+  "what": "G3: the LATER list drops the count's truncation"
+ },
+ {
+  "id": "WG12",
+  "file": "test/must_fail/r_wide_a.json",
+  "find": "\"find\": \"      : { state: \\\"deployment_document_off_branch\\\", commit: sealing.document_commit, reason: c.reason };\"",
+  "replace": "\"find\": \"  return { state: c.off ? \\\"deployment_document_off_branch\\\" : \\\"document_unavailable\\\", commit: sealing.document_commit, reason: c.reason };\"",
+  "what": "G1: WA24 targets the line F3-d rewrote"
+ }
+]
