@@ -1,0 +1,177 @@
+[
+ {
+  "id": "WD01",
+  "file": "lib/_stamp.js",
+  "find": "    const record = { kind: \"file-stamp\", v: 1, sha256: v.sha256, stamped_at: nowIso };",
+  "replace": "    const record = { kind: \"file-stamp\", v: 1, sha256: v.sha256, size: null, stamped_at: nowIso };",
+  "what": "D1: the stamp stores a size again (null)"
+ },
+ {
+  "id": "WD02",
+  "file": "lib/_stamp.js",
+  "find": "    if (!Number.isInteger(body.size) || body.size < 0 || body.size > MAX_SIZE) {",
+  "replace": "    if (false) {",
+  "what": "D1: the size the request sends is not checked for form"
+ },
+ {
+  "id": "WD03",
+  "file": "lib/_stamp.js",
+  "find": "A stamp stores a fingerprint and the time, nothing else; the store is public.",
+  "replace": "A stamp stores a fingerprint and an optional size, nothing else; the store is public.",
+  "what": "D1: the extra-field refusal says a size is stored"
+ },
+ {
+  "id": "WD04",
+  "file": "lib/_stamp.js",
+  "find": "    \"Who made the file. That anything the file says is true. That no other version of it exists. That the file is older than this stamp by any particular amount. \" +\n    \"The stamper's statements about the bytes are not checked.\",",
+  "replace": "    \"Who made the file. That anything the file says is true. That no other version of it exists. That the file is older than this stamp by any particular amount.\",",
+  "what": "D1: does_not_prove drops the stamper's statements"
+ },
+ {
+  "id": "WD05",
+  "file": "lib/_stamp.js",
+  "find": "// THE NUMBER BELOW IS RATIFIED (2026-10-15, the architect): 0.25 credit per",
+  "replace": "// THE NUMBER BELOW IS A PLACEHOLDER AND IS NOT RATIFIED: 0.25 credit per",
+  "what": "D2: the price comment says not ratified"
+ },
+ {
+  "id": "WD06",
+  "file": "lib/_stamp.js",
+  "find": "const STAMP_PRICE_CREDITS = 0.25;",
+  "replace": "const STAMP_PRICE_CREDITS = 0.1;",
+  "what": "D2: the price is a tenth"
+ },
+ {
+  "id": "WD07",
+  "file": "README.md",
+  "find": "### Stamps\n",
+  "replace": "### Stamp\n",
+  "what": "D2: the README's stamp heading is gone"
+ },
+ {
+  "id": "WD08",
+  "file": "README.md",
+  "find": "A stamp costs 0.25 credit, after the free allowance: 3 stamps per address per\nUTC day",
+  "replace": "A stamp costs 0.1 credit, after the free allowance: 3 stamps per address per\nUTC day",
+  "what": "D2: the README's price is wrong"
+ },
+ {
+  "id": "WD09",
+  "file": "README.md",
+  "find": "per address per\nUTC day (STAMP_FREE_PER_DAY)",
+  "replace": "per address per\nUTC week (STAMP_FREE_PER_DAY)",
+  "what": "D2: the README's free tier is wrong"
+ },
+ {
+  "id": "WD10",
+  "file": "README.md",
+  "find": "credit comes from the same prepaid balance the pins spend: one balance per\nkey, shared by pins and stamps.",
+  "replace": "credit comes from a stamp balance of its own.",
+  "what": "D2: the README says the balance is not shared"
+ },
+ {
+  "id": "WD11",
+  "file": "README.md",
+  "find": "stamp by any particular amount. The stamper's statements about the bytes are\nnot checked.",
+  "replace": "stamp by any particular amount.",
+  "what": "D2: the README's does-not-prove drops the stamper's statements"
+ },
+ {
+  "id": "WD12",
+  "file": "README.md",
+  "find": "What a stamp proves: A file with exactly",
+  "replace": "What a stamp proves: a file with exactly",
+  "what": "D2: the README's proves sentence is not the scope's"
+ },
+ {
+  "id": "WD13",
+  "file": "README.md",
+  "find": "A stamp records the fingerprint and the time, and nothing else: no size, no\nfilename, no label.",
+  "replace": "A stamp records the fingerprint, the size and the time.",
+  "what": "D1/D2: the README says a size is recorded"
+ },
+ {
+  "id": "WD14",
+  "file": "api/verify.js",
+  "find": "//   op=case-page       GET   reads: the public case page\n",
+  "replace": "",
+  "what": "D3: the header drops op=case-page"
+ },
+ {
+  "id": "WD15",
+  "file": "api/verify.js",
+  "find": "//   op=reconcile       POST  reads no store: the two-tapes verdict; writes nothing",
+  "replace": "//   op=reconcile       POST  WRITES nothing: the two-tapes verdict",
+  "what": "D3: the header says reconcile WRITES"
+ },
+ {
+  "id": "WD16",
+  "file": "api/verify.js",
+  "find": "//   op=case-open       POST  WRITES an OPEN case and the key's open-quota counter",
+  "replace": "//   op=case-open       POST  WRITES an OPEN case and CHARGES the key's open quota",
+  "what": "D3: the header says case-open CHARGES"
+ },
+ {
+  "id": "WD17",
+  "file": "api/verify.js",
+  "find": "WRITES a stamp to the stamps repository; CHARGES 0.25 credit",
+  "replace": "WRITES a stamp to the stamps repository; costs 0.25 credit",
+  "what": "D3: the header's stamp line does not say CHARGES"
+ },
+ {
+  "id": "WD18",
+  "file": "api/verify.js",
+  "find": "//   op=case-withdraw   POST  WRITES the withdrawal",
+  "replace": "//   op=case-withdraw   POST  the withdrawal",
+  "what": "D3: the header's withdraw line does not say WRITES"
+ },
+ {
+  "id": "WD19",
+  "file": "README.md",
+  "find": "                          op=reconcile-page  GET   — the reconcile page; reads\n",
+  "replace": "",
+  "what": "D3: the Layout row drops op=reconcile-page"
+ },
+ {
+  "id": "WD20",
+  "file": "README.md",
+  "find": "op=case-reference  POST  — WRITES a signed reference row",
+  "replace": "op=case-reference  POST  — a signed reference row",
+  "what": "D3: the Layout row's reference line does not say WRITES"
+ },
+ {
+  "id": "WD21",
+  "file": "README.md",
+  "find": "op=stamp           POST  — WRITES a stamp; CHARGES 0.25 credit",
+  "replace": "op=stamp           POST  — WRITES a stamp; costs 0.25 credit",
+  "what": "D3: the Layout row's stamp line does not say CHARGES"
+ },
+ {
+  "id": "WD22",
+  "file": "lib/_case_http.js",
+  "find": "  const advice = \"Draw a new salt, compute a new commitment, stamp it and register that hash. \";",
+  "replace": "  const advice = `Draw a new salt, compute a new commitment, stamp it with size ${C.COMMITMENT_BYTES_LENGTH} and register that hash. `;",
+  "what": "D1: the advice names a size to stamp"
+ },
+ {
+  "id": "WD23",
+  "file": "lib/_case_http.js",
+  "find": "  // THE STAMP'S SIZE is gone (unit R-WIDE, D1): no stamp records one.\n",
+  "replace": "  if (sg.json.size !== C.COMMITMENT_BYTES_LENGTH) return { ok: false, refusal: new Refusal(409, \"stamp_size_mismatch\", `the stamp records no commitment size. ${advice}${sentence(nothing)}`, { commitment_sha256: sha }) };\n",
+  "what": "D1: the registration reads the stamp's size again"
+ },
+ {
+  "id": "WD24",
+  "file": "lib/_case_http.js",
+  "find": "  // THE STAMP'S SIZE is gone (unit R-WIDE, D1): no stamp records one.\n",
+  "replace": "  if (Object.prototype.hasOwnProperty.call(sg.json, \"size\") && sg.json.size !== C.COMMITMENT_BYTES_LENGTH) return { ok: false, refusal: new Refusal(409, \"stamp_size_mismatch\", `the stamp records a size that is not a commitment's. ${advice}${sentence(nothing)}`, { commitment_sha256: sha }) };\n",
+  "what": "D1: a stamp written before D1 is refused on its recorded size"
+ },
+ {
+  "id": "WD25",
+  "file": "tools/preview_dry_run.js",
+  "find": "  const ans = await postJson(ctx, \"/api/stamp\", { sha256: sha }, { bearer: ctx.key }); // no size since R-WIDE D1",
+  "replace": "  const ans = await postJson(ctx, \"/api/stamp\", { sha256: sha, size: -1 }, { bearer: ctx.key }); // no size since R-WIDE D1",
+  "what": "D1: the preview sends a size the stamp refuses"
+ }
+]
