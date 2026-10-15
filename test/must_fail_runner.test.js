@@ -525,3 +525,12 @@ console.log(JSON.stringify({
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), { http_hostname: "refused", https_host: "refused", http_loopback: "allowed" });
 });
+
+// unit R-WIDEg (G1): a committed defect list applies to the tree it is run
+// against: Group A's WA24 is retargeted at F3-d's arm
+test("R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)", () => {
+  const defects = JSON.parse(fs.readFileSync(path.join(__dirname, "must_fail", "r_wide_a.json"), "utf8"));
+  R.checkDefects(defects, path.join(__dirname, ".."));
+  const wa24 = defects.find((d) => d.id === "WA24");
+  assert.match(wa24.find, /state: "deployment_document_off_branch"/);
+});

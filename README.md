@@ -840,7 +840,10 @@ nothing: withdrawals and references are answered 503
 `deployment_document_off_branch`, codes only, and the status page says so in
 one line (the reveal and the refusal receipt answer it too, unless the
 document it carries lists no active reconcile key: then they answer 409
-`sealing_not_offered` first). This is an operator fault, not a sender's: no
+`sealing_not_offered` first). The status page's line about this deployment's
+key document may be up to about 120 seconds old: a confirmed or off answer is
+kept 60 seconds, and a commit read as on the branch is kept 60 seconds before
+that. This is an operator fault, not a sender's: no
 request can finish it until the deployment is rebuilt from the published
 branch. A deployment whose own commit is ahead of the branch answers 503
 `document_unavailable` until the branch reaches it. A commit the repository

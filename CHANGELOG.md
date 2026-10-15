@@ -152,6 +152,10 @@ The reader's verdict on R-WIDE was DO NOT MERGE, on two false sentences (F1). Th
 - **LATER** (named by the architect, not built here):
   - The reader's `stamp_record_unreadable` 503 for a record at a stamp's path that is not a file-stamp: first write wins, so no re-send finishes it.
   - The other public reads (the status page, `api/latest.js`, the badge, the `?op=` reads) still read with the pin token, not `GITHUB_READ_TOKEN`.
+  - Added by unit R-WIDEg (G3), as the architect named them:
+    - The real registration binding: the opening names the parties' keys, so a registration is bound to a key the opening named, not only to whoever registered first.
+    - The pin lane's outage marking: a deadline missed while the store answered 5xx is `service_outage`, not a sender's miss.
+    - The status page's case count is truncated past 1,000: the tree read lists at most that many, and the count past it is not shown as a count.
 - **The architect's notes.** The 1b tell's ending (`stamp_size_mismatch` retired, R-WIDE D1) is CONFIRMED. The operator, not the builder, runs the suite on Windows at this unit's tip and records the counts; R-AB, R-ABf and R-WIDE count together when that run reads 0 fail.
 
 ## 2026-10-15: Unit R-WIDE, Group D: stamps (branch `case-protocol-2026-10-10`, NOT deployed)

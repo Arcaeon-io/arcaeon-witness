@@ -472,6 +472,13 @@ test("R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page i
   const rp = makeRes();
   RECONCILE.handlePage(makeReq({ method: "GET", query: { op: "reconcile-page" }, headers: { "x-forwarded-for": nextIp() } }), rp);
   refuseWords(String(rp._body), "the reconcile page");
+  // unit R-WIDEg (G2): every file served under public/, PRACTICES.md (the
+  // status page links it) and the key document among them
+  const served = (dir) => fs.readdirSync(path.join(__dirname, "..", dir), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? served(`${dir}/${e.name}`) : [`${dir}/${e.name}`]));
+  const files = served("public");
+  assert.ok(files.includes("public/PRACTICES.md") && files.includes("public/.well-known/arcaeon/case-signing-keys.json"), files.join(", "));
+  for (const f of files) refuseWords(read(f), f);
 });
 
 // F3-b. The page cache keeps no root sha, and no page whose case deadline
@@ -595,4 +602,64 @@ test("MUST-FAIL GAP (WF04): the README says when the reveal and the refusal rece
 test("MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json", async () => {
   gh.seedAtBranch(S.KEY_DOCUMENT_REPO, "main", S.CASE_KEYS_FILE, "not json\n");
   assert.deepEqual(await S.carriedDocumentPublished(DOC, {}), { ok: false, code: "published_document_unreadable", reason: "not_json" });
+});
+
+// =============================================================================
+// UNIT R-WIDEg (the R-WIDEf reader's minors; each test fails on 98866db)
+// =============================================================================
+
+// G3. The change log's LATER list names three more things.
+test("R-WIDEg G3: the change log's LATER list names the real registration binding, the pin lane's outage marking, and the status count's truncation past 1,000", () => {
+  const log = read("CHANGELOG.md");
+  const a = log.indexOf("- **LATER** (named by the architect, not built here):");
+  assert.ok(a > 0, "the LATER list");
+  const later = log.slice(a, log.indexOf("\n- **", a + 10)).replace(/\s+/g, " ");
+  for (const s of [
+    "The real registration binding: the opening names the parties' keys",
+    "The pin lane's outage marking: a deadline missed while the store answered 5xx is `service_outage`",
+    "The status page's case count is truncated past 1,000",
+  ]) assert.ok(later.includes(s), s);
+});
+
+// G4. The contents-API read of the key document times out, as the raw read did.
+test("R-WIDEg G4: a contents-API read of the document at the tip that never answers is cut at the document fetch timeout and is could-not-look (fetch_failed); nothing waits on it", async () => {
+  const viaMock = global.fetch;
+  const before = S._internal.documentFetch.timeoutMs;
+  let hung = 0;
+  let sawSignal = false;
+  global.fetch = (url, o) => {
+    if (!String(url).includes(`/contents/${S.CASE_KEYS_FILE}`)) return viaMock(url, o);
+    hung += 1;
+    return new Promise((resolve, reject) => {
+      sawSignal = !!(o && o.signal);
+      if (!sawSignal) return reject(new Error("no abort signal"));
+      // a hung socket keeps the process alive; the abort timer does not
+      const alive = setTimeout(() => reject(new Error("never aborted")), 10000);
+      o.signal.addEventListener("abort", () => {
+        clearTimeout(alive);
+        reject(o.signal.reason);
+      });
+    });
+  };
+  S._internal.documentFetch.timeoutMs = 50;
+  try {
+    const t0 = Date.now();
+    assert.deepEqual(await S.carriedDocumentPublished(DOC, {}), { ok: false, code: "published_document_unreadable", reason: "fetch_failed" });
+    assert.ok(Date.now() - t0 < 5000, "cut at the timeout");
+    assert.equal(hung, 1);
+    assert.equal(sawSignal, true, "the read carries an abort signal");
+  } finally {
+    global.fetch = viaMock;
+    S._internal.documentFetch.timeoutMs = before;
+  }
+  assert.equal(before, 8000, "the timeout is the raw read's 8 seconds");
+});
+
+// G5. The comment names its unit; the README says how old the status line can be.
+test("R-WIDEg G5: the status cache's comment names unit R-WIDEf; the README says the status page's key-document line may be up to about 120 seconds old", () => {
+  const seal = read("lib/_case_seal.js");
+  assert.equal(seal.includes("(unit R-WIDE, F3-d"), false);
+  assert.ok(seal.includes("(unit R-WIDEf, F3-d"), "the comment");
+  assert.ok(branchParagraph().includes("The status page's line about this deployment's key document may be up to about 120 seconds old: " +
+    "a confirmed or off answer is kept 60 seconds, and a commit read as on the branch is kept 60 seconds before that."), branchParagraph());
 });
