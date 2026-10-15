@@ -182,3 +182,14 @@ test("MUST-FAIL GAP (FF44, FF47): the scan returns a template's chunk before ${,
   const probe = "const u = `it holds ${x}`;\nconst t = `${ {a: 1}.a + holds }`;\n";
   assert.deepEqual(stringLiterals(probe).filter((x) => REFUSED.test(x.text)).map((x) => [x.line, x.text]), [[1, "it holds "]]);
 });
+
+// unit R-FGg (G5): a tool's string can be written into a record (the
+// genesis record), so the scan reads every string literal in tools/ too
+test("R-FGg G5: no string literal in tools/ says holds, holding or second operator; comments and identifiers are exempt", () => {
+  const root = path.join(__dirname, "..");
+  const hits = [];
+  for (const f of fs.readdirSync(path.join(root, "tools")).filter((x) => /\.(js|mjs|cjs)$/.test(x))) {
+    for (const s of stringLiterals(fs.readFileSync(path.join(root, "tools", f), "utf8"))) if (REFUSED.test(s.text)) hits.push(`tools/${f}:${s.line}: ${s.text.slice(0, 120)}`);
+  }
+  assert.deepEqual(hits, []);
+});

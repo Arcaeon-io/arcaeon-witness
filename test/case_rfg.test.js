@@ -745,3 +745,129 @@ test("MUST-FAIL GAP (FF42): the README quotes auth_note as the API sends it", ()
   const quoted = text.slice(at).split("\n\n")[0].split("\n").map((l) => l.replace(/^> ?/, "")).join(" ").replace(/`/g, "").replace(/\s+/g, " ").trim();
   assert.equal(quoted, store.AUTH_LEVEL_NOTE);
 });
+
+// =============================================================================
+// UNIT R-FGg (2026-10-15; the architect's rulings on the R-FGf reader's
+// findings). Each test fails on 0869c9d but G3's (no code change expected).
+// =============================================================================
+
+// The store calls one request makes on the case's rows directory: its
+// listings, its row reads and its row writes (G1).
+async function rowCalls(id, fn) {
+  const viaMock = global.fetch;
+  const calls = [];
+  const dir = `/contents/${C.referencesDir(id)}`;
+  global.fetch = async (url, o) => {
+    const u = decodeURIComponent(String(url));
+    if (u.includes(dir)) calls.push(`${(o && o.method) || "GET"} ${u.slice(u.indexOf(dir) + dir.length).split("?")[0] || "(listing)"}`);
+    return viaMock(url, o);
+  };
+  try {
+    return { out: await fn(), calls };
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+// The first PUT to each path in `rows` is answered 409, and before it is
+// answered that path's row (another sender's) lands there.
+function racesAt(rows) {
+  const viaMock = global.fetch;
+  const fired = new Set();
+  for (const p of Object.keys(rows)) gh.forceConflict(PINS, p, 1);
+  global.fetch = async (url, o) => {
+    const u = decodeURIComponent(String(url));
+    if (((o && o.method) || "GET") === "PUT") {
+      for (const [p, row] of Object.entries(rows)) {
+        if (!fired.has(p) && u.endsWith(`/contents/${p}`)) {
+          fired.add(p);
+          gh.seed(PINS, p, row);
+        }
+      }
+    }
+    return viaMock(url, o);
+  };
+  return () => {
+    global.fetch = viaMock;
+  };
+}
+
+test("R-FGg G1: rows are read once a request: a refusal at 40 rows (cold) makes 41 row-directory calls, an accepted reference at 39 rows 41, a write contended twice 13 (R-FGf: 41, 62, 35)", async () => {
+  // (i) a refusal at the cap, on a cold request: the listing and the 40 rows
+  const full = await sealedCase("RFGg G1 refusal");
+  plantRows(full.id, firstRows(CAP));
+  const i = await rowCalls(full.id, () => roleReference(full, "a", "past the cap"));
+  assert.deepEqual([i.out.status, i.out.body.error_code], [409, "row_limit"]);
+  // (ii) an accepted reference at 39 rows: the listing, the 39 rows and the
+  // write; the live count reads nothing again
+  const open = await sealedCase("RFGg G1 accepted");
+  plantRows(open.id, firstRows(CAP - 1));
+  const ii = await rowCalls(open.id, () => roleReference(open, "a", "the fortieth"));
+  assert.deepEqual([ii.out.status, ii.out.body.seq], [201, CAP], JSON.stringify(ii.out.body).slice(0, 200));
+  // (iii) five rows, then the first two writes each lose their seq to
+  // another sender's row (409, and putFile's re-read finds it): the third
+  // lands at seq 8
+  const busy = await sealedCase("RFGg G1 contended");
+  plantRows(busy.id, firstRows(5));
+  const undo = racesAt({ [C.referencePath(busy.id, 6)]: otherRow(6), [C.referencePath(busy.id, 7)]: otherRow(7) });
+  let iii;
+  try {
+    iii = await rowCalls(busy.id, () => roleReference(busy, "a", "contended twice"));
+  } finally {
+    undo();
+  }
+  assert.deepEqual([iii.out.status, iii.out.body.seq, iii.out.body.row.cross_reference.reference], [201, 8, "contended twice"]);
+  assert.deepEqual({ refusal: i.calls.length, accepted: ii.calls.length, contended: iii.calls.length }, { refusal: 41, accepted: 41, contended: 13 },
+    JSON.stringify({ refusal: i.calls, accepted: ii.calls, contended: iii.calls }).slice(0, 1200));
+  // no row is read twice in a request
+  for (const [name, calls] of [["refusal", i.calls], ["accepted", ii.calls], ["contended", iii.calls]]) {
+    const reads = calls.filter((c) => /^GET \/\d{8}\.json$/.test(c));
+    assert.deepEqual(reads, [...new Set(reads)], name);
+  }
+});
+
+test("R-FGg G2: a rows listing that cannot be read is 503 store_unreachable, codes only, with case_id, as a row read is; nothing is written, and the same send finishes", async () => {
+  const c = await sealedCase("RFGg G2 listing");
+  gh.forceGetFailure(PINS, C.referencesDir(c.id), 1, 502);
+  const puts = gh.putLog.length;
+  const r = await roleReference(c, "a", "past a listing that failed");
+  assert.deepEqual([r.status, r.body], [503, { ok: false, error_code: "store_unreachable", case_id: c.id }]);
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  assert.deepEqual([(await roleReference(c, "a", "past a listing that failed")).status], [201]);
+});
+
+// G3: no code change expected; it passes on 0869c9d.
+test("R-FGg G3: a row PUT that lands but is answered 409 is abandoned on putFile's re-read (the row there is the sender's own); the next listing finds it: 200 existing, that seq, no second row", async () => {
+  const c = await sealedCase("RFGg G3 own row");
+  const p1 = C.referencePath(c.id, 1);
+  const viaMock = global.fetch;
+  let landed = false;
+  global.fetch = async (url, o) => {
+    if (!landed && ((o && o.method) || "GET") === "PUT" && decodeURIComponent(String(url)).endsWith(`/contents/${p1}`)) {
+      landed = true;
+      await viaMock(url, o);
+      return new Response(JSON.stringify({ message: "mock: the write landed; the branch moved before it was answered" }), { status: 409, headers: { "content-type": "application/json" } });
+    }
+    return viaMock(url, o);
+  };
+  let r;
+  let answers;
+  try {
+    ({ out: r, answers } = await putAnswers(() => roleReference(c, "a", "landed, answered 409")));
+  } finally {
+    global.fetch = viaMock;
+  }
+  assert.deepEqual(answers.filter((x) => x.path === p1).map((x) => !!(x.out && x.out.abandoned)), [true], "the store took the abandoned path");
+  assert.deepEqual([r.status, r.body.existing, r.body.seq, r.body.path], [200, true, 1, p1], JSON.stringify(r.body).slice(0, 300));
+  assert.deepEqual(r.body.row, gh.read(PINS, p1));
+  assert.equal(gh.has(PINS, C.referencePath(c.id, 2)), false, "no second row");
+});
+
+test("R-FGg G4: the README says two deliberate references with the same cross_reference from the same appender become one row", () => {
+  assert.ok(README().includes("Two deliberate references with the same cross_reference from the same appender become one row: the second is answered 200 with the first's seq."));
+});
+
+test("R-FGg G5: the genesis record the tool builds says \"the commit that records this\"", () => {
+  const G = require("../tools/stamp_genesis.js");
+  const rec = G.buildGenesisRecord({ repo: "o/stamps", branch: "main", sha: "a".repeat(40), date: "2026-10-01T00:00:00Z", observedAt: "2026-10-02T00:00:00Z", pinsRepo: "o/pins" });
+  assert.ok(rec.scope.shows.includes("existed no later than the time of the commit that records this. "), rec.scope.shows);
+});

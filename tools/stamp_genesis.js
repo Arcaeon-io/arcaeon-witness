@@ -77,7 +77,7 @@ function buildGenesisRecord({ repo, branch, sha, date, observedAt, pinsRepo }) {
       shows:
         "This repository recorded, in a commit of its own, that the stamps log's first commit " +
         "carries this SHA and this date. The stamps log therefore existed no later than the time " +
-        "of the commit that holds this record. A later change to either record would show in the " +
+        "of the commit that records this. A later change to either record would show in the " +
         "public commit history of the repository it lives in.",
       does_not_show:
         "That anything stamped in that log is true. That the stamps log is complete. That no other " +

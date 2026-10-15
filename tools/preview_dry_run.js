@@ -361,7 +361,7 @@ function loadTapes(root) {
     return { why: `the tape pair could not be read from ${TAPES_FIXTURE} (${e.code || e.name})` };
   }
   const c = (fx.cases || []).find((x) => TAPES_NAME.test(x.name) && x.python);
-  if (!c) return { why: `${TAPES_FIXTURE} holds no MATCHED agent-vs-tool pair named as test/case_reveal.test.js names it` };
+  if (!c) return { why: `${TAPES_FIXTURE} has no MATCHED agent-vs-tool pair named as test/case_reveal.test.js names it` };
   return { a: Buffer.from(c.a_b64, "base64"), b: Buffer.from(c.b_b64, "base64") };
 }
 

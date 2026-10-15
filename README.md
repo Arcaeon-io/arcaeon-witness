@@ -1068,7 +1068,9 @@ sha256) that is a valid row; when there is one, the answer is 200,
 `existing: true`, with that row and its seq, and nothing is written. So a
 reference whose row landed but whose answer was lost (a 503 `store_error`,
 say) is answered with that row when it is sent again, never written twice,
-and never refused `row_limit` for its own 40th row. A row is never
+and never refused `row_limit` for its own 40th row. Two deliberate references
+with the same cross_reference from the same appender become one row: the
+second is answered 200 with the first's seq. A row is never
 refused for its case's pin or anchoring: no pin and no anchor is read for a
 row, and its answer names no commit. The case page shows each row with a
 link to it and the commit that wrote it, and says nothing of its pin or its
