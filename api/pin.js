@@ -851,7 +851,7 @@ module.exports = async (req, res) => {
     if (err instanceof verdict.RedVerdictError) {
       const refused = verdict.refusal(err.verdict, "pin");
       refused.body.note =
-        "the namespace's latest pointer moved during this write and what it now holds cannot be read as a pin " +
+        "the namespace's latest pointer moved during this write and what it now has cannot be read as a pin " +
         "record, so the pointer was NOT written over and the charge was refunded.";
       return res.status(refused.status).json(refused.body);
     }

@@ -224,7 +224,7 @@ function successHtml(record, creditBalance, consentStored) {
 ${copyBox("key", record.key)}
 <p><b>${esc(String(record.credits))} prepaid pins</b> are on your balance (plus the free tier: 100 pins/month). Your key pins any namespace starting with <code>${esc(ns)}</code>.</p>
 <p class="muted">Check your balance any time at <a href="${esc(BASE_URL)}/api/balance">${esc(BASE_URL)}/api/balance</a> — you paste the key on the page; the link itself carries nothing.</p>
-<p class="warn">Save this key now. This page re-shows it any time via your Stripe receipt link — treat that link like the key itself.</p>
+<p class="warn">Save this key now. If you lose it, the link in your Stripe receipt is how you recover it: it reopens this page with the same key. Treat that link like the key itself.</p>
 <h2>Install the client</h2>
 ${copyBox("pip", prefixUi.PIP_COMMAND)}
 <h2>Your first pin</h2>

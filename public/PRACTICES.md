@@ -94,7 +94,7 @@ availability norm), and we're not claiming more than that shape affords:
   (README, "Stage-0 limits").
 - **Key custody:** a single GitHub personal-access token, held only in Vercel environment
   variables, never in this repo, reused across the public pins repo and the private usage repo
-  (same account). No HSM, no key-rotation schedule published yet, single operator holds it. That
+  (same account). No HSM, no key-rotation schedule published yet, a single operator has it. That
   is a real single point of failure at Stage-0 and we're not dressing it up as anything else.
 - **Incident disclosure — pre-committed, before an incident, not after:**
   - Any provable inconsistency (a pin that doesn't match its own commit, a rewritten history, a

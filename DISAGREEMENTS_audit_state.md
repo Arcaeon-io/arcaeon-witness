@@ -52,8 +52,71 @@ The brief said to render the audit-state badge "instead" of the green "current";
 
 ## D11. Records are listed from the tree and read up to a budget; over budget is NOT FULLY READ, not a state
 
+(Superseded in part by D20 on 2026-09-23: the budget is no longer a flat 100 reads oldest first. The rule that a namespace over the global cap is COULD NOT LOOK, not a state, stands.)
+
 A hundred contents reads per render (`MAX_RECORD_READS`) bounds the GitHub API cost. A namespace whose records were not all read renders "NOT FULLY READ" and is excluded from the aggregate's denominator ("2 not fully read" is printed beside it). Deriving CHECKED from a prefix of the evidence could skip a BROKEN; deriving BROKEN from a prefix is fine in principle but the two cases are not told apart here, so neither is derived. Test: `the read budget marks a namespace NOT FULLY READ`.
 
 ## D12. A record filed under one namespace but targeting another is evidence for neither
 
 `checks/pin/<ns>/` is a filing convention; `target.ref` is the claim. When they disagree the record is counted as `misfiled` on the namespace it was filed under and ignored for both. Test: `a misfiled record is not evidence for its target either`.
+
+# Slice 2 (2026-09-22, branch `audit-state-slice2`)
+
+Same tie-break: a state is never upgraded without evidence. Tests are in `test/audit_state_slice2.test.js`.
+
+## D13. Outside records arrive by URL through the status reader, not through an endpoint
+
+The design (B8, "Out of slice 1") had a stranger submit a URL that we fetch, re-verify and commit. `api/` holds 12 functions, the Vercel Hobby cap (counted: badge, balance, credit, distill, fulfill, health, latest, pin, renew, status, stripe-webhook, verify), so there is no room for `api/check.js`. Instead the operator lists the stranger's own public location in `WITNESS_CHECK_SOURCES` and `lib/_audit_status.js` reads its `checks/**` on every render, read-only. Nothing is committed to the pins repo, so the part A log does not yet contain these records (a stranger can still hold their own signed file, which is the B4 defense). Test: `api/ is at its 12-function cap`.
+
+## D14. The key decides, not the location
+
+A record fetched from a stranger's URL is judged exactly like one in our repo. A record signed by a key in `OPERATOR_KEYS.json` is SELF-CHECKED at most wherever it was fetched from, and with the declaration unreadable nothing reaches CHECKED (D4 unchanged). A source cannot declare keys or withdraw tools; only our repo's two files can. Tests: `SOURCES NEVER UPGRADE`.
+
+## D15. An unlistable source blanks every namespace, not just "its" namespaces
+
+When a source cannot be listed (HTTP error, truncated tree, budget spent, refused URL), we do not know which namespaces it holds evidence about, and one of those could be a BROKEN. So every namespace renders NOT FULLY READ, with a note naming the source. The cost is real: one dead stranger repo takes every state off the page until the operator removes it from the env var. That is the chosen cost, because the alternative lets a failed read hide a red. A listed record that is not read (budget, size cap, read error) blanks only its own namespace. Tests: `SOURCES FAIL CLOSED`, `SOURCES BUDGET`, `BREAK ARM SOURCES BUDGET`.
+
+## D16. An outside BROKEN from a listed source goes red without being re-run
+
+B9 question 2 (re-run a BROKEN from its public inputs before it flips the badge) is still open for Daniel. Slice 1 could defer it because only the operator committed records; slice 2 lets a listed stranger's BROKEN reach the page. The choice: it goes red, per B3 ("any verifiable BROKEN, from anyone"). The operator's control is the source list itself; a source is listed only after its owner's records have been read by a person. Test: `a source BROKEN goes red`.
+
+## D17. The daily self-check refuses an undeclared key
+
+`tools/self_check_daily.js` will not build a record unless its signing key is in the OPERATOR_KEYS document it is handed. A self-check signed by an undeclared key would read as an outside check, which is our own look painted green (B5, B10 sock puppets). The break arm shows exactly that green appearing when the fence is bypassed. Tests: `DAILY FENCE`, `BREAK ARM DAILY`.
+
+## D18. The JSON twin prints no state for a namespace the page would not derive
+
+With the flag on, `/api/status.json` carries `audit` per namespace and a top-level `audit` summary, both from the same `gatherAuditStates` the page uses. A namespace the page renders NOT FULLY READ carries `state: "NOT_FULLY_READ"` and no counts, dates or keys, so a machine reader cannot pick a state out of a render the page refused to derive. Flag off: no `audit` key and no read of `checks/`. Tests: `JSON FLAG OFF`, `JSON FLAG ON`, `a NOT FULLY READ namespace carries no state word at all`.
+
+# Release tree three (2026-09-23, branch `release-candidate-2026-09-23b`)
+
+## D19. A superseded test namespace keeps its derived state and leaves the totals; no TEST word
+
+The helm's decision on the B10 addendum's item 5: supersede `velouria-selftest` as a test namespace, visibly, rather than leave its BROKEN as the first honest example on the page; its state to read "TEST" if the design's vocabulary allows it without a new verdict word. It does not: B3 has five states and says they are "derived, never set by hand", and D1 makes a BROKEN permanent unless it is shown wrong. "TEST" in the state slot would be a sixth state word set by an operator's declaration, so it was not added; that is a question back to the helm. What was built instead uses only words the record already has: the supersede record (`superseded/<ns>.json`, `lib/_test_ns.js`, create-only, "removes nothing") and a grey tag, the way the cadence column's `retired` tag works. The row keeps its derived state (BROKEN once our self-check records are published, BLIND before), is tagged "superseded test namespace", and is left out of the headline and the aggregate with one sentence naming it and its state. The fail direction is the non-hiding one: a supersede file that cannot be read as a supersede record for that namespace leaves the row counted. Seam worth naming: the record's own `test_namespace` field is `false` for `velouria-selftest`, because that field means "carries a test prefix" (`isTestNamespace`), and `test/no_delete_record.test.js` pins `velouria-selftest` as not test-prefixed; the supersede was made by the deliberate path (`--any-namespace`), and the reason text says test data. The JSON twin does not restate `test_namespace`. Tests: `test/audit_superseded.test.js`.
+
+## D20. The reader reads each checker key's newest 3 records; older records of the same key are superseded, not partial
+
+**Resolved 2026-09-23 (the helm's ruling): the per-key newest-3 reading stands, and D1 holds literally.** The residual at the end of this entry is closed by D22: the result is now in the file name, and the reader reads every broken-named file besides each key's newest 3, so a key's own BROKEN is never superseded by that key's later records. "Superseded" below now applies to VERIFIED and COULD_NOT_LOOK records only. The test formerly named `D20 RESIDUAL` now pins the opposite outcome (`D20 RESIDUAL CLOSED`).
+
+Why: D11's flat budget (100 reads per render, every record, oldest path first) ran out on day 13 with 8 namespaces and one daily self-check each, then took one more namespace to COULD NOT LOOK every day after (measured, release notes 2026-09-23c addendum). The daily task could not be registered against it.
+
+The change, behind the same flag: per namespace, the record files are grouped by the checker's short key id and ordered newest first by the timestamp `checkRecordPath` puts in the file name (`<checked_at>-<keyid8>.json`); the newest `NEWEST_PER_KEY` = 3 of each key are read (the design page names no number; 3 is the build brief's default). A namespace with more files than that is NOT partial: the older records of a key are superseded, because every check record is a full re-run of the public-record checks over the whole history (verifier two reads the whole record, and nothing published is ever deleted), so a key's newer record states everything its older ones could. The cell says so: "N older records not read: each checker key's newest 3 were, and a key's newer check supersedes its older ones"; the JSON twin carries `records_older_not_read`. A file whose name does not parse is always read. The global cap stays as a safety net, now `recordReadCap(n) = n * (3 * 4 + 1)` (3 per key, 4 key slots per namespace, plus the supersede read); past it the remaining namespaces are COULD NOT LOOK exactly as D11 said.
+
+Per KEY, not per namespace, on purpose (the build brief said "K per namespace"). With K per namespace, our own daily self-check would push an outside checker's BROKEN out of the read set within K days and the namespace would read SELF-CHECKED: our own volume burying a red, which is D1 broken by the operator's schedule. Per-key slots keep every key's newest look, so an outside BROKEN or an outside VERIFIED (CHECKED, STALE) is always read.
+
+Residual as first written (closed by D22, kept for the record), pinned by a test so it was visible (`D20 RESIDUAL`): a key's own BROKEN followed by 3 later records from the SAME key is no longer read, and the row derives from the later ones. D1 as written ("a later VERIFIED does not clear it") would keep it red. Accepted here because a same-key flip means that checker's own full-history reading changed, and D2's release for that is a filed withdrawal; if the helm wants D1 literal, the fix is to put the result in the file name (the path scheme is create-only, and no record is published yet, so it is still free to change) or to publish a BROKEN index. Tests: `test/audit_reader_newest.test.js` (day 30, day 60, newest first, the D1 guard, the residual, the safety cap, flag-off identity).
+
+## D21. A check record's `rerun` must be portable
+
+The daily self-check wrote `py C:/Users/<name>/velouria/projects/online_business/verifier_two/verify.py ...` into every record: a Windows user folder name in a signed field bound for a public repo, and a command no stranger can run. `validateShape` now refuses a `rerun` with a backslash, a drive letter followed by a slash, or a home-directory path (`~`, `~user`, `/home/`, `/Users/`, `/root/`, `%USERPROFILE%` and kin, `$HOME`, `$env:`), reason `rerun_not_portable`; so `signCheckRecord` will not sign one and `verifyCheckRecord` (the publisher and the reader) refuses one, and the publisher checks it again first in its own pre-flight. The writer names verifier two by `PUBLIC_VERIFIER` = `verify.py`, the same bare name the page's `rerunCommand` has always printed, instead of the local `--verify-py` path. Verifier two is not published anywhere (searched: the pins repo tree on `main` and `operator-keys-2026-09-23`, its README, this repo's docs, and the design page, whose item 2 still reads "Publish verifier two, and point `rerunCommand` at its public home"), so `verify.py` is a placeholder the design already uses; when it has a public home, that one constant changes and both the page and new records follow. Tests: `test/rerun_portable.test.js`.
+
+## D22. The result is in the file name; the reader reads every broken-named file; a name that disagrees with its body is refused
+
+The helm's ruling on D20 (2026-09-23): keep per-key newest 3, make D1 literal. Nothing is published yet, so the path scheme could change once, now, and is fixed from the first publish on.
+
+- **Path.** `checkRecordPath` writes `checks/<type>/<ns>/<checked_at, colons -> dashes>-<keyid8>-<result>.json`, where `<result>` is the record's own `result`, lower-case: `verified`, `broken`, `could_not_look`. A record with any other result has no path (throws). `parseRecordFileName` reads the name back; `pathResultMismatch(path, record)` is true when the name carries a result and the signed body carries a different one.
+- **Reader.** Per namespace, per key: the newest 3 files, PLUS every older file whose name says `broken`. Each is verified like any record, and a verified BROKEN keeps the namespace BROKEN regardless of later records from the same key (D1's existing "standing BROKEN, regardless of order" rule does the rest once the file is read). The extra reads are bounded at `MAX_BROKEN_EXTRA_PER_KEY` = 20 per key; a key with more older broken-named files than that makes its namespace COULD NOT LOOK with a note naming the key, rather than a state over some of its reds (BROKEN files are rare by construction, so the bound should never bind honestly). The global safety cap is `recordReadCap(n)` plus exactly the broken-named extras selected, so the extras never push another namespace off the page. The cell says "N older BROKEN records read as well"; the JSON twin carries `records_broken_older_read` and `path_result_mismatch`.
+- **A name is a claim.** A file whose name-result disagrees with its signed body is refused, reason `path_result_mismatch`, and counted. One choice beyond the ruling's words: it ALSO makes its namespace COULD NOT LOOK (not just "ignored"), because the read set was chosen by names, and a name that lies means that choice cannot be trusted for that namespace; and ignoring a body that says BROKEN under a `-verified` name would take a red off the page. Same rule for records from outside sources. The publisher's pre-flight refuses the same file with the same reason before anything is sent (and would refuse it as `path_mismatch` anyway, since the expected path now carries the result).
+- **Old names.** A file named in the pre-D22 scheme (`<ts>-<keyid8>.json`) no longer parses, so the reader always reads it (it cannot be called older) and it cannot disagree. The publisher refuses such a file as `path_mismatch`: the 14:44:51Z scratchpad set from the D21 run is now unpublishable, by design.
+
+Tests: `test/check_record.test.js` (path per result; parse and mismatch), `test/audit_reader_newest.test.js` (`D20 RESIDUAL CLOSED`, `D22 BOUND`, `D22 NAME IS A CLAIM` repo and outside source, and the pure selection test), `test/publish_self_checks.test.js` (`D22 pre-flight`). Break arms: the reader ignoring broken-named files fails 4; the reader accepting a mismatch fails 2; the publisher accepting a mismatch fails 1.

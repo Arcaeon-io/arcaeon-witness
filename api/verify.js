@@ -1,6 +1,23 @@
 // GET /api/verify?ns=<namespace>&rows=<n>&chain=<hex>  (&digest= is an alias for chain)
 // POST /api/verify?op=bulk  { "items": [{ns, rows, chain|digest}, ...] }
 //
+// THE MODES (unit R-WIDE, D3). This one function answers every ?op= below,
+// because this deployment is at the Vercel Hobby 12-function cap. Without an
+// op it is the single-item read above. Which write, and which charges:
+//   op=bulk            POST  reads: many heads checked at once (weighted rate limit)
+//   op=stamp           POST  WRITES a stamp to the stamps repository; CHARGES 0.25 credit
+//                            past the free allowance (lib/_stamp.js); GET reads one
+//   op=reconcile       POST  reads no store: the two-tapes verdict; writes nothing
+//   op=reconcile-page  GET   reads: the reconcile page
+//   op=case-open       POST  WRITES an OPEN case and the key's open-quota counter
+//   op=case-commit     POST  WRITES a role's registration and its projection
+//   op=case-reveal     POST  WRITES the sealed case and its pin
+//   op=case-withdraw   POST  WRITES the withdrawal
+//   op=case-reference  POST  WRITES a signed reference row
+//   op=case-page       GET   reads: the public case page
+// The stamp is the one mode that charges; the case modes take a key or a
+// preimage and charge nothing.
+//
 // One-call public proof-of-inclusion (board item 20): "does this exact head
 // exist in the witness record?" No auth, no metering — this is a funnel and
 // a trust surface, not a write path, and the answer leaks nothing beyond
@@ -49,6 +66,9 @@ const verdict = require("../lib/_verdict.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
 const stamp = require("../lib/_stamp.js");
+const reconcileHttp = require("../lib/_reconcile_http.js");
+const caseHttp = require("../lib/_case_http.js");
+const casePage = require("../lib/_case_page.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 const RAW_BASE = `https://raw.githubusercontent.com/${store.REPO}/${store.BRANCH}`;
@@ -111,7 +131,39 @@ function rawRecordUrl(ns, seq) {
 // mode can use it. Every failure mode of the STORE returns a body. The one
 // thing that throws is a programming error: building an ok:true body without
 // a green verdict in hand (lib/_verdict.js) — deliberately, fail closed.
+// Vocabulary pass (2026-09-23). Every JSON field stays exactly as it was:
+// `witnessed` is still true / false / null, status codes and `reason` values
+// are unchanged, so no client breaks. What changes is the human text beside
+// them: the note (or, with no note, the error) now opens with the one word a
+// person reads on every Arcaeon surface. true is VERIFIED, false is BROKEN (the
+// record contradicts the head asked about), null is COULD NOT LOOK, and so is
+// a 409 / 5xx with a reason: a third answer, not an outage. A 400 is a usage
+// error about the question, not an answer, and carries no word.
+const WORD_FOR_WITNESSED = new Map([[true, "VERIFIED"], [false, "BROKEN"], [null, "COULD NOT LOOK"]]);
+
+function verdictWord(status, body) {
+  if (Object.prototype.hasOwnProperty.call(body, "witnessed") && WORD_FOR_WITNESSED.has(body.witnessed)) {
+    return WORD_FOR_WITNESSED.get(body.witnessed);
+  }
+  if (status === 409 || status >= 500) return "COULD NOT LOOK";
+  return null;
+}
+
+function speak(result) {
+  const body = result && result.body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return result;
+  const word = verdictWord(result.status, body);
+  if (!word) return result;
+  const key = typeof body.note === "string" ? "note" : typeof body.error === "string" ? "error" : null;
+  if (key && !body[key].startsWith(word + ":")) body[key] = `${word}: ${body[key]}`;
+  return result;
+}
+
 async function verifyItem(rawNs, rawRows, rawChain, rawDigest) {
+  return speak(await judgeItem(rawNs, rawRows, rawChain, rawDigest));
+}
+
+async function judgeItem(rawNs, rawRows, rawChain, rawDigest) {
   const ns = rawNs || "";
   if (!store.NS_RE.test(ns)) {
     return { status: 400, body: { error: "ns must match [a-z0-9-]{1,64}" } };
@@ -400,7 +452,7 @@ async function handleBulk(req, res) {
   // (refused above) never reaches this check at all and so never spends a
   // rate-limit unit either — it was already refused for a cheaper reason
   // and shouldn't also be charged for one it never got the chance to incur.
-  const rl = ratelimit.check(req, items.length);
+  const rl = await ratelimit.check(req, items.length);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     return res.status(429).json({
@@ -442,6 +494,57 @@ module.exports = async (req, res) => {
     return stamp.handleStamp(req, res);
   }
 
+  // --- co-hosted mode: POST /api/reconcile and GET /reconcile (vercel.json
+  // rewrites -> ?op=reconcile / ?op=reconcile-page) ---
+  // The hosted two-tapes completeness verdict (lib/_reconcile_http.js). Here
+  // for the same reason as stamp: the 12-function cap. It reads no store,
+  // takes no key, writes nothing, and keeps neither tape. Dispatched before
+  // the GET-only CORS helper: the page posts to it from the same origin, and
+  // no cross-origin POST is opened.
+  const op = String((req.query || {}).op || "");
+  if (op === "reconcile") {
+    return reconcileHttp.handleReconcile(req, res);
+  }
+  if (op === "reconcile-page") {
+    return reconcileHttp.handlePage(req, res);
+  }
+
+  // --- co-hosted mode: the case protocol (lib/_case_http.js) ---
+  // POST ?op=case-open writes an OPEN case; POST ?op=case-commit registers a
+  // stamped commitment to one role of it, first write wins; POST
+  // ?op=case-reveal (item 2a) takes both reveals and both tapes in one
+  // request, runs the existing reconcile once, and seals the case. Here for
+  // the same reason as stamp and reconcile: the 12-function cap ("No
+  // thirteenth function. Every new route is ?op=case-<verb> on verify.js",
+  // CASE_PROTOCOL_DESIGN_2026-10-10.md). Writes go to the pins repository's
+  // cases/ tree and the seal's pin; the stamps repository is only read. No
+  // tape, no salt is kept. Item 2c adds three: POST ?op=case-withdraw (a
+  // registered role, proving itself with its commitment preimage, withdraws
+  // an unsealed case), POST ?op=case-reference (a create-only signed
+  // reference row appended to a sealed case), and GET ?op=case-page, the
+  // public case page (GET /case/<case_id>, a vercel.json rewrite, like
+  // /reconcile). The open quota (20 a key a UTC day) is counted in the
+  // private usage repository.
+  if (op === "case-open") {
+    return caseHttp.handleCaseOpen(req, res);
+  }
+  if (op === "case-commit") {
+    return caseHttp.handleCaseCommit(req, res);
+  }
+  if (op === "case-reveal") {
+    return caseHttp.handleCaseReveal(req, res);
+  }
+  if (op === "case-withdraw") {
+    return caseHttp.handleCaseWithdraw(req, res);
+  }
+  if (op === "case-reference") {
+    return caseHttp.handleCaseReference(req, res);
+  }
+  if (op === "case-page") {
+    // the instance's page cache (lib/_case_page.js THE PAGE CACHE; unit R-WIDE, B1)
+    return casePage.handleCasePage(req, res, { cache: casePage.PAGE_CACHE });
+  }
+
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns; every
   // other method falls through to the guard below with the ACAO header
   // already set. See _cors.js for why this is scoped to read endpoints only.
@@ -474,7 +577,7 @@ module.exports = async (req, res) => {
   // so there is no key to bucket abuse on. See _ratelimit.js for the honest
   // per-instance limitation. Checked before any store read so an over-limit
   // caller costs this instance nothing beyond a Map lookup.
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.check(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");

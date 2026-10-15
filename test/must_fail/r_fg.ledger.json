@@ -1,0 +1,340 @@
+{
+  "RF03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, w",
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "94d0f41709f31b4bc86ff314307e5e3472fe9660a99829605969659675b17b99"
+      }
+    ]
+  },
+  "RF01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, w",
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "1044de05ce421467483df9bafeb8e58ae0e9092280cb1a879d4d79935f3e3e25"
+      }
+    ]
+  },
+  "RF02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "cc4d43f73a9485dc7d856869ce495d70a472b61fb9989ac6d1cb73e77757b401"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "cc4d43f73a9485dc7d856869ce495d70a472b61fb9989ac6d1cb73e77757b401",
+        "caught_by": [
+          "MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th"
+        ]
+      }
+    ]
+  },
+  "RF04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "9c6ae91e1e5164a8d1c30097ebb5c99d2b1fcb6212b87e0097f3b6edbc5cbf68"
+      }
+    ]
+  },
+  "RF05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "8bfb80d924fe5a64dabe91369c5eb526dcf86c6e43775bd36d59bce6d0f6959a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "8bfb80d924fe5a64dabe91369c5eb526dcf86c6e43775bd36d59bce6d0f6959a",
+        "caught_by": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
+        ]
+      }
+    ]
+  },
+  "RF06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "e3fea49c506078e504b5afe103c0459569e060ec71510ab27c67d373ee88aa73"
+      }
+    ]
+  },
+  "RF07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "352a4587407c72c011d7d0bf5313541eb7ea49b530e826b812df7bbd19e9e8c5"
+      }
+    ]
+  },
+  "RF08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "436cc3b52a62901a66a8e353f4d3568ceb0947d67d12e4a89d91845fe959be7a"
+      }
+    ]
+  },
+  "RF09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "ef35ba9804321f2010e168730d4442583c4a7c4ef2975cd9d73399fa0f088457"
+      }
+    ]
+  },
+  "RF10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, w",
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "3836c049a2da36b2a5870c366ab5ecf47b035b64141f6a316a4f23ea4fd98e43"
+      }
+    ]
+  },
+  "RF11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, w",
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "7647a093d4283d1bcabc992addaa45093b6eec816508c27235914e8acdeeb47e"
+      }
+    ]
+  },
+  "RF12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 13,
+        "failing_tests": [
+          "FIX G (since unit R-FG): one role appends past FIX G's 20 rows, up to the case's 40; the 41st, by either role or the operator, is 409 row_limit, codes only; not",
+          "FIX G (since unit R-FG): a counter a deployment before R-FG left in the usage repository is not read: a role whose counter says 25 still appends; and the cap is",
+          "FIX G (since unit R-FG): 46 references by one role at once append at most 40 rows; each is answered 201, 409 row_limit or 503 reference_seq_contended",
+          "FIX G (since unit R-FG): a row whose seq another row takes moves to the next seq; nothing is counted",
+          "ADDENDUM: rows are create-only: the second append takes seq 2; a row that lands first at the next seq is never written over, and the append moves to the one aft",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "R-FG 3: there is no reference counter: one role appends past 20 rows; nothing under case_references/ is read or written; reference_quota is answered nowhere",
+          "R-FG 4: a reference refused 503 reference_seq_contended spends nothing: twenty contended sends, then the same send finishes, never 409 reference_quota",
+          "R-FG 5: no request reads or writes a case_references/ path: the page, the status page, open, commit, reveal, withdrawal, a reference with no proof and no bearer",
+          "R-RVf3 5b: the reference's pre-write judge that cannot read the row's named document answers 503 document_unavailable, codes only; nothing is written",
+          "MUST-FAIL GAP (B05): a pre-write judge refusal that is not a could-not-look stays 500 internal_error (a row dated before the seal); nothing is written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "not ok"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "7fbbc7981f893ba6c35fb25dfb30e1caed92d8a321c4258e0797f27d88f61e9d"
+      }
+    ]
+  },
+  "RF13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "47b0b49bc2617e65d51288bb007cc7a6d627e3184e0c79f62ccf735ab394eb14"
+      }
+    ]
+  },
+  "RF14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-FG 2: the cap is judged from the listing either way: the highest seq plus one past 40 refuses with one file listed, and 40 files listed refuse with the highes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "b5c7037fa5829c10b07bebc3aa6f7a28fb569e6e440ec8a97c0b24d2c807e25e"
+      }
+    ]
+  },
+  "RF15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "1aab48ce658527e1fc7e33065ad4acb0b3d698c482b5fdeb7de1259131cd7388"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "3196788ab7ef47c12f80cfe80233e35aa6d358c8",
+        "porcelain": "",
+        "defect_sha256": "1aab48ce658527e1fc7e33065ad4acb0b3d698c482b5fdeb7de1259131cd7388",
+        "caught_by": [
+          "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
+        ]
+      }
+    ]
+  },
+  "RF16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-FG 1: a case takes at most 40 reference rows, for every caller: the 40th row is written; the 41st, a role's or the operator's, is 409 row_limit, codes only, w",
+          "R-L2 M3 (since unit R-FG): a case takes at most 40 reference rows: the 40th is written, the 41st is refused 409 row_limit, codes only, and the README states the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "376393b7affacc87cac8d5026c994c69b61d52da",
+        "porcelain": "",
+        "defect_sha256": "6198dfd39de89ec28591beaf84479349d3a9ac3b96183ba8d3a294916b1850b6"
+      }
+    ]
+  }
+}

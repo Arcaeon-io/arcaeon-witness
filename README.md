@@ -83,20 +83,19 @@ this is an acceptable gap, not a hidden one. The real fix, when it's
 warranted, is a Stage-2 KV (Vercel KV / Upstash) with an atomic `INCR` and
 no CAS loop at all.
 
-### Credit balance — the decrementing balance behind prepaid packs (mechanism only, not yet sold)
+### Credit balance: the decrementing balance behind prepaid packs
 
-Built 2026-08-14 per `COUNCIL_PRICING_REVIEW_2026-08-14.md` §4 decision #5 (the hard
-gate): the free-tier meter above resets monthly and can't honestly back a
-prepaid, non-expiring per-pin credit promise. This is the mechanism that makes
-one real. **Naming the pack sizes here is not the same as selling them.**
-Nothing described in this section is for sale today — the Stripe path is
-unwired (see `api/stripe-webhook.js`'s own header), so there is no live
-purchase surface and therefore no live source of truth to point at. A
-prior version of this README claimed `.well-known/offers.json` was that
-source of truth; that file has never existed (confirmed live, pre-invite
-audit 2026-08-23) and the claim was deleted rather than left pointing at
-a 404 in a document meant to be checked. When a real purchase path ships,
-its source of truth gets named here, and not before.
+The credit packs are listed and Stripe checkout is live. Credits are applied by the fulfilment page (`api/fulfill.js`) when the buyer lands on it after checkout; the Stripe webhook backstop (`api/stripe-webhook.js`) is not yet configured, so a purchase whose buyer never reaches the fulfilment page is credited by hand (`/api/credit`). No real purchase has completed yet.
+The packs are listed on https://arcaeon.io/pricing and in the site's offers
+note: Mini $5 for 1,000 pins, Starter $15 for 3,000, Standard $50 for 12,000,
+Bulk $150 for 40,000. Each pack's checkout lands on the fulfil page
+(`api/fulfill.js`), which is built to verify the session with Stripe, mint the
+key, and apply the credits; `api/stripe-webhook.js` is built as the backstop
+for slower payment methods (its setup steps are below). If a buyer loses their key, the link in their Stripe receipt is how they
+recover it: it reopens the fulfil page, which shows the same key again.
+
+The balance exists because the free-tier meter above resets monthly and can't
+honestly back a prepaid, non-expiring per-pin credit promise (built 2026-08-14).
 
 - Free 100/mo stays the default and is unaffected: a key that has never
   purchased credits behaves exactly as before this build.
@@ -158,7 +157,7 @@ logic itself is already built and tested via `/api/credit`.
 `{credit_balance, credit_ever_purchased, free_tier:{plan, used, cap, month}}`.
 Never consumes a pin (reads via `meter.peek()`, not `meter.check()`).
 
-Pack sizes (LIVE and buyable as of 2026-08-16; credits applied by hand within ~a day. Corrected 2026-08-19: this line still said "not yet offered" while the Stripe links were returning 200 and would take a customer's money): Mini $5/1,000 pins · Starter
+Pack sizes (how credits arrive is said once, at the top of this section): Mini $5/1,000 pins · Starter
 $15/3,000 pins · Standard $50/12,000 pins · Bulk $150/40,000 pins
 (`api/_balance.js` `PACKS`).
 
@@ -343,13 +342,13 @@ stored record, and on every `/api/latest` read. It means exactly this, and the
 same sentence ships in the API responses themselves (`auth_note`):
 
 > Bearer-key auth only. This is NOT owner-signature auth: the witness verifies
-> that the caller holds a key bound to this namespace prefix, not that the
+> that the caller has a key bound to this namespace prefix, not that the
 > log's owner authorized this record. Anyone who obtains the key can pin or
 > renew. Owner-signature auth — a detached signature over `{namespace, rows,
 > chain, timestamp}` verified against a public key registered to the namespace
 > — is the Stage-1 requirement and is NOT built yet. Read
 > `publisher_heartbeat_current` as proof that a key-holder was alive and
-> asserting nothing changed, never as proof of the log owner's intent.
+> asserting, never as proof of the log owner's intent.
 
 Renewal is the write where this matters most: a leaked bearer key can keep a
 namespace looking alive indefinitely without the owner's involvement. That is a
@@ -417,24 +416,70 @@ A scan that exhausts the cap without an answer says so honestly
 
 **`witnessed` is tri-state** (since 2026-08-22; before that, every miss said
 `false` — an external re-run by ColonistOne caught the gap and the changelog
-records it). `true` = this exact head is in the record. `false` = the record
+records it). The field is what a client reads; the word is what a person reads,
+and since the 2026-09-23 vocabulary pass the `note` opens with it, the same
+three words every Arcaeon checker prints. `true` is **VERIFIED**: this exact
+head is in the record. `false` is **BROKEN**: the record
 actively contradicts it: `rows_match_chain_mismatch` (a record exists at that
 rows count with a *different* chain — not the accepted head),
 `rows_never_witnessed` (that rows count was skipped by an advance and was
 never itself a head), `not_found_in_history` (the scan reached the start of
-history without a match — conclusive). `null` = the witness has **no basis to
-decide** and refuses to assert a negative it didn't check:
+history without a match — conclusive). `null` is **COULD NOT LOOK**: the
+witness has **no basis to decide** and refuses to assert a negative it didn't check:
 `no_pin_recorded_for_namespace` (nothing to decide against),
 `exceeds_current_head` (ahead of the record — not witnessed *yet*, not
 refuted; `accepted_head` rides in-band), `scan_bound_reached` (the capped
 scan ran out before an answer — older records may exist and were NOT
-checked). Every response is HTTP `200` — `witnessed` is the signal, not the
-status code, the same way this is a yes/no/can't-say question, not a
-resource fetch.
+checked), `history_unreadable` (a record in the scanned range is missing or
+unreadable and could have been the one asked about). Every one of those is
+HTTP `200` — `witnessed` is the signal, not the status code, the same way this
+is a yes/no/can't-say question, not a resource fetch. A stored record that is
+present and cannot be read as the record it should be is refused with a `503`
+and a named `reason` (a record filed at the wrong path, `409`); both are also
+COULD NOT LOOK, a third answer and not an outage.
 
 A historical (superseded) match sets `is_current_head:false` and its
 cadence fields describe that old record, not the namespace's live status —
 read `is_current_head` before reading `cadence_status` on a hit.
+
+### Stamps
+
+`POST /api/stamp {"sha256": "<64 hex>"}` stamps a file's fingerprint; `GET
+/api/stamp?sha256=<64 hex>` reads one. (`/api/stamp` is a `vercel.json`
+rewrite to `/api/verify?op=stamp`: the 12-function cap.) The page that sends
+it hashes the file in the browser, so the file never leaves the machine. A
+stamp is one JSON file per fingerprint in the public stamps repository,
+written as its own commit; the first write wins, forever, and stamping a
+fingerprint that already has a stamp returns that stamp (`existing: true`),
+writes nothing and charges nothing.
+
+A stamp records the fingerprint and the time, and nothing else: no size, no
+filename, no label. A request may still send a size; it is checked for form
+and not stored (unit R-WIDE, D1). A stamp written before 2026-10-15 may carry
+the size its stamper sent; it is returned as stored, and nothing reads it.
+The case registration's `stamp_size_mismatch` refusal is retired: no new
+stamp carries a size, and old stamps keep theirs and are never deleted.
+
+A stamp costs 0.25 credit, after the free allowance: 3 stamps per address per
+UTC day (STAMP_FREE_PER_DAY), past which a stamp needs a witness key. The
+credit comes from the same prepaid balance the pins spend: one balance per
+key, shared by pins and stamps. The price is one constant in
+`lib/_stamp.js` (`STAMP_PRICE_CREDITS`), ratified 2026-10-15, and not an
+environment variable. A failed write charges nothing. The free allowance is
+per instance and soft; a global daily cap (`STAMP_DAILY_CAP`, kept in the
+store) holds across instances, and the free tier's share of it is lower than
+the paid tier's.
+
+What a stamp proves: A file with exactly this SHA-256 fingerprint was recorded
+no later than the time of the public commit that has this stamp.
+
+What it does not prove: Who made the file. That anything the file says is
+true. That no other version of it exists. That the file is older than this
+stamp by any particular amount. The stamper's statements about the bytes are
+not checked.
+
+The outside witness is the public commit history of the stamps repository,
+not this service: check the stamp's commit there.
 
 ### GET /api/status.json (no auth)
 
@@ -586,6 +631,28 @@ true, complete, or honestly produced; only that they were not fabricated after
 the fact. Each day's anchor covers all history through the previous day's
 anchor commits, forming a chain.
 
+A case page never says a case is anchored. It does not read the daily
+anchor records or their proofs; it says where they are, and that you can
+check one yourself with `ots verify`, as above.
+
+The case page prints only what the record proves and names what it did not
+check. Every refusal page carries its code (`not_a_case_id`, `rate_limited`,
+`no_such_case`, `could_not_look`, `case_unreadable`, and each case state's
+own). A sealed page has a "Where this is recorded" table (the case file, the
+pin once pinned, and each role's stamp commit; the daily anchors are not read
+and have no row). The sealed page, the does-not-verify page and the withdrawn
+page carry the list "The following checks were performed on this record:",
+one line per check that ran on that request, made from the check's
+result and naming the bytes it covers: a check that did not run has no line,
+and one that failed carries its code. A page that shows the case record
+prints the sha256 of the case file's bytes it read and links the raw file,
+and its time rows read relative and absolute ("2 hours ago
+(2026-10-10T07:30:00Z)"); the one-sentence pages and the refusal pages show
+nothing from the record. Every page says when it was read and where to
+report a problem. An expired case keeps its stored status:
+"COMMITTED (EXPIRED by this service's clock)". `/case/<case_id>?format=json`
+(`op=case-page&format=json`) answers the same facts as JSON.
+
 ## Witness log
 
 One cumulative Merkle tree (RFC 9162 hashing) over every create-only record
@@ -680,7 +747,17 @@ the log proves they have not changed since the genesis date, not before it.
 api/pin.js            POST /api/pin       — auth, validate, metering, credit decrement, monotonic guard, commit
 api/renew.js          POST /api/renew     — publisher heartbeat: refresh the deadline, never claim an advance (thin wrapper over pin.js); deadline-owner gated
 api/latest.js          GET /api/latest    — public read via raw + cache-busting
-api/verify.js           GET /api/verify   — one-call public proof-of-inclusion (no auth, no metering)
+api/verify.js           GET /api/verify   — one-call public proof-of-inclusion (no auth, no metering); its ?op= modes (the 12-function cap):
+                          op=bulk            POST  — many heads checked at once; reads
+                          op=stamp           POST  — WRITES a stamp; CHARGES 0.25 credit past the free allowance (GET reads one)
+                          op=reconcile       POST  — the two-tapes verdict; reads no store, writes nothing
+                          op=reconcile-page  GET   — the reconcile page; reads
+                          op=case-open       POST  — WRITES an OPEN case and the key's open-quota counter
+                          op=case-commit     POST  — WRITES a role's registration and its projection
+                          op=case-reveal     POST  — WRITES the sealed case and its pin
+                          op=case-withdraw   POST  — WRITES the withdrawal
+                          op=case-reference  POST  — WRITES a signed reference row
+                          op=case-page       GET   — the public case page; reads
 api/health.js           GET /api/health   — live store reachability
 api/status.js            GET /status      — public trust-surface page
                           — /api/status.json is a vercel.json REWRITE to /api/status?format=json, not its own file (a prior version of this table listed api/status.json.js, which has never existed — confirmed live, pre-invite audit 2026-08-23)
@@ -716,7 +793,315 @@ public pins repo and the private usage repo — same account, same token, two
 repos. `WITNESS_CADENCE` is optional (default cadence is 24h for every
 namespace when unset or malformed) and holds no secrets, but lives with the
 others for one reason: it's operational policy, not code — changing it
-shouldn't require a redeploy.
+shouldn't require a redeploy. `GITHUB_READ_TOKEN` is optional: the case
+page reads the pins repository with it, so page views do not spend the
+token the writers use; when it is unset the page reads with
+`GITHUB_PIN_TOKEN`, and the status page says so in one line. The case page
+keeps a page it answered 200 for 60 seconds per instance, so a page may be
+up to 60 seconds old, and says so.
+
+## Deploy shape
+
+What the domain serves is declared here, in the repository, not decided by
+whoever deploys. `vercel.json` sets `"outputDirectory": "public"`: the domain
+serves `public/<path>` at `/<path>`, nothing else statically, and everything
+else it answers is one of the 12 functions under `api/`, reached directly or
+through a `vercel.json` rewrite.
+
+Served statically, exactly these, and nothing more:
+
+- `/.well-known/arcaeon/case-signing-keys.json`
+- `/favicon.svg`
+- `/PRACTICES.md`
+
+They are committed as `public/.well-known/arcaeon/case-signing-keys.json`
+(the case key document), `public/favicon.svg` and `public/PRACTICES.md` (linked
+from the `/status` footer). Not served: the source and the notes (`api/`,
+`lib/`, `tools/`, `test/`, `README.md`, `package.json`, `CHANGELOG.md`, the
+design documents); check (g) of `tools/preview_dry_run.js` probes for them.
+This project serves no `/.well-known/arcaeon/snapshot-keys.json`: that
+document is not in this repository.
+
+The functions that load the case key document (`api/verify.js`,
+`api/status.js`, `api/badge.js`, through `lib/_case_seal.js`) name
+`public/.well-known/**` in their `vercel.json` `includeFiles`, so each bundle
+carries the same bytes the domain serves. `test/deploy_shape.test.js` holds
+the repository to all of this, this list included.
+
+How to deploy: build locally, then deploy that build, so what is uploaded is
+what was built and checked here.
+
+```
+npx vercel pull --yes --environment=preview
+npx vercel build
+npx vercel deploy --prebuilt                   # a preview
+
+npx vercel pull --yes --environment=production
+npx vercel build --prod
+npx vercel deploy --prebuilt --prod            # production, and only production
+```
+
+After `npx vercel build`, `.vercel/output/static` must hold exactly the three
+files above. `.vercel/` is gitignored, and stays local: `vercel pull` writes
+the environment's variables into it.
+
+### KEY_DOCUMENT_BRANCH: the key document's published branch
+
+`KEY_DOCUMENT_BRANCH` names the branch of this repository on which the case
+key document is published (default `main`). A sealed case names the
+commit of the key document it was sealed under, and every reader holds that
+commit to this branch (`lib/_case_seal.js` `commitOnBranch`): a commit that
+is not on it is not a published document, and the case reads as could not
+look. The joint reveal refuses to seal from a deployment whose own commit is
+not on it. A deployment whose own commit has diverged from the branch signs
+nothing: withdrawals and references are answered 503
+`deployment_document_off_branch`, codes only, and the status page says so in
+one line (the reveal and the refusal receipt answer it too, unless the
+document it carries lists no active reconcile key: then they answer 409
+`sealing_not_offered` first). The status page's line about this deployment's
+key document may be up to about 120 seconds old: a confirmed or off answer is
+kept 60 seconds, and a commit read as on the branch is kept 60 seconds before
+that. This is an operator fault, not a sender's: no
+request can finish it until the deployment is rebuilt from the published
+branch. A deployment whose own commit is ahead of the branch answers 503
+`document_unavailable` until the branch reaches it. A commit the repository
+does not show yet is 503 `document_unavailable`, which a re-send can finish. A preview deployment of another branch sets it to that branch.
+The operator's shell must set the same value as the deployment it checks:
+`tools/preview_dry_run.js` holds the preview's sealed cases to it in its
+steps (e) and (f). Step (f) runs the sealer's case pass, which writes to the
+pins store the shell's `GITHUB_PIN_REPO` names (the production store when it
+is unset), so it runs only when `--store <owner/repo>` names that store, and
+it prints the target repository before any write.
+
+### A revoked key
+
+A key in the case key document is `active` or `revoked`. A record a key
+signed holds only while the key document this service carries lists that
+key active in its role. A key it lists as revoked makes every case the key
+signed read `signer_revoked`, whenever it was signed: the case page shows
+no verdict, the sealer does not pin it, and a reference to it is refused 409
+`signer_revoked`. The key document cannot order a signature against a
+revocation, so none is ordered. A rotated-out key stays listed active, with
+a note that it no longer signs. Revocation marker files
+(`revocations/<fingerprint>.json`) already in a repository are left in place
+and ignored: no code reads or writes them.
+
+### Checking a refusal receipt
+
+A joint reveal of a withdrawn case is refused 409 `case_withdrawn`, and a
+party that names its role and carries its own opening gets a refusal
+receipt: `{kind: "comparison_refused", v: 1, case_id, at, reason:
+"case_withdrawn", role, commitment_sha256, signed_under, signed_by, sig,
+sig_reason: null}`, signed with the service's reconcile key under the key
+document `signed_under` names. While the key document this service carries
+lists no active reconcile key, no case is sealed and no refusal receipt is
+issued: the reveal and the refusal receipt answer 409
+`sealing_not_offered`, codes only, before anything is compared. Publishing
+a reconcile key is a deploy step.
+
+### One signature reader
+
+Every record the service signs carries `signed_under`, exactly
+`{document_sha256, document_commit}`: the sealed case, the withdrawal
+record, the reference row and the refusal receipt. Each writer confirms
+that document at its commit before it signs, as the reveal does, and
+writes nothing otherwise (503 `document_unavailable`). No record is
+unsigned. One function reads all four (`lib/_case_seal.js`
+`signedUnderReason`): the named document's commit on the published
+branch, the document there the one named, `signed_by` listed active in
+its role there (case for the first three, reconcile for the receipt), the
+signature, and the key still listed, not revoked, in the current document.
+It answers `valid_under_document`, `signature_invalid`, `signer_unlisted`,
+`signer_revoked` or `document_unavailable`. A refusal receipt is checked
+by its form and then by that function (`verifyRefusalReceipt`), and
+`tools/check_refusal_receipt.js` does the same from the command line:
+
+    node tools/check_refusal_receipt.js receipt.json
+    node tools/check_refusal_receipt.js receipt.json --document case-signing-keys.json
+
+With `--document` (the key document at `signed_under.document_commit`, as a
+file) it runs offline, and the offline check is partial: it proves the
+signature against the document you supplied and nothing about whether that
+document is the published one (the commit on the published branch is the
+trust root, and it needs the network). So it never prints `ok: true`: it
+prints `{ok: false, reason: "offline_partial", signature_ok, signature_reason,
+not_checked}`
+and exits 3. Only the full online check prints `signature_valid: true` and
+exits 0 (it never prints a key named `ok`, and it names what no receipt
+shows: whether the case reads WITHDRAWN now, and the projection its record
+keeps), and only when the key document this checkout carries is the one at
+the tip of the published branch, read once through the contents API at the head of the published branch (not from the raw host, which caches a branch's file for minutes): an older copy could
+vouch for a key a newer document revokes, so the answer is then
+`carried_document_not_published` (or `published_document_unreadable`). The
+sealer makes the same read before it pins, and pins nothing on either
+answer.
+
+### Withdrawal
+
+Withdrawal before the reveal closes that case; it does not recall a tape a
+counterparty already has, and no verdict ever binds a key that did not
+sign in the case that produced it.
+
+A withdrawal (`?op=case-withdraw`) is accepted on presentation of a role's commitment preimage, takes the case's lock, writes the signed withdrawal
+record over the OPEN or COMMITTED case, writes the withdrawn marker, and
+answers. A withdrawal that loses to a seal or the deadline writes nothing to
+the pins repository. A registration projected between a withdrawal's read
+of the case and its write makes the withdrawal write nothing and answer
+503 `store_error`; sent again, it keeps the new registration. A withdrawal request that wrote nothing says "This
+request wrote nothing." The record carries a reason only when the request
+names one (`party_choice`, `deadline` or `other`); otherwise it has none,
+and the case page says "No reason was given." The page says the case was
+withdrawn on presentation of role a's commitment preimage (or b's), then
+the time written, relative and absolute: it names what was presented, never a party, since whoever
+holds a role's opening can present it, and the sender of a joint reveal
+holds both.
+
+The withdrawal record keeps the case root's `commitments` exactly as they
+stood when it was written, inside the signed record. Every reader of a
+withdrawn case takes a role's standing from them: the refusal receipt, a
+withdrawal sent again, and the case page. None of them reads a registration
+file or the root's history to decide it, and a registration file the record
+does not project does not stand.
+
+The joint reveal writes the case root once: the sealed case, by
+compare-and-swap over the COMMITTED root it read. A reveal that fails
+writes nothing, so the case stays COMMITTED as it was, and either role may
+send the same reveal again or withdraw. The reveal reads no stamp: a sealed
+case's stamp commits and stamp times are its registrations'.
+
+A listing of withdrawn tape digests was added in unit R-N and removed before
+release (see the change log). Files under withdrawn_commitments/ that a pins
+repository may hold from before this release are ignored: no code reads or
+writes them.
+
+No file that belongs to a case is ever deleted. A case's registration
+files, reference rows, withdrawal record and seal are written once and never
+changed. The case root is the one case file that is updated, and only by a
+compare-and-swap that every reader can follow in the repository's history.
+Outside any case's own files, the pins repository updates two kinds of file
+in place: the daily anchor proofs (`anchors/<date>-head.txt.ots`, which the
+anchoring job upgrades once the Bitcoin attestation arrives) and the
+namespace pin pointers (`pins/<namespace>/latest.json`, which each new pin
+of a namespace moves).
+
+A sealed case has at most one pin, `pins/case/<case_id>/00000001.json`,
+written once, by the reveal or by the sealer's run after the seal. It
+records `case_commit`: for the reveal, the commit its write of the sealed
+case file answered with; for the sealer's run, the commit it read back as
+the one that wrote the sealed case file. A reader holds the case file at that commit
+to the case it serves; a pin without `case_commit` is not read as a pin.
+This service writes nothing else under a case's pin namespace: no pointer
+and no next pin. A case's pin line on its page says
+"Pinned at commit P (the pins repository's commit time, T)", or what was
+read instead. Files a preview pins repository may hold from before this
+release under a case's pin namespace (`latest.json`, and `0000000N.json`
+for N above 1) are left where they are and ignored, and no case code reads
+the daily anchor files under `anchors/`.
+
+A registration file is signed by the key that registered it; this service does not bind that key to the party label or to the commitment's preimage. The signature covers the case, role and commitment; the file's
+registered_at, stamp_commit and stamped_at are the service's unsigned
+arrival note until a seal copies them into signed bytes. A registration
+signs only the case, the role and the commitment hash, so anyone holding a
+key can register a role whose commitment hash they know. When the opening
+names a party's `key_id`, a registration of that party's role under
+another key id is refused 409 `key_mismatch`, codes only, and nothing is
+written; a key id is a name and a 32-bit hash, so this compares names and
+binds no key. When two roles show one key id, compare their `key_fp`, never their `key_id`: a key id is a name and a 32-bit hash, and two keys can share one; `key_fp` is the sha256 of the key's own bytes. The case root carries each role's `key_fp`; one public
+key registered under both roles is refused 409 `same_key_both_roles`, and a
+stored case whose two entries share a `key_fp` reads `single_party`.
+
+A registration file is a claim, and it stands only once the case root
+projects it. Each claim has its own file,
+`registrations/<case_id>/<role>/<claim>.json`, written once: the claim is
+the sha256 of the json-c14n:v1 bytes of the fields a party supplies (the
+case, the role, the commitment, the registering key and its signature), so
+the same registration sent again is the same claim and finds its own file.
+A file is written only when the case root as read shows the case open and
+the role not yet projected; the root projects at most one claim per role,
+and its entry carries the claim and the sha256 of the file's bytes. The
+registration projects only after a fresh read of the root shows no
+withdrawal and no seal, before the deadline by this service's clock read
+just before the write, by a compare-and-swap on the root. The
+compare-and-swap decides between two claims: one that loses is not retried,
+and the root, read once more, is the answer (`role_already_committed`,
+naming the projected sha256, when another claim holds the role). If the
+read or the write fails, nothing more is written and the answer is 503
+`registration_unconfirmed`: the registration file is written and is not yet
+confirmed; send the same registration again. A root that fails its schema on
+that read is 409 `registration_unconfirmed`, codes only, since no re-send
+makes it pass; so are a stamp that is gone when a registration is sent
+again (409 `stamp_record_unreadable`), a stamp whose history names no commit
+(409 `stamp_history_unreadable`) and a file at the registration's path that
+holds another registration (409 `registration_record_unreadable`). Every answer after a file is
+written names its path. A role the root projects for another claim is 409
+`role_already_committed` and nothing is written. A file the root does not
+project has no standing, and the case page neither lists nor links it: for
+a role the root does not project, the page says only that no registration
+is confirmed for that role. Every reader takes a case's registrations from
+the root's projection and checks the file at each projected path against
+the sha256 projected. A projected entry whose file is missing or does not
+hash to the projected sha256, or whose projected entry its file does not
+hold, is answered 503 `case_record_inconsistent` by every handler, and the
+body is that code alone; the reason, the case and the role go to the
+operator's log and to the sealer's report. The case page shows the
+could-not-look page with one sentence: "The stored record for this case
+does not agree with itself. Nothing is asserted about this case while that
+is so." The case cannot seal and is never pinned; nothing is written,
+nothing is deleted.
+
+Files under removals/ that a preview pins repository may hold are ignored:
+no code reads or writes them.
+
+### A reference row's sentence
+
+A reference row is signed and create-only, and carries a
+fixed sentence about its anchoring, `anchor_note`, with `note_version: 4`:
+"This row has no pin of its own. It is recorded by the pins-repository
+commit that writes it, and no anchoring is asserted here." Versions 2 and 3
+of this sentence were never issued. A row carrying `note_version` 3 reads
+`row_note_v3`, and any other version but 4, or none, is `malformed_field`;
+neither is counted. A row's `appended_by` says what was presented:
+`preimage:a` or `preimage:b` (that role's commitment preimage, which both
+parties hold after the reveal) or `operator` (the operator's key); the
+page says "appended on presentation of role a's commitment preimage" or
+"appended with the operator key". The page's records line says only what
+was read: "N reference rows were appended", and for each row the preimage
+or the operator key that appended it. Beside the parties' labels the page says "Labels are recorded, not verified. Presence in this record is not meaning: a public record keeps what was submitted to it." When the reveal carried a cross_reference, the page says "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names":
+whoever sent the reveal typed it, and the service contacts no operator. A
+case takes at most 40 reference rows, for every appender, the operator too;
+the 41st is refused 409 `row_limit`. The limit is judged from the listing of
+the case's rows: a reference is refused when the highest listed seq plus one
+would pass 40, or when 40 files or more are listed, and its 409 body carries
+`count` (the files listed) and `limit`, and no sentence. The case page says
+it in a sentence that claims the listing fact only, never a number of rows:
+"This case takes no further reference row: its listing has reached the limit
+of 40." No counter is kept, and no refusal spends anything, so a reference
+answered 503 `reference_seq_contended` (codes only) finishes when it is sent
+again. A row write that GitHub answers 409 and whose path then has another
+sender's file is not taken as written: the reference lists again and takes
+the next seq, or is refused 409 `row_limit` when the listing is now full.
+Before it builds a row, a reference reads the listed rows (seqs 1 to 40) for
+one with its `appended_by` and its cross_reference (the same json-c14n:v1
+sha256) that is a valid row; when there is one, the answer is 200,
+`existing: true`, with that row and its seq, and nothing is written. So a
+reference whose row landed but whose answer was lost (a 503 `store_error`,
+say) is answered with that row when it is sent again, never written twice,
+and never refused `row_limit` for its own 40th row. Two deliberate references
+with the same cross_reference from the same appender become one row: the
+second is answered 200 with the first's seq. A row is never
+refused for its case's pin or anchoring: no pin and no anchor is read for a
+row, and its answer names no commit. The case page shows each row with a
+link to it and the commit that wrote it, and says nothing of its pin or its
+anchoring.
+
+### The sealer's window
+
+Each sealer run reads at most a fixed number of cases, a window of the
+list that starts where the run's full timestamp turns it
+(`lib/_case_seal.js`, THE WINDOW'S START), so no fixed run period reads the
+same slice forever. With 30 entries, 5 a run, an hourly run reads every
+entry within 12 runs and a daily run within 28, from any start time. Some
+periods move more slowly, and the comment there says which.
 
 ## Testing
 

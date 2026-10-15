@@ -1,0 +1,891 @@
+{
+  "WB02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "573a16148c7a74bec63bfab321126a72e9dd918f38e3eb3f902c8d44b62c07cb"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB02): inside a reader, a call for another repository's target (the stamps repository) carries that target's own token, never the read token",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "573a16148c7a74bec63bfab321126a72e9dd918f38e3eb3f902c8d44b62c07cb",
+        "caught_by": [
+          "MUST-FAIL GAP (WB02): inside a reader, a call for another repository's target (the stamps repository) carries that target's own token, never the read token"
+        ]
+      }
+    ]
+  },
+  "WB01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: with GITHUB_READ_TOKEN set, a case page view makes every store call with the read token and none with the pin token; unset, it reads with the pin tok",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "ec704b5101aa5160672d1ed7b5c60590ef8951c4a6c3e01bd32969b82e20e063"
+      }
+    ]
+  },
+  "WB03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: with GITHUB_READ_TOKEN set, a case page view makes every store call with the read token and none with the pin token; unset, it reads with the pin tok",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "4ee4349af3782852293e19cb30013e749c49196f05adc1fc1eebf71624f26db0"
+      }
+    ]
+  },
+  "WB04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE B1: with GITHUB_READ_TOKEN set, a case page view makes every store call with the read token and none with the pin token; unset, it reads with the pin tok",
+          "R-WIDE B1: the status page says in one line whether the case page reads with its own read token",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "67e2d0271a51423e99347fc6aae37044ca64f41b86b9b1ee7e7132045b0efbb9"
+      }
+    ]
+  },
+  "WB05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: with GITHUB_READ_TOKEN set, a case page view makes every store call with the read token and none with the pin token; unset, it reads with the pin tok",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "d8831e3f82827a6540c489cefd151656294f840b11d62e1b96084d0415af47cd"
+      }
+    ]
+  },
+  "WB06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "ebf9eacd41a24501f4f9b204d0fa469977324643322a38b31734701baa546d8d"
+      }
+    ]
+  },
+  "WB07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "564c7f459fc24c7dc853ef4b2c1d4409ed54c5ed6cac7f7a369e993cd1032f84"
+      }
+    ]
+  },
+  "WB08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "56d75b79d5af03d48f194a2afe588d035ed7efe026c4b5aa719584e2a4dc9f41"
+      }
+    ]
+  },
+  "WB09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "f05ad57f408a4aef2eac8c95e1d9d51af7bf5461a620ee86f1301f261f3e91dc"
+      }
+    ]
+  },
+  "WB10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "899dd82c7304b7fcef699a991556a8d76431a835614bd028ff37e0fd203ac4c8"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB10): the page cache keeps at most its bound, dropping the oldest page first",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "899dd82c7304b7fcef699a991556a8d76431a835614bd028ff37e0fd203ac4c8",
+        "caught_by": [
+          "MUST-FAIL GAP (WB10): the page cache keeps at most its bound, dropping the oldest page first"
+        ]
+      }
+    ]
+  },
+  "WB11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "968d265d1c1baacaf5fb88c3a87ef19d31e07b8a826180f476913c96133d4f04"
+      }
+    ]
+  },
+  "WB12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the case page through the dispatch keeps a page it answered 200 for 60 seconds: a second view within them makes no store call; a 503 is not kept",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "2223fc46d5e7b9b036c6eecd743a243edad19d1b4d8e0e4d4a3fd6cb9aa8f0dc"
+      }
+    ]
+  },
+  "WB13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the status page says in one line whether the case page reads with its own read token",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "04b2a56903eab034817bf64cc4411596ecaa3e10fc64648c52c1ac149493fe3e"
+      }
+    ]
+  },
+  "WB14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B1: the status page says in one line whether the case page reads with its own read token",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "971ffdc4cdfd68cd83bf684a30dd4f5191a5c3e8bbfb078dc69250de75e11d65"
+      }
+    ]
+  },
+  "WB15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE B2: a sealer carrying a document that is not the one at the tip of the published branch refuses to pin; nothing is written",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "ddededfbd8941e2b2cd4264156a65eae67459dfa95312bfe212a744cb85f8d7a"
+      }
+    ]
+  },
+  "WB16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE B2: a sealer carrying a document that is not the one at the tip of the published branch refuses to pin; nothing is written",
+          "R-WIDE B2: the online refusal-receipt checker refuses to say the signature verifies when the document it carries is not the one at the tip of the published bran",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "ca50b5668e38fb189b9d4f40a510d7d84a26baaefb494233d7c6e7e58012ffef"
+      }
+    ]
+  },
+  "WB17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "9aa325f0f7c04010708e8d879c68d624b81b138b8f2b7bf4936e5ce192d2dccc"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB17): the document at the tip is read on the published branch KEY_DOCUMENT_BRANCH names, not on main",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "9aa325f0f7c04010708e8d879c68d624b81b138b8f2b7bf4936e5ce192d2dccc",
+        "caught_by": [
+          "MUST-FAIL GAP (WB17): the document at the tip is read on the published branch KEY_DOCUMENT_BRANCH names, not on main"
+        ]
+      }
+    ]
+  },
+  "WB18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE B2: a sealer carrying a document that is not the one at the tip of the published branch refuses to pin; nothing is written",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "78e99ef2d2f54623d633eb9eb7137f2fda02dfb14868dfbd2eecc7deeefe09aa"
+      }
+    ]
+  },
+  "WB19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B2: the online refusal-receipt checker refuses to say the signature verifies when the document it carries is not the one at the tip of the published bran",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "322fcb71bf86845953136df6453733a916206c2c06802d0f2910884de789d3ea"
+      }
+    ]
+  },
+  "WB20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B2: the online refusal-receipt checker refuses to say the signature verifies when the document it carries is not the one at the tip of the published bran",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "dfc1bed6ab6e382178090c08adec6142f176ea523ea9c1c44784d944958cacb4"
+      }
+    ]
+  },
+  "WB21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "0160201e173209eeebf2c3256a2053557e0ce5d2713128450c09a76f8f3b2995"
+      }
+    ]
+  },
+  "WB22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "87af3eb79c12aa63ad0d8c91fe5501e8d0571cc5d1f18567669e6e7595c0f41f"
+      }
+    ]
+  },
+  "WB23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "08136b02e9a653d457c228ea77761426cdf00f759ca448ea0b217ab63ad1d39e"
+      }
+    ]
+  },
+  "WB24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "b3eca1e9fe896297a13ee60bb5a42e34fdb960947363693d5821e7bdfa310872"
+      }
+    ]
+  },
+  "WB25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "fbb0cf00113c9b423bec9491556a80df6f1c29d81e295b742fe5331e8b91c332"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB25): the CLI takes --store, and refuses an empty one"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "fbb0cf00113c9b423bec9491556a80df6f1c29d81e295b742fe5331e8b91c332",
+        "caught_by": [
+          "MUST-FAIL GAP (WB25): the CLI takes --store, and refuses an empty one"
+        ]
+      }
+    ]
+  },
+  "WB26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses to plant unless the unplanted suite exits 0 with no failing test; nothing is planted and no ledger is written"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "eaf46b0d44f7f78f8d6bac790a173e86cbe6f8a5ceec943ac39c969c4c512862"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses to plant unless the unplanted suite exits 0 with no failing test; nothing is planted and no ledger is written"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "eaf46b0d44f7f78f8d6bac790a173e86cbe6f8a5ceec943ac39c969c4c512862"
+      }
+    ]
+  },
+  "WB27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: caught only when the suite exits with code 1 and a test failed: another exit code with failing tests is error"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "e967ac543892e86bf882c1fe35a3163884646e0b9868e69eac2882cf7b475f87"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: caught only when the suite exits with code 1 and a test failed: another exit code with failing tests is error"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "e967ac543892e86bf882c1fe35a3163884646e0b9868e69eac2882cf7b475f87"
+      }
+    ]
+  },
+  "WB28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "5f48d4924863e57c3948745579ce43d04ed7d9942304ff6395dfdae4d7dcf4d9"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "5f48d4924863e57c3948745579ce43d04ed7d9942304ff6395dfdae4d7dcf4d9"
+      }
+    ]
+  },
+  "WB29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "95c66b624b97038c2a94407fa54494d16f4c95dde34eca2505677317d212fdf2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "95c66b624b97038c2a94407fa54494d16f4c95dde34eca2505677317d212fdf2"
+      }
+    ]
+  },
+  "WB30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the table prints a gap test the defects file names as 'named, not verified' unless the latest catch failed it"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "b9a6631ddfde2fc30b903514339e8ecd617a7bf611d5c2d7b4b5b53ac4b9924f"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the table prints a gap test the defects file names as 'named, not verified' unless the latest catch failed it"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "b9a6631ddfde2fc30b903514339e8ecd617a7bf611d5c2d7b4b5b53ac4b9924f"
+      }
+    ]
+  },
+  "WB31": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "60b29da1936af54b6c458355cc1048f74a804f694f862f157e80ba4efa1dcbe2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "60b29da1936af54b6c458355cc1048f74a804f694f862f157e80ba4efa1dcbe2"
+      }
+    ]
+  },
+  "WB32": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "71c302795e2dda86c2c2a00116b3802034f92168334cd65df46193d1740737ca"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's",
+          "MUST-FAIL GAP (WB38, WB39): the suite's only preload is the runner's own no-network shim: an inherited NODE_OPTIONS is not carried"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "f4f447d2211610b1258bd0b6cd6096b988fa98c6484449a0fd8b8759391b6435"
+      }
+    ]
+  },
+  "WB33": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B5: on Windows the runner kills the suite's process tree with taskkill /T /F; elsewhere its process group"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "3db92a709392f5b69be42e1b2e7e87a4e87479cecc154af3dfa9fb694302a044"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B5: on Windows the runner kills the suite's process tree with taskkill /T /F; elsewhere its process group"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "3db92a709392f5b69be42e1b2e7e87a4e87479cecc154af3dfa9fb694302a044"
+      }
+    ]
+  },
+  "WB34": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "00b547a10854447e2c078d4ed50c9cc8996ba8067f0ab15a66cfa33b76a9c0ed"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "00b547a10854447e2c078d4ed50c9cc8996ba8067f0ab15a66cfa33b76a9c0ed",
+        "caught_by": [
+          "MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and"
+        ]
+      }
+    ]
+  },
+  "WB35": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree",
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, ",
+          "R-WIDE B4: the runner refuses to plant unless the unplanted suite exits 0 with no failing test; nothing is planted and no ledger is written",
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}",
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "269a0b6b1c540fe9030d18a11492966e5245b50690f80735c082b848b9829c27"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "R-ABf m-d: an interrupted run (SIGINT) removes its copies of the tree",
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, ",
+          "R-WIDE B4: the runner refuses to plant unless the unplanted suite exits 0 with no failing test; nothing is planted and no ledger is written",
+          "R-WIDE B4: the runner refuses a tree that is not clean, and every ledger run records the commit, the clean status and the sha256 of the defect's {find, replace}",
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's",
+          "MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and",
+          "MUST-FAIL GAP (WB37): the suite's fetch reaches this machine: a fixture that serves itself on 127.0.0.1 passes unplanted"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "269a0b6b1c540fe9030d18a11492966e5245b50690f80735c082b848b9829c27"
+      }
+    ]
+  },
+  "WB36": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, ",
+          "R-WIDE B5: on Windows the runner kills the suite's process tree with taskkill /T /F; elsewhere its process group"
+        ],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "754934abc1d1327fa05efcfc0a5d85242c876837e4c7e030ad31217287050bd0"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, ",
+          "R-WIDE B5: on Windows the runner kills the suite's process tree with taskkill /T /F; elsewhere its process group"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "754934abc1d1327fa05efcfc0a5d85242c876837e4c7e030ad31217287050bd0"
+      }
+    ]
+  },
+  "WB37": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "7b0bac5a83607f362fefce849a607e9d9acc7864aa0343ddadfff9564c7df892"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB37): the suite's fetch reaches this machine: a fixture that serves itself on 127.0.0.1 passes unplanted"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "7b0bac5a83607f362fefce849a607e9d9acc7864aa0343ddadfff9564c7df892",
+        "caught_by": [
+          "MUST-FAIL GAP (WB37): the suite's fetch reaches this machine: a fixture that serves itself on 127.0.0.1 passes unplanted"
+        ]
+      }
+    ]
+  },
+  "WB38": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "ece916510f2572b593aef3690100ca7a51224966",
+        "porcelain": "",
+        "defect_sha256": "61f0417c7bc5ca7d650ffefe295ede646d73765f9b3547e4f9940a4e3573c299"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "61f0417c7bc5ca7d650ffefe295ede646d73765f9b3547e4f9940a4e3573c299",
+        "caught_by": [
+          "R-WIDE B4: the suite runs with no WITNESS_* variable, no GITHUB_* variable and no token, and with fetch refused to every host but this machine's"
+        ]
+      }
+    ]
+  },
+  "WB39": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB38, WB39): the suite's only preload is the runner's own no-network shim: an inherited NODE_OPTIONS is not carried"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "b7271142bf3c9317698e37401b85a676d3d3375fce3c07142f5fc8fe9cd24a3a"
+      }
+    ]
+  },
+  "WB40": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB34, WB40): a file changed in the tree while the run is going is never planted against: every copy is taken before the unplanted suite runs, and"
+        ],
+        "head": "2007c308b2ecc37e22746d5c2e3ab882c33ef2dd",
+        "porcelain": "",
+        "defect_sha256": "2d46312b93dae5070c01426c60266c3ed8de37bc56d4deb2f01995504f6b77e2"
+      }
+    ]
+  }
+}

@@ -17,16 +17,41 @@
 const store = require("../lib/_store.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
-const { gatherStatusData, humanDuration, BLOB, TREE, REPO_URL } = require("../lib/_status_data.js");
+const { gatherStatusData, conflictLine, humanDuration, BLOB, TREE, REPO_URL } = require("../lib/_status_data.js");
 // Audit-state column (design page part B, slice 1). Behind WITNESS_AUDIT_STATE
 // (default off): with the flag off nothing below this line changes what the
 // page renders. See lib/_audit_status.js.
 const auditStatus = require("../lib/_audit_status.js");
+// The locked Arcaeon mark (header 30 px, footer 20 px + "arcaeon.io") and the
+// /favicon.svg head link. Light page with a dark media flip, so "light-auto".
+const brandMark = require("../lib/_brand_mark.js");
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
+}
+
+// One line (unit R-WIDE, B1): whether the case page reads with its own
+// token. Never prints the token or names the variable.
+function readTokenLine() {
+  return store.readTokenConfigured()
+    ? '<p class="muted">The case page reads the pins repository with its own read token.</p>'
+    : '<p class="muted">This deployment has no separate read token: the case page reads the pins repository with the token it writes with.</p>';
+}
+
+// One line (unit R-WIDE, A6): the key document this deployment carries,
+// confirmed at the commit it was built from, or why not.
+function deploymentDocumentLine(d) {
+  const at = d.commit ? `<code>${esc(d.commit.slice(0, 12))}</code>` : "a commit this deployment does not know";
+  if (d.state === "confirmed") return `<p class="muted">The key document this deployment carries is confirmed at commit ${at} on the published branch.</p>`;
+  if (d.state === "deployment_document_off_branch") {
+    // only what is always true (unit R-WIDEf, F1-b): a reveal or a refusal
+    // receipt under a document with no active reconcile key answers 409
+    // sealing_not_offered before this is read
+    return `<p class="muted"><code>deployment_document_off_branch</code>: the commit this deployment was built from (${at}) is not on the published branch of the key document's repository, so this deployment signs nothing: withdrawals and references are answered 503 deployment_document_off_branch; an operator fault.</p>`;
+  }
+  return `<p class="muted"><code>document_unavailable</code>: the key document this deployment carries could not be named and confirmed at ${at} when this page was read (${esc(d.reason)}).</p>`;
 }
 
 function statusBadge(status, overdueSeconds) {
@@ -52,16 +77,15 @@ module.exports = async (req, res) => {
   // recursive tree fetch, an anchors/ listing), which makes it the single
   // biggest lever for draining the shared GITHUB_PIN_TOKEN budget that
   // paying customers' /api/pin calls also depend on.
-  const rl = ratelimit.check(req);
+  // Codes only (unit R-PAGE, P1): the limiter is the naive per-instance,
+  // per-IP one (Stage-0, lib/_ratelimit.js: about LIMIT calls per address
+  // per window); the body names the code and when to try again, and the
+  // Retry-After header says the same.
+  const rl = await ratelimit.check(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");
-    return res.status(429).json({
-      ok: false,
-      error: "rate limit exceeded",
-      note: `naive per-instance, per-IP limiter (Stage-0): ~${rl.limit} calls per IP per ${Math.round(rl.windowSeconds / 60)} minutes`,
-      retry_after_seconds: rl.retryAfterSeconds,
-    });
+    return res.status(429).json({ ok: false, error_code: "rate_limited", retry_after_seconds: rl.retryAfterSeconds });
   }
 
   // Merged twin (Vercel Hobby 12-function cap): /api/status.json now routes
@@ -85,12 +109,13 @@ module.exports = async (req, res) => {
   const {
     renderedAt, reachable, healthErr,
     rows, nsErr,
-    obsCount, obsSample, obsErr,
+    obsCount, obsPartial, obsSample, obsErr,
     anchor, anchorErr,
     overdueCount, currentCount, heartbeatCount, ungradeableCount, missedEverCount,
     retiredCount, retiredNamespaces,
     degraded, indeterminate, overallOk,
     namespaces,
+    caseAnchors, caseErr, caseAnchorNote, deploymentDocument,
   } = await gatherStatusData();
 
   // Audit states, only when the flag is on. A namespace nobody has ever
@@ -157,14 +182,28 @@ module.exports = async (req, res) => {
       }).join("\n")
     : `<tr><td colspan="7">${nsErr ? `namespace listing failed: ${esc(nsErr)}` : "no namespaces pinned yet"}</td></tr>`;
 
+  // Case anchors: their own row, not a namespace (case protocol items 2b and
+  // 2c; see lib/_status_data.js). Counted from the tree alone; feeds no
+  // verdict.
+  const caseRowHtml = caseAnchors
+    ? `<tr>
+          <td><code>pins/case/</code> <a class="src" href="${esc(TREE("pins/case"))}" title="every case seal pin">tree</a></td>
+          <td>${esc(caseAnchors.case_files)}</td>
+          <td>${esc(caseAnchors.pin_files)}</td>
+          <td>${esc(caseAnchors.withdrawal_markers)}</td>
+        </tr>`
+    : `<tr class="row-error"><td><code>pins/case/</code></td><td colspan="3">case anchors not counted: ${esc(caseErr || "unknown")}</td></tr>`;
+  const casePartialHtml = caseAnchors && caseAnchors.partial
+    ? `<p class="muted"><strong>Partial.</strong> The repository tree came back truncated on this read, so these counts may be short. They are not a full count.</p>`
+    : "";
+
+  // One line per observed conflict (B080): what it was and how it resolved,
+  // from lib/_status_data.js's conflictLine, so the page and the JSON twin
+  // say the same sentence.
   const obsListHtml = obsSample.length
     ? `<ul class="obs-list">${obsSample.map((o) => {
-        const v = o.obs;
-        const label = v
-          ? `<code>${esc(v.claimed && v.claimed.namespace)}</code> at rows=${esc(v.claimed && v.claimed.rows)} &mdash; ${esc(v.verdict || "conflict")}`
-          : "(could not read record content)";
-        return `<li>${label} &middot; <a href="${esc(o.url)}">raw record</a></li>`;
-      }).join("\n")}</ul>${obsCount !== null && obsCount > obsSample.length ? `<p class="muted">${obsCount - obsSample.length} more not sampled here &mdash; see the full folder.</p>` : ""}`
+        return `<li>${esc(conflictLine(o.obs))} &middot; <a href="${esc(o.url)}">raw record</a></li>`;
+      }).join("\n")}</ul>${obsCount !== null && obsCount > obsSample.length ? `<p class="muted">${obsCount - obsSample.length} more not sampled here. See the full folder.</p>` : ""}`
     : "";
 
   let anchorHtml;
@@ -203,6 +242,7 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>arcaeon-witness — status</title>
+${brandMark.FAVICON_LINK}
 <meta name="robots" content="index,follow">
 <style>
   :root{
@@ -230,6 +270,7 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
   .wrap{max-width:960px;margin:0 auto}
   header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.25rem}
   h1{font-size:1.4rem;margin:0}
+  h1.arc-h1{display:flex;align-items:center;gap:10px}
   h2{font-size:1.05rem;margin:2rem 0 .5rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
   .sub{color:var(--muted);font-size:.9rem;margin:.25rem 0 1.5rem}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem}
@@ -279,7 +320,7 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
 <body>
 <div class="wrap">
   <header>
-    <h1>arcaeon-witness &mdash; status</h1>
+    <h1 class="arc-h1">${brandMark.headerMark("light-auto")}<span>arcaeon-witness &mdash; status</span></h1>
     ${overallOk
       ? `<span class="badge badge-green" style="font-size:.95rem">OK</span>`
       : degraded
@@ -332,12 +373,27 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
     </table>
   </div>
 
+  <h2>Case seals</h2>
+  <p class="muted">A case of the case protocol is not a namespace, so cases have their own row. This row is counted from the repository tree alone and reads no case file. <em>pin files</em> counts the case files whose pin file, <code>pins/case/&lt;case_id&gt;/00000001.json</code>, the tree lists, and no withdrawal marker; whether a pin is its case's, only the case's own page reads. A case with no pin file is not counted as anything here: the tree alone cannot say whether it is open, committed, sealed and waiting for the operator's sealer run, or past its deadline. No registration file is counted. <em>withdrawal markers</em> counts the case files whose withdrawal marker the tree lists. ${esc(caseAnchorNote)} This row does not change the overall status above.</p>
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>where</th><th>case files</th><th>pin files</th><th>withdrawal markers</th></tr></thead>
+      <tbody>${caseRowHtml}</tbody>
+    </table>
+    ${casePartialHtml}
+    ${deploymentDocumentLine(deploymentDocument)}
+    ${readTokenLine()}
+  </div>
+
   <h2>Conflict observations</h2>
   <p class="muted">A same-rows/different-chain submission never overwrites the accepted head &mdash; it's rejected and appended to an append-only log instead, so a detected conflict attempt can't quietly disappear even though it failed. <a href="${TREE("observations")}">browse observations/</a> directly.</p>
   <div class="panel">
     ${obsCount === null
       ? `<p><strong>Conflicts could not be counted on this render</strong>${obsErr ? `: ${esc(obsErr)}` : ""}. That is not zero &mdash; browse the folder directly.</p>`
       : `<p><strong>${obsCount}</strong> conflict${obsCount === 1 ? "" : "s"} observed, ever.${obsErr ? ` (count may be incomplete: ${esc(obsErr)})` : ""}</p>`}
+    ${obsPartial === true
+      ? `<p class="muted"><strong>Partial.</strong> The repository tree came back truncated on this read, so this count may be short. It is not a full count.</p>`
+      : ""}
     ${obsListHtml}
   </div>
 
@@ -346,8 +402,9 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
   <div class="panel">${anchorHtml}</div>
 
   <footer>
+    <p>${brandMark.footerMark("light-auto")}</p>
     <p><strong>What this page proves:</strong> the pins are public, the cadence math is reproducible by anyone, and the conflict log can't quietly disappear a detected problem. Every link above goes to the same GitHub history a stranger can clone and check independently &mdash; nothing here is asserted from a database only we can read.</p>
-    <p><strong>Auth honesty (Stage-0):</strong> every write here &mdash; pin <em>and</em> renewal &mdash; is authorized by a bearer key and nothing else. That is not owner-signature auth: it proves a key-holder acted, not that the log's owner did. A deadline write (renewal or first arm) additionally requires the key bound as that namespace's <em>deadline owner</em> in <code>owners/&lt;namespace&gt;.json</code> &mdash; so another issued key whose prefix covers the namespace cannot renew it &mdash; but that closes the <em>other</em> key, not the <em>stolen</em> one: anyone holding the bound key can still renew a deadline. Owner-signature auth is the Stage-1 requirement and is <strong>not built yet</strong>; until it is, read <code>heartbeat</code> as "a key-holder was alive and asserting nothing changed." Responses carry <code>auth_level:"bearer-stage0"</code> so this can't be mistaken for something stronger.</p>
+    <p><strong>Auth honesty (Stage-0):</strong> every write here &mdash; pin <em>and</em> renewal &mdash; is authorized by a bearer key and nothing else. That is not owner-signature auth: it proves a key-holder acted, not that the log's owner did. A deadline write (renewal or first arm) additionally requires the key bound as that namespace's <em>deadline owner</em> in <code>owners/&lt;namespace&gt;.json</code> &mdash; so another issued key whose prefix covers the namespace cannot renew it &mdash; but that closes the <em>other</em> key, not the <em>stolen</em> one: anyone with the bound key can still renew a deadline. Owner-signature auth is the Stage-1 requirement and is <strong>not built yet</strong>; until it is, read <code>heartbeat</code> as "a key-holder was alive and asserting nothing changed." Responses carry <code>auth_level:"bearer-stage0"</code> so this can't be mistaken for something stronger.</p>
     <p><strong>What it does not prove:</strong> that logged content is true (a chain notarizes a fingerprint, not a fact), anything about the gap between pins (a witness only sees what's sent to it), or that we never lose data. Full scope and the standing challenge to break this: <a href="/PRACTICES.md">PRACTICES.md</a>.</p>
     <p class="muted">Stage-0: single region, single operator, no SLA. Source: <a href="${esc(REPO_URL)}">${esc(store.REPO)}</a>.</p>
   </footer>

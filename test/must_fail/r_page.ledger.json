@@ -1,0 +1,1107 @@
+{
+  "PG01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "9324995ec3676666417ff76fa7894ee38b0cfa6339c666dbfb73b9e6d19e544d"
+      }
+    ]
+  },
+  "PG02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5b9925e5e22b54657fdfb4975a82a2aed0a79f22511b6842486c8fa363729329"
+      }
+    ]
+  },
+  "PG03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5740473138008d5377a74ca0d24cccfb24822fb3eed62fe4c48660e1f433b887"
+      }
+    ]
+  },
+  "PG05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "6b226c5024d18e8a9c90ef6f8f14adc89c9444ac213907ba61b8bdc0eec76c9b"
+      }
+    ]
+  },
+  "PG04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "7183fccede5a8859680d48a8ecfc730ce4901ab71bf82b7ec57e22184fb08432"
+      }
+    ]
+  },
+  "PG06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "f3025643742505f1d2b5fef1242e8817af0fbd827737c10907da528bbe2b3f45"
+      }
+    ]
+  },
+  "PG08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "a31cc3f57c1c22902487dcd1abc102376d4a4b55523c272bccd99355d3e93e0b"
+      }
+    ]
+  },
+  "PG07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: every refusal page names its code: not_a_case_id, rate_limited, no_such_case, could_not_look, case_unreadable, and the case states' document_unavaila",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "f3d8bed70d84c8639aa06ec8670d70d83d57ef2a3b9bd7656517131b8e575242"
+      }
+    ]
+  },
+  "PG09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P1: GET /status rate limited answers 429 {ok: false, error_code: rate_limited, retry_after_seconds}, codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "602e426ed531771387d8e1c3edb67a17693a395775b819459beadeb5ab6b5434"
+      }
+    ]
+  },
+  "PG10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "551005121d8458c8b51f25faca77a77f3bc3055a59d5de52d0673bd6f96a5dd3"
+      }
+    ]
+  },
+  "PG12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "387b6e3792142a403b067a6930d344e664931129d1d5005017bd9ebe0e10815e"
+      }
+    ]
+  },
+  "PG11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "J4: the case is compared at case_commit byte for byte, sig included: a served case whose sig differs from the bytes at case_commit is pin_commit_mismatch; the c",
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "d97465b9674631cabf2b99c4829b0e9dd205b0638e040433755ca04dd762ce8e"
+      }
+    ]
+  },
+  "PG13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "bd97e8af69357be2abca49edd44675d027be26b99aef4835450f093fe1028571"
+      }
+    ]
+  },
+  "PG15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 52,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §3.4 / §5: \"pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion i",
+          "THE TABLE: pinState, pinned (pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, not_pinned (not_pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_missing_field (no_case_commit): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_unknown_field (unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / pin_not_json (pin_not_json): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / not_a_json_object (unreadable_not_a_json_object): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_record_kind (unreadable_case_seal_wrong_record_kind): the pin line, the sentence under it, and the reference's",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_auth_level (unreadable_case_seal_wrong_auth_level): the pin line, the sentence under it, and the reference's a",
+          "THE TABLE: pinState, unreadable / case_seal_namespace_unreadable (unreadable_case_seal_namespace_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / namespace_mismatch (unreadable_namespace_mismatch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_rows (unreadable_case_seal_wrong_rows): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_seq (unreadable_case_seal_wrong_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / chain_unreadable (unreadable_chain_unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_pinned_at_unreadable (unreadable_case_seal_pinned_at_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_auth_note_unreadable (unreadable_case_seal_auth_note_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_case_commit_unreadable (unreadable_case_seal_case_commit_unreadable): the pin line, the sentence under it, and the r",
+          "THE TABLE: pinState, conflict / pin_holds_another_chain (pin_file_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_read_failed (pin_read_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commit_unreadable (pin_commit_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_beyond_bound (pin_commits_beyond): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_none (pin_commits_none): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_json (pin_text): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_503 (pin_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_404 (pin_raw_404): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_fetch_failed (pin_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_500 (pin_raw_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_holds_another_chain (pin_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_judge_fails): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_other_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_at_commit_differs (case_differs): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_absent_at_commit (case_absent): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_not_found (case_not_found): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_off_branch (case_off_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_not_shown (case_not_shown): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_503 (case_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_fetch_failed (case_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_429 (case_raw_429): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_503 (case_exists_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_read_failed (case_exists_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_500 (case_exists_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_503 (case_compare_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_failed (case_compare_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_500 (case_compare_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_unreadable (case_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_name_invalid (case_branch_name): the pin line, the sentence under it, and the reference's answer",
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-PIN 3: the page never prints \"anchored\", even beside a daily anchor record naming the pin's head, and prints the fixed ots verify sentence once",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "THE TABLE: pinState, not_pinned (not_pinned): the pin line, the se",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "007c0483d6a6e916ab8fb918d722cd853afcb17fe8be4146e1f7f413fb45cfd5"
+      }
+    ]
+  },
+  "PG14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "0ee44d3942751bf1464f41631132fb8a3a4fd1a99642e2d531fdb9c00c3886d1"
+      }
+    ]
+  },
+  "PG16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P2: the sealed page's 'Where this is recorded' table: the case file, the pin once pinned, and each role's stamp; no anchor row (the page reads no anchor)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "fe4c89b2b49a7253c340e3178f404a865818791dbad02b279e336d7462f1af30"
+      }
+    ]
+  },
+  "PG17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were las",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "44bab07783be28b4ae1171706537888301a683ea7cf7d32c8fa94d415f3c8b6e"
+      }
+    ]
+  },
+  "PG18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were las",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "21ba9c0e3ceb29b27b7972d821dfefcf0813716b85b957d2f52abacaa834f8ac"
+      }
+    ]
+  },
+  "PG19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were las",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "0a9336601baa0a2190e2de6f40d7bddd5c5962579b40bc85182ef48bc00b2ae4"
+      }
+    ]
+  },
+  "PG20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P3: the footer prints when the page was read, as the status page prints when it was rendered; the pin row and the key-document row say when they were las",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "85ee053f96a55ec56ecfe7ec8e0d9ed7cfd46746b255763f493ce2e02d99abce"
+      }
+    ]
+  },
+  "PG21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 10,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "Gemini 3.1 Pro §2: \"one party commits but refuses to reveal ... to prevent the protocol from stalling indefinitely\": at the deadline the case reads EXPIRED and ",
+          "R-PAGE P4: an expired case keeps its stored status: COMMITTED (EXPIRED by this service's clock), OPEN likewise, never EXPIRED alone; the pending sentence for CO",
+          "R-RVf2: a reveal in flight. A reveal that arrived before the deadline has not landed its seal; the page read past the deadline prints the ruled sentence under E",
+          "R-RVf2: a timely reveal whose seal write failed: the root stays COMMITTED, and the page past the deadline prints the ruled sentence under EXPIRED",
+          "R-RVf2: no reveal ever: the page past the deadline prints the ruled sentence under EXPIRED",
+          "R-RVf3 1: an OPEN case past its deadline prints the first sentence only, under EXPIRED; the second appears nowhere; a COMMITTED one keeps both",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-R",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5ec228dd33d38be296bf48e4cdf4cb265c47119327f7f1fafc267ad09da11365"
+      }
+    ]
+  },
+  "PG24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "7d0918f3dd328ca88f9f57fab218f18c5b586a68b8cdf3c474bfd704ac0c7af9"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "7d0918f3dd328ca88f9f57fab218f18c5b586a68b8cdf3c474bfd704ac0c7af9",
+        "caught_by": [
+          "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
+        ]
+      }
+    ]
+  },
+  "PG22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P4: an expired case keeps its stored status: COMMITTED (EXPIRED by this service's clock), OPEN likewise, never EXPIRED alone; the pending sentence for CO",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "dcd277b17c6503ecc26dd6c0af87ca115888b7b8c1e5a60a4cd09375b231a3bf"
+      }
+    ]
+  },
+  "PG23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file; since unit R-PIN no page is kept): the page reads eac",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "ada6c7b8f1c93bf14585108ad2d3619884412561abd525748f9e0044dd8351ee"
+      }
+    ]
+  },
+  "PG25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "J4: the case is compared at case_commit byte for byte, sig included: a served case whose sig differs from the bytes at case_commit is pin_commit_mismatch; the c",
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "4fc53d374f74d1b056c68ea33dc6e108fee2c9d2201f4f6606af28e5acbe613b"
+      }
+    ]
+  },
+  "PG26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "a5d0f62cb0ee8707a5e9c6305636be255a157eddd4953fbeccf359f3dd0f255f"
+      }
+    ]
+  },
+  "PG27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "ce93617dd76652cb5ec00913afbaa3d6022a76d5255f2df363a963b51a2f4c97"
+      }
+    ]
+  },
+  "PG28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "209558bd7a2fa17c7cbba603c39f6f784a110f43cb2559224d0fc049b28f3689"
+      }
+    ]
+  },
+  "PG29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "3ebdcb9d55316abf61deef8ec99e181f623f0cfa9499b66b71ba6960895bc28e"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "3ebdcb9d55316abf61deef8ec99e181f623f0cfa9499b66b71ba6960895bc28e",
+        "caught_by": [
+          "MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin"
+        ]
+      }
+    ]
+  },
+  "PG30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "e55c9ef565d1cf34b46791d7a440631c226428a699fa936ca0ec7aa1898181c9"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "e55c9ef565d1cf34b46791d7a440631c226428a699fa936ca0ec7aa1898181c9",
+        "caught_by": [
+          "MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look"
+        ]
+      }
+    ]
+  },
+  "PG31": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "38a5c1a8e26e1a53b9c1f2dea7b14cd53973c35d830a90ef8a7d87d47ad1fef5"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "38a5c1a8e26e1a53b9c1f2dea7b14cd53973c35d830a90ef8a7d87d47ad1fef5",
+        "caught_by": [
+          "MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned"
+        ]
+      }
+    ]
+  },
+  "PG33": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "89919fdc384c819a12930faed8f9449a09d571cad45f9ceb97da7b7c937d4fc5"
+      }
+    ]
+  },
+  "PG32": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "56fc3667e3d6eca5311247fa8f654d8404c9f2f3717e5f22f2f388f836736643"
+      }
+    ]
+  },
+  "PG34": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "4a7886a5993b0d0f46e1d8f96069c85adc36cd088fb1935321dbb05d352c211e"
+      }
+    ]
+  },
+  "PG35": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "777018b3668aeb872dc2bb7bc288a1928c16b14cd3b009aef38d0fe9a659d9c1"
+      }
+    ]
+  },
+  "PG36": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "baeed61d0efe0b4ba7d31b3b616248d21cdf435bf5276b56ceb1bc1d19eaff69"
+      }
+    ]
+  },
+  "PG38": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "a654c3ace1804fc5e0fb8682e0f9570c27c101bab52a4fd2f95c991f8ff29bfb"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG38): a registration time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "a654c3ace1804fc5e0fb8682e0f9570c27c101bab52a4fd2f95c991f8ff29bfb",
+        "caught_by": [
+          "MUST-FAIL GAP (PG38): a registration time row prints relative and absolute"
+        ]
+      }
+    ]
+  },
+  "PG37": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "3c6c5ddb32f2625f9256bb0fb58df85ca737707c7f9374ea0c4d352580791964"
+      }
+    ]
+  },
+  "PG39": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P6: every page, a refusal too, says where to report a problem; a time row prints relative and absolute",
+          "R-RVf B1: the page's 'revealed at' is the arrival time, and a case sealed by a reveal that arrived in time never prints the EXPIRED sentence",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "81abe6ce5a3e108966724c3e7d97659befb7cfaea1064d3f300de0a313248e5e"
+      }
+    ]
+  },
+  "PG40": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P7: next to 'Labels are recorded, not verified.', the page and the README say what presence in the record is",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "6eb1e524e44720bd4e6d96383e32fe2fad68f2cd512f8d5686b4efe4ef8162f1"
+      }
+    ]
+  },
+  "PG41": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P7: next to 'Labels are recorded, not verified.', the page and the README say what presence in the record is",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "e97257b29a93b4b08fdc2d180714f2d3af817c5b486c4cfaacff9bdd819b5af9"
+      }
+    ]
+  },
+  "PG42": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "73dc54431a4e0b553b12b6b7089af1063ca02560085e2a1a5c901f695144e681"
+      }
+    ]
+  },
+  "PG43": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "19929a63aeaac5960159716b459e1c897f2349e0c86fbba1940c6695a33c33fa"
+      }
+    ]
+  },
+  "PG44": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "55f3d9e6a6c2969abd2bc46ac0dd399170b4d0f3d3792c74c472c6817415721e"
+      }
+    ]
+  },
+  "PG45": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "1539c7c04c70f3c1ee99fa5a0d4d070d80e55bd2abb96921e8daad5e983b47bb"
+      }
+    ]
+  },
+  "PG47": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "0eba0dd5cb55157b90ea7adf4885700aec8e11ba43d98120cee3a27288d3d7c9"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "0eba0dd5cb55157b90ea7adf4885700aec8e11ba43d98120cee3a27288d3d7c9",
+        "caught_by": [
+          "MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid"
+        ]
+      }
+    ]
+  },
+  "PG46": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "EVERY COMMIT IS A LINK: on a sealed page, pinned and with a row recorded, and under a revoked key, every commit (the key document's, the stamps', the case file'",
+          "EVERY COMMIT IS A LINK, ON THE OTHER PAGES THAT NAME ONE: pin_commit_mismatch (the commit the pin names), could_not_look on the key document, a case not yet pin",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "2a94f62fb25fc9865c25992343f4dd0e5dc61c36cba1d8c7385a20ce21f58723"
+      }
+    ]
+  },
+  "PG48": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-PAGE P5: the page prints the sha256 of the case file's bytes it read and links the raw file; ?format=json answers the same state, status, counts and codes",
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "5002daba15279eb76940b7623bff91175abbb19ab9fd51d4f9eea175b2d30ce8"
+      }
+    ]
+  },
+  "PG49": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "6b924732623ee8c3e693cae1888024f4a55ba41aa6f77fbd43ca9b2da30f29eb"
+      }
+    ]
+  },
+  "PG51": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "1ce535e347a836e05c3642263d065e20bbfec1f7e985e4790dc19c05cec64be5"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "1ce535e347a836e05c3642263d065e20bbfec1f7e985e4790dc19c05cec64be5",
+        "caught_by": [
+          "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
+        ]
+      }
+    ]
+  },
+  "PG50": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PAGE P8: the checks that ran on this request, each from its result and bound to the bytes it covers; a check that did not run has no line, a failed one its co",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "90c79a6de9d4dd5196cf1cefb5e2f68e2893289735de5ea697599a3bac459397"
+      }
+    ]
+  },
+  "PG52": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "9678ed8929ac66e69f7942ae5ec7f689d1d66a88",
+        "porcelain": "",
+        "defect_sha256": "def469315c21a3051414827e45d27c9451f25877829607b91a610d9793ac1afa"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PG52): the README names the JSON twin",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "f405a6dfb800ef5bc3e42bd7b373d5e2b8f084f8",
+        "porcelain": "",
+        "defect_sha256": "def469315c21a3051414827e45d27c9451f25877829607b91a610d9793ac1afa",
+        "caught_by": [
+          "MUST-FAIL GAP (PG52): the README names the JSON twin"
+        ]
+      }
+    ]
+  }
+}

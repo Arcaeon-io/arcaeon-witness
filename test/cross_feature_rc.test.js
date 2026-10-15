@@ -202,7 +202,7 @@ test("CROSS (a1): a stamp and a bulk verify from ONE IP spend the budgets their 
   // do), and prove the same assertion fails.
   const ip2 = freshIp();
   const shim = makeReq({ method: "POST", headers: { "x-forwarded-for": ip2 } });
-  for (let i = 0; i < 3; i += 1) ratelimit.check(shim, 1); // the bug shape
+  for (let i = 0; i < 3; i += 1) await ratelimit.check(shim, 1); // the bug shape
   await call(verifyHandler, bulkReq(5, ip2));
   const remainingIfShared = await sharedBudgetRemaining(ip2);
   assert.equal(remainingIfShared, ratelimit.LIMIT - 8,

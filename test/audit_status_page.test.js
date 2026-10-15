@@ -158,16 +158,20 @@ test("FLAG ON: a tampered record, a misfiled record, and a COULD_NOT_LOOK are co
   const html = await render();
   const row = rowOf(html, "acme-prod");
   assert.ok(row.includes(">BLIND</span>"), "tampered/misfiled/CNL must leave the row BLIND");
-  assert.ok(row.includes("1 attempted check could not complete"));
+  assert.ok(row.includes("1 attempted check: COULD NOT LOOK"));
   assert.ok(row.includes("1 record ignored: bad signature, shape, or clock"));
   assert.ok(row.includes("1 record filed here but targeting another namespace, ignored"));
   assert.ok(rowOf(html, "velouria-demo").includes(">BLIND</span>"), "a misfiled record is not evidence for its target either");
 });
 
-test("gatherAuditStates: the read budget marks a namespace NOT FULLY READ rather than deriving over half the evidence", async () => {
+// The reader reads each checker key's newest NEWEST_PER_KEY records (D20), so
+// volume from ONE key never spends the cap. The global cap is a safety net
+// for many keys: more distinct keys in one namespace than the cap holds.
+test("gatherAuditStates: the read budget marks a namespace COULD NOT LOOK rather than deriving over half the evidence", async () => {
   gh.seed(REPO, "checks/OPERATOR_KEYS.json", { keys: [{ key: ours.keyId }] });
-  for (let i = 0; i < auditStatus.MAX_RECORD_READS + 1; i++) {
-    seedCheck(check(stranger, "acme-prod", "VERIFIED", 3600 + i));
+  const cap = auditStatus.recordReadCap(2);
+  for (let i = 0; i < cap + 1; i++) {
+    seedCheck(check(cr.generateKeyPair(), "acme-prod", "VERIFIED", 3600 + i));
   }
   seedCheck(check(stranger, "velouria-demo", "VERIFIED", 3600));
   const audit = await auditStatus.gatherAuditStates(["acme-prod", "velouria-demo"], { nowSeconds: NOW });
@@ -177,11 +181,38 @@ test("gatherAuditStates: the read budget marks a namespace NOT FULLY READ rather
   assert.equal(empty.byNs["no-such-ns"].partial, false, "a namespace with nothing listed needs no reads and is simply BLIND");
   assert.equal(empty.byNs["no-such-ns"].state, "BLIND");
   const cell = auditStatus.renderAuditCell(audit.byNs["acme-prod"]);
-  assert.ok(cell.includes("NOT FULLY READ"));
+  assert.ok(cell.includes("COULD NOT LOOK"));
   assert.ok(!cell.includes("UNALTERED"));
   const summary = auditStatus.renderAuditSummary(audit, { noun: "namespaces" });
   assert.ok(summary.includes("0 of 0 namespaces checked by a key not declared as ours."));
-  assert.ok(summary.includes("2 not fully read."));
+  assert.ok(summary.includes("2 COULD NOT LOOK."));
+  assert.ok(!summary.includes("not fully read"), "the retired headline spelling is gone");
+});
+
+test("VOCABULARY: the headline count and the badge say COULD NOT LOOK in the same words", async () => {
+  gh.seed(REPO, "checks/OPERATOR_KEYS.json", { keys: [{ key: ours.keyId }] });
+  const cap = auditStatus.recordReadCap(2);
+  for (let i = 0; i < cap + 1; i++) {
+    seedCheck(check(cr.generateKeyPair(), "acme-prod", "VERIFIED", 3600 + i));
+  }
+  seedCheck(check(stranger, "velouria-demo", "VERIFIED", 3600));
+  const audit = await auditStatus.gatherAuditStates(["acme-prod", "velouria-demo"], { nowSeconds: NOW });
+  const word = auditStatus.COULD_NOT_LOOK_WORD;
+  assert.equal(word, "COULD NOT LOOK");
+  const badgeOf = (html) => {
+    const m = /<span class="badge badge-amber">&#9888; ([^<]+)<\/span>/.exec(html);
+    assert.ok(m, html);
+    return m[1];
+  };
+  assert.equal(badgeOf(auditStatus.renderAuditCell(audit.byNs["acme-prod"])), word);
+  assert.equal(badgeOf(auditStatus.renderAuditCell(null)), word, "the no-data badge uses the same words");
+  const summary = auditStatus.renderAuditSummary(audit, { noun: "namespaces" });
+  const head = /<p class="audit-headline">.*? (\d+) ([^<.]+)\.<\/p>/.exec(summary);
+  assert.ok(head, summary);
+  assert.equal(head[1], "2");
+  assert.equal(head[2], word, "headline and badge share one spelling");
+  // The machine value on the JSON twin is frozen and does not move with the display word.
+  assert.equal(auditStatus.NOT_FULLY_READ, "NOT_FULLY_READ");
 });
 
 test("auditStateEnabled reads only 1/true/on", () => {

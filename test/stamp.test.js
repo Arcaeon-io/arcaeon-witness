@@ -56,14 +56,16 @@ async function get(sha) {
   return res;
 }
 
-test("CONTRACT: a new fingerprint is stamped, 201, and the record holds a hash, a size, a time and nothing else", async () => {
+// Since unit R-WIDE (D1, the architect's ruling) a stamp stores no size: the
+// size a request sends is accepted and not stored. The two tests below held
+// a size; each is rewritten to hold none.
+test("CONTRACT: a new fingerprint is stamped, 201, and the record holds a hash, a time and nothing else (no size since R-WIDE D1)", async () => {
   const res = await post({ sha256: SHA_A, size: 1234 });
   assert.equal(res._status, 201);
   assert.equal(res._body.existing, false);
   const rec = gh.read(REPO, pathOf(SHA_A));
-  assert.deepEqual(Object.keys(rec).sort(), ["kind", "sha256", "size", "stamped_at", "v"]);
+  assert.deepEqual(Object.keys(rec).sort(), ["kind", "sha256", "stamped_at", "v"]);
   assert.equal(rec.sha256, SHA_A);
-  assert.equal(rec.size, 1234);
   assert.equal(res._body.permalink, `https://arcaeon.io/r/${SHA_A}`);
 });
 
@@ -84,7 +86,7 @@ test("FIRST WRITE WINS: stamping the same fingerprint again returns the ORIGINAL
   assert.equal(again._status, 200);
   assert.equal(again._body.existing, true);
   assert.equal(again._body.stamp.stamped_at, t0);
-  assert.equal(again._body.stamp.size, 10, "a later caller must not be able to change the recorded size");
+  assert.equal("size" in again._body.stamp, false, "a later caller must not be able to add a size (R-WIDE D1: none is stored)");
   assert.equal(gh.putLog.length, writesBefore, "a repeat stamp must not write, not even the budget counter");
 });
 

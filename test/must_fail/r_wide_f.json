@@ -1,0 +1,429 @@
+[
+ {
+  "id": "WF01",
+  "file": "README.md",
+  "find": "A deployment whose own commit has diverged from the branch signs\nnothing",
+  "replace": "A deployment whose own commit is ahead of the branch or diverged from it signs\nnothing",
+  "what": "F1-a: the README says ahead of the branch or diverged"
+ },
+ {
+  "id": "WF02",
+  "file": "README.md",
+  "find": "branch. A deployment whose own commit is ahead of the branch answers 503\n`document_unavailable` until the branch reaches it. A commit",
+  "replace": "branch. A commit",
+  "what": "F1-a: the README drops the ahead sentence"
+ },
+ {
+  "id": "WF03",
+  "file": "README.md",
+  "find": "nothing: withdrawals and references are answered 503\n`deployment_document_off_branch`, codes only,",
+  "replace": "nothing: every reveal, withdrawal, reference and refusal receipt is answered 503\n`deployment_document_off_branch`, codes only,",
+  "what": "F1-b: the README says every reveal and refusal receipt is answered 503"
+ },
+ {
+  "id": "WF04",
+  "file": "README.md",
+  "find": " (the reveal and the refusal receipt answer it too, unless the\ndocument it carries lists no active reconcile key: then they answer 409\n`sealing_not_offered` first)",
+  "replace": "",
+  "what": "F1-b: the README drops when the reveal and the receipt answer 409 sealing_not_offered first",
+  "gap": "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503"
+ },
+ {
+  "id": "WF05",
+  "file": "lib/_case_http.js",
+  "find": "// (confirmSealingDocument's `off`: diverged only, since C14), so nothing it",
+  "replace": "// (confirmSealingDocument's `off`: ahead or diverged), so nothing it",
+  "what": "F1-a: the comment says ahead or diverged"
+ },
+ {
+  "id": "WF06",
+  "file": "lib/_case_http.js",
+  "find": "// in one line). A commit ahead of the branch answers 503 document_unavailable\n// until the branch reaches it, which a fast-forward finishes (unit R-WIDEf,\n// F1-a); a commit",
+  "replace": "// in one line). A commit",
+  "what": "F1-a: the comment drops the ahead sentence"
+ },
+ {
+  "id": "WF07",
+  "file": "api/status.js",
+  "find": "so this deployment signs nothing: withdrawals and references are answered 503 deployment_document_off_branch; an operator fault.</p>`;",
+  "replace": "so every reveal, withdrawal, reference and refusal receipt is answered 503 and nothing is signed; this is an operator fault, not a sender's, and no request can finish it until the deployment is rebuilt from the published branch.</p>`;",
+  "what": "F1-b: the status line says every reveal and refusal receipt is answered 503"
+ },
+ {
+  "id": "WF08",
+  "file": "CHANGELOG.md",
+  "find": " (Corrected by unit R-WIDEf, F1-a: this entry said \"ahead or diverged\". Since R-WIDE C14 a commit ahead of the branch is not off: it answers 503 `document_unavailable` until the branch reaches it, which a fast-forward finishes.)",
+  "replace": "",
+  "what": "F1-a: the A6 bullet is not corrected in place"
+ },
+ {
+  "id": "WF09",
+  "file": "test/must_fail/run.js",
+  "find": "const suiteArgs = (suite) => [\"--test\", \"--test-reporter=tap\", \"--test-reporter-destination=stdout\", suite];",
+  "replace": "const suiteArgs = (suite) => [\"--test\", suite];",
+  "what": "F2-a: the suite runs under node's default reporter"
+ },
+ {
+  "id": "WF10",
+  "file": "test/must_fail/run.js",
+  "find": "const suiteArgs = (suite) => [\"--test\", \"--test-reporter=tap\", \"--test-reporter-destination=stdout\", suite];",
+  "replace": "const suiteArgs = (suite) => [\"--test\", \"--test-reporter=tap\", suite];",
+  "what": "F2-a: the reporter is named and its destination is not"
+ },
+ {
+  "id": "WF11",
+  "file": "test/must_fail/run.js",
+  "find": "    const p = spawn(process.execPath, suiteArgs(suite), { cwd: dir, env, detached: true });",
+  "replace": "    const p = spawn(process.execPath, suiteArgs(suite), { cwd: dir, env: scrubbedEnv(), detached: true });",
+  "what": "F2-a: runSuite ignores the environment it is handed",
+  "gap": "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
+ },
+ {
+  "id": "WF12",
+  "file": "test/must_fail/run.js",
+  "find": "    p.stderr.on(\"data\", (d) => { err += d; });",
+  "replace": "    p.stderr.on(\"data\", () => {});",
+  "what": "F2-b: the suite's stderr is discarded"
+ },
+ {
+  "id": "WF13",
+  "file": "test/must_fail/run.js",
+  "find": "  if (result === \"error\") rec.stderr_tail = tailLines(outcome.stderr, STDERR_TAIL_LINES);",
+  "replace": "  rec.stderr_tail = tailLines(outcome.stderr, STDERR_TAIL_LINES);",
+  "what": "F2-b: every run keeps a stderr tail"
+ },
+ {
+  "id": "WF14",
+  "file": "test/must_fail/run.js",
+  "find": "const STDERR_TAIL_LINES = 30;",
+  "replace": "const STDERR_TAIL_LINES = 40;",
+  "what": "F2-b: the tail is 40 lines"
+ },
+ {
+  "id": "WF15",
+  "file": "test/must_fail/run.js",
+  "find": "  while (lines.length && lines[lines.length - 1].trim() === \"\") lines.pop();\n",
+  "replace": "",
+  "what": "F2-b: trailing blank lines are kept in the tail"
+ },
+ {
+  "id": "WF16",
+  "file": "test/must_fail/run.js",
+  "find": "        result = `error (exit ${first.exit})${why ? `: ${cellText(why.trim())}` : \"\"}${preB4}`;",
+  "replace": "        result = `error (exit ${first.exit})${preB4}`;",
+  "what": "F2-b: the table prints no stderr line for an error"
+ },
+ {
+  "id": "WF17",
+  "file": "test/must_fail/run.js",
+  "find": "const vouched = (r) => typeof r.head === \"string\" && r.head !== \"\";",
+  "replace": "const vouched = (r) => true;",
+  "what": "F2-c: every run is vouched for"
+ },
+ {
+  "id": "WF18",
+  "file": "test/must_fail/run.js",
+  "find": "    const caughtOn = lastCaught ? `${lastCaught.date}${vouched(lastCaught) ? \"\" : PRE_B4}` : null;",
+  "replace": "    const caughtOn = lastCaught ? lastCaught.date : null;",
+  "what": "F2-c: the date of a pre-B4 catch is not marked"
+ },
+ {
+  "id": "WF19",
+  "file": "test/must_fail/run.js",
+  "find": "      default: result = lastCaught ? `survived${preB4}; caught on re-seed by",
+  "replace": "      default: result = lastCaught ? `survived; caught on re-seed by",
+  "what": "F2-c: a pre-B4 survival is not marked when a catch follows"
+ },
+ {
+  "id": "WF20",
+  "file": "test/must_fail/run.js",
+  "find": "/(_TOKEN|_SECRET|_KEY)$/",
+  "replace": "/(_TOKEN|_SECRET)$/",
+  "what": "F2-d: names ending _KEY reach the suite"
+ },
+ {
+  "id": "WF21",
+  "file": "test/must_fail/no_network.js",
+  "find": "for (const mod of [http, https]) {",
+  "replace": "for (const mod of [http]) {",
+  "what": "F2-d: https is not guarded",
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
+ },
+ {
+  "id": "WF22",
+  "file": "test/must_fail/no_network.js",
+  "find": "guard(net, \"connect\", connectHost);\n",
+  "replace": "",
+  "what": "F2-d: net.connect is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF23",
+  "file": "test/must_fail/no_network.js",
+  "find": "guard(net, \"createConnection\", connectHost);\n",
+  "replace": "",
+  "what": "F2-d: net.createConnection is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF24",
+  "file": "test/must_fail/no_network.js",
+  "find": "guard(tls, \"connect\", connectHost);\n",
+  "replace": "",
+  "what": "F2-d: tls.connect is not guarded",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF25",
+  "file": "test/must_fail/no_network.js",
+  "find": "    if (!LOOPBACK.has(host)) throw refuse(host);",
+  "replace": "    if (false) throw refuse(host);",
+  "what": "F2-d: the guard lets every host through",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF26",
+  "file": "test/must_fail/no_network.js",
+  "find": "    if (opts.hostname) host = String(opts.hostname);",
+  "replace": "    if (false) host = String(opts.hostname);",
+  "what": "F2-d: a request's hostname option is not read",
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
+ },
+ {
+  "id": "WF27",
+  "file": "test/must_fail/no_network.js",
+  "find": "    else if (opts.host) host = String(opts.host);",
+  "replace": "    else if (false) host = String(opts.host);",
+  "what": "F2-d: a request's host option is not read",
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
+ },
+ {
+  "id": "WF28",
+  "file": "test/must_fail/no_network.js",
+  "find": "  if (isObject(a0)) return a0.path ? \"localhost\" : String(a0.host || \"localhost\");",
+  "replace": "  if (isObject(a0)) return \"localhost\";",
+  "what": "F2-d: a connection's host option is not read",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF29",
+  "file": "test/must_fail/no_network.js",
+  "find": "return typeof a1 === \"string\" ? a1 : \"localhost\";",
+  "replace": "return \"localhost\";",
+  "what": "F2-d: connect(port, host) is taken as this machine",
+  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+ },
+ {
+  "id": "WF30",
+  "file": "test/must_fail/no_network.js",
+  "find": "    if (opts.socketPath) return \"localhost\";",
+  "replace": "    if (opts.socketPath) return \"a socket\";",
+  "what": "F2-d: a request over a Unix socket is refused",
+  "gap": "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+ },
+ {
+  "id": "WF31",
+  "file": "test/must_fail/no_network.js",
+  "find": "a0.path ? \"localhost\" : String(a0.host || \"localhost\")",
+  "replace": "a0.path ? \"a path\" : String(a0.host || \"localhost\")",
+  "what": "F2-d: a connection to a path is refused",
+  "gap": "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+ },
+ {
+  "id": "WF32",
+  "file": "lib/_case_page.js",
+  "find": "this service records it and never checks who has it.",
+  "replace": "this service records it and never checks who holds it.",
+  "what": "F3-a: the parties sentence says holds"
+ },
+ {
+  "id": "WF33",
+  "file": "lib/_case_page.js",
+  "find": "return `the pins repository has no ${file} at that commit`;",
+  "replace": "return `the pins repository holds no ${file} at that commit`;",
+  "what": "F3-a: the absent-at-commit words say holds"
+ },
+ {
+  "id": "WF34",
+  "file": "lib/_case_seal.js",
+  "find": "  pin_holds_another_chain: \"the pin file under this case's namespace names another chain\",",
+  "replace": "  pin_holds_another_chain: \"the pin file under this case's namespace holds another chain\",",
+  "what": "F3-a: the pin file's conflict words say holds"
+ },
+ {
+  "id": "WF35",
+  "file": "lib/_case_seal.js",
+  "find": "  pin_at_its_commit_holds_another_chain: \"the pin record, read at the commit that wrote it, names another chain\",",
+  "replace": "  pin_at_its_commit_holds_another_chain: \"the pin record, read at the commit that wrote it, holds another chain\",",
+  "what": "F3-a: the pin record's conflict words say holds"
+ },
+ {
+  "id": "WF36",
+  "file": "lib/_case_seal.js",
+  "find": "it does not recall a tape a counterparty already has, and no \" +",
+  "replace": "it does not recall a tape a counterparty already holds, and no \" +",
+  "what": "F3-a: the withdrawal claim says holds"
+ },
+ {
+  "id": "WF37",
+  "file": "api/status.js",
+  "find": "whether a pin is its case's, only the case's own page reads.",
+  "replace": "whether a pin holds its case, only the case's own page reads.",
+  "what": "F3-a: the status page says holds"
+ },
+ {
+  "id": "WF38",
+  "file": "lib/_reconcile_page.js",
+  "find": "has two sides at once, or has something the comparison",
+  "replace": "holds two sides at once, or holds something the comparison",
+  "what": "F3-a: the reconcile page says holds"
+ },
+ {
+  "id": "WF39",
+  "file": "lib/_case_page.js",
+  "find": "      if (deadlineMs > nowMs && deadlineMs - nowMs <= ttlMs) return;\n",
+  "replace": "",
+  "what": "F3-b: a page whose deadline is near is kept"
+ },
+ {
+  "id": "WF40",
+  "file": "lib/_case_page.js",
+  "find": "      if (deadlineMs > nowMs && deadlineMs - nowMs <= ttlMs) return;",
+  "replace": "      if (deadlineMs > nowMs && deadlineMs - nowMs < ttlMs) return;",
+  "what": "F3-b: a deadline exactly 60 seconds away is kept"
+ },
+ {
+  "id": "WF41",
+  "file": "lib/_case_page.js",
+  "find": "      if (deadlineMs > nowMs && deadlineMs - nowMs <= ttlMs) return;",
+  "replace": "      if (deadlineMs > nowMs - ttlMs && deadlineMs - nowMs <= ttlMs) return;",
+  "what": "F3-b: a deadline just past is not kept"
+ },
+ {
+  "id": "WF42",
+  "file": "lib/_case_page.js",
+  "find": "      kept.set(id, { at: clock(), status: out.status, html: out.html });",
+  "replace": "      kept.set(id, { at: clock(), root_sha: null, status: out.status, html: out.html });",
+  "what": "F3-b: the kept page records a root sha"
+ },
+ {
+  "id": "WF43",
+  "file": "lib/_case_page.js",
+  "find": "    if (cache) cache.put(id, out, { deadlineMs: Date.parse(got.json.deadline), nowMs });",
+  "replace": "    if (cache) cache.put(id, out);",
+  "what": "F3-b: the handler gives the cache no deadline"
+ },
+ {
+  "id": "WF44",
+  "file": "lib/_case_page.js",
+  "find": "    if (cache) cache.put(id, out, { deadlineMs: Date.parse(got.json.deadline), nowMs });",
+  "replace": "    if (cache) cache.put(id, out, { deadlineMs: Date.parse(got.json.deadline), nowMs: Date.now() });",
+  "what": "F3-b: the deadline is held to the service clock, not the page's"
+ },
+ {
+  "id": "WF45",
+  "file": "lib/_case_seal.js",
+  "find": "    got = await store.getFile(CASE_KEYS_FILE, { repo: KEY_DOCUMENT_REPO, branch, tokenEnv: store.PINS_TARGET.tokenEnv });",
+  "replace": "    got = await store.getFile(CASE_KEYS_FILE, { repo: KEY_DOCUMENT_REPO, branch: \"main\", tokenEnv: store.PINS_TARGET.tokenEnv });",
+  "what": "F3-c: the tip is read on main whatever branch is published"
+ },
+ {
+  "id": "WF46",
+  "file": "lib/_case_seal.js",
+  "find": "    got = await store.getFile(CASE_KEYS_FILE, { repo: KEY_DOCUMENT_REPO, branch, tokenEnv: store.PINS_TARGET.tokenEnv });",
+  "replace": "    got = await store.getFile(CASE_KEYS_FILE, { repo: KEY_DOCUMENT_REPO, branch, tokenEnv: \"STAMP_TOKEN\" });",
+  "what": "F3-c: the tip is read with another token than the compare's"
+ },
+ {
+  "id": "WF47",
+  "file": "lib/_case_seal.js",
+  "find": "  if (got === null) return unreadable(\"http_404\");",
+  "replace": "  if (got === null) return { ok: true };",
+  "what": "F3-c: a tip the API does not show passes"
+ },
+ {
+  "id": "WF48",
+  "file": "lib/_case_seal.js",
+  "find": "    return unreadable(status ? `http_${status[1]}` : \"fetch_failed\");",
+  "replace": "    return unreadable(\"fetch_failed\");",
+  "what": "F3-c: a failed read loses its status"
+ },
+ {
+  "id": "WF49",
+  "file": "lib/_case_seal.js",
+  "find": "    if (e instanceof SyntaxError) return unreadable(\"not_json\");\n",
+  "replace": "",
+  "what": "F3-c: a tip that is not JSON reads as a failed fetch",
+  "gap": "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json"
+ },
+ {
+  "id": "WF50",
+  "file": "lib/_case_seal.js",
+  "find": "  if (kept && onBranchClock.now() - kept.at < ON_BRANCH_KEEP_MS) return kept.answer;",
+  "replace": "  if (false) return kept.answer;",
+  "what": "F3-d: the status page's answer is never kept"
+ },
+ {
+  "id": "WF51",
+  "file": "lib/_case_seal.js",
+  "find": "  if (kept && onBranchClock.now() - kept.at < ON_BRANCH_KEEP_MS) return kept.answer;",
+  "replace": "  if (kept && onBranchClock.now() - kept.at <= ON_BRANCH_KEEP_MS) return kept.answer;",
+  "what": "F3-d: an answer is kept one millisecond past 60 seconds"
+ },
+ {
+  "id": "WF52",
+  "file": "lib/_case_seal.js",
+  "find": "  if (c.ok || c.off) {",
+  "replace": "  if (c.ok) {",
+  "what": "F3-d: an off answer is not kept"
+ },
+ {
+  "id": "WF53",
+  "file": "lib/_case_seal.js",
+  "find": "      deploymentStates.clear();\n",
+  "replace": "",
+  "what": "F3-d: the cache reset leaves the status answers"
+ },
+ {
+  "id": "WF54",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "`${t.name}/${t.label}/${i}`",
+  "replace": "t.label",
+  "what": "F3-e: two tapes sharing a name and a label share a key"
+ },
+ {
+  "id": "WF55",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "!shared(\"label\", t) ? t.label :",
+  "replace": "!shared(\"label\", t) ? t.name :",
+  "what": "F3-e: two same-side tapes are keyed by side"
+ },
+ {
+  "id": "WF56",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "const key = !shared(\"name\", t) ? t.name :",
+  "replace": "const key = !shared(\"name\", t) ? t.label :",
+  "what": "F3-e: a tape with its own side is keyed by label"
+ },
+ {
+  "id": "WF57",
+  "file": "lib/_reconcile_tapes.js",
+  "find": "tapes.some((o) => o !== t && o[field] === t[field])",
+  "replace": "tapes.some((o) => o[field] === t[field])",
+  "what": "F3-e: a tape is taken to share its name with itself"
+ },
+ {
+  "id": "WF58",
+  "file": "README.md",
+  "find": "\nThe case registration's `stamp_size_mismatch` refusal is retired: no new\nstamp carries a size, and old stamps keep theirs and are never deleted.",
+  "replace": "",
+  "what": "F3-f: the README does not name the retired refusal"
+ },
+ {
+  "id": "WF59",
+  "file": "README.md",
+  "find": "read once through the contents API at the head of the published branch (not from the raw host, which caches a branch's file for minutes)",
+  "replace": "read once from the raw host",
+  "what": "F3-c: the README says the tip is read from the raw host"
+ }
+]

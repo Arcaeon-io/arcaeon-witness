@@ -773,7 +773,8 @@ const FLAG_OFF_FROZEN_RECORD = {
   renewals_total: 0,
   auth_level: "bearer-stage0",
   auth_note:
-    "Bearer-key auth only. This is NOT owner-signature auth: the witness verifies that the caller holds a key bound " +
+    // (unit R-FGf, M1: "has", never "holds", in a body)
+    "Bearer-key auth only. This is NOT owner-signature auth: the witness verifies that the caller has a key bound " +
     "to this namespace prefix, not that the log's owner authorized this record. Anyone who obtains the key can pin " +
     "or renew. Owner-signature auth — a detached signature over {namespace, rows, chain, timestamp} verified " +
     "against a public key registered to the namespace — is the Stage-1 requirement and is NOT built yet. Read " +

@@ -1,0 +1,19 @@
+{
+  "how": "test/fixtures/key_id_collision.js: key i's Ed25519 seed is sha256(seed_tag + i); the search stops at the first key id already seen",
+  "name": "arcaeon.io/case-test/key-id-collision",
+  "seed_tag": "arcaeon-witness key-id collision search, unit R-RVf3\n",
+  "key_id": "arcaeon.io/case-test/key-id-collision+60178041",
+  "tried": 9629,
+  "keys": [
+    {
+      "counter": 5466,
+      "signer": "PRIVATE+KEY+arcaeon.io/case-test/key-id-collision+60178041+AddUrzoeaFLr1t2e9uB95Ss3fuEBYXJVYauilS8OFDgU",
+      "verifier": "arcaeon.io/case-test/key-id-collision+60178041+ASXojTXSe4NbXS5Uvuf9lm6tSxVcC9ebzSwYL0gZwFxf"
+    },
+    {
+      "counter": 9628,
+      "signer": "PRIVATE+KEY+arcaeon.io/case-test/key-id-collision+60178041+AdXnHx8KgRkoISdptE9wUpiMRTd06CCXb8U5jshk9EIz",
+      "verifier": "arcaeon.io/case-test/key-id-collision+60178041+AeTzp4KIPK1BvDGdNdfIyzwxyVDFb4WxDOQL3jPwf0Ir"
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+[
+ {
+  "id": "GG01",
+  "file": "lib/_case_http.js",
+  "find": "    const live = await SEAL.liveRecords(kase, { keyDocument, listing, read: seen });",
+  "replace": "    const live = await SEAL.liveRecords(kase, { keyDocument });",
+  "what": "G1: the live count lists and reads the rows again"
+ },
+ {
+  "id": "GG02",
+  "file": "lib/_case_http.js",
+  "find": "    const live = await SEAL.liveRecords(kase, { keyDocument, listing, read: seen });",
+  "replace": "    const live = await SEAL.liveRecords(kase, { keyDocument, listing });",
+  "what": "G1: the live count reads the rows again"
+ },
+ {
+  "id": "GG03",
+  "file": "lib/_case_http.js",
+  "find": "      return refuse(res, new Refusal(503, \"store_unreachable\", \"\", { case_id }));\n    }\n    const { seqs } = listing;",
+  "replace": "      return refuse(res, new Refusal(503, \"store_unreachable\", `the case's reference rows could not be listed; this is not a 'no', and ${nothing}`));\n    }\n    const { seqs } = listing;",
+  "what": "G2: the listing's 503 carries a sentence again"
+ },
+ {
+  "id": "GG04",
+  "file": "lib/_case_http.js",
+  "find": "      return refuse(res, new Refusal(503, \"store_unreachable\", \"\", { case_id }));\n    }\n    const { seqs } = listing;",
+  "replace": "      return refuse(res, new Refusal(503, \"store_unreachable\", \"\", {}));\n    }\n    const { seqs } = listing;",
+  "what": "G2: the listing's 503 has no case_id"
+ },
+ {
+  "id": "GG05",
+  "file": "lib/_case_http.js",
+  "find": "      seen.set(seq, known);\n",
+  "replace": "",
+  "what": "G1: a row read is not kept"
+ },
+ {
+  "id": "GG06",
+  "file": "lib/_case_http.js",
+  "find": "    let known = seen.get(seq);",
+  "replace": "    let known;",
+  "what": "G1: the kept rows are not consulted"
+ },
+ {
+  "id": "GG07",
+  "file": "lib/_case_http.js",
+  "find": "      if (put.fresh_present) seen.set(seq, { got: { json: put.fresh, sha: put.fresh_sha } });\n",
+  "replace": "",
+  "what": "G1: the row putFile's re-read found is not kept"
+ },
+ {
+  "id": "GG08",
+  "file": "lib/_case_http.js",
+  "find": "    seen.set(seq, { got: { json: built, sha: put && put.content ? put.content.sha : null } });\n",
+  "replace": "",
+  "what": "G1: the row this request wrote is not handed to the live count"
+ },
+ {
+  "id": "GG09",
+  "file": "lib/_case_http.js",
+  "find": "    return rowAnswer(201, built, p, pre, { seqs: [...seqs, seq], files: listing.files + 1 });",
+  "replace": "    return rowAnswer(201, built, p, pre, listing);",
+  "what": "G1: the live count's listing leaves out the row this request wrote"
+ },
+ {
+  "id": "GG10",
+  "file": "lib/_case_http.js",
+  "find": "          known = { notJson: true };",
+  "replace": "          known = { gone: true };",
+  "what": "G1: a row that is not JSON is kept as gone (expected equivalent: notJson and gone change only `whole`, which never decides the records_live a reference answers)"
+ },
+ {
+  "id": "GG11",
+  "file": "lib/_case_http.js",
+  "find": "    if (!known.got) continue; // listed, then gone; or not JSON: not a row",
+  "replace": "    if (known.gone) continue; // listed, then gone; or not JSON: not a row",
+  "what": "G1: a row that is not JSON is read as a row"
+ },
+ {
+  "id": "GG12",
+  "file": "lib/_case_seal.js",
+  "find": "    ({ seqs, files: listed } = listing || await referenceListing(sealed.case_id));",
+  "replace": "    ({ seqs, files: listed } = await referenceListing(sealed.case_id));",
+  "what": "G1: the live count lists again though handed the listing"
+ },
+ {
+  "id": "GG13",
+  "file": "lib/_case_seal.js",
+  "find": "    if (known !== undefined) {\n      if (known.gone) continue;",
+  "replace": "    if (false) {\n      if (known.gone) continue;",
+  "what": "G1: the live count reads the handed rows again"
+ },
+ {
+  "id": "GG14",
+  "file": "lib/_case_seal.js",
+  "find": "      if (known.gone) continue; // listed, then gone\n",
+  "replace": "",
+  "what": "G1: a handed row listed then gone is read as unreadable",
+  "gap": "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over"
+ },
+ {
+  "id": "GG15",
+  "file": "lib/_case_seal.js",
+  "find": "        unreadable.push(seq); // not JSON: as a getFile that cannot parse it\n",
+  "replace": "",
+  "what": "G1: a handed row that is not JSON is passed over, not unreadable",
+  "gap": "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over"
+ },
+ {
+  "id": "GG16",
+  "file": "README.md",
+  "find": "Two deliberate references\nwith the same cross_reference from the same appender become one row: the\nsecond is answered 200 with the first's seq.",
+  "replace": "Two deliberate references\nwith the same cross_reference from the same appender become two rows.",
+  "what": "G4: the README says two rows"
+ },
+ {
+  "id": "GG17",
+  "file": "tools/stamp_genesis.js",
+  "find": "of the commit that records this.",
+  "replace": "of the commit that holds this record.",
+  "what": "G5: the genesis record says holds"
+ },
+ {
+  "id": "GG18",
+  "file": "tools/preview_dry_run.js",
+  "find": "`${TAPES_FIXTURE} has no MATCHED",
+  "replace": "`${TAPES_FIXTURE} holds no MATCHED",
+  "what": "G5: a tool string says holds"
+ }
+]

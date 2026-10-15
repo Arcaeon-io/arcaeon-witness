@@ -457,14 +457,16 @@ test("THE GLOBAL DAILY CAP STILL FAILS CLOSED on a paid stamp, and refuses BEFOR
 // 3. THE PRIVACY GUARANTEE, RE-PROVED AGAINST THE NEW STORE
 // ---------------------------------------------------------------------------
 
-test("PRIVACY: the paid path stores a fingerprint and a size and nothing else, in the stamps repo", async () => {
+// Since unit R-WIDE (D1, the architect's ruling) a stamp stores no size; this
+// test held a fingerprint and a size, and is rewritten to hold no size.
+test("PRIVACY: the paid path stores a fingerprint and a time and nothing else (no size since R-WIDE D1), in the stamps repo", async () => {
   seedBalance(4);
   process.env.STAMP_FREE_PER_DAY = "0";
   const s = sha("3n");
   await post({ sha256: s, size: 1234 }, { key: KEY });
 
   const rec = gh.read(STAMPS_REPO, pathOf(s));
-  assert.deepEqual(Object.keys(rec).sort(), ["kind", "sha256", "size", "stamped_at", "v"]);
+  assert.deepEqual(Object.keys(rec).sort(), ["kind", "sha256", "stamped_at", "v"]);
 
   // MUST-FAIL ARM: paying does not buy a filename field, and the key that paid
   // must not be identifiable anywhere in the PUBLIC record.

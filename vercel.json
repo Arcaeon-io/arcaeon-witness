@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/",
@@ -23,14 +24,33 @@
     {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
+    },
+    {
+      "source": "/api/reconcile",
+      "destination": "/api/verify?op=reconcile"
+    },
+    {
+      "source": "/reconcile",
+      "destination": "/api/verify?op=reconcile-page"
+    },
+    {
+      "source": "/case/:case_id",
+      "destination": "/api/verify?op=case-page&case_id=:case_id"
     }
   ],
   "functions": {
+    "api/badge.js": {
+      "includeFiles": "public/.well-known/**"
+    },
     "api/pin.js": {
       "maxDuration": 30
     },
+    "api/status.js": {
+      "includeFiles": "public/.well-known/**"
+    },
     "api/verify.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "public/.well-known/**"
     }
   }
 }

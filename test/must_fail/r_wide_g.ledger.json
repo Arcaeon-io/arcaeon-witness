@@ -1,0 +1,203 @@
+{
+  "WG01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "a0db88430d8d5fa3a76d09c41034be38392a03ba26465853246d0a03250ae802"
+      }
+    ]
+  },
+  "WG03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G4: a contents-API read of the document at the tip that never answers is cut at the document fetch timeout and is could-not-look (fetch_failed); nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "abb2ba90f3e291df1274772c6600d9036b9642ea71d915018e10e2164872d1dc"
+      }
+    ]
+  },
+  "WG02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-REV: the key document's prose says two statuses, and the README says marker files are left in place and ignored",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "e44fef4f07c4d90862fe585d3a0dc299cf077c00fec34ba2c5b3a371a9529aa6"
+      }
+    ]
+  },
+  "WG04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G4: a contents-API read of the document at the tip that never answers is cut at the document fetch timeout and is could-not-look (fetch_failed); nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "daec15e53ab11b8c4c0132585743a2d79b0c0c3e72c055517664e8cf4ae85ccd"
+      }
+    ]
+  },
+  "WG06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G5: the status cache's comment names unit R-WIDEf; the README says the status page's key-document line may be up to about 120 seconds old",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "e870f61fa6732dbeaa8a8fe9e45cdcb130ff4055b6777b66674b0a4666d5c341"
+      }
+    ]
+  },
+  "WG05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G4: a contents-API read of the document at the tip that never answers is cut at the document fetch timeout and is could-not-look (fetch_failed); nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "236a6e1ac6a9e12c9da4529a3ffca13096435427e443f33d914cc522ce0d4ea2"
+      }
+    ]
+  },
+  "WG08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "83a20bf64ecad5818e997c837e03d0fcb9c2020cd3b335d1fac773933b4bb91c"
+      }
+    ]
+  },
+  "WG07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G5: the status cache's comment names unit R-WIDEf; the README says the status page's key-document line may be up to about 120 seconds old",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "029184eed2a1b872e9dd7505a76aa075fadbc7a814d157af751520eb79a16911"
+      }
+    ]
+  },
+  "WG09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G3: the change log's LATER list names the real registration binding, the pin lane's outage marking, and the status count's truncation past 1,000",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "b90230b3fcf40a795e0ddacf4b0153e8c38ffe0df660b7a8c731017cc1cb97b8"
+      }
+    ]
+  },
+  "WG10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G3: the change log's LATER list names the real registration binding, the pin lane's outage marking, and the status count's truncation past 1,000",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "2714cc8757d12ce8530f0c517d769c35ad96312256d2e2b26b6aa5b92a58cc59"
+      }
+    ]
+  },
+  "WG12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "76b5a568774c0812311855e08ffce684de18bf1f762cbaeab392025b7a5b0f1f"
+      }
+    ]
+  },
+  "WG11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G3: the change log's LATER list names the real registration binding, the pin lane's outage marking, and the status count's truncation past 1,000",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "0c16025b657525d42a96ecfa1b0af11b005a0d3a",
+        "porcelain": "",
+        "defect_sha256": "a7fd1ecb240d72b3c00ff6a9125780d5f5fbbad3192201c1a64863374b5e380d"
+      }
+    ]
+  }
+}

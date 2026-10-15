@@ -703,6 +703,8 @@ test("rev-2: welcome email renders branded HTML with key, prefix, credits, pip c
   assert.ok(text.includes("pip install arcaeon-ledger"));
   assert.ok(!/<[a-z]+[\s>]/.test(text)); // no markup tags (the <YOUR KEY> placeholder is fine)
   assert.equal(typeof welcome.WELCOME_SUBJECT, "string");
+  // B078: the lost-key recovery path is named in both parts: the Stripe receipt link.
+  for (const part of [html, text]) assert.match(part, /Stripe receipt is how you recover it/);
 });
 
 test("rev-2: first mint renders the welcome email through the stub without breaking fulfillment", async () => {

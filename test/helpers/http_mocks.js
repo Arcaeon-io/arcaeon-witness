@@ -35,6 +35,20 @@ function makeRawReq({ method = "POST", headers = {}, rawBody = Buffer.alloc(0) }
   return stream;
 }
 
+// THE BODY AUDIT (unit R-N2, B2; since unit R-N3, N8, every status): with
+// ARCAEON_BODY_AUDIT naming a file, every response sent is appended to it,
+// one JSON line {file, status, handler, body}, for
+// test/response_bodies.test.js to read. `handler` is the handle* function
+// that sent it, read from the stack (the path, not the error code), or null.
+// Off unless that variable is set.
+function audit(res, body) {
+  const file = process.env.ARCAEON_BODY_AUDIT;
+  if (!file) return;
+  const text = typeof body === "string" ? body : JSON.stringify(body === undefined ? null : body);
+  const m = /at (?:async )?(?:Object\.)?(handle[A-Za-z]+)/.exec(new Error().stack || "");
+  require("fs").appendFileSync(file, `${JSON.stringify({ file: require("path").basename(process.argv[1] || ""), status: res._status, handler: m ? m[1] : null, body: text })}\n`);
+}
+
 // res.status(code).json(body) — captures what was sent so a test can assert
 // on it without a real HTTP round trip.
 function makeRes() {
@@ -55,6 +69,7 @@ function makeRes() {
     json(body) {
       res._body = body;
       res._sent = true;
+      audit(res, body);
       return res;
     },
     // Real http.ServerResponse#end(): sends a bodyless response. Used by
@@ -64,6 +79,7 @@ function makeRes() {
     send(body) {
       res._body = body;
       res._sent = true;
+      audit(res, body);
       return res;
     },
     end() {

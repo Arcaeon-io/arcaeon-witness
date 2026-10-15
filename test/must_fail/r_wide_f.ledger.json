@@ -1,0 +1,1238 @@
+{
+  "WF03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "7b879139489830e21104bc621b6f750049fd1566e927ea3ef7e6dda5e8abcc35"
+      }
+    ]
+  },
+  "WF01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-a: the README's KEY_DOCUMENT_BRANCH paragraph says diverged, never 'ahead of the branch or diverged', and that a commit ahead of the branch answers 5",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "26ebc58e7f0b248dc400be0c93e9bb55c21fbb3a5000981ced4fd9f203e9f8f9"
+      }
+    ]
+  },
+  "WF02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-a: the README's KEY_DOCUMENT_BRANCH paragraph says diverged, never 'ahead of the branch or diverged', and that a commit ahead of the branch answers 5",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "bd8992bae28e32e834665a82578c5939d4e485bc2d41d6cc01c0c84ef85a9578"
+      }
+    ]
+  },
+  "WF04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "207c8bede4e2501497a4b66cf43062bcb77afe1d9e71d3148094930a0f588cc3"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "207c8bede4e2501497a4b66cf43062bcb77afe1d9e71d3148094930a0f588cc3",
+        "caught_by": [
+          "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503"
+        ]
+      }
+    ]
+  },
+  "WF05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-a: the README's KEY_DOCUMENT_BRANCH paragraph says diverged, never 'ahead of the branch or diverged', and that a commit ahead of the branch answers 5",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "ddebb8f0cd2f5a7114e897c0d5deae81367552f4f4861d5e3c17760c55c558fd"
+      }
+    ]
+  },
+  "WF06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-a: the README's KEY_DOCUMENT_BRANCH paragraph says diverged, never 'ahead of the branch or diverged', and that a commit ahead of the branch answers 5",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "6db6a92fac2db41841ec35c5ad925a4cf5d8376a9387b7baffec311baa19e322"
+      }
+    ]
+  },
+  "WF08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F1-a: the README's KEY_DOCUMENT_BRANCH paragraph says diverged, never 'ahead of the branch or diverged', and that a commit ahead of the branch answers 5",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a15c3a470b14a9e2ab04a792869cce94df63c269122e379b32bab55bc09a5a66"
+      }
+    ]
+  },
+  "WF07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "9cdbacba28df8b65e51481882aba680651b131dcfb9b44e76b2399b7d1a94b4d"
+      }
+    ]
+  },
+  "WF09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-a: runSuite asks for the tap reporter on stdout by name, so a failing test is counted whatever reporter the node it runs under defaults to (spec, as "
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "4d2864979da85f3fcbdf620699ca3271df193b925f256745945e0f758cea1b11"
+      }
+    ]
+  },
+  "WF10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-a: runSuite asks for the tap reporter on stdout by name, so a failing test is counted whatever reporter the node it runs under defaults to (spec, as "
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "fa76c689b5d7ff822447d423ec13b11629606d9d23887b06494f7702bc0662a7"
+      }
+    ]
+  },
+  "WF11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "0a6122015b64b58cb0f917cae4586e3df389d2c6c788b50c7bc1d50a712fe911"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "0a6122015b64b58cb0f917cae4586e3df389d2c6c788b50c7bc1d50a712fe911",
+        "caught_by": [
+          "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
+        ]
+      }
+    ]
+  },
+  "WF12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "ad59d38243195a3a9e47e8e835e96d95d200eb8986cda67a1c2e145b1097ee58"
+      }
+    ]
+  },
+  "WF15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "3874ad7ab8597d66e8ccc1b7d47125e0ac838ce1cf7a126406e6e30bb7cfcad2"
+      }
+    ]
+  },
+  "WF14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "98199da9cc1eca996385ad7be1fb6e0aa8e02e4965b9e7f9e9144ca1ff5ef6a0"
+      }
+    ]
+  },
+  "WF13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "b86bbfcee4b93ce1c46fa8a20445f0eff85805b31ac5c9a2f4a53c87f22b46df"
+      }
+    ]
+  },
+  "WF16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-b: an error run keeps the last 30 lines of the suite's stderr as stderr_tail, and the table prints its first line; a catch or a survival keeps none"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a7e0d5724143d4ff86ee4e677f4c3852c433301a5e6e2011cb708ce9cd4ba315"
+      }
+    ]
+  },
+  "WF17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, first_failing) the same way",
+          "R-WIDEf F2-c: the table prints a run with no head (a run of the runner before unit R-WIDE, B4) as 'pre-B4, not vouched'"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "e54504909b1d0804a048f4f4cccd1278f7a90526f421deac96098b1ce1f26363"
+      }
+    ]
+  },
+  "WF18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, first_failing) the same way",
+          "R-WIDEf F2-c: the table prints a run with no head (a run of the runner before unit R-WIDE, B4) as 'pre-B4, not vouched'"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "95f49b2df3ec347ed1c88fbcdfed90af15bab1d1864deaa5e7364d5d8af8a291"
+      }
+    ]
+  },
+  "WF19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-ABf m-e: the table reads a ledger written before unit R-ABf (caught, first_failing) the same way",
+          "R-WIDEf F2-c: the table prints a run with no head (a run of the runner before unit R-WIDE, B4) as 'pre-B4, not vouched'"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "de893535487ca0b618e711e27653b49b2d2aea2d91bf85374e56533c4aae00b7"
+      }
+    ]
+  },
+  "WF20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the suite's environment drops every name ending _KEY as well (STRIPE_SECRET_KEY, *_API_KEY)"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "aed4f7a76411193b2b3d07f42497ed605df904f923c308d207c57aaa6188b751"
+      }
+    ]
+  },
+  "WF21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
+      }
+    ]
+  },
+  "WF22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "2d36acac00366add25dc46734e54a204e62cc091178d876fb183286cbe13bb60"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "2d36acac00366add25dc46734e54a204e62cc091178d876fb183286cbe13bb60",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "f9df90ff0e66a19a69403d61f7d265c64c26687593e5090bb94e26c75fed3c16"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "f9df90ff0e66a19a69403d61f7d265c64c26687593e5090bb94e26c75fed3c16",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "27bbb1370bc6ecdc3ef21c2c035921e48b85744fbb7863a3ccb1542b62251d13"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "27bbb1370bc6ecdc3ef21c2c035921e48b85744fbb7863a3ccb1542b62251d13",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "91fee250f2693abd6d08bd62ccda238c95c0171423807ada8dba893beb442a8c"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "91fee250f2693abd6d08bd62ccda238c95c0171423807ada8dba893beb442a8c",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
+      }
+    ]
+  },
+  "WF27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ],
+        "head": "a3385f92f29d44d27b217bc0755e54ede80f4449",
+        "porcelain": "",
+        "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a",
+        "caught_by": [
+          "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own gu"
+        ]
+      }
+    ]
+  },
+  "WF28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "2fd1b2c2fb6d08a825da8c898d6346818db54365d44ceb81675b947416ac49af"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "2fd1b2c2fb6d08a825da8c898d6346818db54365d44ceb81675b947416ac49af",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a6b94abedb05b79d7d8c38a7ba19494df974a75338f7ff38512cc417cfefe9ee"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "a6b94abedb05b79d7d8c38a7ba19494df974a75338f7ff38512cc417cfefe9ee",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
+      }
+    ]
+  },
+  "WF30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "7b318c4a03e4c064a9b595529fb172e30d3141f6e869f4a1394d65e4881646c4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "7b318c4a03e4c064a9b595529fb172e30d3141f6e869f4a1394d65e4881646c4",
+        "caught_by": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ]
+      }
+    ]
+  },
+  "WF31": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "4ebc5dd0bca5f746471a1422dbe395623286d880015682197cbfe14444e5e3de"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "4ebc5dd0bca5f746471a1422dbe395623286d880015682197cbfe14444e5e3de",
+        "caught_by": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ]
+      }
+    ]
+  },
+  "WF32": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "7cbeef247fc15cfeb6ae9a420c0d4fb9ab5b0f3f1ef6ca2de25ed05783a2a241"
+      }
+    ]
+  },
+  "WF33": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "MUST-FAIL GAP (D04, D05, D06): the case commit row says the commit does not hold this case file byte for byte; a pinned page links the case file at case_commit;",
+          "n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for byte'; a commit off the branch, or one the repository does not have, is not called 'th",
+          "THE TABLE: pinState, pin_commit_mismatch / case_absent_at_commit (case_absent): the pin line, the sentence under it, and the reference's answer",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "475d5c4d870293a76604f6f3504fa95fd0fcdde135b8ed5405c3b9696be31d07"
+      }
+    ]
+  },
+  "WF34": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "P08 (pinnedHtml): a pin file holding another chain reads as a conflict on the page, never as pinned",
+          "B1: the page says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons (unit R-PIN: the pin ",
+          "THE TABLE: pinState, conflict / pin_holds_another_chain (pin_file_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "BL2: conflictWords says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons; *_not_a_pin sa",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "BL2: conflictWords says 'names another chain' (since"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "dc5ef37cf5a2c1a4d7319135f0900f709ed6e292ae6bb2e6822fa9bf6270b247"
+      }
+    ]
+  },
+  "WF35": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "B1: the page says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons (unit R-PIN: the pin ",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_holds_another_chain (pin_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "BL2: conflictWords says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons; *_not_a_pin sa",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "BL2: conflictWords says 'names another chain' (since unit R-WIDEf; it said 'holds another chain') only for the two *_holds_another_chain reasons; *_not_a_pi"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "80f069f8a26e069727a215f9f9be45ac7c9bde35e99b5479cc061fe1e94979a9"
+      }
+    ]
+  },
+  "WF36": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-L L2: the README's withdrawal section and the WITHDRAWN case page carry the public claim verbatim",
+          "MUST-FAIL GAP (H21, H22): the withdrawal's answer carries the public claim, and says that only the salt's sha256 is kept, in the withdrawal record",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "4eae026e4b5b90c9745a744295e30ef90421151bb7a571290583c1ae9a85d350"
+      }
+    ]
+  },
+  "WF37": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-PINf f2: the status page and the README claim no more than the tree shows: pin files and withdrawal markers are counted by path, and a sealed case has at most",
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "01121aad32b14cadaa2b1b090703d92e00ac764b790807a36c34400a334bcb7e"
+      }
+    ]
+  },
+  "WF38": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-a: no page prints 'holds' or 'second operator': the case page in every state reached here (OPEN, COMMITTED, WITHDRAWN, sealed and pinned, a pin confl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a5721260b56f4caf9b4210a84ebbec20a187f2c4372897aff69855bb731cb8a0"
+      }
+    ]
+  },
+  "WF39": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "94bbe8c97fddfac248cd086a9e8cf17e415b3b0ee43d34342d19cb0500655756"
+      }
+    ]
+  },
+  "WF40": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "92cb610e04f855fb8bcf17a09c50c853c40f17cce7fb57544e66ac3ed81d6d43"
+      }
+    ]
+  },
+  "WF41": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "47d70d5408d6cbbccb60947a0e066c13ba968a89aeaabd7effdfdc2a691b0b36"
+      }
+    ]
+  },
+  "WF42": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "1ade5922d8355d3d594bd5393cf367b52aae5b601d6b4480e04d3ff8d10e1228"
+      }
+    ]
+  },
+  "WF43": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "ac591f79980beb1eb510747a18e7b8ba866f4b052ad1606ce1ebd6c9e3b14cb5"
+      }
+    ]
+  },
+  "WF44": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-b: a case whose deadline is 30 seconds away is not kept (the page would show OPEN past it); one 120 seconds away, or already past, is; the kept page ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "8ff462eaf03b5957c4b8f962dafc8d40c603bc945a84037fa80f6faf20b277e5"
+      }
+    ]
+  },
+  "WF45": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (WB17): the document at the tip is read on the published branch KEY_DOCUMENT_BRANCH names, not on main",
+          "R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "168e658c90c03dee7d5cad20990223535eb232a5e9a65102663a340a3deb923b"
+      }
+    ]
+  },
+  "WF46": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "41a03dfccc1292771f1fc323d9665b213c3fcbc0f9fc1c2e250ccec302d76327"
+      }
+    ]
+  },
+  "WF47": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE B2: a sealer carrying a document that is not the one at the tip of the published branch refuses to pin; nothing is written",
+          "R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw ",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "b0ad905205c7685a4569075d6c9179435a4cce50aca779c9c9bd0ed0daf9cfc4"
+      }
+    ]
+  },
+  "WF48": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "8e218c0c244b29a2c910e91e4550732f59ed8a2d12ee1c0e63de0f39a58bbbc2"
+      }
+    ]
+  },
+  "WF49": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "49fa1d575c8a4ac63d3d5fa53dc01d4f104a1639902267519795a1fab88cd194"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "49fa1d575c8a4ac63d3d5fa53dc01d4f104a1639902267519795a1fab88cd194",
+        "caught_by": [
+          "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json"
+        ]
+      }
+    ]
+  },
+  "WF50": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a69861d636c00ef1f610392ce7f8b981d526db6482878f299db0127f187f6c1a"
+      }
+    ]
+  },
+  "WF51": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "f1f92e9da772e7535b2e71e5e0c7933630e48cddd4ec6676f1d6e4add88ab9a2"
+      }
+    ]
+  },
+  "WF52": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "a4efc831402452111640e7c725ce16d2a562403323f97f72c581028d6189780c"
+      }
+    ]
+  },
+  "WF53": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "70a67d467fd358dc00d6d762ae8c0b158cc60b96feb0d222132461faeaa655da"
+      }
+    ]
+  },
+  "WF54": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F3-e: two tapes that share a name and a label keep both counts, keyed by name, label and index; the usual keys stay as they were"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "ae4af53181a6a44d67696dfce6467e470cd4ba0f6fb6e07452c343c440042683"
+      }
+    ]
+  },
+  "WF55": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side",
+          "R-WIDEf F3-e: two tapes that share a name and a label keep both counts, keyed by name, label and index; the usual keys stay as they were",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "df82607cb5c57590e9f4ea7d01c079638846e70029180ca37a3481fd75e8a83e"
+      }
+    ]
+  },
+  "WF56": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 11,
+        "failing_tests": [
+          "CONFORMANCE: every crossrepo case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every ledger case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every edge case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every fuzz case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words",
+          "BREAK ARM: a lying reconcile that always says MATCHED is caught",
+          "BREAK ARM: a port that parses with JSON.parse (floats lose their type) is caught",
+          "R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side",
+          "R-WIDEf F3-e: two tapes that share a name and a label keep both counts, keyed by name, label and index; the usual keys stay as they were",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "38330f6120214c899ee0e8da78d29423c125000735e52b72177c3fde3f4c7fc4"
+      }
+    ]
+  },
+  "WF57": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 11,
+        "failing_tests": [
+          "CONFORMANCE: every crossrepo case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every ledger case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every edge case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every fuzz case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words",
+          "BREAK ARM: a lying reconcile that always says MATCHED is caught",
+          "BREAK ARM: a port that parses with JSON.parse (floats lose their type) is caught",
+          "R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side",
+          "R-WIDEf F3-e: two tapes that share a name and a label keep both counts, keyed by name, label and index; the usual keys stay as they were",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "b68dc0c9fee511a8bd26240e2dc6f161d240937b4a243e62670ad9dcaf943573"
+      }
+    ]
+  },
+  "WF58": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-f: the README's stamp section says stamp_size_mismatch is retired: no new stamp carries a size, and old stamps keep theirs and are never deleted",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "319542dfe660037e218ba4d3cee1c2ad32875a346716ee933e91e46c590e2fb1"
+      }
+    ]
+  },
+  "WF59": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEf F3-c: the document at the tip is read through the contents API at the head of the published branch (the API road the compare takes), never from the raw ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "916666c4843f3dd594eace3778a2d451cb22e92d7641cafeb2a5516b60763d90"
+      }
+    ]
+  }
+}

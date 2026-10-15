@@ -1,0 +1,2469 @@
+{
+  "WA02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "5c5d55050a34b9b30ee83e66522ff1a025efe4f7ae7b187d7ddbcb57a6967e89"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "5c5d55050a34b9b30ee83e66522ff1a025efe4f7ae7b187d7ddbcb57a6967e89"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "5c5d55050a34b9b30ee83e66522ff1a025efe4f7ae7b187d7ddbcb57a6967e89"
+      }
+    ]
+  },
+  "WA03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "99a0fa0b0d09977a6ece4849f9f861d200b6f02ba12c89e9648cd8d1cfceec00"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "99a0fa0b0d09977a6ece4849f9f861d200b6f02ba12c89e9648cd8d1cfceec00"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "99a0fa0b0d09977a6ece4849f9f861d200b6f02ba12c89e9648cd8d1cfceec00"
+      }
+    ]
+  },
+  "WA01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A1: a reveal that carried a typed cross_reference: the records line says one cross-reference was recorded by the sender of the reveal and that this servi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A1: a reveal that carried a typed cross_reference: the records line says one cross-reference was recorded by the sender of the reveal and that this servi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "7bd003eacecdf16ca70e959639c84b6354455452c9b924e1d2bcad1b5df6cc7a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A1: a reveal that carried a typed cross_reference: the records line says one cross-reference was recorded by the sender of the reveal and that this servi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "7bd003eacecdf16ca70e959639c84b6354455452c9b924e1d2bcad1b5df6cc7a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A1: a reveal that carried a typed cross_reference: the records line says one cross-reference was recorded by the sender of the reveal and that this servi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "7bd003eacecdf16ca70e959639c84b6354455452c9b924e1d2bcad1b5df6cc7a"
+      }
+    ]
+  },
+  "WA04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "d32ce9b7dff6f6cce17f0af7bbc3c3c8e3224b11a2e42364e91b265e79b45550"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "d32ce9b7dff6f6cce17f0af7bbc3c3c8e3224b11a2e42364e91b265e79b45550"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "d32ce9b7dff6f6cce17f0af7bbc3c3c8e3224b11a2e42364e91b265e79b45550"
+      }
+    ]
+  },
+  "WA05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "8a0ff8d5573097b888df2fdf104ebee709dd9428ff048f85aa6152d067122b07"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "8a0ff8d5573097b888df2fdf104ebee709dd9428ff048f85aa6152d067122b07"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "8a0ff8d5573097b888df2fdf104ebee709dd9428ff048f85aa6152d067122b07"
+      }
+    ]
+  },
+  "WA06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "3ca8bbface1bfaabdf39b19a938bc9f77edd97d1df4220dbed70cae9704d045c"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "3ca8bbface1bfaabdf39b19a938bc9f77edd97d1df4220dbed70cae9704d045c"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "3ca8bbface1bfaabdf39b19a938bc9f77edd97d1df4220dbed70cae9704d045c"
+      }
+    ]
+  },
+  "WA07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "f01133be6f69cb3a6d2684dda374ca01d3c235ae28909ec1151c6b51fc86b2b0"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "f01133be6f69cb3a6d2684dda374ca01d3c235ae28909ec1151c6b51fc86b2b0"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "f01133be6f69cb3a6d2684dda374ca01d3c235ae28909ec1151c6b51fc86b2b0"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "aebaea73b1f0c61f8ce0c04d3efa9dc2c455c1952f41d503f89de3ff98e5aa79"
+      }
+    ]
+  },
+  "WA08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": []
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "caught_by": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "a810157cb85abb10ab4dc28ce68afd6c48bbf81f784acb6e1a0534c62df19ffc"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "a810157cb85abb10ab4dc28ce68afd6c48bbf81f784acb6e1a0534c62df19ffc"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "a810157cb85abb10ab4dc28ce68afd6c48bbf81f784acb6e1a0534c62df19ffc"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "58d024a6f9ade590dcc98213509b3c394ff020befc36c768dd1dcba9ba52d1cc"
+      }
+    ]
+  },
+  "WA09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "f48dddc64cc40cbd3273c215f566d281c7f029716a0fa7f860c30f81efbf0ab4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "f48dddc64cc40cbd3273c215f566d281c7f029716a0fa7f860c30f81efbf0ab4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "f48dddc64cc40cbd3273c215f566d281c7f029716a0fa7f860c30f81efbf0ab4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "776cb3f2665aaa8d2a12f86c70f544f3d45ba524f9ac05d99c27e0f528a5f5d8"
+      }
+    ]
+  },
+  "WA10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "0f81ec95c37bdf764119880eb1bdf7a4d78b597e8571e39e49086c5278137a96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "0f81ec95c37bdf764119880eb1bdf7a4d78b597e8571e39e49086c5278137a96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "0f81ec95c37bdf764119880eb1bdf7a4d78b597e8571e39e49086c5278137a96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "7a37f7ef01618919a609396942c3096c35f67b2152b09b563307a7e6c6a77b5e"
+      }
+    ]
+  },
+  "WA11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the sam",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the sam",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "56909e5bebed7984cda0395640fa4f212c08933ef361d17aac218887047260a6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the sam",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "56909e5bebed7984cda0395640fa4f212c08933ef361d17aac218887047260a6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the sam",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "56909e5bebed7984cda0395640fa4f212c08933ef361d17aac218887047260a6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 9,
+        "failing_tests": [
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "R-PAGEf m2: the withdrawal's time, each stamped time and each recorded time print relative and absolute",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, <when> (T)', never that the role proved itself; the README says t",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDE A2: the withdrawn page says 'withdra",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "9d414fad937d527c158dafedec072aaa94bd4f56",
+        "porcelain": "",
+        "defect_sha256": "77e07752735959e090bef92b5c1f2a660889968ee4c5852de0d5013c05f86d4f"
+      }
+    ]
+  },
+  "WA12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "cbb6170ed3f93833413437d4d77be6ce75caefab453449b559a3a4ab7a995c61"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "cbb6170ed3f93833413437d4d77be6ce75caefab453449b559a3a4ab7a995c61"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "cbb6170ed3f93833413437d4d77be6ce75caefab453449b559a3a4ab7a995c61"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "8bcec79776342dc2cfe9d457892808840d662be97fcb2a62fa5c16f6cf681bcb"
+      }
+    ]
+  },
+  "WA15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 548,
+        "failing_tests": [
+          "FIX G: one role appends REFERENCE_QUOTA_PER_ROLE (20, the open quota's constant) rows to a case; its next is 409 reference_quota with the count, and nothing is ",
+          "FIX G: only a role that proved itself on a sealed case spends its count",
+          "FIX G: the count is read from the store, per case: a counter planted past the quota refuses with its count, one at 19 admits one row, another case's counter is ",
+          "FIX G: 26 references by one role at once append at most 20 rows, and the counter agrees",
+          "FIX G: a row whose seq another row takes moves to the next seq and takes no second unit",
+          "FIX G: two takers creating a role's counter at once: the one that loses the create re-reads and counts on, never a 503",
+          "OPERATOR: after references with no proof and no bearer spend one address's budget, the operator's reference from that address still appends",
+          "OPERATOR: the operator's bearer draws on its own budget: from one address, its LIMIT+1th call is 429 with the per-key note, while that address's budget stays un",
+          "OPERATOR: a bearer that is not the operator's, or any bearer while the operator's key is unset, draws on the address's budget, and past it is 429 before its 401",
+          "PINNED: a sealed case whose pin holds its chain reads pinned, naming the commit that wrote its pin, read at that commit",
+          "COULD_NOT_LOOK: a read the pin's state needs that fails is no claim",
+          "A PIN THAT HOLDS ANOTHER CHAIN, ON THE BRANCH OR AT ITS OWN COMMIT, IS A CONFLICT: never pinned",
+          "THE WRITERS SAY PINNED: the reveal's answer, pinChain, the sealer's report and the status row say pinned, and none of them says anchored",
+          "TWO WRITES: the reveal reads back the commit the pins repository assigned to the sealed case file and records it as case_commit in the pin; the answer names it ",
+          "THE VERIFIER NEVER TRUSTS case_commit AS AN ID: a pin naming a commit at which the case file is not the case served, byte for byte, is pin_commit_mismatch, neve",
+          "NOT PINNED, AND A PIN THAT NAMES NO CASE COMMIT: a sealed case with no pin file reads not_pinned, and a pin without case_commit unreadable (unit R-PIN: case_com",
+          "CRASH BETWEEN THE PHASES: the case file written and its pin not; the answer names what it knows, the page says not pinned, the case file is never backfilled, an",
+          "SWAPPED FILE: a late retry that would pin a different commit of a swapped case file pins nothing and reports pin_commit_mismatch; a pin that did is pin_commit_m",
+          "EVERY COMMIT IS A LINK: on a sealed page, pinned and with a row recorded, and under a revoked key, every commit (the key document's, the stamps', the case file'",
+          "EVERY COMMIT IS A LINK, ON THE OTHER PAGES THAT NAME ONE: pin_commit_mismatch (the commit the pin names), could_not_look on the key document, a case not yet pin",
+          "B03 (a commit whose case file is not JSON): a pin naming it is pin_commit_mismatch, not could_not_look",
+          "C01, C02 (the pin holds seq 1): the pin read at its commit with another seq is a conflict, and an orphan at seq 1 that says seq 2 is never adopted",
+          "S01, S02 (the status page's case row): the column counts pin files (since unit R-PINf: says pin files) and holds the pinned count",
+          "FIX C: a withdrawal the commit sees under the case lock writes nothing: 409 case_withdrawn, nothing registered, no registration file, and the lock is released",
+          "FIX C: a live case lock held by another request: the commit and the withdrawal each wait, then answer 503 case_busy and write nothing; an expired lock is taken ",
+          "FIX C: a case lock that cannot be read, or is unreadable, is 503 and nothing is written",
+          "DESIGN N (1): a withdrawal records its reason code beside by_role and at: party_choice, deadline or other, from the request; since unit R-SIG none when the requ",
+          "DESIGN N (2): a joint reveal after a withdrawal is refused 409 case_withdrawn before its tapes are read or hashed: they are never decoded, so even tapes that do",
+          "DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), ",
+          "ONE SIGNATURE RULE (since unit R-SIG): a seal with sig null is not a valid record (malformed_field) and cannot be built: the sealer reads it unreadable and pins",
+          "ONE SIGNATURE RULE: the reveal seals only signed; without a case key the current document lists, it is 503 case_signer_unavailable before anything is written or",
+          "MUST-FAIL GAP (L04, L05, L06): a case lock record that names a held lease but cannot be read as one (an expiry that does not parse, an unknown state, another ki",
+          "MUST-FAIL GAP (R04; since unit R-SIG the schema's rule): an unsigned seal is malformed_field even when the document it names cannot be fetched: the rule needs n",
+          "MUST-FAIL GAP (L09, L13, L12): a live lock is waited on twice between three attempts before case_busy; a lock write the store refuses (not a conflict) is case_l",
+          "MUST-FAIL GAP (L16, L17): the lock lives at case_locks/<case_id>.json in the private usage repository, and a holder releases only its own lease: a lease another",
+          "MUST-FAIL GAP (L23): a case that cannot be read again under the lock, before the registration's write, is 503 store_unreachable and nothing is registered",
+          "MUST-FAIL GAP (E11, E12; since unit R-RV a failure writes nothing): a seal the schema refuses is 500 seal_build_failed, a verdict a JSON record cannot hold 422 ",
+          "MUST-FAIL GAP (E05; since unit R-RV the reveal's one write is the seal): a seal write whose answer names no blob sha still seals",
+          "MUST-FAIL GAP (N15, N17, N19, N20, N22, N23, N24; since unit R-N): the refusal receipt's checker names each defect, and (since unit R-SIG) a withdrawal record b",
+          "MUST-FAIL GAP (L39): a case that reads under the lock but is not a valid case record (here: WITHDRAWN with no withdrawal) cannot say whether it was withdrawn: 5",
+          "MUST-FAIL GAP (L42): a withdrawal whose root write the store refuses releases the case lock: 503 store_error, and the next request takes the lock at once",
+          "MUST-FAIL GAP (PG06): a withdrawal record with no reason reads, and its page says none was given (since unit R-SIG, \"No reason was given.\") rather than naming o",
+          "A19 (checkRegistrationKey, the name's length): a verifier whose key name is longer than a key id holds (180) is 400 malformed_field verifier, never a 500",
+          "A03, A04 (checkRegistrationKey): a sig that is not 64 bytes of canonical base64 is 400 malformed_field sig, even when its bytes would verify",
+          "A11, A12 (validateRegistrationRecord): a stored registration whose key_id is not its verifier's, or whose sig is not its key's, is not a valid record",
+          "A13 (checkCommitmentEntry): a case whose commitment entry has no key id, or a malformed one, is not a valid record",
+          "A16 (singleParty): a case with no registration, or one, is not single party; the page of a fresh case reads OPEN",
+          "H03 (commit step 4b; since unit R-L4, THE PROJECTION): role b's file raced in under role a's key and its projection failed; b's re-send is refused same_key_both",
+          "H05 (commit, the lost race; since unit R-L4c, c4, THE CLAIM): another key's registration of the same commitment for this role lands first and is projected; this",
+          "H08 (commit step 4b; since unit R-L4 the other role's PROJECTION, not its file): role a's file is written and unprojected; role b under the same key is projecte",
+          "H07 (reference, single_party; since unit R-ABf codes only): the refusal is 409 single_party with the case id and no sentence",
+          "S02 (sealCase): a single-party COMMITTED case is never sealed, whatever it is handed",
+          "S05 (anchorCase, the order): a single-party case past its deadline is terminal EXPIRED, as any unsealed case past it is",
+          "P03, P04 (the single-party page past the deadline; since unit R-AB the one-sentence page): still SINGLE PARTY, never the EXPIRED page with its labels, the same ",
+          "S10 (since unit R-SIG through sealedRecordReason, the one stored-receipt reader): a receipt naming a verifier that is not one is receipt_unsigned, unknown_signe",
+          "S12 (since unit R-SIG through sealedRecordReason): a receipt the service's signer signed and someone altered after is receipt_bad_signature, not receipt_unsigne",
+          "H13 (reference, the words for receipt_unsigned); since Design I its environment does not decide: a case holds under the document it names whatever the deploymen",
+          "P08 (the page's words for receipt_unsigned): the failed check is named in words, not only by its code",
+          "FIX 1: anchorCase refuses a schema-valid VERDICT whose receipt does not bind its reveals (verdict_unbound) and writes no pin",
+          "FIX 2: WITNESS_CASE_SIGNER_KEY set to the receipt key's value with WITNESS_RECONCILE_SIGNER_KEY unset is never used to sign, key_separation_unverifiable (since ",
+          "FIX 2: a legitimately separate case key signs when both other keys are present; one key under another name is still the same key",
+          "STATUS: a store holding a sealed case does not degrade /status; pins/case is not a namespace; case anchors are their own row (case files, pinned, withdrawn, fro",
+          "STATUS: a damaged case file changes nothing in the case row, which reads no case file; a tree that cannot be read is shown as not counted; neither feeds a verdi",
+          "LOG TREE: a sealed case and its pin add no leaf to the witness log tree v1; the reveal and the seal's header say how a case is pinned",
+          "CASE_SEAL: the seal's pin is exactly the case_seal record type; an extra field, a missing record_kind or a wrong value is refused; the generic judge takes none ",
+          "SIGNED_BY: the reveal writes the case signer's key id inside the signed bytes; an open case carries null and (since unit R-SIG) no record is built unsigned; the",
+          "KEY DOCUMENT: .well-known/arcaeon/case-signing-keys.json is valid JSON with the required fields, served the snapshot keys' way; an entry for the seal's key is w",
+          "SEALER: a sealer run with one pending case pins it once; a second run pins nothing new; the chain is the seal's",
+          "SEALER: a committed case is passed over, an unbound verdict is refused, a tree it cannot read is reported; none writes, and the batch receipt stands",
+          "SEALER: with more pending cases than one run reads, the window moves on each minute and every case is pinned",
+          "SEALER: no public op writes a pin; verify.js dispatches exactly the six case ops",
+          "OPEN KEY: case-open needs a valid bearer key: none is 401 key_required, an unknown or revoked one 401 key_invalid, a store failure 503; nothing is written and t",
+          "FIX 1 (GPT's planted test): a signed case sealed with a failed pin, its sig alone replaced, is refused signature_invalid (since unit R-SIG) by anchorCase and no",
+          "FIX 1, SINCE THE ONE SIGNATURE RULE: an unsigned seal is never a seal: the reveal will not make one, and since unit R-SIG one found in the store is not a valid ",
+          "FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since t",
+          "FIX 3: the status row reads no case file and no pin; a truncated tree makes it partial on the page and in the JSON; getTree carries truncated",
+          "FIX 6: a case with the withdrawn marker is not considered for a pin (its case file is read only by the withdrawn path, unit R-N C1); a root read as expired or w",
+          "TEST 10: a withdrawal before the joint reveal publishes only the redacted record, signed with the case key, with no labels, keeping the root's commitments as th",
+          "WITHDRAWAL: a preimage that does not recompute the named role's registration is refused withdraw_unauthorized; nothing is written, and nothing of any preimage b",
+          "WITHDRAWAL RACE: a withdrawal and a reveal interleaved both ways; the CAS on the root record decides and the loser answers the typed 409",
+          "TEST 11: records is 2 only when a valid cross-reference row exists; an addendum appends a signed create-only row and never rewrites the sealed case; it has no p",
+          "ADDENDUM: an invalid row is ignored by the count; since unit R-SIG a row with sig null is malformed_field, and a signature that does not hold is the one reader'",
+          "ADDENDUM: a role that cannot prove itself, a missing or wrong operator key, an unconfigured operator key, an unsealed or withdrawn case: each refused, typed, an",
+          "ADDENDUM: rows are create-only: the second append takes seq 2; a row that lands first at the next seq is never written over, and the append moves to the one aft",
+          "PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT pinned and pending, ALTERED with its first divergence, WITHDRAWN, EXPIRED), through ve",
+          "PAGE: nothing secret appears for any status: no tape bytes, tape hash, salt, salt hash or scope digest",
+          "FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one with its sig replaced: ?op=case-reference refuses each with a typed 409 and writes noth",
+          "FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecords is indeterminate, never one record, and the page says the count could not be establ",
+          "FIX 3: the operator path reads WITNESS_CASE_OPERATOR_KEY and never WITNESS_ADMIN_KEY; unset, no bearer is 401 reference_unauthorized and a bearer is 503 operato",
+          "H36 (since unit R-L4, the projection; unit R-L4b): a projected registration file that is present and not the file projected is 503 case_record_inconsistent, nev",
+          "S39 (caseTreeIndex; since unit R-L4 every case file is a candidate, by its root): a case holding one registration file is read once, as a candidate, and nothing",
+          "S55 (referenceSeqs): a references listing that cannot be read is never read as no rows: liveRecords is references_unreadable, a reference is 503 and writes noth",
+          "P07 (since unit R-SIG, the withdrawn page's signature cell, through the one reader): a WITHDRAWN record signed by a key the current key document does not list s",
+          "P08 (pinnedHtml): a pin file holding another chain reads as a conflict on the page, never as pinned",
+          "P10 (crossRows): a reference row's operator is escaped on the page",
+          "E03 (sealOnce): a batch pass that refuses does not stop the case pass: a pending case is pinned on the same run",
+          "TEST 3: a second registration for the same role is refused role_already_committed; the first one stands",
+          "TEST 3: a registration at or after the deadline is refused late_commitment and writes nothing",
+          "TEST 3: a commitment hash with no stamp is refused no_commitment and writes nothing; a stamp-shaped file in the pins repo does not count",
+          "TEST 3: stamp fields come from the fetched stamp record; a caller's stamped_at, commit or record_url is refused, never used",
+          "TEST 3: a stored stamp that is not a file-stamp for this hash is refused, not trusted, and writes nothing",
+          "TEST 3, ITEM 1B: a file-stamp of the matching hash whose size is not a commitment's (64, a tape's byte length, none) is refused stamp_size_mismatch and writes n",
+          "TEST 3, TWO WRITES (since unit R-L4, THE PROJECTION; since unit R-L4c, c4, THE CLAIM): a registration whose projection fails is written and not confirmed, and s",
+          "TEST 3: both roles registered -> COMMITTED; a registration whose compare-and-swap loses to another's (its lease run out) is never retried and never overwrites i",
+          "TEST 3, ITEM 1B, TWO WRITES (since unit R-L4, THE PROJECTION): role b's file landed and its projection failed; role a's registration projects a alone, and b's f",
+          "TEST 4: fifty stamped hashes for one role; only the first REGISTERED counts and every later registration is refused",
+          "TEST 5: a commitment registered to role a cannot be registered to role b",
+          "TEST 5, STATED LIMIT: into an empty b slot a role-a commitment registers (the service sees a hash, not its role); it is bound to b and can never recompute there",
+          "TEST 5: no tape and no salt is held anywhere, and a registration that carries a salt is refused",
+          "TEST 3, ITEM 2A (since unit R-RV, the architect's ruling b): a stamp path touched by more than one commit registers at the oldest commit that touched it; a path",
+          "TEST 3, ITEM 2A: a stamp history that cannot be read, cannot be parsed, or names no commit is a 503 and writes nothing; stamp_commit is never written null",
+          "TEST 3, ITEM 2A (1B LEFTOVER; since unit R-L4c, THE TIE RULE): a registration whose case write goes stale is never rebuilt: the lost compare-and-swap re-reads o",
+          "TEST 3, ITEM 2A (1B LEFTOVER; since unit R-L4, THE PROJECTION): the same registration sent again is a 200 that projects its own file or confirms; only a differe",
+          "TEST 3, ITEM 2A (1B LEFTOVER): a case WITHDRAWN between a registration's read and its case write is a typed 409 case_withdrawn, never a 500; the registration fi",
+          "TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp's size and projects nothing if it fails",
+          "TEST 13: api/ still has twelve files, none of them a case function, and verify.js dispatches both case ops",
+          "R-AB 1: a projected entry carries key_fp, the sha256 of the registering key's 32-byte public key, from its registration file's verifier; the file carries none",
+          "R-AB 1: an entry without key_fp fails the schema, missing_field at commitments.<role>.key_fp, in a COMMITTED root and a WITHDRAWN record; one not 64 lowercase h",
+          "R-AB 1: a root whose key_fp is not its registration file's verifier's does not agree with itself: the page is the inconsistent page, and the withdrawal answers ",
+          "R-AB 2, 3: role b under role a's public key in another name (another key id) is 409 same_key_both_roles, codes only, and nothing is written to the pins reposito",
+          "R-AB 3: one key under one name in both roles is 409 same_key_both_roles, codes only: the body names no key id, the requester's or any other",
+          "R-AB 3: a registration that raced past the pre-write check under the other role's public key is refused at its projection, 409 same_key_both_roles, codes only; ",
+          "R-AB 2: two public keys that share a key id (test/fixtures/key_id_collision.json) are two keys: both roles register, the case is not single party, and the revea",
+          "R-AB 2 (since unit R-ABf, B1): a stored case whose two entries share a key_fp and agree with their files is single party wherever it is read; one whose key_fp w",
+          "R-AB 2: the seal refuses a COMMITTED case whose entries share a key_fp under two key ids",
+          "R-AB 4: role a sent again under its own public key in another name is 409 role_already_committed; the claim hash is the party-supplied fields' as before, and th",
+          "R-AB 5: a WITHDRAWN record whose entries share a key_fp is never single party: the withdrawal of such a case is written, and its page is the withdrawn page",
+          "R-AB 6: a single-key stored case's page is the one-sentence shape at 200: the sentence, single_party as a code, and the record's links; no key id, label, time, ",
+          "R-AB 7: the sealed page makes no claim about key identity, and no library file says \"two keys, never two parties\"",
+          "R-AB (a): the sealer writes a withdrawn case's missing marker only when the withdrawal record verifies; one whose signature does not verify, or whose named docu",
+          "R-AB (b): the reference answers a sealed case whose named key document cannot be read 503 document_unavailable, codes only, writing nothing; sent again once it ",
+          "R-AB m1: a withdrawal record whose key the current document lists revoked is refused with the revoked-key words, never the bare code",
+          "R-AB m2: a withdrawal record whose named document cannot be read for a moment: the refusal receipt and the retried withdrawal each answer 503 document_unavailab",
+          "R-AB m3: a version-3 row whose named document cannot be read is unreadable: neither counted nor invalid",
+          "R-AB m5: a receipt alteration the binding sees reads verdict_unbound with the binding's reason, whether or not the case was signed again over it",
+          "MUST-FAIL GAP (K07): singleParty reads one key only from two key_fp values that are one: entries in the form before unit R-AB (no key_fp, two key ids) are not o",
+          "R-ABf B1: a COMMITTED root whose b.key_fp is overwritten with a's while file b holds another key reads case_record_inconsistent on the page and the sealer, neve",
+          "R-ABf B1: a single-key VERDICT whose root agrees with its files is single party everywhere: the page 200, the sealer not_sealed single_party, the reference 409 ",
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "R-ABf B1: the reference reads the projected files before the sealed check, for the operator too: a forged key_fp is 503 case_record_inconsistent, codes only, an",
+          "R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, ",
+          "R-ABf M2: a named commit the repository does not have (404) stays a could-not-look: the reference 503 document_unavailable, the page 503",
+          "R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, with words, ",
+          "R-ABf m-b: the withdrawn root's could-not-look (unconfirmedWithdrawal) still prints UNSEALED_WORDS.document_unavailable, so the words stay",
+          "MUST-FAIL GAP (PG6): a named commit the repository does not have (404) is worded as a read that failed, 'try again', never as off the published branch",
+          "GPT-5.6 §1.1 / §6.2: \"A commitment can land after withdrawal ... project() then rereads, sees WITHDRAWN, and returns case_withdrawn, but the registration file r",
+          "GPT-5.6 §1.1: \"It also creates a public registration dated after a redacted withdrawal\": the commit's arrival, the registered_at it would have recorded, is befo",
+          "GPT-5.6 §1.4: \"Conversely, a later document can introduce a verifier that makes a formerly unverifiable stored signature appear valid\"",
+          "GPT-5.6 §1.4 / §3.3: \"No sealed case records the key-document hash, Git commit, or retrieval time\"",
+          "GPT-5.6 §2A (NARROWED by unit R-AB to one public key): \"Create a seemingly bilateral case using an honest party's label\": one key holder opens, registers both r",
+          "FIX A (by public key since unit R-AB): the refusal is symmetric and writes nothing: role a under the public key role b registered with is 409 same_key_both_role",
+          "FIX A: two registrations under two distinct public keys still seal, and the page shows the verdict naming both parties",
+          "FIX A: a case whose two entries share a public key (key_fp; since unit R-AB) never reaches sealed: the joint reveal is 409 single_party, codes only, and writes ",
+          "FIX A: the sealer reports such a case not_sealed: single_party, and pins nothing",
+          "FIX A: the case page shows such a case as single_party and names no label (since unit R-AB the one-sentence page, naming no key id)",
+          "A + B DECISION (narrowed by unit R-AB): no page says two parties; the single-party page says one key signs both roles",
+          "FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the sealer and the reference re",
+          "FIX A: a registration proves its key: a signature the verifier does not confirm is 403 registration_unauthorized, and a body without a key is 400",
+          "FIX A: a registration under another key for a role already registered is role_already_committed, never a replay",
+          "GPT-5.6 §2B: \"Before either submits the joint reveal, B sends case-withdraw ... A's reveal returns 409 case_withdrawn\"",
+          "GPT-5.6 §2B: \"The public root is redacted. It does not identify ... which side prevented the comparison\": it names the role whose preimage was presented (by_rol",
+          "GPT-5.6 §2B: \"It does not identify the parties, commitments\"",
+          "GPT-5.6 §2C / §6.1 (and Gemini §4, storage bloat): \"Either can repeatedly call case-reference as role:a or role:b ... There is no per-case, per-role, per-key, o",
+          "GPT-5.6 §3.1 / §5 / §6.3: \"Fabricate a case verdict without actually running reconcile ... If the reconcile receipt is unsigned, checkStoredReceipt() accepts it",
+          "FIX B: the joint reveal with no reconcile signer is 503 signer_unavailable; nothing is compared and nothing is sealed",
+          "FIX B: a receipt signed by another key than the service's reconcile signer is receipt_unsigned: the sealed check, the page, the sealer and the reference all ref",
+          "FIX B, AFTER DESIGN I: a reader holds a receipt to the reconcile key the case's named document publishes, never to its own environment; WITNESS_RECONCILE_VERIFI",
+          "GPT-5.6 §3.2 (and Gemini §3, timestamps): \"The public case does not bind them [the service-clock fields] to a Git commit ID\"",
+          "GPT-5.6 §3.4 / §5: \"pinChain(), anchorState(), and the page only establish that latest.json exists and has the matching chain. They do not establish inclusion i",
+          "Gemini 3.1 Pro §1: \"if a withdraw and a reveal are processed simultaneously, the system must guarantee that only one succeeds and the final state is consistent\"",
+          "Gemini 3.1 Pro §2: \"one party commits but refuses to reveal ... to prevent the protocol from stalling indefinitely\": at the deadline the case reads EXPIRED and ",
+          "Gemini 3.1 Pro §5: \"if the signature does not cover the entire context of the record (e.g., missing a timestamp or a protocol version)\": changing any field of a",
+          "TEST 7: the accepted reveal runs reconcile exactly once and seals; the receipt's received-tape hashes are the committed ones",
+          "TEST 7: an ALTERED pair seals as ALTERED with the first divergence in the receipt; through the real verify.js dispatch, this deployment refuses before comparing",
+          "TEST 7: the two tapes may come as JSON text, base64 or multipart parts; each seals the same receipt",
+          "SEAL: records is 2 only with a cross_reference sent with the reveal, recorded at the service clock; a caller's time is refused",
+          "TEST 6: every reveal refusal is a typed 4xx (or a 503 for the store), carries no verdict, writes nothing and never invokes reconcile",
+          "TEST 4 AND TEST 5, THE REVEAL HALVES: of fifty stamped candidates only the registered one reveals; A's tape and salt under B's role are refused, reconcile never",
+          "REVEAL: policy_unavailable when the case's bound version is not the one this build runs; it never compares under another",
+          "RECEIPT CHECK: a tampered receipt is refused by name, and through the endpoint nothing is sealed",
+          "TEST 8: registered before the deadline and revealed at or after it is expired, typed, never compared; one second before, it seals",
+          "TEST 8: a pin that fails after the case write leaves the sealed case standing and not_pinned, computed from the pin file's absence and stored nowhere",
+          "TEST 8: a case write that fails leaves no pin and the case COMMITTED; the same reveal then seals",
+          "TEST 8: a retry by case_id never changes the chain: after a failed pin, and on a repeat (unit R-PIN: there is no pointer to lose)",
+          "SEAL: a case is sealed once; a reveal that loses the race to another is refused and seals nothing",
+          "TEST 9: the sealed case verifies under lib/_check_record.js's rule with WITNESS_CASE_SIGNER_KEY; an unknown field is refused; any change breaks it",
+          "TEST 9: with no usable case key nothing is sealed (the one signature rule: an unsigned seal never verifies) and the refusal says why; the log key, the receipt k",
+          "TEST 12: the reveal keeps no tape and no salt: no store write, no request and no log line carries one; the sealed case holds salt_sha256 only",
+          "J1 (version 4 since unit R-PIN): REFERENCE_ANCHOR_NOTE is the current version and rows carry its note_version; the judge accepts it, and (since unit R-SIG) reje",
+          "J1: a row's 201 body: the row and the answer carry the v4 note, and the answer names no row commit (unit R-PIN)",
+          "J3: a pin naming a commit that does not exist, or one at which the case file is absent, is pin_commit_mismatch (the commit's existence read once from the commit",
+          "J4: the case is compared at case_commit byte for byte, sig included: a served case whose sig differs from the bytes at case_commit is pin_commit_mismatch; the c",
+          "J5: non-JSON at the pin's oldest commit is conflict, never could_not_look",
+          "J6: case_commit goes through commitOnBranch: off the branch is pin_commit_mismatch; a branch read that fails is could_not_look",
+          "J7: the per-IP limiter covers the page route",
+          "MUST-FAIL GAP (A03): a row whose note_version is not 4 is refused (since unit R-SIG malformed_field)",
+          "MUST-FAIL GAP (B06, B07): a commit's existence is read once and kept",
+          "MUST-FAIL GAP (B25, B26): given a chain, the case read from the branch is served only when it has that chain; a read that fails is could_not_look",
+          "MUST-FAIL GAP (D04, D05, D06): the case commit row says the commit does not hold this case file byte for byte; a pinned page links the case file at case_commit;",
+          "MUST-FAIL GAP (B29, C04, D07): a reader that holds the case it serves never reads the case file again: the page, a reference, and the sealed check under a revok",
+          "B2 (version 4 since unit R-PIN): the signed row carries the version-4 sentence and note_version 4, exactly; the 201 body names no row commit; the README records",
+          "B2 (since unit R-SIG): a row carrying version 3 reads as row_note_v3; one carrying version 2, or no version, is malformed_field; none is counted",
+          "B1: the page says 'holds another chain' only for the two *_holds_another_chain reasons (unit R-PIN: the pin file's and the pin record's at its commit); a record",
+          "M1: a case_commit the host does not show yet (a compare 404 on a branch that exists) is could_not_look, never a mismatch",
+          "n5: given a chain the case served does not have, pinState answers pin_commit_mismatch before reading the case at the commit",
+          "n6, n7: the page says 'in canonical form (json-c14n:v1)', never 'byte for byte'; a commit off the branch, or one the repository does not have, is not called 'th",
+          "MUST-FAIL GAP (S07): n5's mismatch names the commit the pin names",
+          "MUST-FAIL GAP (P31; since unit R-ABf): an unsealed root whose b.key_fp is overwritten with a's is the inconsistent page before and after its deadline, never the",
+          "THE TABLE: pinState, pinned (pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, not_pinned (not_pinned): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_missing_field (no_case_commit): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_unknown_field (unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / pin_not_json (pin_not_json): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / not_a_json_object (unreadable_not_a_json_object): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_record_kind (unreadable_case_seal_wrong_record_kind): the pin line, the sentence under it, and the reference's",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_auth_level (unreadable_case_seal_wrong_auth_level): the pin line, the sentence under it, and the reference's a",
+          "THE TABLE: pinState, unreadable / case_seal_namespace_unreadable (unreadable_case_seal_namespace_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / namespace_mismatch (unreadable_namespace_mismatch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_rows (unreadable_case_seal_wrong_rows): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_wrong_seq (unreadable_case_seal_wrong_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / chain_unreadable (unreadable_chain_unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, unreadable / case_seal_pinned_at_unreadable (unreadable_case_seal_pinned_at_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_auth_note_unreadable (unreadable_case_seal_auth_note_unreadable): the pin line, the sentence under it, and the refer",
+          "THE TABLE: pinState, unreadable / case_seal_case_commit_unreadable (unreadable_case_seal_case_commit_unreadable): the pin line, the sentence under it, and the r",
+          "THE TABLE: pinState, conflict / pin_holds_another_chain (pin_file_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_read_failed (pin_read_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commit_unreadable (pin_commit_cnl): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_beyond_bound (pin_commits_beyond): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_commits_none (pin_commits_none): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_json (pin_text): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_503 (pin_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_404 (pin_raw_404): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_fetch_failed (pin_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / pin_at_commit_http_500 (pin_raw_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_holds_another_chain (pin_other_chain): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_judge_fails): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, conflict / pin_at_its_commit_not_a_pin (pin_other_seq): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_at_commit_differs (case_differs): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_absent_at_commit (case_absent): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_not_found (case_not_found): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, pin_commit_mismatch / case_commit_off_branch (case_off_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_not_shown (case_not_shown): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_503 (case_raw_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_fetch_failed (case_raw_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_at_commit_http_429 (case_raw_429): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_503 (case_exists_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_read_failed (case_exists_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_exists_http_500 (case_exists_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_503 (case_compare_503): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_failed (case_compare_failed): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_compare_http_500 (case_compare_500): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_unreadable (case_branch): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState, could_not_look / case_commit_branch_name_invalid (case_branch_name): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState (chain), could_not_look / case_unreadable (chain_case_unreadable): the pin line, the sentence under it, and the reference's answer",
+          "THE TABLE: pinState (chain), pin_commit_mismatch / case_served_differs (chain_served_differs): the pin line, the sentence under it, and the reference's answer",
+          "R-L4 TABLE (registration file): committed, role a -> projected: \"registered at\"",
+          "R-L4 TABLE (registration file): unconfirmed, role a -> not_confirmed: \"no registration is confirmed for this role\"",
+          "R-L4 TABLE (registration file): unconfirmed, role b -> not_confirmed: \"no registration is confirmed for this role\"",
+          "R-L4 TABLE (registration file): unconfirmed_late, role a -> no_rows: \"null\"",
+          "R-L4 TABLE (registration file): withdrawn, role a -> no_rows: \"null\"",
+          "R-L4 TABLE (registration file): withdrawn, role b -> no_rows: \"null\"",
+          "R-L4e TABLE (inconsistent record): registration_file_differs -> 503: \"The stored record for this case does not agree with itself. Nothing is asserted about this",
+          "R-L4e TABLE (inconsistent record): registration_file_missing -> 503: \"The stored record for this case does not agree with itself. Nothing is asserted about this",
+          "R-L4e TABLE (inconsistent record): projection_differs_from_file -> 503: \"The stored record for this case does not agree with itself. Nothing is asserted about t",
+          "R-L L1: a withdrawal proves the role, takes the lock, writes the signed record and the marker, and answers; nothing is written under withdrawn_commitments/, and",
+          "R-L L1: a withdrawal request that wrote nothing ends with exactly 'This request wrote nothing.'",
+          "R-L L1: ?op=reconcile and a joint reveal compare a tape whose committer withdrew another case; a withdrawn_commitments/ file left in the repository is never rea",
+          "R-L L2: the README's withdrawal section and the WITHDRAWN case page carry the public claim verbatim",
+          "R-L L2 (since unit R-L2, the verdict and the receipt inspected): every key id a sealed case, its receipt and its reveal's answer name, past the service's own ke",
+          "R-L L4: a withdrawal that loses (the case sealed first, or expired) writes nothing and removes nothing",
+          "R-L L6 (b): the case page says, beside the key document it names, that dates in a key document are not enforced",
+          "MUST-FAIL GAP (H21, H22): the withdrawal's answer carries the public claim, and says that only the salt's sha256 is kept, in the withdrawal record",
+          "R-L2 M2: a withdrawal whose root write kept losing while the case read fine says the case changed (since unit R-L5f); one whose read after the write failed says",
+          "R-L2 M3: a case holds at most 500 reference rows: the 500th is written, the 501st is refused 409 row_limit in a plain sentence, and the README states the cap",
+          "R-L2 L4 (since unit R-RV no reveal attempt): a withdrawal that loses to another withdrawal writes nothing to the pins repository and removes nothing",
+          "R-L4: the confirming read fails: 503 in the rule's words, the file is there, the case root does not project it, and the page says no registration is confirmed f",
+          "R-L4: the same registration sent again finds the file and projects it, with the file's sha256: 200, and no second file",
+          "R-L4: two overlapping sends of the same registration: exactly one file, exactly one projection, and both answers say what the case root holds",
+          "R-L4: a file with no projection past the deadline is written, never confirmed, and the case never commits on it",
+          "R-L4: a registration written after its case's withdrawal is 409 case_withdrawn, the file stays, the case stays WITHDRAWN, and nothing is deleted",
+          "R-L4: a projected sha256 that the file at the path does not match, or a file missing under a projection, is never sealed and never pinned (since unit R-L4b: 503",
+          "R-L4: a reveal racing a withdrawal: exactly one of them writes the case root",
+          "R-L4 (rule 3 corrected): the same registration re-sent with a later clock projects the ORIGINAL file as it is: its own sha256 and its own registered_at, 200 exi",
+          "R-L4 (rule 3 corrected): a file holding the same party-supplied fields in other bytes (another layout, the service's fields of its own) is the same registration",
+          "R-L4 (rule 3 corrected): two overlapping sends of the same registration with different clocks are answered by the one file: both answers carry its registered_at",
+          "MUST-FAIL GAP (H03, S19, S18, S20; since unit R-L4b, case_record_inconsistent; since unit R-L4e, in the operator log): the log says which role and why: a file n",
+          "MUST-FAIL GAP (H09, H10): a replay of a projected registration is not refused by the other role's key; another registration for a projected role names the regis",
+          "MUST-FAIL GAP (H11, H20, H38): the refusals after a write carry the time it was received and say the root does not project it",
+          "MUST-FAIL GAP (H14; since unit R-L4c, c1): a case sealed between the re-send's read and its confirming read, after another re-send projected the file: the proje",
+          "MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root re-read that fails after the projection lost, are 503 with the projection not known",
+          "MUST-FAIL GAP (H23, H29): a projection another send made first is answered 200 with nothing projected by this one, whether found at the confirming read or after",
+          "MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a written file rechecks the stamp without its history, and says so when the stamp is go",
+          "MUST-FAIL GAP (H36, H45): the file at the path that could not be read writes nothing; a write that kept losing to a file that is not there says the registration",
+          "MUST-FAIL GAP (S21, S22, S24): the marker repair says a case it could not read and leaves a root that is not withdrawn; the sealer says a registration file it c",
+          "MUST-FAIL GAP (P02, P03, P05, P10, P11, P13, P14, P18; since unit R-L4c, c4, the page reads no claim file; since unit R-PIN no page is kept): the page reads eac",
+          "MUST-FAIL GAP (C02): a case root whose projection's sha256 is not 64 hex is not a valid case record",
+          "MUST-FAIL GAP (X01, X06, X07; since unit R-L4c, c4, a file at the claim's path that is not the claim): the party-supplied comparison names the field: a file of ",
+          "MUST-FAIL GAP (X14): in the lost create-only race the winner's file is projected by its own bytes",
+          "R-L4b: a projected file that does not hash to the projected sha256, or is missing, is 503 case_record_inconsistent at every handler, and nothing is written or d",
+          "R-L4b: the page is the could-not-look page with case_record_inconsistent and the sentence (since unit R-L4e, the one sentence), and shows nothing from the case",
+          "R-L4b: the sealer never seals or pins such a case, writes nothing, and says why",
+          "R-L4e: for each of the three reasons the page prints exactly the one sentence, the old heading and the old sentence are gone, and the reason goes to the operato",
+          "R-L4e: for each of the three reasons the 503 body is exactly the one error code, at the registration, the reveal and the withdrawal",
+          "R-L4e: the reason codes go to the operator log, with the case and the role, and to the sealer's refused record",
+          "R-L4c c1: two identical sends overlap and the case seals between them: the send that finds its own file projected is 200 existing:true with the projected values",
+          "R-L4c c1: the same registration sent again after its case is sealed is 200 existing:true with what the root projects; an unprojected registration on the sealed ",
+          "R-L4c c2: the projection is judged by the server clock read just before its compare-and-swap: received before the deadline and swapped after it is 409 late_comm",
+          "R-L4c c2: a re-send received before the deadline, of a written and unconfirmed file, whose swap would be issued after it is refused 409 late_commitment and neve",
+          "R-L4c c4: a registration file is keyed by its claim, registrations/<case_id>/<role>/<sha256 of the party-supplied fields>.json, written once, and the root's ent",
+          "R-L4c c4: a different registration for a role the root projects writes no file: 409 role_already_committed naming the projected sha256",
+          "R-L4c c4: a registration for a withdrawn, sealed or expired case writes no file",
+          "R-L4c c4: a claim whose projection was refused does not hold the role: an honest registration for that role is another file, projected, and the case commits",
+          "R-L4c c4: no registration_exists: a different claim for a role whose file is written and not projected is another file, and the compare-and-swap decides; the lo",
+          "R-L4c c4: a lost compare-and-swap is never retried: the root moved for the other role, so the answer is 503, the file is written and not confirmed, and the same",
+          "R-L4c c4: every answer after a file is written names its path",
+          "R-L4c c4: the page says only that no registration is confirmed for a role the root does not project; it lists, counts and links no claim file",
+          "R-L4c c4: the page never reads the registrations folder: it reads only the files the root projects",
+          "MUST-FAIL GAP (K22, K23): a case root whose claim is not 64 hex is not a valid case record, and no claim path is made from one",
+          "MUST-FAIL GAP (H08, H18, H27): the answers name what they say: the loser of the compare-and-swap is not recorded and names its own path; a late re-send and a re",
+          "MUST-FAIL GAP (S04, S05): a projected file is held to being the registration record of the claim the root names: a file that is not a registration record, or th",
+          "MUST-FAIL GAP (P06; since unit R-AB): the single-party page links the case file and its history, and no registration file",
+          "R-L4d d1: two identical sends overlap and the one that found the other's file loses the compare-and-swap: it reads the root once more, finds that file's sha256 ",
+          "R-L4d d3 (since unit R-RVf, M2): the registrations panel prints the ruled stamp sentence on an open page and on a committed one; it never says a role registered",
+          "R-L5 1: a withdrawn root keeps its projection: commitments exactly as they stood, inside the signed record, and no labels",
+          "R-L5 1b: an OPEN case withdrawn by its one registered role keeps that role's entry and a null for the other",
+          "R-L5 1c: a WITHDRAWN root with no commitments, or with no entry for the role that withdrew, is not a valid record",
+          "R-L5 2: the refusal receipt reads no registration file and no history: with every registration read failing, a valid own opening gets the signed receipt",
+          "R-L5 3: a retried withdrawal reads no registration file and no history: 200",
+          "R-L5 4: a registration file written after the withdrawal is not in the kept projection and never stands; the page says registrations the record does not project",
+          "R-L5 5 (a guard; R-L4b and R-L4e did it): a projected file that does not match is 503 case_record_inconsistent, the could-not-look page, and the sealer does not",
+          "R-L5 6 (a guard): a withdrawn root without its marker gets one from the sealer's terminal branch, and no other window runs",
+          "MUST-FAIL GAP (L04, L05, L06, L07, L08, L10): the withdrawn record's projection is checked as the root's is: an object, no other key, both roles, whole entries,",
+          "MUST-FAIL GAP (L11): a withdrawn record whose kept projection names one key for both roles is WITHDRAWN, never single party",
+          "R-L5f B1: a registration projected between the withdrawal's read and its write: 503, nothing written; the re-send withdraws with the projected entry, and that r",
+          "R-L5f B1: when the root moved and both entries are the ones the built record carries, the built record is written",
+          "R-L5f M1: an old-form withdrawal record (no commitments, no signed_under) is refused as missing_field and never read as a valid withdrawal",
+          "MUST-FAIL GAP (F03): a projection for role a landing under role b's withdrawal is compared too: 503, nothing written",
+          "MUST-FAIL GAP (F05, F06): an entry that differs from the one the built record carries in any field is a moved projection: 503, nothing written",
+          "R-N N1 (BLOCKER): with no reconcile signer the refusal is 503 signer_unavailable: no receipt, no 409 claiming one, and the body names no environment variable",
+          "R-N N1, N3: a refusal on a withdrawn case with the requester's own valid opening carries a receipt signed by the reconcile key, naming the requester's role and ",
+          "R-N N1: an unsigned reference row is not a record: the reference refuses 503 signer_unavailable rather than write one (no row, no quota), and (since unit R-SIG)",
+          "R-N N1: ONE SIGNATURE RULE: a withdrawal is written signed or not at all: without a case key the document lists it is 503 signer_unavailable and nothing is with",
+          "R-N N3: without a valid own opening the refusal is 404 not_a_party, with no receipt and no change anywhere",
+          "R-N N3: the counterparty's opening is never read or hashed: the hasher never sees its tape hash or salt, and a malformed counterparty entry changes nothing",
+          "R-N N3, C1: a registration written after the withdrawal does not stand: its role is not a party to a refusal (404 not_a_party), while the role registered before",
+          "R-N C1: the sealer's withdrawn path rewrites a withdrawn marker that failed",
+          "R-N C3: the lease clock is read at acquisition and on each wait: a lease that runs out while the request waits is taken, not reported busy, and the new lease ex",
+          "R-N C3: a retried withdrawal (the same role and preimage) is idempotent 200 and rewrites a marker that failed; another role or another salt is still 409",
+          "MUST-FAIL GAP (R18, H14): a role with no registration file on a withdrawn case is not a party (404), never could-not-look",
+          "MUST-FAIL GAP (C03, C04, C06): a refusal names role a or b and carries exactly its opening's two fields; a joint reveal's role is a or b",
+          "MUST-FAIL GAP (H04): the lease is released at the lease clock's time",
+          "MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt",
+          "MUST-FAIL GAP (H31): a retry with the withdrawer's salt and another tape hash is not the withdrawer's: 409, and nothing is written",
+          "R-N2 B1: the marker reads its path back before it answers \"existing\": a conflict with no file there is a failure, a file there is existing",
+          "R-N2 M3: the sealer writes a failed withdrawn marker for a case with ONE registration file, a WITHDRAWN root and no pin",
+          "R-N2 m3 (since unit R-REV, on a pin file's history): the commit walk goes on when the page is full, whether or not the host names a next page",
+          "R-N2 m4 (since unit R-RV, rule 3's words), m5: the lease race says exactly what happened; the withdrawn refusal says the tapes are never decoded or hashed",
+          "R-N2 m6: a receipt naming a commit definitely off the published branch has its own reason; one whose branch cannot be read is could-not-look",
+          "R-N2 m6: the README has a section on checking a refusal receipt, and tools/check_refusal_receipt.js checks one offline",
+          "R-N2 m7 (since unit R-SIG): an unsigned withdrawal record is never built, and one found in the store is not a valid record: the page answers from nothing in it ",
+          "R-N2 m10 (since unit R-L4, the root's projection): registration_recorded on the projection path and on the abandoned branch",
+          "MUST-FAIL GAP (C03, C11): the loaders' codes: a reconcile key the document does not list, and a carried document that does not read",
+          "MUST-FAIL GAP (R02, R04): a receipt whose commit the repository does not show, or whose document cannot be fetched, is could-not-look, never definitely off the ",
+          "MUST-FAIL GAP (T05): on the abandoned branch, a read-back that fails leaves registration_recorded unknown (null)",
+          "R-N3 N3: the offline receipt check is partial: it prints ok false, offline_partial, whether the signature holds against the supplied document, what it did not c",
+          "R-N3 N8: a retried withdrawal's 200 never carries a stored sig_reason",
+          "MUST-FAIL GAP (H11-H15; since unit R-L, L1, no listing; since unit R-RV no reveal attempt): a root write lost to another withdrawal or a deadline keeps the case",
+          "MUST-FAIL GAP (H06-H08; since unit R-L, L1, no listing): a root that moved to something unreadable while the withdrawal was written is 503 store_error, reason c",
+          "MUST-FAIL GAP (H21): a signed record's 200 shows the case exactly as stored",
+          "R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdrawal handler gives, first request and second, never says 'nothing was withdrawn' and cla",
+          "MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other handler's tail as it was: '; ' or ', and ' before a clause",
+          "f1: a withdrawal whose lock could not be read or written (a write that may have landed) ends 'This request wrote nothing to the case record. Try again shortly.'",
+          "R-PIN 1: a sealed case writes exactly one file under its pin namespace: the sealer three times, two reference rows, and the sealer again",
+          "R-PIN 2: no code path updates any pins file except the case root, over a whole case life",
+          "R-PIN 3: the page never prints \"anchored\", even beside a daily anchor record naming the pin's head, and prints the fixed ots verify sentence once",
+          "R-PIN 4: a reference row is written on a sealed case that is not pinned",
+          "R-PIN 5: a reference row is written when a daily anchor record conflicts with the pin",
+          "R-PIN 6: a reference request reads no pin and no anchor path",
+          "R-PIN 7: a pin without case_commit is unreadable",
+          "R-PIN 10: two page requests read the store twice",
+          "MUST-FAIL GAP (S10): pinChain writes no pin for a case commit that is not 40 lowercase hex",
+          "MUST-FAIL GAP (P02): a reference row's link is the history of its file, which names the commit that wrote it",
+          "R-PINf f1: a pin create the store answers 409 on every attempt, with no file at the path on the re-read, is commit_unrecorded, never conflict: the reveal answer",
+          "R-PINf f2: the fixed sentence is printed once, directly under the pin line, in the pin's own cell",
+          "R-PINf f2: a pin found already written is held as the page holds it: a pin naming another commit for the case file is pin_commit_mismatch, never pinned; one nam",
+          "MUST-FAIL GAP (F05, unit R-PINf): a pin found, and not found when it is read again, is commit_unrecorded (pin_not_found), never not_pinned",
+          "R-REV 1: a seal under a key the current document revokes shows no verdict and reads no pins file: SIGNED BY A REVOKED KEY and the one sentence, at 200",
+          "R-REV 2: a failed read never prints does not verify: with every pins-store read but the case file failing, an active-key seal shows its verdict, and a revoked-k",
+          "R-REV 3: a planted marker changes nothing: a valid-looking revocations/<fingerprint>.json for an active key leaves the seal valid_under_document, and nothing re",
+          "R-REV 7: the reference refuses a revoked-key case 409 signer_revoked and writes no row",
+          "R-REV: the sealer never pins a signer_revoked case: anchorCase answers not_sealed with the reason, and the run counts it not_sealed",
+          "R-REV: the reconcile key revoked is signer_revoked too, naming that key; signer_since_revoked and pin_unavailable are gone",
+          "R-REV: the could-not-look page for a current document that does not read says what that document lists, and orders nothing",
+          "R-REV: KEY_DATES_NOTE stays beside the key document a valid seal names",
+          "MUST-FAIL GAP (R06): both keys listed revoked: the answer names the case key, which is checked first",
+          "MUST-FAIL GAP (P06): with the reconcile key revoked, the page's one sentence names the reconcile key, never the case key",
+          "MUST-FAIL GAP (P11): the revoked page's title says SIGNED BY A REVOKED KEY, never VERDICT",
+          "R-REVf 1 (a) only the case key revoked: the page prints the ruled sentence exactly and withholds the verdict",
+          "R-REVf 1 (b) only the reconcile key revoked: the page prints the ruled sentence exactly and withholds the verdict",
+          "R-REVf 1 (c) both revoked: the case key's id, printed once: the page prints the ruled sentence exactly and withholds the verdict",
+          "R-REVf 2: KEY_DATES_NOTE reads exactly as ruled, beside the key document a valid seal names",
+          "R-REVf 3: the sealed check answers key_revoked with the revoked key's id, for either key, and no role",
+          "R-REVf 4: the reference refuses 409 signer_revoked, reason key_revoked, with key_id and the page's words, no role word, and writes no row",
+          "R-RV 1: a reveal that fails after the comparison leaves the case unchanged: 500 comparison_failed, the root's blob sha as before, no reveal_attempts",
+          "R-RV 2: a withdrawal after a failed reveal succeeds, and the root is WITHDRAWN",
+          "R-RV 3: a deterministic reveal failure does not trap the case: two reveals fail, the page never says a reveal sent again seals it, and a withdrawal succeeds",
+          "R-RV 4 (a guard: it passes before this unit too): the same reveal re-sent after a transient failure seals",
+          "R-RV 5: a seal that loses to a withdrawal returns no verdict: 409 case_withdrawn, the rule's text, no verdict, receipt or tape digest, and the root WITHDRAWN",
+          "R-RV 6: the reveal does not read the stamps repository: with every stamps read failing it seals, and the seal's stamp fields are the registration files'",
+          "R-RV 7: a registration with stamp_commit null is malformed, and so is a commitment entry with null",
+          "R-RV 8: a root carrying reveal_attempts is refused unknown_field",
+          "R-RV 10: a seal write that throws is 503 case_seal_failed saying the case may not have been sealed and nothing was pinned; the same reveal sent again seals",
+          "R-RV rule 3 (ruling a): a lost compare-and-swap that re-reads COMMITTED is 503 case_seal_failed with rule 4's text; one that re-reads VERDICT is 409 not_committ",
+          "R-RV rule 2: each failure writes nothing and logs the case id and its code only",
+          "R-RV ruling b: a stamp touched by more than one commit is registered at the oldest commit that touched it",
+          "R-RV ruling b: the oldest is found past the first page of the stamp's history",
+          "R-RV ruling c (since unit R-RVf, B1): compared_at is the clock read after the port returns; revealed_at and the seal's other times are the arrival time",
+          "R-RV: the sealer reads a COMMITTED case as not_sealed with its status and no reason, and its run has no reveal_incomplete",
+          "R-RV ruling c, at the deadline (since unit R-RVf, B1): a reveal received before the deadline whose comparison ends at or after it seals: 201",
+          "MUST-FAIL GAP (V09): a receipt that cannot be held in a case record for another reason is 500 receipt_check_failed with that reason, nothing written",
+          "MUST-FAIL GAP (V12): a seal write that throws a conflict is a lost swap, answered from the root read again: a withdrawal that landed is 409 case_withdrawn",
+          "MUST-FAIL GAP (V19): the pin is dated by the clock read after the port returns",
+          "MUST-FAIL GAP (V25): ruling b walks on past a full page whose answer names no next page",
+          "MUST-FAIL GAP (V26): ruling b asks for the page the Link header names, not the one after the last",
+          "MUST-FAIL GAP (V28): a stamp history longer than 10 pages of 100 is 409 commits_beyond_bound (since unit R-RVf, B2), and nothing is registered",
+          "R-RVf B1: a reveal that arrives before the deadline whose comparison and compare-and-swap land after it answers 201 and seals; revealed_at is the arrival time a",
+          "R-RVf B1: the receipt check accepts revealed_at earlier than compared_at, and refuses revealed_at later than compared_at, at the seal and on a stored case",
+          "R-RVf B1: the page's 'revealed at' is the arrival time, and a case sealed by a reveal that arrived in time never prints the EXPIRED sentence",
+          "R-RVf B1 (since unit R-RVf2, the ruled sentence): the EXPIRED sentence prints on a COMMITTED case past its deadline, and not before it",
+          "R-RVf B1: a re-send after the deadline is a new arrival, judged on its own arrival time",
+          "R-RVf B2: a stamp path with more than ten pages of history answers 409 commits_beyond_bound with the existing sentence, writes nothing, and a re-send with a new",
+          "R-RVf M1: the stamp is read at the oldest commit that touched it, and its bytes there must equal the current file's; stamped_at is taken from those bytes",
+          "R-RVf M1: a stamp whose bytes differ from those its oldest commit wrote answers 409 stamp_rewritten with the existing sentence; nothing is recorded and the case",
+          "R-RVf M1: a listing cut at a page boundary never takes a newer commit as the oldest",
+          "R-RVf M1: a history of exactly ten full pages is past the bound: 409 commits_beyond_bound, never the tenth page's last as the oldest",
+          "R-RVf M2: the registrations panel prints the ruled sentence exactly, keeps the stamp commit and stamped line, and no longer says 'stamped first as a public, dat",
+          "MUST-FAIL GAP (W05, W06): a stored receipt whose compared_at is not a UTC-seconds string is receipt_time_mismatch",
+          "MUST-FAIL GAP (W15, W25): a stamp the oldest commit did not leave at its path is 409 stamp_rewritten, never a 500; nothing is recorded",
+          "MUST-FAIL GAP (W20): a read at the oldest commit that fails is 503 stamp_store_unreachable, not a 409; nothing is recorded, and the same registration sent again",
+          "R-RVf2: a reveal in flight. A reveal that arrived before the deadline has not landed its seal; the page read past the deadline prints the ruled sentence under E",
+          "R-RVf2: a timely reveal whose seal write failed: the root stays COMMITTED, and the page past the deadline prints the ruled sentence under EXPIRED",
+          "R-RVf2: no reveal ever: the page past the deadline prints the ruled sentence under EXPIRED",
+          "R-RVf3 1: an OPEN case past its deadline prints the first sentence only, under EXPIRED; the second appears nowhere; a COMMITTED one keeps both",
+          "R-RVf3 4a: stamp_rewritten says the stamp is not the bytes recorded at its oldest commit, or is absent there, both when the bytes differ and when no file is the",
+          "R-RVf3 4b: a registration projected between the reveal's arrival and its read of the case seals normally, its registered_at later than revealed_at",
+          "R-SIG 1: a reference row signed by a key published only later never verifies: its key is absent from the document the row names and active in the current one; t",
+          "R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code",
+          "R-SIG 3: one tampered signature, one answer: a seal, a reference row, a withdrawal record and a refusal receipt, each with a signature byte flipped, read signat",
+          "R-SIG 4: every signed record carries signed_under, exactly document_sha256 and document_commit; it is required, and retrieved_at is unknown_field",
+          "R-SIG 5: signRecord without a signer throws, and so does each builder of a signed record",
+          "R-SIG 6: sig null is malformed_field on a sealed case, a withdrawal record, a reference row and a refusal receipt",
+          "R-SIG 7 (ruled: note_version must equal 4): a row with no note_version, or 1, 2 or 5, is malformed_field; a row at version 3 keeps its own reading, row_note_v3",
+          "R-SIG 8: a withdrawal that names no reason records none, and the page says \"No reason was given.\"; one that names a reason records it",
+          "R-SIG 9: appended_by names what was presented: preimage:a for a role's proof, operator for the operator key; the page says so in words",
+          "R-SIG 10: the refusal receipt's reason is case_withdrawn",
+          "R-SIG 12: the withdrawal and the reference refuse 503 document_unavailable when the document they sign under cannot be confirmed, and write nothing",
+          "R-SIG: signature_invalid replaces case_signature_invalid everywhere",
+          "R-SIG: a sealed case's stored reconcile receipt must be signed: sig null or unsigned_reason is malformed_field",
+          "R-SIG: sig_reason is non-null only on an OPEN or COMMITTED root, and there it is UNSEALED_SIG_REASON",
+          "R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README",
+          "R-SIG: the page prints no 'unsigned:' cell; an open or committed case's signed-by row is the fixed sentence",
+          "MUST-FAIL GAP (G07): a stored receipt with sig null alone, or an empty sig, is malformed_field at verdict.sig",
+          "MUST-FAIL GAP (T02): the exported receipt binding refuses a receipt with sig null: receipt_signature_unreadable",
+          "MUST-FAIL GAP (T24): a refusal receipt whose signed_under lacks a field is missing_field",
+          "MUST-FAIL GAP (T29, T30): a reference row whose named document cannot be read is unreadable, not invalid, and the live count is not established",
+          "MUST-FAIL GAP (U08): a reference to a case whose seal signature does not verify is refused 409 signature_invalid in words",
+          "MUST-FAIL GAP (U09): the refusal receipt's 409 says what was read, and nothing of consent",
+          "MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the commit it verified under, and says when the named document could not be read",
+          "MUST-FAIL GAP (V09): the does-not-verify page names the failed check in words for signature_invalid",
+          "R-RVf3 2 (T12): two keys sharing one key id are told apart by the full verifier: a record the first signed, under a document listing it, is signer_unlisted when",
+          "R-RVf3 5a: a refusal receipt is signed only from a withdrawal record that verifies: one whose signature does not verify is 409 signature_invalid, one whose name",
+          "R-RVf3 5a: a retried withdrawal is answered only from a withdrawal record that verifies: 409 signature_invalid, or 503 document_unavailable; no marker is writte",
+          "R-RVf3 5b: the reference's pre-write judge that cannot read the row's named document answers 503 document_unavailable, codes only; nothing is written",
+          "R-RVf3 5c: a row at note_version 3 reads row_note_v3 only when its signature verifies; one whose signature does not verify reads signature_invalid; neither is c",
+          "MUST-FAIL GAP (W11): the 5a refusals carry the reader's reason",
+          "MUST-FAIL GAP (B05): a pre-write judge refusal that is not a could-not-look stays 500 internal_error (a row dated before the seal); nothing is written",
+          "MUST-FAIL GAP (V01): a version-3 row whose other fields do not read as a row's reads by its form, never row_note_v3, and is not counted",
+          "R-WIDE A1: a reveal that carried a typed cross_reference: the records line says one cross-reference was recorded by the sender of the reveal and that this servi",
+          "R-WIDE A1: a case with two party rows prints the count and, per row, the preimage that appended it; an operator row says the operator key; nothing about a secon",
+          "R-WIDE A2: the withdrawn page says 'withdrawn on presentation of role a's commitment preimage, at T', never that the role proved itself; the README says the sam",
+          "R-WIDE A2: a refusal receipt is issued on presentation of a party's preimage, and the refusal says so in those words",
+          "R-WIDE A3: a withdrawal record whose signature does not verify (signature_invalid, signer_unlisted) shows no withdrawal detail: the one-sentence refusal page wi",
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDE A3: a withdrawal record whose named document cannot be read is the could-not-look page at 503, with no withdrawal detail",
+          "R-WIDE A4: the registration sentence says the file is signed by the key that registered it and binds that key to nothing else, on the page and in the README",
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "SIGNED_UNDER: the sealed case names the document its sealer carried (sha256 of its json-c14n:v1 form) and the commit the deployment was built from (since unit R",
+          "SIGNED_UNDER, THE SCHEMA: among full cases only a VERDICT carries it, as exactly {document_sha256, document_commit}; since unit R-SIG a VERDICT without it is mi",
+          "DOCUMENT UNAVAILABLE AT THE SEAL: no deployment commit, a malformed one, or a document that does not read is 503 document_unavailable; the comparison never runs",
+          "SEALCASE: a seal is never built without signed_under",
+          "VALID UNDER THE DOCUMENT IT NAMES: the reader fetches the named document from the public repository at the named commit, with no credentials, and both signature",
+          "THE CURRENT DOCUMENT MUST LIST BOTH KEYS (unit R-I, I3; Design I said the current document does not decide): a later document that drops a key, or lists no key ",
+          "REVOKED IN THE NAMED DOCUMENT (by status; since unit R-I no date is read): a case key the document the case names lists as revoked is signature_invalid signer_n",
+          "A LATER DOCUMENT NEVER MAKES A FORMERLY UNVERIFIABLE STORED SIGNATURE VERIFY: a key the named document does not list stays unlisted, whatever the current docume",
+          "DOCUMENT UNAVAILABLE: the named commit cannot be fetched (404, 5xx, network): never a yes and never a no; the sealer pins nothing and reports could_not_look, th",
+          "THE DOCUMENT AT THE COMMIT MUST BE THE ONE NAMED: other bytes at the named commit, or a file there that is not a key document, is signature_invalid",
+          "THE NAMED DOCUMENT IS FETCHED ONCE PER COMMIT: a commit's document never changes, so a read is cached; a failed read is not",
+          "AN UNREADABLE CURRENT DOCUMENT: whether a key was since revoked cannot be told, so it is could-not-look (document_unavailable), never a yes",
+          "THE PAGE NAMES ITS DOCUMENT AND ITS PIN: sealed under document <sha256> at commit <W> (a link to the document there), since unit R-PIN \"Pinned at commit <P> (th",
+          "THE PAGE, NOT PINNED YET, OR A PIN COMMIT IT CANNOT READ: it says so, and still shows the verdict",
+          "THE VERDICT WORD NEVER CHANGES ON A LATER DOCUMENT: whatever the current document says of the two keys, a sealed case shows the word it was sealed with, or (sin",
+          "K06 (checkSignedUnder): a signed_under missing a field is missing_field, named",
+          "H09 (reference, document_unavailable; since unit R-AB): the refusal is 503 with codes only, the reason saying why, and no sentence",
+          "S21, S24 (the sealed check, each key in its role): a receipt key the named document lists only as a case key, or a case key it lists only as a reconcile key, do",
+          "S32, SINCE UNIT R-REV: the revoked page names V, the commit of the key document this deployment carries, as a link; a deployment whose commit is not 40 hex, or ",
+          "S44 (since unit R-SIG, through sealedRecordReason): a stored receipt holds by the reconcile key of the document the case names, never by the verifier the enviro",
+          "P03 (pinCommitOf): the page names the commit that WROTE the numbered pin record, the oldest touching it, not a later one",
+          "P13 (the page's reads): a case not pinned yet reads no pin commit history",
+          "L01 (lib/_sealer.js anchorCases): the current document it is handed is the one the pass reads; an unreadable one is could_not_look, not a pin",
+          "I1 (since unit R-REV): a case whose signer the current document lists as revoked is signer_revoked, pinned or not: the sealer does not pin an unpinned one",
+          "I2: a reveal whose bundled document's sha256 differs from the document at its commit is 503 document_unavailable: no attempt, nothing compared; the mismatching ",
+          "I2: a reveal whose commit's document cannot be read, or whose commit is not on the published branch, is 503 document_unavailable with no attempt; KEY_DOCUMENT_B",
+          "ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is never valid: since un",
+          "I3: a signer absent from the current document is signer_unlisted: no verdict, no pin, the reference refuses 409; the case key and the reconcile key alike",
+          "I5: a fetched document is cached only after its hash matches: other bytes at the named commit are signature_invalid (since unit R-SIG), and once the commit serv",
+          "I5: the could-not-look page names which document could not be read: the one the case names, or the current one this reader carries",
+          "MUST-FAIL GAP (C02, C06): the reveal refuses a branch read that fails by its reason, and reads the document at its commit once per instance, after a match",
+          "MUST-FAIL GAP (S08): a case key the current document lists only as a reconcile key is unlisted",
+          "MUST-FAIL GAP (H03, H04, G04, G05): the reference and the page say signer_unlisted and signer_revoked in words",
+          "MUST-FAIL GAP (B01): KEY_DOCUMENT_BRANCH names the branch: a deployment of another branch seals when it names that branch, and is refused when it does not",
+          "R-I2 B1 (commitsOf): the commit that wrote a pin record is the oldest touching it, past the first page of its history",
+          "R-I2 m3 (since unit R-REV): the DOES NOT VERIFY notice says the current document's one rule; a revoked key's case is not that page",
+          "R-I2 m4: a compare 404 is off only on a branch that exists: a branch that does not exist, or a branch read that fails, is unknown (branch_unreadable), and the b",
+          "R-I2 GAP (P11, P13): the could-not-look page's heading says a commit off the branch is not on it, and a current document that does not read is named as the curr",
+          "R-I2 GAP (K02): a pin file with no commit at all is could_not_look, never a crash; since unit R-L (g5) it says the repository lists no commit for it (pin_commit",
+          "ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --pin-token, every check is VERIFIED and the exit is 0",
+          "DEFAULT RUN: without --exhaust-quota and --pin-token, (c) and (f) are COULD NOT LOOK and say why, the rest VERIFIED, exit 3",
+          "(d) BROKEN when the immediate read does not see the stamp's commit, or reads another; COULD NOT LOOK when the history cannot be read",
+          "(e) BROKEN when the platform loses a chunked JSON body, or asks for a length; the case stays COMMITTED",
+          "(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_by null is BROKEN, never VERIFIED; so is any seal the published key does not confirm, ",
+          "(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BROKEN when it refuses a case; COULD NOT LOOK when the store is not the preview's",
+          "(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to the reconcile key WITNESS_RECONCILE_VERIFIER names (another key is BROKEN, none is COULD",
+          "T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it",
+          "(f) REVIEW FIX 3: a pinned state counts only under the reveal's own chain; a pin read under another chain is BROKEN (unit R-PIN: no anchored state)",
+          "PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret and none asks for the bypass cookie, which the stand-in",
+          "EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anything COULD NOT LOOK, even beside a BROKEN",
+          "CLI: seven lines on stdout and nothing else, in order; no key, operator key or pin token on either stream; exit 3 without the two flags",
+          "CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET when the flag is absent, the flag wins over it, an empty variable is no bypass; never pr",
+          "T03 (f) DESIGN J: a case still not pinned after the pass, its pin write failing at the reveal and in the pass, is COULD NOT LOOK with the pass's reason, never B",
+          "T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, naming why",
+          "MUST-FAIL GAP (T04, unit R-PIN): a case the pass did not pin, not pending and with no candidate deferred, reads not_pinned and is BROKEN, never 'fell outside th",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "FIX G: 26 references by on"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "f72d4ec959e0f440cc48f238bfa4416b6d63a749b6d5c905e17a68fdf4eab87e"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "f72d4ec959e0f440cc48f238bfa4416b6d63a749b6d5c905e17a68fdf4eab87e"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "f72d4ec959e0f440cc48f238bfa4416b6d63a749b6d5c905e17a68fdf4eab87e"
+      }
+    ]
+  },
+  "WA13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "4053f496f6cacfe4421123ba0b8f6091c33082f31a4a484800e7052dc92a96c2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "4053f496f6cacfe4421123ba0b8f6091c33082f31a4a484800e7052dc92a96c2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "4053f496f6cacfe4421123ba0b8f6091c33082f31a4a484800e7052dc92a96c2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A3: a withdrawal record signed by a key the current document lists revoked is the SIGNED BY A REVOKED KEY page, with no withdrawal detail",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "4e0516bac7e3ba50e9d8a90f85ba089bebe3820e",
+        "porcelain": "",
+        "defect_sha256": "e2cfa149bb893640a9e6e94b657029450b82c50620987398272ceb4ac9ce46cf"
+      }
+    ]
+  },
+  "WA14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README",
+          "R-WIDE A4: the registration sentence says the file is signed by the key that registered it and binds that key to nothing else, on the page and in the README",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README",
+          "R-WIDE A4: the registration sentence says the file is signed by the key that registered it and binds that key to nothing else, on the page and in the README",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "522ff1ed8f917a0128a570e1f9e6263c8d644e5ffad827dc9012f0a7bdd354fb"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README",
+          "R-WIDE A4: the registration sentence says the file is signed by the key that registered it and binds that key to nothing else, on the page and in the README",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "522ff1ed8f917a0128a570e1f9e6263c8d644e5ffad827dc9012f0a7bdd354fb"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README",
+          "R-WIDE A4: the registration sentence says the file is signed by the key that registered it and binds that key to nothing else, on the page and in the README",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "522ff1ed8f917a0128a570e1f9e6263c8d644e5ffad827dc9012f0a7bdd354fb"
+      }
+    ]
+  },
+  "WA16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "933b9f485c267cdaab481ccd6381cbf47558b9568206bcc8df182f27ced643e4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "933b9f485c267cdaab481ccd6381cbf47558b9568206bcc8df182f27ced643e4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A4: a registration under a key other than the one the opening names for that role is refused 409 key_mismatch, codes only, and nothing is written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "933b9f485c267cdaab481ccd6381cbf47558b9568206bcc8df182f27ced643e4"
+      }
+    ]
+  },
+  "WA18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since t",
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since t",
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "fa917262beada5116f0f64ed0423837933d18fe51512bf43494d354e45a96615"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since t",
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "fa917262beada5116f0f64ed0423837933d18fe51512bf43494d354e45a96615"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "FIX 2 (GPT's planted test): three valid distinct signer keys configured and a key document without the case key: the key is never used, key_unpublished; since t",
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "fa917262beada5116f0f64ed0423837933d18fe51512bf43494d354e45a96615"
+      }
+    ]
+  },
+  "WA17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "2d8e5a25318108601a012379873c006372f3a95bf4e13fda4e5abae255dd5af8"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "2d8e5a25318108601a012379873c006372f3a95bf4e13fda4e5abae255dd5af8"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A5: a reveal from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only; nothing is compared or written",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "2d8e5a25318108601a012379873c006372f3a95bf4e13fda4e5abae255dd5af8"
+      }
+    ]
+  },
+  "WA19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), ",
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), ",
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WI"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "7d92d7c5c3794cbb48bfbbfa38abfbe9059634c4abb81f546e676d76afd41684"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), ",
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WI"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "7d92d7c5c3794cbb48bfbbfa38abfbe9059634c4abb81f546e676d76afd41684"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal receipt {kind: comparison_refused, case_id, at, reason: case_withdrawn (since unit R-SIG), ",
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-W",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "7d92d7c5c3794cbb48bfbbfa38abfbe9059634c4abb81f546e676d76afd41684"
+      }
+    ]
+  },
+  "WA21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "I2: a reveal whose commit's document cannot be read, or whose commit is not on the published branch, is 503 document_unavailable with no attempt; KEY_DOCUMENT_B",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "I2: a reveal whose commit's document cannot be read, or whose commit is not on the published branch, is 503 document_unavailable with no attempt; KEY_DOCUMENT_B",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "7c3f2daa914d79fdd5ec493079e04d023019dbd029b6cc3a81c91141ac06edac"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "I2: a reveal whose commit's document cannot be read, or whose commit is not on the published branch, is 503 document_unavailable with no attempt; KEY_DOCUMENT_B",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "7c3f2daa914d79fdd5ec493079e04d023019dbd029b6cc3a81c91141ac06edac"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "I2: a reveal whose commit's document cannot be read, or whose commit is not on the published branch, is 503 document_unavailable with no attempt; KEY_DOCUMENT_B",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BR",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "7c3f2daa914d79fdd5ec493079e04d023019dbd029b6cc3a81c91141ac06edac"
+      }
+    ]
+  },
+  "WA20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "771ca0e4c67d3d336d9e07745dd078d8565e87b8cd91e9cc4c8de9343996f335"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "771ca0e4c67d3d336d9e07745dd078d8565e87b8cd91e9cc4c8de9343996f335"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "771ca0e4c67d3d336d9e07745dd078d8565e87b8cd91e9cc4c8de9343996f335"
+      }
+    ]
+  },
+  "WA22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "24b8f9795ec9f0d3c4bb57f17eea6b1caf60e8e23d925b5e4df69fb59c6f9918"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "24b8f9795ec9f0d3c4bb57f17eea6b1caf60e8e23d925b5e4df69fb59c6f9918"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "24b8f9795ec9f0d3c4bb57f17eea6b1caf60e8e23d925b5e4df69fb59c6f9918"
+      }
+    ]
+  },
+  "WA23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt",
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt",
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "cff77b7189cc4b3c6dfca96865edfaabdd531d4dc33e950402dca1c8c1e8f9f4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt",
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "cff77b7189cc4b3c6dfca96865edfaabdd531d4dc33e950402dca1c8c1e8f9f4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "MUST-FAIL GAP (H19): a deployment whose document is not confirmed issues no receipt",
+          "R-WIDE A6: a deployment whose own document commit is off the published branch answers the withdrawal, the reference, the reveal and the refusal receipt 503 depl",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "cff77b7189cc4b3c6dfca96865edfaabdd531d4dc33e950402dca1c8c1e8f9f4"
+      }
+    ]
+  },
+  "WA24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "29f85fe0910e5cffefe212db0fe3ccefcb800469aa855924cf32022485a2e304"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "08d5385908a665987c8ff51beef156731211f7b285a00e3c4313dd5982e5e0a8"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "08d5385908a665987c8ff51beef156731211f7b285a00e3c4313dd5982e5e0a8"
+      }
+    ]
+  },
+  "WA25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "e01bf1eab6c30585e948e70714b801f31b680b36cb7a6066e22ac9fd2043c4d2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "e01bf1eab6c30585e948e70714b801f31b680b36cb7a6066e22ac9fd2043c4d2"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 7,
+        "failing_tests": [
+          "R-WIDE A6: the status page says in one line that the deployment's document commit is off the published branch; the README calls it an operator fault, not a send",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch is read again",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDEf F3-d: two status views within 60 seconds in the off state make one compare call; past 60 seconds the branch",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "e01bf1eab6c30585e948e70714b801f31b680b36cb7a6066e22ac9fd2043c4d2"
+      }
+    ]
+  },
+  "WA26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "e029b211d87aff2ae53b70a9d93250d8a8a3f24c6aef4b5d609b6b89c68a4ca6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "e029b211d87aff2ae53b70a9d93250d8a8a3f24c6aef4b5d609b6b89c68a4ca6"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "e029b211d87aff2ae53b70a9d93250d8a8a3f24c6aef4b5d609b6b89c68a4ca6"
+      }
+    ]
+  },
+  "WA27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "e101a764c6411f8bb27db9cab3776cf551bfc9fa1986e1ef01d35a0e28ce7465"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "e101a764c6411f8bb27db9cab3776cf551bfc9fa1986e1ef01d35a0e28ce7465"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "e101a764c6411f8bb27db9cab3776cf551bfc9fa1986e1ef01d35a0e28ce7465"
+      }
+    ]
+  },
+  "WA28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A2: a refusal receipt is issued on presentation of a party's preimage, and the refusal says so in those words",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A2: a refusal receipt is issued on presentation of a party's preimage, and the refusal says so in those words",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "9094af7292f07e51955e87b40590fa1106d15e1c4d77137bde4c5e51e3641b96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE A2: a refusal receipt is issued on presentation of a party's preimage, and the refusal says so in those words",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "9094af7292f07e51955e87b40590fa1106d15e1c4d77137bde4c5e51e3641b96"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A2: a refusal receipt is issued on presentation of a party's preimage, and the refusal says so in those words",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "9094af7292f07e51955e87b40590fa1106d15e1c4d77137bde4c5e51e3641b96"
+      }
+    ]
+  },
+  "WA29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "MUST-FAIL GAP (RN8, RN9): a runner started with NODE_TEST_CONTEXT set (as from a test) still runs its suite, and an interrupt kills the suite's test processes, ",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "328041834c28530d7bd7285e22169158fb7c918cad8c3283609b4ef985f56b78"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "328041834c28530d7bd7285e22169158fb7c918cad8c3283609b4ef985f56b78"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-WIDE A5: a refusal receipt from a deployment whose document lists no active reconcile key is 409 sealing_not_offered, codes only, and carries no receipt",
+          "R-WIDEf F1-b: in the off state the status line says only what is always true (this deployment signs nothing: withdrawals and references are answered 503); and a",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "328041834c28530d7bd7285e22169158fb7c918cad8c3283609b4ef985f56b78"
+      }
+    ]
+  },
+  "WA30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-SIG rule 12: the key document's description names every signed record and its key",
+          "R-WIDE A5: the committed key document's description does not describe a reconcile key it does not list",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ]
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-SIG rule 12: the key document's description names every signed record and its key",
+          "R-WIDE A5: the committed key document's description does not describe a reconcile key it does not list",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "6d3bef6402b27b4c976abbfedb5ccc734f27eb16",
+        "porcelain": "",
+        "defect_sha256": "dedbe869993edaa2548621f10ee84aafa7fb86ca023a1766973cdd350f0ed2bd"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-SIG rule 12: the key document's description names every signed record and its key",
+          "R-WIDE A5: the committed key document's description does not describe a reconcile key it does not list",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "2c471dacc1c40bcd89d0345f47b135864f6aa417",
+        "porcelain": "",
+        "defect_sha256": "dedbe869993edaa2548621f10ee84aafa7fb86ca023a1766973cdd350f0ed2bd"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 5,
+        "failing_tests": [
+          "R-SIG rule 12: the key document's description names every signed record and its key",
+          "R-WIDE A5: the committed key document's description does not describe a reconcile key it does not list",
+          "R-WIDEg G1: every defect in Group A's list applies to this tree (WA24 at the status state's off arm)",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "588cac4873b974a258723b27a18854086a140f2d",
+        "porcelain": "",
+        "defect_sha256": "dedbe869993edaa2548621f10ee84aafa7fb86ca023a1766973cdd350f0ed2bd"
+      }
+    ]
+  }
+}

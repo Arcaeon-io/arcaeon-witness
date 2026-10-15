@@ -1,0 +1,374 @@
+[
+ {
+  "id": "PG01",
+  "file": "lib/_case_page.js",
+  "find": "<p>${esc(text)}</p><p class=\"muted\"><code>${esc(code)}</code></p></section>",
+  "replace": "<p>${esc(text)}</p></section>",
+  "what": "P1: a refusal page names no code"
+ },
+ {
+  "id": "PG02",
+  "file": "lib/_case_page.js",
+  "find": "\"A case id is 64 lowercase hex characters: /case/<case_id>.\", \"not_a_case_id\");",
+  "replace": "\"A case id is 64 lowercase hex characters: /case/<case_id>.\", \"bad_request\");",
+  "what": "P1: not_a_case_id named otherwise"
+ },
+ {
+  "id": "PG03",
+  "file": "lib/_case_page.js",
+  "find": "try again in ${rl.retryAfterSeconds} seconds.`, \"rate_limited\");",
+  "replace": "try again in ${rl.retryAfterSeconds} seconds.`, \"too_many_requests\");",
+  "what": "P1: rate_limited named otherwise"
+ },
+ {
+  "id": "PG04",
+  "file": "lib/_case_page.js",
+  "find": "\"No case with this id is recorded.\", \"no_such_case\");",
+  "replace": "\"No case with this id is recorded.\", \"not_found\");",
+  "what": "P1: no_such_case named otherwise"
+ },
+ {
+  "id": "PG05",
+  "file": "lib/_case_page.js",
+  "find": "\"The case record could not be read when this page was read. That is not a no; try again.\", \"could_not_look\");",
+  "replace": "\"The case record could not be read when this page was read. That is not a no; try again.\", \"store_error\");",
+  "what": "P1: could_not_look named otherwise"
+ },
+ {
+  "id": "PG06",
+  "file": "lib/_case_page.js",
+  "find": "This page does not answer from it.`, \"case_unreadable\");",
+  "replace": "This page does not answer from it.`, \"could_not_look\");",
+  "what": "P1: case_unreadable named could_not_look"
+ },
+ {
+  "id": "PG07",
+  "file": "lib/_case_page.js",
+  "find": "      [\"code\", `<code>${esc(answer.code)}</code>`],\n",
+  "replace": "",
+  "what": "P1: the could-not-look page names no code"
+ },
+ {
+  "id": "PG08",
+  "file": "lib/_case_page.js",
+  "find": "    `<p class=\"muted\"><code>${esc(answer.code)}</code></p></section>\\n`, nowMs);",
+  "replace": "    `</section>\\n`, nowMs);",
+  "what": "P1: the revoked page names no code"
+ },
+ {
+  "id": "PG09",
+  "file": "api/status.js",
+  "find": "return res.status(429).json({ ok: false, error_code: \"rate_limited\", retry_after_seconds: rl.retryAfterSeconds });",
+  "replace": "return res.status(429).json({ ok: false, error: \"rate limit exceeded\", retry_after_seconds: rl.retryAfterSeconds });",
+  "what": "P1: the status 429 carries prose, no code"
+ },
+ {
+  "id": "PG10",
+  "file": "lib/_case_page.js",
+  "find": "  html += whereRecordedHtml(kase, pin, read) + checksHtml(checks) + bytesReadHtml(kase.case_id, read);",
+  "replace": "  html += checksHtml(checks) + bytesReadHtml(kase.case_id, read);",
+  "what": "P2: no where-recorded table"
+ },
+ {
+  "id": "PG11",
+  "file": "lib/_case_page.js",
+  "find": "  if (pin.pin === \"pinned\") {\n    rows.push([esc(\"pins repository: the case file\")",
+  "replace": "  if (false) {\n    rows.push([esc(\"pins repository: the case file\")",
+  "what": "P2: a pinned case's rows as if not pinned"
+ },
+ {
+  "id": "PG12",
+  "file": "lib/_case_page.js",
+  "find": "      pin.pin_commit.date ? esc(`${pin.pin_commit.date} (the pins repository's commit time)`) : '<span class=\"muted\">not given by the repository</span>',",
+  "replace": "      '<span class=\"muted\">not given by the repository</span>',",
+  "what": "P2: the pin row's time not printed"
+ },
+ {
+  "id": "PG13",
+  "file": "lib/_case_page.js",
+  "find": "  } else if (read) {\n    rows.push([esc(\"pins repository: the case file\")",
+  "replace": "  } else if (false) {\n    rows.push([esc(\"pins repository: the case file\")",
+  "what": "P2: no case-file row for a case not pinned"
+ },
+ {
+  "id": "PG14",
+  "file": "lib/_case_page.js",
+  "find": "    const e = kase.commitments[r];\n    if (!e) continue;\n    rows.push([esc(`stamps repository",
+  "replace": "    const e = kase.commitments[r];\n    if (true) continue;\n    rows.push([esc(`stamps repository",
+  "what": "P2: no stamp rows"
+ },
+ {
+  "id": "PG15",
+  "file": "lib/_case_page.js",
+  "find": "  const repo = stampsRepo();\n  for (const r of C.ROLES) {\n    const e = kase.commitments[r];\n    if (!e) continue;",
+  "replace": "  const repo = stampsRepo();\n  if (kase.status === \"VERDICT\") rows.push([esc(\"anchors/: the daily anchor\"), esc(\"anchored\"), esc(\"today\"), operator(store.REPO), link(`${PINS_URL}/tree/${store.BRANCH}/anchors`, \"the anchors\")]);\n  for (const r of C.ROLES) {\n    const e = kase.commitments[r];\n    if (!e) continue;",
+  "what": "P2: an anchor row printed from the status, not a read"
+ },
+ {
+  "id": "PG16",
+  "file": "lib/_case_page.js",
+  "find": "  const operator = (repo) => esc(`${repo.split(\"/\")[0]} on GitHub`);",
+  "replace": "  const operator = (repo) => esc(`${repo} on GitHub`);",
+  "what": "P2: the operator is the repository, not its owner"
+ },
+ {
+  "id": "PG17",
+  "file": "lib/_case_page.js",
+  "find": "may be up to 60 seconds old &middot; This page was read at <time datetime=\"${at}\">${at}</time> (UTC) &middot; the witness",
+  "replace": "may be up to 60 seconds old &middot; the witness",
+  "what": "P3: the footer does not say when the page was read"
+ },
+ {
+  "id": "PG18",
+  "file": "lib/_case_page.js",
+  "find": "  return new Date(nowMs).toISOString();",
+  "replace": "  return new Date(nowMs).toUTCString();",
+  "what": "P3: the read time in another shape"
+ },
+ {
+  "id": "PG19",
+  "file": "lib/_case_page.js",
+  "find": "    [\"pin\", `${pinnedHtml(pin)}<br><span class=\"muted\">${anchorsSentenceHtml()}</span><br>${lastRead}`],",
+  "replace": "    [\"pin\", `${pinnedHtml(pin)}<br><span class=\"muted\">${anchorsSentenceHtml()}</span>`],",
+  "what": "P3: the pin row says nothing of when it was read"
+ },
+ {
+  "id": "PG20",
+  "file": "lib/_case_page.js",
+  "find": "    [\"key document\", `${sealedUnderHtml(answer)} ${lastRead}`],",
+  "replace": "    [\"key document\", sealedUnderHtml(answer)],",
+  "what": "P3: the key-document row says nothing of when it was read"
+ },
+ {
+  "id": "PG21",
+  "file": "lib/_case_page.js",
+  "find": "  const word = expired ? `${kase.status} ${EXPIRED_BY_CLOCK}` : kase.status;",
+  "replace": "  const word = expired ? \"EXPIRED\" : kase.status;",
+  "what": "P4: the heading says EXPIRED alone"
+ },
+ {
+  "id": "PG22",
+  "file": "lib/_case_page.js",
+  "find": "    [\"status\", expired ? `<span class=\"word\">${esc(kase.status)}</span> ${esc(EXPIRED_BY_CLOCK)}` : `<span class=\"word\">${esc(kase.status)}</span>`],",
+  "replace": "    [\"status\", `<span class=\"word\">${esc(expired ? \"EXPIRED\" : kase.status)}</span>`],",
+  "what": "P4: the status row says EXPIRED alone"
+ },
+ {
+  "id": "PG23",
+  "file": "lib/_case_page.js",
+  "find": "function bytesReadHtml(id, read) {\n  if (!read) return \"\";",
+  "replace": "function bytesReadHtml(id, read) {\n  if (read) return \"\";",
+  "what": "P5: no sha256 of the bytes read"
+ },
+ {
+  "id": "PG24",
+  "file": "lib/_case_page.js",
+  "find": "opts.env || process.env, { sha256: sha256hex(raw.bytes), blob: raw.sha });",
+  "replace": "opts.env || process.env, { sha256: sha256hex(Buffer.from(raw.text, \"utf8\")), blob: raw.sha });",
+  "what": "P5: the sha256 of the text re-encoded, not of the bytes read",
+  "gap": "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
+ },
+ {
+  "id": "PG25",
+  "file": "lib/_case_page.js",
+  "find": "  return `https://raw.githubusercontent.com/${store.REPO}/${store.BRANCH}/${C.casePath(id)}`;",
+  "replace": "  return `https://github.com/${store.REPO}/blob/${store.BRANCH}/${C.casePath(id)}`;",
+  "what": "P5: the raw link is the blob page"
+ },
+ {
+  "id": "PG26",
+  "file": "lib/_case_page.js",
+  "find": "  const asJson = String((req.query || {}).format || \"\").toLowerCase() === \"json\";",
+  "replace": "  const asJson = false;",
+  "what": "P5: ?format=json answers HTML"
+ },
+ {
+  "id": "PG27",
+  "file": "lib/_case_page.js",
+  "find": "  const twin = (fields) => ({ ok: true, case_id: id, read_at: readTime(nowMs), ...(read ? { case_sha256: read.sha256 } : {}), ...fields });",
+  "replace": "  const twin = (fields) => ({ ok: true, case_id: id, read_at: readTime(nowMs), ...fields });",
+  "what": "P5: the JSON twin carries no sha256"
+ },
+ {
+  "id": "PG28",
+  "file": "lib/_case_page.js",
+  "find": "{ html: notice(title, text, code, nowMs), json: { ok: false, error_code: code, read_at: readTime(nowMs) } });",
+  "replace": "{ html: notice(title, text, code, nowMs), json: { ok: false, error_code: code } });",
+  "what": "P5: a refusal's JSON says not when it was read"
+ },
+ {
+  "id": "PG29",
+  "file": "lib/_case_page.js",
+  "find": "      kept.set(id, { at: clock(), status: out.status, html: out.html, json: out.json });",
+  "replace": "      kept.set(id, { at: clock(), status: out.status, html: out.html });",
+  "what": "P5: the page cache keeps no JSON twin",
+  "gap": "MUST-FAIL GAP (PG29): a page kept in the page cache answers ?format=json from the cache too, the same twin"
+ },
+ {
+  "id": "PG30",
+  "file": "lib/_case_page.js",
+  "find": "    } catch {\n      return unreadable(\"not_json\");\n    }",
+  "replace": "    } catch {\n      return refusal(503, \"Could not look\", \"The case record could not be read when this page was read. That is not a no; try again.\", \"could_not_look\");\n    }",
+  "what": "P5: a case file that is not JSON is could_not_look, not case_unreadable",
+  "gap": "MUST-FAIL GAP (PG30): a case file that is not JSON is case_unreadable (a record is there), never could_not_look"
+ },
+ {
+  "id": "PG31",
+  "file": "lib/_case_page.js",
+  "find": "    const pinJson = { state: pin.pin, ...(pin.reason ? { reason: pin.reason } : {}),",
+  "replace": "    const pinJson = { state: kase.status === \"VERDICT\" ? \"pinned\" : pin.pin, ...(pin.reason ? { reason: pin.reason } : {}),",
+  "what": "P5: the JSON pin state from the status, not the read",
+  "gap": "MUST-FAIL GAP (PG31): the JSON twin's pin state is the pin read's: a sealed case with no pin file is not_pinned"
+ },
+ {
+  "id": "PG32",
+  "file": "lib/_case_page.js",
+  "find": "<br>Report a problem with this case to the operator: ${link(`mailto:${OPERATOR_CONTACT}`, OPERATOR_CONTACT)}</footer>",
+  "replace": "</footer>",
+  "what": "P6: no report line"
+ },
+ {
+  "id": "PG33",
+  "file": "lib/_case_page.js",
+  "find": "  const [n, unit] = a < 60000 ? [Math.floor(a / 1000), \"second\"] : a < 3600000 ? [Math.floor(a / 60000), \"minute\"]\n    : a < 86400000 ? [Math.floor(a / 3600000), \"hour\"]",
+  "replace": "  const [n, unit] = a < 60000 ? [Math.floor(a / 1000), \"second\"] : a < 3600000 ? [Math.floor(a / 60000), \"minute\"]\n    : a < 86400000 ? [Math.round(a / 3600000), \"hour\"]",
+  "what": "P6: hours rounded, not whole"
+ },
+ {
+  "id": "PG34",
+  "file": "lib/_case_page.js",
+  "find": "  return d >= 0 ? `${words} ago` : `in ${words}`;",
+  "replace": "  return d >= 0 ? `in ${words}` : `${words} ago`;",
+  "what": "P6: past and future swapped"
+ },
+ {
+  "id": "PG35",
+  "file": "lib/_case_page.js",
+  "find": "  const words = `${n} ${unit}${n === 1 ? \"\" : \"s\"}`;",
+  "replace": "  const words = `${n} ${unit}s`;",
+  "what": "P6: one hour is 1 hours"
+ },
+ {
+  "id": "PG36",
+  "file": "lib/_case_page.js",
+  "find": "    [\"opened at\", `${whenHtml(kase.opened_at, nowMs)} <span class=\"muted\">(the opener's clock, an assertion)</span>`],",
+  "replace": "    [\"opened at\", `${esc(kase.opened_at)} <span class=\"muted\">(the opener's clock, an assertion)</span>`],",
+  "what": "P6: opened at absolute only"
+ },
+ {
+  "id": "PG37",
+  "file": "lib/_case_page.js",
+  "find": "    [\"deadline\", whenHtml(kase.deadline, nowMs)],",
+  "replace": "    [\"deadline\", esc(kase.deadline)],",
+  "what": "P6: the deadline absolute only"
+ },
+ {
+  "id": "PG38",
+  "file": "lib/_case_page.js",
+  "find": "    rows.push([`role ${r} registered at`, `${whenHtml(e.registered_at, nowMs)} <span class=\"muted\">",
+  "replace": "    rows.push([`role ${r} registered at`, `${esc(e.registered_at)} <span class=\"muted\">",
+  "what": "P6: registered at absolute only",
+  "gap": "MUST-FAIL GAP (PG38): a registration time row prints relative and absolute"
+ },
+ {
+  "id": "PG39",
+  "file": "lib/_case_page.js",
+  "find": "    [\"revealed at\", whenHtml(kase.reveals.a.revealed_at, nowMs)],",
+  "replace": "    [\"revealed at\", esc(kase.reveals.a.revealed_at)],",
+  "what": "P6: revealed at absolute only"
+ },
+ {
+  "id": "PG40",
+  "file": "lib/_case_page.js",
+  "find": "<p class=\"muted\">${esc(LABELS_SENTENCE)} ${esc(PRESENCE_SENTENCE)} A label",
+  "replace": "<p class=\"muted\">${esc(LABELS_SENTENCE)} A label",
+  "what": "P7: no presence sentence"
+ },
+ {
+  "id": "PG41",
+  "file": "README.md",
+  "find": "\"Labels are recorded, not verified. Presence in this record is not meaning: a public record keeps what was submitted to it.\"",
+  "replace": "\"Labels are recorded, not verified.\"",
+  "what": "P7: the README leaves the presence sentence out"
+ },
+ {
+  "id": "PG42",
+  "file": "lib/_case_page.js",
+  "find": "    const checks = [sealedRecordCheck(\"sealed record\", answer, read), ...registrationChecks(reads.proj), pinCheck(pin), rowsCheck(live)];",
+  "replace": "    const checks = [sealedRecordCheck(\"sealed record\", answer, read), ...registrationChecks(reads.proj), pinCheck(kase.status === \"VERDICT\" && pin.pin !== \"pinned\" ? { pin: \"pinned\", pin_commit: { sha: kase.signed_under.document_commit }, case_commit: kase.signed_under.document_commit } : pin), rowsCheck(live)];",
+  "what": "P8: the pin line printed from the status, not the pin read"
+ },
+ {
+  "id": "PG43",
+  "file": "lib/_case_page.js",
+  "find": "    const checks = [sealedRecordCheck(\"sealed record\", answer, read), ...registrationChecks(reads.proj), pinCheck(pin), rowsCheck(live)];",
+  "replace": "    const checks = [sealedRecordCheck(\"sealed record\", answer, read), ...registrationChecks(reads.proj), pinCheck(pin), rowsCheck(live), { check: \"anchor\", code: \"found\", html: \"the anchor: found\" }];",
+  "what": "P8: an anchor check line printed though no anchor was read"
+ },
+ {
+  "id": "PG44",
+  "file": "lib/_case_page.js",
+  "find": "      const checks = [sealedRecordCheck(\"sealed record\", answer, read), ...registrationChecks(reads.proj)];",
+  "replace": "      const checks = [...registrationChecks(reads.proj)];",
+  "what": "P8: the failed sealed-record check not listed"
+ },
+ {
+  "id": "PG45",
+  "file": "lib/_case_page.js",
+  "find": "  const bytes = esc(read ? `the case file this page read (sha256 ${read.sha256})` : \"the case record\");",
+  "replace": "  const bytes = esc(\"the case record\");",
+  "what": "P8: the sealed-record line names no bytes"
+ },
+ {
+  "id": "PG46",
+  "file": "lib/_case_page.js",
+  "find": "verifies under the key document at commit ${link(documentAt(answer.document_commit), answer.document_commit)}${esc(listed)}` };",
+  "replace": "verifies under the key document at commit ${esc(answer.document_commit)}${esc(listed)}` };",
+  "what": "P8: the document commit is bare text"
+ },
+ {
+  "id": "PG47",
+  "file": "lib/_case_page.js",
+  "find": "  const judged = live.rows.length + live.invalid.length;",
+  "replace": "  const judged = live.rows.length;",
+  "what": "P8: an invalid row is not counted as read",
+  "gap": "MUST-FAIL GAP (PG47): the reference rows line counts an invalid row as read and not valid"
+ },
+ {
+  "id": "PG48",
+  "file": "lib/_case_page.js",
+  "find": "  return `  <section class=\"panel\"><h2>Checks</h2><p>${esc(CHECKS_INTRO)}</p><ul class=\"plain\">` +",
+  "replace": "  return `  <section class=\"panel\"><h2>Checks</h2><p>These checks passed:</p><ul class=\"plain\">` +",
+  "what": "P8: the list's sentence claims every check passed"
+ },
+ {
+  "id": "PG49",
+  "file": "lib/_case_page.js",
+  "find": "      checksHtml(checks) + bytesReadHtml(id, read) + limitsPanel(kase.limits), nowMs),\n    json: twin({ state: \"WITHDRAWN\"",
+  "replace": "      bytesReadHtml(id, read) + limitsPanel(kase.limits), nowMs),\n    json: twin({ state: \"WITHDRAWN\"",
+  "what": "P8: the withdrawn page lists no check"
+ },
+ {
+  "id": "PG50",
+  "file": "lib/_case_page.js",
+  "find": "  if (pin.pin === \"not_pinned\") return { check: \"pin\", code: \"not_pinned\", html: esc(\"the pin: no pin file is present under this case's namespace\") };",
+  "replace": "  if (pin.pin === \"not_pinned\") return { check: \"pin\", code: \"pinned\", html: esc(\"the pin: no pin file is present under this case's namespace\") };",
+  "what": "P8: not_pinned listed with the code pinned"
+ },
+ {
+  "id": "PG51",
+  "file": "lib/_store.js",
+  "find": "  const bytes = Buffer.from(body.content, \"base64\");\n  return { text: bytes.toString(\"utf-8\"), sha: body.sha, bytes };",
+  "replace": "  const bytes = Buffer.from(body.content, \"base64\");\n  return { text: bytes.toString(\"utf-8\"), sha: body.sha, bytes: Buffer.from(bytes.toString(\"utf-8\"), \"utf-8\") };",
+  "what": "P5: the bytes handed back are the text re-encoded",
+  "gap": "MUST-FAIL GAP (PG24, PG51): the sha256 the page prints is of the bytes it read, not of their text re-encoded: a case file with a byte that is not UTF-8 in it"
+ },
+ {
+  "id": "PG52",
+  "file": "README.md",
+  "find": "`/case/<case_id>?format=json`\n(`op=case-page&format=json`) answers the same facts as JSON.",
+  "replace": "`/case/<case_id>?format=json`\n(`op=case-page&format=json`) is not offered.",
+  "what": "P5: the README says there is no JSON twin",
+  "gap": "MUST-FAIL GAP (PG52): the README names the JSON twin"
+ }
+]

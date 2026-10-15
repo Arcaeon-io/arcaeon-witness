@@ -1,0 +1,7 @@
+# Line endings: LF in every blob and in every working copy, on every OS.
+# A prebuilt deploy uploads the working copy, so without this a Windows
+# checkout (core.autocrlf true) would serve public/ with other bytes than a
+# Linux checkout: the case key document 2077 bytes instead of git's 2055
+# (README "Deploy shape"; test/deploy_shape.test.js checks public/ for CR).
+# No binary rules: every tracked file is text (git ls-files --eol: all i/lf).
+* text=auto eol=lf

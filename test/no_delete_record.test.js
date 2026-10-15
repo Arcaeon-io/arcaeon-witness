@@ -25,6 +25,9 @@ const ROOT = path.join(__dirname, "..");
 // file -> why a DELETE there is not a deletion from the public record.
 const ALLOWED_DELETE = {
   "lib/_balance.js": "private usage/balance store (GITHUB_USAGE_REPO), not the pin repo; no callers",
+  // (lib/_case_unregister.js, the one deletion from the pin repo that red-team
+  // fix C added, was taken out in unit R-L4: nothing in the pins repository
+  // is ever deleted; test/case_rl4.test.js)
   "tools/ceiling_probe.js": "deletes only the throwaway probe repository it created itself",
 };
 

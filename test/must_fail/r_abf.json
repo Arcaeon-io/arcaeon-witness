@@ -1,0 +1,184 @@
+[
+ {
+  "id": "PG1",
+  "file": "lib/_case_page.js",
+  "find": "  const reads = await registrationReads(kase);\n  if (reads.inconsistent)",
+  "replace": "  if (C.singleParty(kase)) return { status: 200, html: singlePartyPage(kase, head) };\n  const reads = await registrationReads(kase);\n  if (reads.inconsistent)",
+  "what": "B1: the page judges single party before it reads the files (the reader's defect)"
+ },
+ {
+  "id": "PG2",
+  "file": "lib/_case_page.js",
+  "find": "    if (reads.unread.a || reads.unread.b) return { status: 503, html: unreadPage(kase, head) };\n",
+  "replace": "",
+  "what": "B1: a single-key root whose file could not be read gets the single-party page"
+ },
+ {
+  "id": "PG3",
+  "file": "lib/_case_page.js",
+  "find": "    if (reads.unread.a || reads.unread.b) return { status: 503, html: unreadPage(kase, head) };",
+  "replace": "    if (reads.unread.a || reads.unread.b) return { status: 200, html: unreadPage(kase, head) };",
+  "what": "B1: the could-not-look page at 200"
+ },
+ {
+  "id": "PG4",
+  "file": "lib/_case_page.js",
+  "find": "const UNREAD_SENTENCE = \"A registration file this case projects could not be read when this page was read, so nothing is asserted about this \" +",
+  "replace": "const UNREAD_SENTENCE = \"A registration file this case projects could not be read, so this case is one key \" +",
+  "what": "B1: the could-not-look sentence altered"
+ },
+ {
+  "id": "PG5",
+  "file": "lib/_case_page.js",
+  "find": "    if (answer.code === \"document_off_branch\") return { status: 200, html: couldNotLookPage(kase, answer, head) };",
+  "replace": "    if (answer.code === \"document_off_branch\") return { status: 503, html: couldNotLookPage(kase, answer, head) };",
+  "what": "M2: the off-branch page at 503"
+ },
+ {
+  "id": "PG6",
+  "file": "lib/_case_page.js",
+  "find": "  const offBranch = !current && answer.code === \"document_off_branch\";",
+  "replace": "  const offBranch = !current && answer.reason === \"commit_not_on_branch\";",
+  "what": "M2: a 404 commit's page worded as off the branch"
+ },
+ {
+  "id": "PG7",
+  "file": "lib/_case_page.js",
+  "find": "  const offBranch = !current && answer.code === \"document_off_branch\";",
+  "replace": "  const offBranch = false;",
+  "what": "M2: the off-branch page worded as a read that failed"
+ },
+ {
+  "id": "SE1",
+  "file": "lib/_case_seal.js",
+  "find": "  const proj = await projectedRegistrations(got.json);\n  if (!proj.ok && proj.inconsistent) return { ok: false, code: \"case_record_inconsistent\", role: proj.role, reason: proj.reason };",
+  "replace": "  if (C.singleParty(got.json)) return { ok: false, code: \"not_sealed\", status, reason: \"single_party\" };\n  const proj = await projectedRegistrations(got.json);\n  if (!proj.ok && proj.inconsistent) return { ok: false, code: \"case_record_inconsistent\", role: proj.role, reason: proj.reason };",
+  "what": "B1: the sealer judges single party before it reads the files (the reader's defect)"
+ },
+ {
+  "id": "SE2",
+  "file": "lib/_case_seal.js",
+  "find": "    if (nc.unavailable && nc.off) return { code: \"document_off_branch\",",
+  "replace": "    if (false) return { code: \"document_off_branch\",",
+  "what": "M2: off read by nothing (the reader's defect)"
+ },
+ {
+  "id": "SE3",
+  "file": "lib/_case_seal.js",
+  "find": "    if (nc.unavailable && nc.off) return { code: \"document_off_branch\",",
+  "replace": "    if (nc.unavailable) return { code: \"document_off_branch\",",
+  "what": "M2: every named read that failed answered off-branch"
+ },
+ {
+  "id": "HT1",
+  "file": "lib/_case_http.js",
+  "find": "  const auth = await readAuthority(kase, nothing);\n  if (auth.refusal) return refuse(res, auth.refusal);\n  // 1c.",
+  "replace": "  if (C.singleParty(kase)) return refuse(res, new Refusal(409, \"single_party\", \"\", { case_id }));\n  const auth = await readAuthority(kase, nothing);\n  if (auth.refusal) return refuse(res, auth.refusal);\n  // 1c.",
+  "what": "B1: the reference judges single party before it reads the files (the reader's defect)"
+ },
+ {
+  "id": "HT2",
+  "file": "lib/_case_http.js",
+  "find": "  const auth = await readAuthority(kase, nothing);\n  if (auth.refusal) return refuse(res, auth.refusal);\n  // 1c.",
+  "replace": "  const auth = proof === null ? { regs: null } : await readAuthority(kase, nothing);\n  if (auth.refusal) return refuse(res, auth.refusal);\n  // 1c.",
+  "what": "B1: the operator's reference reads no file"
+ },
+ {
+  "id": "HT3",
+  "file": "lib/_case_http.js",
+  "find": "  if (answer.code === \"document_off_branch\") return refuse(res, new Refusal(409, \"document_off_branch\", \"\", { case_id, reason: answer.reason }));",
+  "replace": "  if (answer.code === \"document_off_branch\") return refuse(res, new Refusal(503, \"document_off_branch\", \"\", { case_id, reason: answer.reason }));",
+  "what": "M2: the reference's off-branch at 503"
+ },
+ {
+  "id": "HT4",
+  "file": "lib/_case_http.js",
+  "find": "  if (answer.code === \"document_off_branch\") return refuse(res, new Refusal(409, \"document_off_branch\", \"\", { case_id, reason: answer.reason }));",
+  "replace": "  if (answer.code === \"document_off_branch\") return refuse(res, new Refusal(409, \"document_off_branch\", \"the key document the seal names is not on the published branch; no row was written\", { case_id, reason: answer.reason }));",
+  "what": "M2: the reference's off-branch with a sentence"
+ },
+ {
+  "id": "HT5",
+  "file": "lib/_case_http.js",
+  "find": "  if (answer.code === \"document_off_branch\") return refuse(res, new Refusal(409, \"document_off_branch\", \"\", { case_id, reason: answer.reason }));\n",
+  "replace": "",
+  "what": "M2: the reference's off-branch branch gone"
+ },
+ {
+  "id": "HT6",
+  "file": "lib/_case_http.js",
+  "find": "  if (answer.code === \"single_party\") return refuse(res, new Refusal(409, \"single_party\", \"\", { case_id }));",
+  "replace": "  if (answer.code === \"single_party\") return refuse(res, new Refusal(409, \"single_party\", \"one key registered both roles of this case; no row was written\", { case_id }));",
+  "what": "m-a: the reference's single_party with a sentence"
+ },
+ {
+  "id": "HT7",
+  "file": "lib/_case_http.js",
+  "find": "  document_off_branch: \"the key document it names is at a commit that is not on the published branch\",\n",
+  "replace": "",
+  "what": "M2: no words for document_off_branch in the withdrawn root's answer"
+ },
+ {
+  "id": "RN1",
+  "file": "test/must_fail/run.js",
+  "find": "  return code !== null && code !== undefined && failing.length > 0 ? \"caught\" : \"error\";",
+  "replace": "  return code !== 0 ? \"caught\" : \"error\";",
+  "what": "M1: caught on any non-zero exit (the reader's defect)"
+ },
+ {
+  "id": "RN2",
+  "file": "test/must_fail/run.js",
+  "find": "  if (timedOut) return \"timeout\";\n",
+  "replace": "",
+  "what": "M1: a timeout classified by its exit"
+ },
+ {
+  "id": "RN3",
+  "file": "test/must_fail/run.js",
+  "find": "if (typeof d.file !== \"string\" || !d.file || path.isAbsolute(d.file) || /^[A-Za-z]:/.test(d.file) ||",
+  "replace": "if (typeof d.file !== \"string\" || !d.file || /^[A-Za-z]:/.test(d.file) ||",
+  "what": "m-d: an absolute path accepted"
+ },
+ {
+  "id": "RN4",
+  "file": "test/must_fail/run.js",
+  "find": "      d.file.split(/[\\\\/]/).includes(\"..\") || !path.resolve(root, d.file).startsWith(path.resolve(root) + path.sep)) {",
+  "replace": "      !path.resolve(root, d.file).startsWith(path.resolve(\"/\") )) {",
+  "what": "m-d: a '..' path accepted"
+ },
+ {
+  "id": "RN5",
+  "file": "test/must_fail/run.js",
+  "find": "  for (const sig of [\"SIGINT\", \"SIGTERM\"]) {",
+  "replace": "  for (const sig of []) {",
+  "what": "m-d: an interrupt leaves the copies"
+ },
+ {
+  "id": "RN6",
+  "file": "test/must_fail/run.js",
+  "find": "    rec.caught_by = gap.length ? gap : outcome.failing.slice();\n",
+  "replace": "",
+  "what": "m-e: a re-seed's catch records no gap test"
+ },
+ {
+  "id": "RN7",
+  "file": "test/must_fail/run.js",
+  "find": "const caughtByOf = (r) => r.caught_by || (",
+  "replace": "const caughtByOf = (r) => testsOf(r) || (",
+  "what": "m-e: the table prints every failing test, not the record's gap test"
+ },
+ {
+  "id": "RN8",
+  "file": "test/must_fail/run.js",
+  "find": "    delete env.NODE_TEST_CONTEXT;\n",
+  "replace": "",
+  "what": "found in testing: the suite inherits NODE_TEST_CONTEXT"
+ },
+ {
+  "id": "RN9",
+  "file": "test/must_fail/run.js",
+  "find": "    process.kill(-p.pid, \"SIGKILL\");",
+  "replace": "    p.kill(\"SIGKILL\");",
+  "what": "found in testing: the suite's test processes outlive a kill"
+ }
+]
