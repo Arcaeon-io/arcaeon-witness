@@ -884,3 +884,22 @@ test("MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads 
   assert.deepEqual([gone.records, gone.indeterminate, gone.unreadable, gone.invalid], [1, false, [], []]);
   assert.deepEqual(gh.getLog.slice(g0).filter((p) => p.startsWith(C.referencesDir(c.id))), [], "nothing read: the listing and the rows were handed in");
 });
+
+// =============================================================================
+// UNIT R-PAGEf: a must-fail gap test (beside R-FGg G1's helpers)
+// =============================================================================
+
+test("MUST-FAIL GAP (PF37): a row that is not JSON is read once a request: kept, as every row read is, and read again neither by a later attempt nor by the live count", async () => {
+  const c = await sealedCase("RPAGEf gap not json once");
+  gh._repoMap(PINS).set(C.referencePath(c.id, 1), { content: "not json\n", sha: "f".repeat(40) });
+  // the first write loses seq 2 to another sender's row: a second attempt runs
+  const undo = racesAt({ [C.referencePath(c.id, 2)]: otherRow(2) });
+  let got;
+  try {
+    got = await rowCalls(c.id, () => roleReference(c, "a", "past a file that is not JSON, twice"));
+  } finally {
+    undo();
+  }
+  assert.deepEqual([got.out.status, got.out.body.seq], [201, 3], JSON.stringify(got.out.body).slice(0, 300));
+  assert.deepEqual(got.calls.filter((x) => x === "GET /00000001.json"), ["GET /00000001.json"], JSON.stringify(got.calls));
+});

@@ -839,3 +839,64 @@ test("R-PAGEf m4: a case page asked for with another method is 405 method_not_al
   await CP.handleCasePage(makeReq({ method: "POST", query: { op: "case-page", case_id: "1".repeat(64) }, headers: { "x-forwarded-for": nextIp() } }), res, { now: AT });
   assert.deepEqual([res._status, res._body, res._headers.allow], [405, { ok: false, error_code: "method_not_allowed" }, "GET, HEAD"]);
 });
+
+// R-PAGEf's must-fail gap tests: each fails with its planted defect
+// A registration file whose record still validates with a byte that is not
+// UTF-8 in it: a duplicate "kind" key first, holding `b` (JSON.parse keeps a
+// duplicate key's last value, so the record is the same record). The honest
+// form holds EF BF BD (U+FFFD) where the planted one holds 0xFF: the two
+// decode to the same text, and their bytes differ.
+function dupKindBytes(text, b) {
+  const at = text.indexOf("{") + 1;
+  return Buffer.concat([Buffer.from(text.slice(0, at), "utf8"), Buffer.from('"kind":"', "utf8"), Buffer.from(b), Buffer.from('",', "utf8"), Buffer.from(text.slice(at), "utf8")]);
+}
+function projectBytes(id, role, bytes) {
+  const k = storedCase(id);
+  gh.seed(PINS, C.casePath(id), { ...k, commitments: { ...k.commitments, [role]: { ...k.commitments[role], registration_sha256: sha(bytes) } } }, { keepHistory: true });
+}
+
+test("MUST-FAIL GAP (PF11): a registration that validates with a byte that is not UTF-8 in it: the projection answers its bytes' sha256, and a file whose text is the projected file's but whose bytes are not is not the file projected", async () => {
+  const c = await committedCase("RPAGEf gap shas");
+  const p = REG.pathOf(gh, c.id, "a");
+  const text = gh._repoMap(PINS).get(p).content;
+  const planted = dupKindBytes(text, [0xff]);
+  assert.notEqual(sha(planted), sha(Buffer.from(planted.toString("utf8"), "utf8")), "fixture: the bytes' sha256 is not the text's");
+  gh.seedBytes(PINS, p, planted);
+  projectBytes(c.id, "a", planted);
+  const proj = await S.projectedRegistrations(storedCase(c.id));
+  assert.equal(proj.ok, true, JSON.stringify(proj));
+  assert.equal(proj.shas.a, sha(planted));
+  // the brief's case: the root projects the honest bytes (EF BF BD), the
+  // file read holds 0xFF; their texts are the same
+  const honest = dupKindBytes(text, [0xef, 0xbf, 0xbd]);
+  assert.equal(honest.toString("utf8"), planted.toString("utf8"), "fixture: the same text");
+  projectBytes(c.id, "a", honest);
+  const differs = await S.projectedRegistrations(storedCase(c.id));
+  assert.deepEqual([differs.ok, differs.role, differs.reason], [false, "a", "registration_file_differs"]);
+});
+
+test("MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded", async () => {
+  const c = await sealedCase("RPAGEf gap check line");
+  const p = REG.pathOf(gh, c.id, "a");
+  const planted = dupKindBytes(gh._repoMap(PINS).get(p).content, [0xff]);
+  gh.seedBytes(PINS, p, planted);
+  projectBytes(c.id, "a", planted);
+  const html = (await viewAs(c.id)).html;
+  const line = checkLines(html).find((l) => l.text.startsWith(esc("role a's registration file")));
+  assert.ok(line, JSON.stringify(checkLines(html)));
+  assert.ok(line.text.includes(`sha256 ${sha(planted)}`), line.text);
+});
+
+test("MUST-FAIL GAP (PF40): the README says the withdrawal time prints relative and absolute", () => {
+  assert.ok(README().replace(/\s+/g, " ").includes("withdrawn on presentation of role a's commitment preimage (or b's), then the time written, relative and absolute"));
+});
+
+test("MUST-FAIL GAP (PF20): the cross-reference sent with the reveal prints its recorded time relative and absolute", async () => {
+  const c = await committedCase("RPAGEf gap xref recorded");
+  const r = await reveal(c, { body: { ...revealBody(c.id, c.a, c.b), cross_reference: XREF } });
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
+  const x = storedCase(c.id).cross_reference;
+  assert.equal(typeof x.recorded_at, "string", "fixture: the reveal recorded it");
+  const row = cell((await viewAs(c.id)).html, "with the reveal");
+  assert.ok(row.endsWith(`<span class="muted">(recorded 1 hour ago (${x.recorded_at}))</span>`), row);
+});
