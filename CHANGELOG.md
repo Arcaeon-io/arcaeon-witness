@@ -1,5 +1,92 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDE, Group A: page sentences that claim more than the record (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **The brief.** Three outside readers read the whole protocol at a118c94 as hostile strangers; the architect's rulings on what they found are binding. R-WIDE is four groups (A to D), each its own commit set and its own entry here. This is Group A, the blockers.
+- **Commits.** 5ab2ec6 (tests, code, README, the rewritten tests) and this entry's commit (the defect list and its ledger, the gap tests, the change log).
+- **A1. The records line prints only what was read.** `lib/_case_page.js` `recordsWords` is gone ("two records: a second operator holds a record of this case" and "one record: this service's, ..."). The records cell now says:
+  - when the reveal carried a `cross_reference`: "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names";
+  - then, from the valid rows `liveRecords` read: "N reference rows were appended: row 1 on presentation of role a's commitment preimage; row 2 with the operator key" (one row: "1 reference row was appended: ..."; none, from a read that saw every listed row: "no reference row was appended");
+  - a read that did not see every listed row (left past the window, or a read that failed) says "... among the rows read when this page was read", and with no valid row "no valid reference row was among the rows read when this page was read", never that no row was appended (item 2d's FIX 2, carried over);
+  - a listing that failed: "the reference rows could not be read when this page was read";
+  - the notes on invalid, unreadable and unread rows are kept, one per line.
+  - The sealed `records` field (2 with a `cross_reference`, else 1) is no longer printed. The words "second operator" appear nowhere on the page or in the README, and the records line never says "holds". README: the reference-row section's first sentence ("A second operator's reference row is signed ...") now reads "A reference row is signed ...", and it gains the records line's two sentences.
+- **A2. Presented, never a party.** The withdrawn page's row reads "withdrawn on presentation of role a's commitment preimage, at T" (it read "by role a, at T (the role proved itself with its commitment preimage)"). The refusal for a request that is not a party's says "a refusal receipt is issued on presentation of a party's preimage" (it said "issued to a party only"). README: "A withdrawal (`?op=case-withdraw`) is accepted on presentation of a role's commitment preimage, ..." and a sentence that the page names what was presented, since the sender of a joint reveal holds both openings. The comments at `lib/_case_http.js` A ROLE PROVES ITSELF and THE REFUSAL BEFORE THE TAPES say the same.
+- **A3. The withdrawn page fails closed.** `renderCase` reads the withdrawal record through the one reader (`signedUnderReason`) before it shows anything of it, and routes it as a VERDICT is routed:
+  - a named document that could not be read: the could-not-look page, 503 (its words say "the withdrawal record", not "the sealed record");
+  - a named commit off the published branch: the same page at 200;
+  - a key the current document lists revoked: the SIGNED BY A REVOKED KEY page, "... so this page does not show its withdrawal record, whenever it was signed.";
+  - `signature_invalid`, `signer_unlisted` (anything else that is not `valid_under_document`): a new one-sentence page at 200, heading WITHDRAWAL RECORD DOES NOT VERIFY, "The withdrawal record stored for this case does not verify, so this page shows nothing from it.", then the reader's code and the case file's two links.
+  - None of them shows the role, the time, the reason, the claim or the registrations note. `withdrawalSignedByHtml` is gone: the signed-by cell is printed only for a record that verifies.
+- **A4. What a registration's signature binds.** The registration sentence (page and README) now reads: "A registration file is signed by the key that registered it; this service does not bind that key to the party label or to the commitment's preimage. The signature covers the case, role and commitment; the file's registered_at, stamp_commit and stamped_at are the service's unsigned arrival note until a seal copies them into signed bytes."
+  - When the opening names a party's `key_id`, a registration of that party's role under another key id is refused 409 `key_mismatch`, codes only (`{ok, error_code, case_id, role}`), and nothing is written. The check is in `projectionBar`, so it runs before the file is written (the pre-write call passes the request's key id again) and at the projection.
+  - A key id is a name and a 32-bit hash: this compares names and binds no key. The binding (the opening naming the parties' keys so only the named key may register) is a later unit's, and is not built here. The README says so.
+- **A5. No reconcile key, no sealing.** `lib/_case_seal.js` `sealingOffered(doc)`: the document lists an active reconcile key. When the document the deployment carries lists none, the reveal answers 409 `sealing_not_offered`, codes only (`{case_id}`), and the refusal receipt the same with `status: "WITHDRAWN"`, both before the document is confirmed or anything is compared. They answered 503 `signer_unavailable`, which no re-send can finish.
+  - A document that lists one, with no reconcile key configured (or another key configured), is still 503 `signer_unavailable`: an operator can finish it.
+  - The committed key document lists no reconcile key; publishing one is a deploy step outside this unit. Its description no longer describes one: "A reconcile key (role reconcile), once this document lists one active, signs each sealed case's reconcile receipt and each refusal receipt; while this document lists no active reconcile key, this service seals no case and issues no refusal receipt (it answers sealing_not_offered)." and "a case key is never the witness log's key or a reconcile key". Its `updated` is 2026-10-15.
+- **A6. The deployment's own document commit off the branch.** `confirmSealingDocument` now says `off` when the deployment's commit is definitely not on the published branch (ahead or diverged; a 404 is not off). Every caller answers that 503 `deployment_document_off_branch`, codes only (`{case_id}`): the reveal, the refusal receipt, and `signingDocument` (the withdrawal and the reference). It answered 503 `document_unavailable` with reason `commit_not_on_branch`.
+  - A commit the repository does not show is still `document_unavailable`, which a re-send can finish.
+  - The status page shows one line under the case row (`lib/_case_seal.js` `deploymentDocumentState`): confirmed at commit X; or `deployment_document_off_branch`, "... this is an operator fault, not a sender's, and no request can finish it until the deployment is rebuilt from the published branch."; or `document_unavailable` with its reason. It does not change the overall status.
+  - README: the published-branch section says the same, an operator fault, not a sender's.
+  - `tools/preview_dry_run.js` (e) reads both new answers as BROKEN (the preview's configuration), as it read `document_unavailable` with `commit_not_on_branch` before.
+- **Line counts.** `lib/_case_page.js` 754 to 786, `lib/_case_http.js` 2449 to 2492, `lib/_case_seal.js` 2322 to 2355.
+- **Tests.**
+  - New, `test/case_rwide.test.js` (Group A: 15, and 4 gap tests), and one in `test/preview_dry_run.test.js` (the preview reads `sealing_not_offered` as BROKEN). All 20 fail on 07903f3.
+  - Rewritten to the rulings, each with a note naming the ruling and what it said before:
+    - A1: `case_item2c` PAGE (the records cell and the ALTERED row), `case_item2d` FIX 2 (the page's words for a read that did not see every row; the rule it pins, never a count from a truncated read, now reads "never that no row was appended");
+    - A2: `case_item2c` PAGE (the withdrawn row), `case_redteam` §2B by_role (renamed: "it names the role whose preimage was presented (by_role), and the page says so, in those words");
+    - A3: R-SIG 2 (renamed: "the withdrawn page says only that it does not verify, with its code"), MUST-FAIL GAP (V03, V10) (the could-not-look page, no signed-by cell), P07 (the one-sentence page), MUST-FAIL GAP (L11) (the planted record is now signed, so it verifies, and its kept projection shares a `key_fp`);
+    - A4: R-SIG rule 11 (renamed "ruled; reworded by R-WIDE A4");
+    - A5: R-SIG rule 12, DESIGN N (3)'s no-reconcile-key arm, `case_item2c` FIX 2's committed-document arm (409 `sealing_not_offered`), R-N N1's third case and MUST-FAIL GAP (C03, C11) (the deployment's key is now another key beside the one the document lists, so the 503 and its `reconcile_key_unpublished` are still reached);
+    - A6: `case_trust_root` I2 and MUST-FAIL GAP (PD01) (the off-branch arm reads `deployment_document_off_branch`).
+- **The must-fail pass** (the repository's runner; dates from the ledger, `test/must_fail/r_wide_a.ledger.json`). 30 defects were planted over the lines Group A changed, each alone with the whole suite run: `lib/_case_page.js` 14, `lib/_case_http.js` 9, `lib/_case_seal.js` 3, `api/status.js` 1, `tools/preview_dry_run.js` 2, the key document 1.
+  - 26 were caught. The 4 that survived (WA04, WA05, WA06, WA08: the records line's three reads that do not see every row, and the withdrawn root naming an off-branch document) each have a gap test, and each was re-seeded the same day against the whole suite and caught.
+  - Found while running it: the runner read each defect's file from the live tree for every defect, not from its copy, so an edit made during a run would have been planted with the defect. Nothing was edited during this run. Group B's runner reads it from the copy.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | WA01 | `lib/_case_page.js` | the records line drops the typed cross-reference sentence | caught (2 failing) | 2026-10-15 |
+  | WA02 | `lib/_case_page.js` | a read that did not see every row says no row was appended | caught (2 failing) | 2026-10-15 |
+  | WA03 | `lib/_case_page.js` | every row is said to be appended with the operator key | caught (3 failing) | 2026-10-15 |
+  | WA04 | `lib/_case_page.js` | a failed rows read says no row was appended | survived; caught on re-seed by MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended | 2026-10-15 |
+  | WA05 | `lib/_case_page.js` | rows whose read failed are taken as seen | survived; caught on re-seed by MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read | 2026-10-15 |
+  | WA06 | `lib/_case_page.js` | invalid rows are counted as appended | survived; caught on re-seed by MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended' | 2026-10-15 |
+  | WA07 | `lib/_case_page.js` | a withdrawn root whose document could not be read is not the 503 could-not-look page | caught (3 failing) | 2026-10-15 |
+  | WA08 | `lib/_case_page.js` | a withdrawn root naming an off-branch document is not the could-not-look page | survived; caught on re-seed by MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no wi | 2026-10-15 |
+  | WA09 | `lib/_case_page.js` | a withdrawn root signed by a revoked key is not the revoked page | caught (2 failing) | 2026-10-15 |
+  | WA10 | `lib/_case_page.js` | a withdrawal record that does not verify shows its detail | caught (4 failing) | 2026-10-15 |
+  | WA11 | `lib/_case_page.js` | the withdrawn row names a role, not the preimage presented | caught (5 failing) | 2026-10-15 |
+  | WA12 | `lib/_case_page.js` | the withdrawn could-not-look page speaks of a sealed record | caught (2 failing) | 2026-10-15 |
+  | WA13 | `lib/_case_page.js` | the withdrawn revoked page speaks of a verdict | caught (2 failing) | 2026-10-15 |
+  | WA14 | `lib/_case_page.js` | the registration sentence names a party as the signer | caught (3 failing) | 2026-10-15 |
+  | WA15 | `lib/_case_http.js` | the opening's named key id is not compared | caught (548 failing) | 2026-10-15 |
+  | WA16 | `lib/_case_http.js` | the pre-write bar is not given the registering key id | caught (2 failing) | 2026-10-15 |
+  | WA17 | `lib/_case_seal.js` | a revoked reconcile entry offers sealing | caught (2 failing) | 2026-10-15 |
+  | WA18 | `lib/_case_http.js` | the reveal does not answer sealing_not_offered | caught (4 failing) | 2026-10-15 |
+  | WA19 | `lib/_case_http.js` | the refusal receipt does not answer sealing_not_offered | caught (3 failing) | 2026-10-15 |
+  | WA20 | `lib/_case_http.js` | the withdrawal and the reference answer an off-branch deployment document_unavailable | caught (2 failing) | 2026-10-15 |
+  | WA21 | `lib/_case_http.js` | the reveal answers an off-branch deployment document_unavailable | caught (4 failing) | 2026-10-15 |
+  | WA22 | `lib/_case_http.js` | the refusal receipt answers an off-branch deployment document_unavailable | caught (2 failing) | 2026-10-15 |
+  | WA23 | `lib/_case_seal.js` | a commit the repository does not show is taken as off the branch | caught (3 failing) | 2026-10-15 |
+  | WA24 | `lib/_case_seal.js` | the status state never says the deployment's document is off the branch | caught (2 failing) | 2026-10-15 |
+  | WA25 | `api/status.js` | the status page drops the deployment document line | caught (2 failing) | 2026-10-15 |
+  | WA26 | `tools/preview_dry_run.js` | the preview does not call an off-branch deployment BROKEN | caught (1 failing) | 2026-10-15 |
+  | WA27 | `tools/preview_dry_run.js` | the preview does not call a document with no reconcile key BROKEN | caught (1 failing) | 2026-10-15 |
+  | WA28 | `lib/_case_http.js` | the not-a-party refusal says a receipt is issued to a party | caught (2 failing) | 2026-10-15 |
+  | WA29 | `lib/_case_http.js` | the refusal receipt's sealing_not_offered does not say the case is WITHDRAWN | caught (2 failing) | 2026-10-15 |
+  | WA30 | `public/.well-known/arcaeon/case-signing-keys.json` | the key document's description describes a reconcile key it does not list | caught (3 failing) | 2026-10-15 |
+
+- Counts, as `npm test` prints them here (both environment-dependent tests skip): 1534 tests, 1527 pass, 2 skipped, 0 fail, 5 todo. The three runs are on the final tree, after Group D.
+- **UNSURE.**
+  - A1, "the words 'holds' and 'second operator' appear nowhere": read as the records line's claim. "Second operator" appears nowhere on the page or in the README; the records line never says "holds". The page keeps "holds" in ruled sentences about other things: the parties panel ("never checks who holds it"), the pin words ("holds another chain", R-J2 B1; "holds no case file at that commit") and the withdrawal claim ("a tape a counterparty already holds").
+  - A1: the reference's answer still carries `records_live` (1, 2 or null), the operator count the page no longer prints. The brief rules on the page and the README; the body is unchanged.
+  - A1: the number words are mine for one row ("1 reference row was appended") and none ("no reference row was appended"); the ruling gives "N reference rows were appended".
+  - A2: the withdrawn row's label is now "withdrawal" (it was "withdrawn"), so the cell holds the whole sentence.
+  - A3: the one-sentence page for a withdrawal record that does not verify is new copy: its heading (WITHDRAWAL RECORD DOES NOT VERIFY) and its sentence are mine. The could-not-look and revoked pages for a withdrawn root use "withdrawal record" where the VERDICT's say "sealed record" and "verdict".
+  - A4: the comparison is by key id, as the ruling says, so two keys that share a key id (the T12 pair) pass it. The README says a key id is a name and binds no key.
+  - A5: `sealing_not_offered` is checked before the deployment's document is confirmed, since the carried document alone decides it. The refusal receipt's answer adds `status: "WITHDRAWN"` beside `case_id`, after the withdrawal record is confirmed.
+  - A6: the status page's line is printed in all three states (confirmed, off the branch, unavailable), and costs one compare read per status view when the deployment names its commit.
+
 ## 2026-10-15: Unit R-ABf: the fixes for R-AB (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** 0408ca1 (tests and code) and this entry's commit (the defect list and its ledger, the gap tests, the change log).

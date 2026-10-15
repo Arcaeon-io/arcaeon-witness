@@ -606,3 +606,52 @@ test("R-WIDE A6: the status page says in one line that the deployment's document
   assert.ok(README().includes("This is an operator fault, not a sender's"), "README");
 });
 
+// Group A's must-fail gap tests: each fails with its planted defect
+async function withFailingGet(match, fn) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => ((!o || !o.method || o.method === "GET") && match(decodeURIComponent(String(url)))
+    ? { status: 502, ok: false, json: async () => ({}), text: async () => "{}" }
+    : viaMock(url, o));
+  try {
+    return await fn();
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+test("MUST-FAIL GAP (WA04): when the reference rows cannot be listed, the records line says they could not be read, never that no row was appended", async () => {
+  const s = await sealedCase("RWIDE gap WA04");
+  const p = await withFailingGet((u) => u.includes(`/contents/${C.referencesDir(s.id)}`) && !u.includes(".json"), () => casePage(s.id));
+  assert.equal(p.status, 200);
+  assert.equal(recordsCell(p.html), esc("the reference rows could not be read when this page was read"));
+});
+
+test("MUST-FAIL GAP (WA05): a reference row whose read failed is not seen: the records line never says no row was appended, and says the row could not be read", async () => {
+  const s = await sealedCase("RWIDE gap WA05");
+  assert.equal((await reference(s, { role: "a" })).status, 201);
+  const p = await withFailingGet((u) => u.includes(`/contents/${C.referencePath(s.id, 1)}`), () => casePage(s.id));
+  const t = recordsCell(p.html);
+  assert.ok(t.startsWith(esc("no valid reference row was among the rows read when this page was read")), t);
+  assert.ok(t.includes("1 reference row(s) could not be read when this page was read."), t);
+});
+
+test("MUST-FAIL GAP (WA06): an invalid reference row is not counted as appended: one valid row and one invalid row read '1 reference row was appended'", async () => {
+  const s = await sealedCase("RWIDE gap WA06");
+  assert.equal((await reference(s, { role: "a" })).status, 201);
+  gh.seed(PINS, C.referencePath(s.id, 2), { ...gh.read(PINS, C.referencePath(s.id, 1)), seq: 2, extra: true });
+  const t = recordsCell((await casePage(s.id)).html);
+  assert.ok(t.startsWith(esc("1 reference row was appended: row 1 on presentation of role a's commitment preimage")), t);
+  assert.ok(t.includes("1 reference row(s) are not valid and are not counted"), t);
+});
+
+test("MUST-FAIL GAP (WA08): a withdrawal record naming a document commit off the published branch is the could-not-look page at 200, worded off the branch, with no withdrawal detail", async () => {
+  const c = await withdrawnBy("RWIDE gap WA08", "a");
+  const side = KD.serveOffBranch(gh, DOC, "7".repeat(40));
+  const w = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), signByHand({ ...withoutSig(w), signed_under: { ...w.signed_under, document_commit: side } }, caseSigner()));
+  const p = await pageUnder(c.id, DOC);
+  assert.equal(p.status, 200);
+  assert.match(p.html, /<h1>Case: COULD NOT LOOK<\/h1>/);
+  assert.ok(p.html.includes("The key document this case names is not on the published branch"), p.html.slice(0, 3000));
+  assert.ok(p.html.includes("says neither that the withdrawal record verifies nor that it does not"));
+  for (const d of WITHDRAWAL_DETAIL) assert.doesNotMatch(p.html, d, String(d));
+});
