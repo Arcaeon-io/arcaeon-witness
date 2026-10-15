@@ -506,3 +506,22 @@ server.listen(sock, () => {
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), { request: "here", connect: "connected" });
 });
+
+test("MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "must-fail-own-conn-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const probe = path.join(dir, "probe.js");
+  fs.writeFileSync(probe, `"use strict";
+const http = require("node:http"); const https = require("node:https"); const { PassThrough } = require("node:stream");
+const own = () => new PassThrough();
+const tried = (fn) => { try { const q = fn(); q.on("error", () => {}); q.destroy(); return "allowed"; } catch (e) { return /must-fail run: no network/.test(e.message) ? "refused" : "other: " + e.message; } };
+console.log(JSON.stringify({
+  http_hostname: tried(() => http.request({ hostname: "example.com", path: "/", createConnection: own })),
+  https_host: tried(() => https.request({ host: "api.github.com", path: "/", createConnection: own })),
+  http_loopback: tried(() => http.request({ hostname: "127.0.0.1", path: "/", createConnection: own })),
+}));
+`);
+  const r = spawnSync(process.execPath, ["--require", path.join(__dirname, "must_fail", "no_network.js"), probe], { encoding: "utf8", timeout: 20000, env: probeEnv() });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { http_hostname: "refused", https_host: "refused", http_loopback: "allowed" });
+});

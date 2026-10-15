@@ -61,6 +61,22 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "207c8bede4e2501497a4b66cf43062bcb77afe1d9e71d3148094930a0f588cc3"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "207c8bede4e2501497a4b66cf43062bcb77afe1d9e71d3148094930a0f588cc3",
+        "caught_by": [
+          "MUST-FAIL GAP (WF04): the README says when the reveal and the refusal receipt answer 409 sealing_not_offered before the off-branch 503"
+        ]
       }
     ]
   },
@@ -176,6 +192,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "0a6122015b64b58cb0f917cae4586e3df389d2c6c788b50c7bc1d50a712fe911"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "0a6122015b64b58cb0f917cae4586e3df389d2c6c788b50c7bc1d50a712fe911",
+        "caught_by": [
+          "MUST-FAIL GAP (WF11): runSuite runs the suite in the environment it is handed"
+        ]
       }
     ]
   },
@@ -337,6 +368,16 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "39f6a2948593e10eecf4cf5879b8224bd092c847ff98aca84ba0b404976f9f02"
       }
     ]
   },
@@ -351,6 +392,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "2d36acac00366add25dc46734e54a204e62cc091178d876fb183286cbe13bb60"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "2d36acac00366add25dc46734e54a204e62cc091178d876fb183286cbe13bb60",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -365,6 +421,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "f9df90ff0e66a19a69403d61f7d265c64c26687593e5090bb94e26c75fed3c16"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "f9df90ff0e66a19a69403d61f7d265c64c26687593e5090bb94e26c75fed3c16",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -379,6 +450,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "27bbb1370bc6ecdc3ef21c2c035921e48b85744fbb7863a3ccb1542b62251d13"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "27bbb1370bc6ecdc3ef21c2c035921e48b85744fbb7863a3ccb1542b62251d13",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -393,6 +479,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "91fee250f2693abd6d08bd62ccda238c95c0171423807ada8dba893beb442a8c"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "91fee250f2693abd6d08bd62ccda238c95c0171423807ada8dba893beb442a8c",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -405,6 +506,16 @@
         "failing": 0,
         "failing_tests": [],
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
+        "porcelain": "",
+        "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
         "porcelain": "",
         "defect_sha256": "cd796c78bff63876eafc69d342b5a2bfeff253cb918e08cc3e6162173984b19d"
       }
@@ -421,6 +532,16 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "a511747d235efb1ad836cb2e5578388474713aa10bd30b917eb1891da6c8aa5a"
       }
     ]
   },
@@ -435,6 +556,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "2fd1b2c2fb6d08a825da8c898d6346818db54365d44ceb81675b947416ac49af"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "2fd1b2c2fb6d08a825da8c898d6346818db54365d44ceb81675b947416ac49af",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -449,6 +585,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "a6b94abedb05b79d7d8c38a7ba19494df974a75338f7ff38512cc417cfefe9ee"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "a6b94abedb05b79d7d8c38a7ba19494df974a75338f7ff38512cc417cfefe9ee",
+        "caught_by": [
+          "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine thro"
+        ]
       }
     ]
   },
@@ -463,6 +614,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "7b318c4a03e4c064a9b595529fb172e30d3141f6e869f4a1394d65e4881646c4"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "7b318c4a03e4c064a9b595529fb172e30d3141f6e869f4a1394d65e4881646c4",
+        "caught_by": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ]
       }
     ]
   },
@@ -477,6 +643,21 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "4ebc5dd0bca5f746471a1422dbe395623286d880015682197cbfe14444e5e3de"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "4ebc5dd0bca5f746471a1422dbe395623286d880015682197cbfe14444e5e3de",
+        "caught_by": [
+          "MUST-FAIL GAP (WF30, WF31): the no-network preload lets a Unix socket or a named pipe through (a path is this machine's)"
+        ]
       }
     ]
   },
@@ -798,6 +979,22 @@
         "head": "6a7ff6d0798101b51179fd10b29edbad49ee6eff",
         "porcelain": "",
         "defect_sha256": "49fa1d575c8a4ac63d3d5fa53dc01d4f104a1639902267519795a1fab88cd194"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "a9c1dc4e8f972fbf0efeb591ac1db972ab1a5fe8",
+        "porcelain": "",
+        "defect_sha256": "49fa1d575c8a4ac63d3d5fa53dc01d4f104a1639902267519795a1fab88cd194",
+        "caught_by": [
+          "MUST-FAIL GAP (WF49): a document at the tip that is not JSON is published_document_unreadable, not_json"
+        ]
       }
     ]
   },

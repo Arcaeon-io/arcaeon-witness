@@ -147,7 +147,7 @@
   "find": "for (const mod of [http, https]) {",
   "replace": "for (const mod of [http]) {",
   "what": "F2-d: https is not guarded",
-  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
  },
  {
   "id": "WF22",
@@ -187,7 +187,7 @@
   "find": "    if (opts.hostname) host = String(opts.hostname);",
   "replace": "    if (false) host = String(opts.hostname);",
   "what": "F2-d: a request's hostname option is not read",
-  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
  },
  {
   "id": "WF27",
@@ -195,7 +195,7 @@
   "find": "    else if (opts.host) host = String(opts.host);",
   "replace": "    else if (false) host = String(opts.host);",
   "what": "F2-d: a request's host option is not read",
-  "gap": "R-WIDEf F2-d: the no-network preload refuses http.request, https.request, net.connect and tls.connect to any host but this machine's, and lets this machine through"
+  "gap": "MUST-FAIL GAP (WF21, WF26, WF27): a request whose connection the caller makes itself (createConnection, no net or tls socket) is refused by the request's own guard, read from its hostname or host option"
  },
  {
   "id": "WF28",
