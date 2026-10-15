@@ -1,0 +1,455 @@
+{
+  "WD01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "CONTRACT: a new fingerprint is stamped, 201, and the record holds a hash, a time and nothing else (no size since R-WIDE D1)",
+          "FIRST WRITE WINS: stamping the same fingerprint again returns the ORIGINAL time and writes nothing",
+          "PRIVACY: the paid path stores a fingerprint and a time and nothing else (no size since R-WIDE D1), in the stamps repo",
+          "R-WIDE D1: a stamp stores {kind, v, sha256, stamped_at} and no size, whatever size the request sends; the answer carries none"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "a4b5ea92838a824f3975da6e31471a4cf324b1e3ce772668205661bf54985022"
+      }
+    ]
+  },
+  "WD02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "VALIDATION: bad fingerprints and bad sizes are 400 and write nothing"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "924dd484ca6db570a769f1e7cfdd4e2fe0701c653dcaabc7166ccedb74262ffa"
+      }
+    ]
+  },
+  "WD03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D1: a stamp stores {kind, v, sha256, stamped_at} and no size, whatever size the request sends; the answer carries none"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "cc844a6d1ec484f7cb1c79afb77ae34d490e5b9b07eb7598444a1b6026e42861"
+      }
+    ]
+  },
+  "WD06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "PAID: four stamps at 0.25 credits each cost exactly one credit, with no float drift",
+          "PAID: an insufficient balance is 402 with an honest body, and nothing is stamped",
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "0dc6c98c1c6e02d67cc9e28c8e7b881ca9585479abb26bfcf7dc371f116dd500"
+      }
+    ]
+  },
+  "WD05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "665685c91ab6db099088a074543ba27fe47b3bb4a870f64787456b795e1af524"
+      }
+    ]
+  },
+  "WD04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D1: the scope's does_not_prove says the stamper's statements about the bytes are not checked"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "ea3dcb79fd0df415f399c18ac6447ceb137b9e6f4b590db5c7a9fd1bbf78ace6"
+      }
+    ]
+  },
+  "WD09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "ef9e55d0465bc18062bde3119c3945b8c71166e3803df636583a729732d19172"
+      }
+    ]
+  },
+  "WD07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "bed06395d1c37da07152005757c76f5267749fbf51ce3033b3a59e8f50bc9ca4"
+      }
+    ]
+  },
+  "WD08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "6aaf4da0664706d218ca43be84248a204bece496c1ec7d8f4e61152263957620"
+      }
+    ]
+  },
+  "WD11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "1fdcfad436d29786528d9b56bb6fbc64ed304d4059a0420bac2de8865c5253f1"
+      }
+    ]
+  },
+  "WD10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "3868e69bbed7fb4cd782f36a5cff8286bfc747286c95dcb2292e3ed572cdbb53"
+      }
+    ]
+  },
+  "WD12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "5c5211ae48916719491e0aabfca11b41c3359f7a697a19b8fcf95aaa550bbf90"
+      }
+    ]
+  },
+  "WD14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "1d58a2ac63c2dc4e045ce57b8f1886638dad816512728cfea5f3ed94fb443fc0"
+      }
+    ]
+  },
+  "WD13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D2: the price, 0.25 credit per stamp past the free allowance, is ratified in the code's comment; the README has a stamp section with the price, the free "
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "857e43e43a96dde07acc28d6668f99ebea45e4228991a7a677edcec244b0d613"
+      }
+    ]
+  },
+  "WD15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "935bda76f85e6ff902fa61170cd564397aa92e4c460ea3c28f5abb94b3435f38"
+      }
+    ]
+  },
+  "WD16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "a199af3b2bf86a29e76dc12808676ec5980bb39cd1e20b8beb7e53039b0c5c23"
+      }
+    ]
+  },
+  "WD18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "dc9a63ba7c69aaae7418b234f8b3bddac3e9a8059637f981cef2a0f22899c752"
+      }
+    ]
+  },
+  "WD17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "1bc1029f75dff20db8095f0c513a204719024812e251fc5c64d4f2a27de4c538"
+      }
+    ]
+  },
+  "WD19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "0249eabcf10194caef0342fe6e52d440c8d10e2357d3c59533be084344565241"
+      }
+    ]
+  },
+  "WD20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "364edbacfe7eedfed748f35ec761da38ad1d0e16ad750b00af3e5634b8b04898"
+      }
+    ]
+  },
+  "WD21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE D3: api/verify.js's header and the README's Layout row name every ?op= mode it dispatches, and which ones write and which one charges"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "e1fe8a09bee975f1900e83eac35fcf1459bb1b6b160c3f3b42ceea8c5a899dac"
+      }
+    ]
+  },
+  "WD23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 24,
+        "failing_tests": [
+          "TEST 3, ITEM 1B (RETIRED BY R-WIDE D1): a file-stamp of the matching hash registers whatever size it records (64, a tape's byte length, none, absent); no size i",
+          "TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp and projects nothing if it fails",
+          "MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a written file rechecks the stamp without its history, and says so when the stamp is go",
+          "ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --pin-token, every check is VERIFIED and the exit is 0",
+          "DEFAULT RUN: without --exhaust-quota and --pin-token, (c) and (f) are COULD NOT LOOK and say why, the rest VERIFIED, exit 3",
+          "(d) BROKEN when the immediate read does not see the stamp's commit, or reads another; COULD NOT LOOK when the history cannot be read",
+          "(e) BROKEN when the platform loses a chunked JSON body, or asks for a length; the case stays COMMITTED",
+          "(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_by null is BROKEN, never VERIFIED; so is any seal the published key does not confirm, ",
+          "(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BROKEN when it refuses a case; COULD NOT LOOK when the store is not the preview's",
+          "(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to the reconcile key WITNESS_RECONCILE_VERIFIER names (another key is BROKEN, none is COULD",
+          "T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it",
+          "(f) REVIEW FIX 3: a pinned state counts only under the reveal's own chain; a pin read under another chain is BROKEN (unit R-PIN: no anchored state)",
+          "PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret and none asks for the bypass cookie, which the stand-in",
+          "EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anything COULD NOT LOOK, even beside a BROKEN",
+          "CLI: seven lines on stdout and nothing else, in order; no key, operator key or pin token on either stream; exit 3 without the two flags",
+          "CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET when the flag is absent, the flag wins over it, an empty variable is no bypass; never pr",
+          "T03 (f) DESIGN J: a case still not pinned after the pass, its pin write failing at the reveal and in the pass, is COULD NOT LOOK with the pass's reason, never B",
+          "T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, naming why",
+          "MUST-FAIL GAP (T04, unit R-PIN): a case the pass did not pin, not pending and with no candidate deferred, reads not_pinned and is BROKEN, never 'fell outside th",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "aeb83bdb45761813e0f95fe43c79ee4138c566602e84b2a3ec7f206e4a1c03e6"
+      }
+    ]
+  },
+  "WD22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "R-RVf B2: a stamp path with more than ten pages of history answers 409 commits_beyond_bound with the existing sentence, writes nothing, and a re-send with a new",
+          "R-RVf M1: a stamp whose bytes differ from those its oldest commit wrote answers 409 stamp_rewritten with the existing sentence; nothing is recorded and the case",
+          "R-RVf3 4a: stamp_rewritten says the stamp is not the bytes recorded at its oldest commit, or is absent there, both when the bytes differ and when no file is the",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "5752d91fc2c4923fcc922c4566d688adaf3e982330f0280c84c83f4213b83d42"
+      }
+    ]
+  },
+  "WD24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "TEST 3, ITEM 1B (RETIRED BY R-WIDE D1): a file-stamp of the matching hash registers whatever size it records (64, a tape's byte length, none, absent); no size i",
+          "TEST 3, ITEM 2A (1B LEFTOVER): the retry that completes a registration rechecks the stamp and projects nothing if it fails",
+          "MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a written file rechecks the stamp without its history, and says so when the stamp is go",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "42470fa2bff265989a04192d71b25bcb7fbed098e3c79c58b8bf79706de5bd9b"
+      }
+    ]
+  },
+  "WD25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 20,
+        "failing_tests": [
+          "ALL VERIFIED: against a preview that behaves, with --exhaust-quota and --pin-token, every check is VERIFIED and the exit is 0",
+          "DEFAULT RUN: without --exhaust-quota and --pin-token, (c) and (f) are COULD NOT LOOK and say why, the rest VERIFIED, exit 3",
+          "(d) BROKEN when the immediate read does not see the stamp's commit, or reads another; COULD NOT LOOK when the history cannot be read",
+          "(e) BROKEN when the platform loses a chunked JSON body, or asks for a length; the case stays COMMITTED",
+          "(e) REVIEW FIX 1: a reveal answering 201 VERDICT with sig null and signed_by null is BROKEN, never VERIFIED; so is any seal the published key does not confirm, ",
+          "(f) VERIFIED when the pass pins a case whose pin failed at the reveal; BROKEN when it refuses a case; COULD NOT LOOK when the store is not the preview's",
+          "(e), (f) RED-TEAM FIX B AND DESIGN I: (e) holds the receipt's signer to the reconcile key WITNESS_RECONCILE_VERIFIER names (another key is BROKEN, none is COULD",
+          "T06, T07 (f) DESIGN I: a pass that could not read the key document this run's sealed case names is COULD NOT LOOK, saying so, and the summary counts it",
+          "(f) REVIEW FIX 3: a pinned state counts only under the reveal's own chain; a pin read under another chain is BROKEN (unit R-PIN: no anchored state)",
+          "PROTECTED, RIGHT BYPASS: the checks run (all VERIFIED with both flags); every request carries the secret and none asks for the bypass cookie, which the stand-in",
+          "EXIT CODES: 0 all VERIFIED, 2 a BROKEN with nothing unlooked, 3 when anything COULD NOT LOOK, even beside a BROKEN",
+          "CLI: seven lines on stdout and nothing else, in order; no key, operator key or pin token on either stream; exit 3 without the two flags",
+          "CLI, PROTECTED: the bypass is read from VERCEL_AUTOMATION_BYPASS_SECRET when the flag is absent, the flag wins over it, an empty variable is no bypass; never pr",
+          "T03 (f) DESIGN J: a case still not pinned after the pass, its pin write failing at the reveal and in the pass, is COULD NOT LOOK with the pass's reason, never B",
+          "T05 (f) DESIGN J: a pin the reader could not read is COULD NOT LOOK, naming why",
+          "MUST-FAIL GAP (T04, unit R-PIN): a case the pass did not pin, not pending and with no candidate deferred, reads not_pinned and is BROKEN, never 'fell outside th",
+          "MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROK",
+          "R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing",
+          "R-WIDE B3: (f) refuses to run unless --store names the pins store this shell writes to, and prints the target repository before any write",
+          "R-WIDE B2: (f) is BROKEN when this checkout's key document is not the one at the tip of the published branch, and COULD NOT LOOK when the tip could not be read;"
+        ],
+        "head": "4861d8cde1113cbc6d6f6a864cfef5a765bbb52e",
+        "porcelain": "",
+        "defect_sha256": "bb2f465ff8a25e2448cecb13fa61a4b790a176b108088251320b5244e90acda9"
+      }
+    ]
+  }
+}

@@ -1,5 +1,62 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-WIDE, Group D: stamps (branch `case-protocol-2026-10-10`, NOT deployed)
+
+- **Commits.** 6466231 (tests and code), 4861d8c (the defect list, committed before the run), and this entry's commit (the ledger and the change log).
+- **D1. A stamp is {sha256, stamped_at}.** `lib/_stamp.js` writes `{kind: "file-stamp", v: 1, sha256, stamped_at}` and nothing else.
+  - A size the request sends is still accepted (older pages send one) and checked for form (a size that is not a non-negative whole number is 400, as before), and it is not stored. The answer carries no size.
+  - The extra-field refusal says "A stamp stores a fingerprint and the time, nothing else; the store is public."
+  - `SCOPE.does_not_prove` ends "The stamper's statements about the bytes are not checked."
+  - The case registration reads no stamp size: `lib/_case_http.js` `readStamp`'s size check is removed, and `stamp_size_mismatch` is retired. A stamp of the wrong bytes (a tape hash stamped in place of the commitment's) registers, and the reveal's recomputation refuses it, as it always did. The refusals' advice is "Draw a new salt, compute a new commitment, stamp it and register that hash." A stamp written before D1 may carry a size; it is returned as stored, and nothing reads it.
+  - `tools/preview_dry_run.js` stamps with no size.
+- **D2. The price is ratified.** `lib/_stamp.js`'s price comment reads "THE NUMBER BELOW IS RATIFIED (2026-10-15, the architect): 0.25 credit per stamp past the free allowance, from the same prepaid balance the pins spend". The math stays as the record of what was ratified. `STAMP_PRICE_CREDITS` is unchanged (0.25).
+  - The README has a `### Stamps` section, under the API: the routes, what a stamp is, that it records the fingerprint and the time and nothing else, the price ("A stamp costs 0.25 credit, after the free allowance: 3 stamps per address per UTC day (STAMP_FREE_PER_DAY), past which a stamp needs a witness key."), the shared balance ("one balance per key, shared by pins and stamps"), and what a stamp proves and does not, word for word from `SCOPE`.
+- **D3. Every ?op= mode, named.** `api/verify.js`'s header has THE MODES: one line per `?op=` the file dispatches (bulk, stamp, reconcile, reconcile-page, case-open, case-commit, case-reveal, case-withdraw, case-reference, case-page), saying which WRITE (stamp and the five case writes) and the one that CHARGES (stamp). The README's Layout row for `api/verify.js` names the same modes the same way. A test reads the modes from the dispatch code, so a new `?op=` with no line fails it.
+- **Line counts.** `lib/_stamp.js` 690 to 695, `lib/_case_http.js` 2490 to 2469, `lib/_case.js` 1496 (a comment), `api/verify.js` 579 to 596, `tools/preview_dry_run.js` 1026, `README.md` 1027 to 1074.
+- **Tests.**
+  - New: `test/stamp_rwide.test.js` (4: D1 two, D2, D3). Each fails on aabbfc5, the Group C tip.
+  - Rewritten, each with a note: `stamp` CONTRACT and FIRST WRITE WINS, `stamp_own_repo` PRIVACY (each held a stored size; now none is stored); `case_protocol` TEST 3 ITEM 1B (it asserted `stamp_size_mismatch` for a size of 64, a tape's length and none; each now registers, and a stamp with no size key too) and ITEM 2A (1B LEFTOVER) (the retry's recheck is shown with a record that is not a file-stamp, 503 `stamp_record_unreadable`; a size of 64 projects); `case_rl4` H34 (the replay's recheck, the same way; a size of 64 replays); `case_rrvf`'s advice sentence. Each rewritten test fails on aabbfc5.
+
+- **The must-fail pass** (the repository's runner; dates from the ledger, `test/must_fail/r_wide_d.ledger.json`, whose runs record the commit they planted against). 25 defects were planted over the lines Group D changed, each alone with the whole suite run, over 4861d8c: `lib/_stamp.js` 6, `README.md` 10, `api/verify.js` 5, `lib/_case_http.js` 3, `tools/preview_dry_run.js` 1.
+  - All 25 were caught on their first run; no gap test was needed.
+  - One changed line has no defect of its own: `validate`'s `return { sha256: sha }`. A defect there that hands the size on (`size: body.size`) is equivalent, since the record never reads it; WD01 plants the size in the record. The comment lines (`lib/_case.js`, `lib/_case_http.js`'s THE STAMP'S SIZE) are read by no test and were not planted.
+
+  | id | file | planted defect | first run | last re-seeded and caught |
+  |---|---|---|---|---|
+  | WD01 | `lib/_stamp.js` | D1: the stamp stores a size again (null) | caught (4 failing) | 2026-10-15 |
+  | WD02 | `lib/_stamp.js` | D1: the size the request sends is not checked for form | caught (1 failing) | 2026-10-15 |
+  | WD03 | `lib/_stamp.js` | D1: the extra-field refusal says a size is stored | caught (1 failing) | 2026-10-15 |
+  | WD04 | `lib/_stamp.js` | D1: does_not_prove drops the stamper's statements | caught (1 failing) | 2026-10-15 |
+  | WD05 | `lib/_stamp.js` | D2: the price comment says not ratified | caught (1 failing) | 2026-10-15 |
+  | WD06 | `lib/_stamp.js` | D2: the price is a tenth | caught (3 failing) | 2026-10-15 |
+  | WD07 | `README.md` | D2: the README's stamp heading is gone | caught (1 failing) | 2026-10-15 |
+  | WD08 | `README.md` | D2: the README's price is wrong | caught (1 failing) | 2026-10-15 |
+  | WD09 | `README.md` | D2: the README's free tier is wrong | caught (1 failing) | 2026-10-15 |
+  | WD10 | `README.md` | D2: the README says the balance is not shared | caught (1 failing) | 2026-10-15 |
+  | WD11 | `README.md` | D2: the README's does-not-prove drops the stamper's statements | caught (1 failing) | 2026-10-15 |
+  | WD12 | `README.md` | D2: the README's proves sentence is not the scope's | caught (1 failing) | 2026-10-15 |
+  | WD13 | `README.md` | D1/D2: the README says a size is recorded | caught (1 failing) | 2026-10-15 |
+  | WD14 | `api/verify.js` | D3: the header drops op=case-page | caught (1 failing) | 2026-10-15 |
+  | WD15 | `api/verify.js` | D3: the header says reconcile WRITES | caught (1 failing) | 2026-10-15 |
+  | WD16 | `api/verify.js` | D3: the header says case-open CHARGES | caught (1 failing) | 2026-10-15 |
+  | WD17 | `api/verify.js` | D3: the header's stamp line does not say CHARGES | caught (1 failing) | 2026-10-15 |
+  | WD18 | `api/verify.js` | D3: the header's withdraw line does not say WRITES | caught (1 failing) | 2026-10-15 |
+  | WD19 | `README.md` | D3: the Layout row drops op=reconcile-page | caught (1 failing) | 2026-10-15 |
+  | WD20 | `README.md` | D3: the Layout row's reference line does not say WRITES | caught (1 failing) | 2026-10-15 |
+  | WD21 | `README.md` | D3: the Layout row's stamp line does not say CHARGES | caught (1 failing) | 2026-10-15 |
+  | WD22 | `lib/_case_http.js` | D1: the advice names a size to stamp | caught (4 failing) | 2026-10-15 |
+  | WD23 | `lib/_case_http.js` | D1: the registration reads the stamp's size again | caught (24 failing) | 2026-10-15 |
+  | WD24 | `lib/_case_http.js` | D1: a stamp written before D1 is refused on its recorded size | caught (4 failing) | 2026-10-15 |
+  | WD25 | `tools/preview_dry_run.js` | D1: the preview sends a size the stamp refuses | caught (20 failing) | 2026-10-15 |
+
+- Counts: as `npm test` prints them on the final tree, three runs, each the same (both environment-dependent tests skip): 1580 tests, 1573 pass, 2 skipped, 0 fail, 5 todo.
+- **UNSURE.**
+  - D1: dropping the size drops the case registration's early tell (`stamp_size_mismatch`) for a tape hash stamped in place of the commitment's bytes. Such a registration now stands until the reveal's recomputation refuses it, so a party who made that mistake learns it at the reveal, not at registration, and must open a new case or re-register with a new salt before the deadline. The ruling says the size is not stored; this unit read that as not read either, since a size nothing checks is the stamper's own statement.
+  - D1: a size in the request is still accepted and checked for form, so an older page that sends one keeps working. Refusing it (400 for an unexpected field) would be stricter and would break those pages; not done.
+  - D1: stamps written before D1 keep their size in the public repository (nothing is deleted or rewritten), and GET returns them as stored, size included.
+  - D2: "3 stamps per address per UTC day" is the default (`STAMP_FREE_PER_DAY`, read on every request). The allowance is soft (per instance; the README says so), and the README's sentence names the variable.
+  - D3: "WRITES" for case-open includes the key's open-quota counter in the private usage repository; the rate limiters' in-memory state is not counted as a write anywhere.
+
 ## 2026-10-15: Unit R-WIDE, Group C: small truth fixes (branch `case-protocol-2026-10-10`, NOT deployed)
 
 - **Commits.** db80faf (tests and code), 56e10f4 (the defect list, committed before the run), 83b8988 (the ledger, and WC30's check removed: see the pass below), and this entry's commit (the RN3 re-seed's ledger and the change log).
