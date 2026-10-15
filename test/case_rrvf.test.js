@@ -313,8 +313,10 @@ async function timedReveal(t, c, arrival, portMs) {
   TAPES.reconcileTapes.mock.restore();
   return { status: res._status, body: parsed(res) };
 }
+// (since unit R-PAGE, P6, the row prints relative then absolute: the
+// absolute time, in its parentheses)
 const revealedAtRow = (html) => {
-  const m = html.match(/<tr><th>revealed at<\/th><td>([^<]*)<\/td><\/tr>/);
+  const m = html.match(/<tr><th>revealed at<\/th><td>[^<(]*\(([^)<]*)\)<\/td><\/tr>/);
   return m ? m[1] : null;
 };
 
@@ -571,7 +573,8 @@ async function expiredPage(id, now) {
   const p = await casePage(id, now);
   assert.equal(gh.putLog.length, puts, "the page read writes nothing");
   assert.equal(p.status, 200);
-  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  // (unit R-PAGE, P4: an expired case keeps its stored status in the heading)
+  assert.match(p.html, /<h1>Case: COMMITTED \(EXPIRED by this service&#39;s clock\)<\/h1>/);
   assert.ok(p.html.includes(`<p class="muted">${esc(EXPIRED_SENTENCE)} `), p.html.slice(0, 2000));
   assert.ok(!p.html.includes(OLD_EXPIRED_SENTENCE));
   assert.doesNotMatch(p.html, /received before the deadline/);
@@ -583,7 +586,7 @@ test("R-RVf2: a reveal in flight. A reveal that arrived before the deadline has 
   const sealPut = (u, m) => m === "PUT" && decodeURIComponent(u).includes(`/repos/${PINS}/contents/${C.casePath(c.id)}`);
   const { out: r, inner: p, fired } = await during(sealPut, () => expiredPage(c.id, DEADLINE_MS + 1000), () => reveal(c, { now: DEADLINE_MS - 500 }));
   assert.equal(fired, true, "fixture: the page was read before the seal landed");
-  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  assert.match(p.html, /<h1>Case: COMMITTED \(EXPIRED by this service&#39;s clock\)<\/h1>/);
   assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 300));
   assert.equal(storedCase(c.id).status, "VERDICT");
   const after = await casePage(c.id, DEADLINE_MS + 2000);
@@ -633,7 +636,8 @@ test("R-RVf3 1: an OPEN case past its deadline prints the first sentence only, u
   const p = await casePage(id, DEADLINE_MS + 1000);
   assert.equal(gh.putLog.length, puts, "the page read writes nothing");
   assert.equal(p.status, 200);
-  assert.match(p.html, /<h1>Case: EXPIRED<\/h1>/);
+  // (unit R-PAGE, P4: an expired case keeps its stored status in the heading)
+  assert.match(p.html, /<h1>Case: OPEN \(EXPIRED by this service&#39;s clock\)<\/h1>/);
   assert.ok(p.html.includes(`<p class="muted">${esc(EXPIRED_FIRST)} Expiry is read, not written, and implies no actor.</p>`), p.html.slice(0, 2000));
   assert.ok(!p.html.includes(esc(EXPIRED_PENDING)));
   assert.doesNotMatch(p.html, /cannot tell whether one is pending/);

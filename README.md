@@ -635,6 +635,24 @@ A case page never says a case is anchored. It does not read the daily
 anchor records or their proofs; it says where they are, and that you can
 check one yourself with `ots verify`, as above.
 
+The case page prints only what the record proves and names what it did not
+check. Every refusal page carries its code (`not_a_case_id`, `rate_limited`,
+`no_such_case`, `could_not_look`, `case_unreadable`, and each case state's
+own). A sealed page has a "Where this is recorded" table (the case file, the
+pin once pinned, and each role's stamp commit; the daily anchors are not read
+and have no row). The sealed page, the does-not-verify page and the withdrawn
+page carry the list "The following checks were performed on this record:",
+one line per check that ran on that request, made from the check's
+result and naming the bytes it covers: a check that did not run has no line,
+and one that failed carries its code. A page that shows the case record
+prints the sha256 of the case file's bytes it read and links the raw file,
+and its time rows read relative and absolute ("2 hours ago
+(2026-10-10T07:30:00Z)"); the one-sentence pages and the refusal pages show
+nothing from the record. Every page says when it was read and where to
+report a problem. An expired case keeps its stored status:
+"COMMITTED (EXPIRED by this service's clock)". `/case/<case_id>?format=json`
+(`op=case-page&format=json`) answers the same facts as JSON.
+
 ## Witness log
 
 One cumulative Merkle tree (RFC 9162 hashing) over every create-only record
@@ -1048,7 +1066,7 @@ parties hold after the reveal) or `operator` (the operator's key); the
 page says "appended on presentation of role a's commitment preimage" or
 "appended with the operator key". The page's records line says only what
 was read: "N reference rows were appended", and for each row the preimage
-or the operator key that appended it. When the reveal carried a cross_reference, the page says "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names":
+or the operator key that appended it. Beside the parties' labels the page says "Labels are recorded, not verified. Presence in this record is not meaning: a public record keeps what was submitted to it." When the reveal carried a cross_reference, the page says "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names":
 whoever sent the reveal typed it, and the service contacts no operator. A
 case takes at most 40 reference rows, for every appender, the operator too;
 the 41st is refused 409 `row_limit`. The limit is judged from the listing of

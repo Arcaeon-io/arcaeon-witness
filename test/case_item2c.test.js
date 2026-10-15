@@ -1080,7 +1080,8 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   // EXPIRED: the opening and the word
   const e = await committedCase({ over: { scope_digest: sha("page expired") } });
   const pe = await casePage(e.id, { now: Date.parse(DEADLINE) + 1000 });
-  assert.match(pe.html, /<h1>Case: EXPIRED<\/h1>/);
+  // (unit R-PAGE, P4: an expired case keeps its stored status in the heading)
+  assert.match(pe.html, /<h1>Case: COMMITTED \(EXPIRED by this service&#39;s clock\)<\/h1>/);
   assert.ok(pe.html.includes("2026-10-10T07:30:00Z") && pe.html.includes(DEADLINE), "the opening");
   assert.match(pe.html, /Labels are recorded, not verified\./);
   assert.ok(!pe.html.includes("registered at"), "the opening and the word, not the registrations");

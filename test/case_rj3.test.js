@@ -254,6 +254,9 @@ function plain(h) {
 // The pin cell: the pin line, then (since unit R-PINf, f2) the fixed
 // sentence directly under it, in the same cell after a line break.
 function pageCells(html) {
+  // (since unit R-PAGE, P3, the cell ends with when the pin was last read,
+  // under the sentence; it is not the table's)
+  html = html.replace(/<br><span class="muted">last read [^<]*<\/span><\/td>/g, "</td>");
   const m = /<tr><th>pin<\/th><td>([\s\S]*?)<br><span class="muted">([\s\S]*?)<\/span><\/td><\/tr>/.exec(html);
   assert.ok(m, `the page has a pin line with the sentence under it: ${html.slice(0, 300)}`);
   assert.ok(html.indexOf("<h2>Pin and signature</h2>") >= 0, "the page has its pin panel");

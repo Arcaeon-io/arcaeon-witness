@@ -77,16 +77,15 @@ module.exports = async (req, res) => {
   // recursive tree fetch, an anchors/ listing), which makes it the single
   // biggest lever for draining the shared GITHUB_PIN_TOKEN budget that
   // paying customers' /api/pin calls also depend on.
+  // Codes only (unit R-PAGE, P1): the limiter is the naive per-instance,
+  // per-IP one (Stage-0, lib/_ratelimit.js: about LIMIT calls per address
+  // per window); the body names the code and when to try again, and the
+  // Retry-After header says the same.
   const rl = await ratelimit.check(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");
-    return res.status(429).json({
-      ok: false,
-      error: "rate limit exceeded",
-      note: `naive per-instance, per-IP limiter (Stage-0): ~${rl.limit} calls per IP per ${Math.round(rl.windowSeconds / 60)} minutes`,
-      retry_after_seconds: rl.retryAfterSeconds,
-    });
+    return res.status(429).json({ ok: false, error_code: "rate_limited", retry_after_seconds: rl.retryAfterSeconds });
   }
 
   // Merged twin (Vercel Hobby 12-function cap): /api/status.json now routes

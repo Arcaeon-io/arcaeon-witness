@@ -992,7 +992,8 @@ test('Gemini 3.1 Pro §2: "one party commits but refuses to reveal ... to preven
   assert.equal(r.status, 409);
   assert.equal(r.body.error_code, "expired");
   assert.deepEqual(await S.anchorCase(id, { now: at, keyDocument: KEYS_DOC }), { ok: false, code: "terminal", status: "EXPIRED" });
-  assert.match((await casePage(id, { now: at })).html, /<h1>Case: EXPIRED<\/h1>/);
+  // (unit R-PAGE, P4: an expired case keeps its stored status in the heading)
+  assert.match((await casePage(id, { now: at })).html, /<h1>Case: COMMITTED \(EXPIRED by this service&#39;s clock\)<\/h1>/);
 });
 
 test('Gemini 3.1 Pro §2: "If the commitment preimage includes variable-length fields or optional parameters, an adversary might attempt length extension attacks or parameter confusion": the preimage is fixed-length, every field fixed-width, no optional field', () => {

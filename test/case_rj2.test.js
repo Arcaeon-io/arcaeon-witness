@@ -374,7 +374,9 @@ test("MUST-FAIL GAP (P31; since unit R-ABf): an unsealed root whose b.key_fp is 
   const before = await casePage(c.id, { now: dl - 2000 });
   assert.equal(before.status, 503, before.html.slice(0, 200));
   const after = await casePage(c.id, { now: dl + 1000 });
-  assert.equal(after.html, before.html);
+  // (unit R-PAGE, P3: but for when the page was read)
+  const noReadTime = (h) => h.replace(/This page was read at <time[^>]*>[^<]*<\/time>/, "");
+  assert.equal(noReadTime(after.html), noReadTime(before.html));
   assert.ok(after.html.includes("<code>case_record_inconsistent</code>"));
   assert.doesNotMatch(after.html, /SINGLE PARTY|EXPIRED|past its deadline/);
 });

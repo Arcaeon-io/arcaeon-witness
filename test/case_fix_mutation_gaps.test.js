@@ -413,7 +413,10 @@ test("P03, P04 (the single-party page past the deadline; since unit R-AB the one
   assert.equal(p.html.includes("honest-party-account"), false);
   assert.equal(p.html.includes("attacker-account"), false);
   const before = await casePage(id, REVEAL_AT);
-  assert.equal(before.html, p.html, "the page states no time");
+  // (unit R-PAGE, P3: the footer says when the page was read, a time of the
+  // page's own, not the case's)
+  const noReadTime = (h) => h.replace(/This page was read at <time[^>]*>[^<]*<\/time>/, "");
+  assert.equal(noReadTime(before.html), noReadTime(p.html), "the page states no time");
 });
 
 // =============================================================================
