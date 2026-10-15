@@ -180,6 +180,25 @@
         "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
         "porcelain": "",
         "defect_sha256": "69b3f6619216eed6c12274f6a67f60ee525d34d923387cbd3ff522e2a929c2dd"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (PF11): a registration that validates with a byte that is not UTF-8 in it: the projection answers its bytes' sha256, and a file whose text is the ",
+          "MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "0cf56e56ecc01611207c9262d4f394f14b5f61f3",
+        "porcelain": "",
+        "defect_sha256": "69b3f6619216eed6c12274f6a67f60ee525d34d923387cbd3ff522e2a929c2dd",
+        "caught_by": [
+          "MUST-FAIL GAP (PF11): a registration that validates with a byte that is not UTF-8 in it: the projection answers its bytes' sha256, and a file whose text is the ",
+          "MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded"
+        ]
       }
     ]
   },
@@ -351,6 +370,23 @@
         "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
         "porcelain": "",
         "defect_sha256": "a35d4d6691558c55542d2306dca2782e0d9e6188585670f7fd7920bb57f233f5"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "0cf56e56ecc01611207c9262d4f394f14b5f61f3",
+        "porcelain": "",
+        "defect_sha256": "a35d4d6691558c55542d2306dca2782e0d9e6188585670f7fd7920bb57f233f5",
+        "caught_by": [
+          "MUST-FAIL GAP (PF13): the page's registration check line prints the sha256 of the file's bytes, not of its text re-encoded"
+        ]
       }
     ]
   },
@@ -452,6 +488,23 @@
         "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
         "porcelain": "",
         "defect_sha256": "1e1c2354e9d197cfca37f749108f0af5589e7710832d112b5b37767aaf838501"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PF20): the cross-reference sent with the reveal prints its recorded time relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "0cf56e56ecc01611207c9262d4f394f14b5f61f3",
+        "porcelain": "",
+        "defect_sha256": "1e1c2354e9d197cfca37f749108f0af5589e7710832d112b5b37767aaf838501",
+        "caught_by": [
+          "MUST-FAIL GAP (PF20): the cross-reference sent with the reveal prints its recorded time relative and absolute"
+        ]
       }
     ]
   },
@@ -766,6 +819,23 @@
         "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
         "porcelain": "",
         "defect_sha256": "5a13b3f165674700190ff36950ccf779920806f32f2d3ade95faaf4c75406a3c"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PF37): a row that is not JSON is read once a request: kept, as every row read is, and read again neither by a later attempt nor by the live count",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "0cf56e56ecc01611207c9262d4f394f14b5f61f3",
+        "porcelain": "",
+        "defect_sha256": "5a13b3f165674700190ff36950ccf779920806f32f2d3ade95faaf4c75406a3c",
+        "caught_by": [
+          "MUST-FAIL GAP (PF37): a row that is not JSON is read once a request: kept, as every row read is, and read again neither by a later attempt nor by the live count"
+        ]
       }
     ]
   },
@@ -830,6 +900,23 @@
         "head": "9af3ae826fdba39fd68dcceae526984eabf085bf",
         "porcelain": "",
         "defect_sha256": "e87442cb982b8ba6b9ff87f3b6331234bd7ee5a850dcc670daa4f44fce28700d"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (PF40): the README says the withdrawal time prints relative and absolute",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "0cf56e56ecc01611207c9262d4f394f14b5f61f3",
+        "porcelain": "",
+        "defect_sha256": "e87442cb982b8ba6b9ff87f3b6331234bd7ee5a850dcc670daa4f44fce28700d",
+        "caught_by": [
+          "MUST-FAIL GAP (PF40): the README says the withdrawal time prints relative and absolute"
+        ]
       }
     ]
   }
