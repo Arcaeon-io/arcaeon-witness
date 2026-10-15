@@ -240,6 +240,23 @@
         "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
         "porcelain": "",
         "defect_sha256": "a41e41581ce3d1c606eebcac83490f1830b4f8d63479704ce5a23e63790f0e02"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one list",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "6aa485d0ac52eb7b7903c3030e3e799900afb1ef",
+        "porcelain": "",
+        "defect_sha256": "a41e41581ce3d1c606eebcac83490f1830b4f8d63479704ce5a23e63790f0e02",
+        "caught_by": [
+          "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one list"
+        ]
       }
     ]
   },
@@ -254,6 +271,23 @@
         "head": "e1fb702d7c39e5d4531f2b0a7296f8eeced8d310",
         "porcelain": "",
         "defect_sha256": "584f30c8067eb9c77affe071c84a217a72d385bf2ae6ecb9d9883c77f7bee7c3"
+      },
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one list",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-FGf M1: no body any audited suite drives, 2xx, 4xx or 5xx, HTML or JSON, says holds, holding or second operator; the bodies that said it are among those read"
+        ],
+        "head": "6aa485d0ac52eb7b7903c3030e3e799900afb1ef",
+        "porcelain": "",
+        "defect_sha256": "584f30c8067eb9c77affe071c84a217a72d385bf2ae6ecb9d9883c77f7bee7c3",
+        "caught_by": [
+          "MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one list"
+        ]
       }
     ]
   },

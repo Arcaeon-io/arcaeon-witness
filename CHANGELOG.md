@@ -1,5 +1,59 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-15: Unit R-FGg: the R-FGf reader's minors; each row read once a request (branch `case-protocol-2026-10-10`, NOT deployed)
+
+The R-FGf reader said MERGE. The operator's Windows run at 0869c9d read 1623 tests, 1615 pass, 0 fail, three times, so the fix sequence through R-FGf counts. This is part 1 of the brief's two commit sets (R-FGg, then R-PAGE). Each new test fails on 0869c9d but G3's, which the brief expected to pass there (no code change).
+
+- **Commits.** 21c1c26 (tests and code), b10abea (the defect list, committed before the run), e1fb702 (R-N T1 names the §4 cost TODO by its assertion: the pass found the unplanted suite red at b10abea, so nothing was planted there), 6aa485d (the pass's first ledger, at e1fb702, and the gap test), and this entry's commit (the re-seed's ledger and the change log).
+- **G1. Each row read once a request.** `lib/_case_http.js` (THE SAME SEND AGAIN's comment gains EACH ROW READ ONCE A REQUEST): the rows a reference reads are kept in a Map by seq across its attempts (`seen`), with the row `putFile`'s re-read found when it abandons a write; `sentRow` reads only the seqs not yet kept; the live count is read from that request's listing (with the row it wrote) and those rows: `lib/_case_seal.js` `liveRecords` takes `listing` and `read` and reads neither again. A refusal at the cap reads the listing and the rows not yet read. Calls on the case's rows directory (listings, row reads, row writes), as the G1 test counts them:
+
+  | request | R-FGf (0869c9d) | R-FGg |
+  |---|---|---|
+  | (i) a refusal at 40 rows, cold | 41 | 41 |
+  | (ii) an accepted reference at 39 rows | 62 | 41 |
+  | (iii) five rows, then two writes that each lose their seq to another sender's row (409, the row found on putFile's re-read), the third landing at seq 8 | 35 | 13 |
+
+  (i) is unchanged: the look for the same send must read every row a cold request has not seen (R-FGf's 40th-row rule). No row is read twice in a request (the test checks each of the three).
+- **G2.** The listing's 503 `store_unreachable` is codes only with `case_id` (it carried a sentence), as the row read's is. Nothing is written, and the same send finishes.
+- **G3** (no code change). A PUT that lands and is answered 409: `putFile` re-reads, finds the sender's own row and abandons; the next attempt finds it (kept from that re-read) and answers 200 `existing: true` with seq 1. The test passes on 0869c9d.
+- **G4.** README: "Two deliberate references with the same cross_reference from the same appender become one row: the second is answered 200 with the first's seq."
+- **G5.** `tools/stamp_genesis.js`: the genesis record says "the commit that records this" (it said "the commit that holds this record"); a genesis record already written is not touched. The refuse-words scan reads every string literal in `tools/` too, so `tools/preview_dry_run.js`'s "has no MATCHED agent-vs-tool pair" (it said "holds") follows.
+- **Line counts.** `lib/_case_http.js` 2509 to 2540, `lib/_case_seal.js` 2474 to 2490, `README.md` 1099 to 1101.
+- **Tests.** New: `test/case_rfg.test.js` R-FGg G1 to G5 and the gap test; `test/response_bodies.test.js` R-FGg G5 (the tools/ scan). Rewritten, each with a note: `case_redteam` §4's cost TODO (one listing, 21 row reads with 21 rows), and `case_rn` R-N T1, which names that TODO by its assertion.
+
+- **The must-fail pass** (the repository's runner; dates and commits from the ledger, `test/must_fail/r_fgg.ledger.json`). 18 defects over the lines this part changed, at e1fb702.
+  - 15 were caught on their first run. GG14 and GG15 (the live count's reading of a handed row that is gone or not JSON) survived and got a gap test; their re-seed, at 6aa485d, caught both. GG10 survived and is equivalent (below).
+  - 17 of 18 caught; GG10 equivalent.
+  - Not planted: the sha of the row the request wrote, kept beside it (`put.content.sha`): nothing reads it.
+
+  | id | file | planted defect | first run (date, at commit) | last re-seeded and caught (date, at commit) |
+  |---|---|---|---|---|
+  | GG01 | `lib/_case_http.js` | G1: the live count lists and reads the rows again | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG02 | `lib/_case_http.js` | G1: the live count reads the rows again | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG03 | `lib/_case_http.js` | G2: the listing's 503 carries a sentence again | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG04 | `lib/_case_http.js` | G2: the listing's 503 has no case_id | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG05 | `lib/_case_http.js` | G1: a row read is not kept | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG06 | `lib/_case_http.js` | G1: the kept rows are not consulted | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG07 | `lib/_case_http.js` | G1: the row putFile's re-read found is not kept | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG08 | `lib/_case_http.js` | G1: the row this request wrote is not handed to the live count | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG09 | `lib/_case_http.js` | G1: the live count's listing leaves out the row this request wrote | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG10 | `lib/_case_http.js` | G1: a row that is not JSON is kept as gone (expected equivalent: the reference answers only records_live, 2 whenever it answers a row) | survived; equivalent: the reference answers only records_live, which is 2 whenever it answers a row (its own or the one it found is valid), so how another row is kept changes nothing it answers, 2026-10-15, at e1fb702 | never (equivalent) |
+  | GG11 | `lib/_case_http.js` | G1: a row that is not JSON is read as a row | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG12 | `lib/_case_seal.js` | G1: the live count lists again though handed the listing | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG13 | `lib/_case_seal.js` | G1: the live count reads the handed rows again | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG14 | `lib/_case_seal.js` | G1: a handed row listed then gone is read as unreadable | survived; caught on re-seed by MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over, 2026-10-15, at e1fb702 | 2026-10-15, at 6aa485d |
+  | GG15 | `lib/_case_seal.js` | G1: a handed row that is not JSON is passed over, not unreadable | survived; caught on re-seed by MUST-FAIL GAP (GG14, GG15): the live count reads a handed row as it reads the store: one that is not JSON is unreadable (the count is not established), one listed then gone is passed over, 2026-10-15, at e1fb702 | 2026-10-15, at 6aa485d |
+  | GG16 | `README.md` | G4: the README says two rows | caught (3 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG17 | `tools/stamp_genesis.js` | G5: the genesis record says holds | caught (4 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+  | GG18 | `tools/preview_dry_run.js` | G5: a tool string says holds | caught (1 failing), 2026-10-15, at e1fb702 | 2026-10-15, at e1fb702 |
+
+- Counts at this part's tip: 1630 tests, 1623 pass, 2 skipped, 0 fail, 5 todo (the three runs on the final tree are R-PAGE's).
+- **UNSURE.**
+  - G1 (b), "after the first listing, read only seqs higher than the highest already read": built as "only seqs not yet read", which is the same under create-only rows written at the highest seq plus one, and also reads a lower seq that appears later (a gap filled by hand), which (b) as worded would skip.
+  - G1 (c): the live count after a write is read from this request's listing plus the row it wrote, not from a new listing; a row another sender writes after that listing is not counted in this answer. `records_live` is 2 either way once this request answers a row.
+  - G1's numbers count calls on the case's rows directory only, as the brief's 41/62 and 1/23 do; the case root, registration and key document reads are unchanged by this part.
+  - G5, "tools/ strings that can be written into a record": the scan reads every string literal in `tools/`, a superset.
+
 ## 2026-10-15: Unit R-FGf: the R-FG reader's findings (branch `case-protocol-2026-10-10`, NOT deployed)
 
 The R-FG reader said DO NOT MERGE on two things (B1, B2). The operator's Windows suite at 6c385cb read 1608 tests, 1600 pass, 0 fail, three times. This unit fixes B1, B2, M1, M2 and the minors as the architect ruled. Each new or rewritten test fails on 6c385cb: run there with this unit's tests, 17 fail (every one of them new or rewritten here).
