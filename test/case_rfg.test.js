@@ -478,3 +478,21 @@ test("R-FG 5: no request reads or writes a case_references/ path: the page, the 
   };
   for (const [name, fn] of Object.entries(steps)) assert.deepEqual(await touched(fn), [], name);
 });
+
+// R-FG's must-fail gap tests: each fails with its planted defect
+test("MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th", async () => {
+  const c = await sealedCase("RFG gap directory");
+  plantRows(c.id, Array.from({ length: CAP - 1 }, (_, i) => i + 1));
+  gh.seed(PINS, `${C.referencesDir(c.id)}/notes/one.json`, { nested: true });
+  assert.deepEqual((await S.referenceListing(c.id)).files, CAP - 1, "the directory is not counted");
+  const r = await roleReference(c, "a", "the fortieth, past a directory");
+  assert.equal(r.status, 201, JSON.stringify(r.body).slice(0, 200));
+});
+
+test("MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed", async () => {
+  const c = await sealedCase("RFG gap page high seq");
+  plantRows(c.id, [CAP]);
+  const live = await S.liveRecords(storedCase(c.id), { keyDocument: DOC });
+  assert.deepEqual([live.listed, live.highest], [1, CAP]);
+  assert.ok((await casePage(c.id)).html.includes(esc(CP.ROW_LIMIT_SENTENCE)), "the page's sentence");
+});

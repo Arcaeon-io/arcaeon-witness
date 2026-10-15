@@ -11,7 +11,8 @@
   "file": "lib/_case_seal.js",
   "find": "    if (!e || e.type !== \"file\") continue;",
   "replace": "    if (!e) continue;",
-  "what": "2: a directory in the listing is counted as a file"
+  "what": "2: a directory in the listing is counted as a file",
+  "gap": "MUST-FAIL GAP (RF02): a directory in the rows listing is not a file: 39 rows and a directory leave room for the 40th"
  },
  {
   "id": "RF03",
@@ -32,7 +33,8 @@
   "file": "lib/_case_seal.js",
   "find": "    highest: seqs.length ? seqs[seqs.length - 1] : 0,",
   "replace": "    highest: 0,",
-  "what": "2: the page is told the highest seq is 0"
+  "what": "2: the page is told the highest seq is 0",
+  "gap": "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
  },
  {
   "id": "RF06",
@@ -102,7 +104,8 @@
   "file": "lib/_case_page.js",
   "find": "  return live.ok && (live.highest + 1 > SEAL.MAX_REFERENCE_ROWS || live.listed >= SEAL.MAX_REFERENCE_ROWS);",
   "replace": "  return live.ok && (live.listed >= SEAL.MAX_REFERENCE_ROWS);",
-  "what": "2: the page's cap ignores the highest seq"
+  "what": "2: the page's cap ignores the highest seq",
+  "gap": "MUST-FAIL GAP (RF05, RF15): the page says a case has reached the cap when its highest seq is 40, with one file listed"
  },
  {
   "id": "RF16",
