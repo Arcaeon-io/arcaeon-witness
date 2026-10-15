@@ -1,0 +1,611 @@
+{
+  "WC01": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C1: every sealed page prints the commit of the key document this service carries: the sealed page, the does-not-verify page and the could-not-look page",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "b36d18111a2b9fd1409fcf03b512b733a9322919636e9eb3f80ba5159f0fb2bc"
+      }
+    ]
+  },
+  "WC02": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C1: every sealed page prints the commit of the key document this service carries: the sealed page, the does-not-verify page and the could-not-look page",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "b39fedcc7e1f141128c2dce4533b05d596b6c2130d8042ac196cb084d80faea8"
+      }
+    ]
+  },
+  "WC03": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C1: every sealed page prints the commit of the key document this service carries: the sealed page, the does-not-verify page and the could-not-look page",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "2816d69af0f217e85d409dddd6408097b73f1d81ded8e752bfbb13d7e5a0da35"
+      }
+    ]
+  },
+  "WC04": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C1: every sealed page prints the commit of the key document this service carries: the sealed page, the does-not-verify page and the could-not-look page",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "a775e7114c79cbc9bec49021f55234404e30e271b905335134822cdab9cbec7b"
+      }
+    ]
+  },
+  "WC06": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C14: a named document commit AHEAD of the published branch (not merged yet) stays could-not-look: the page 503, the reference 503 document_unavailable; d",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "7bc8bedf19d8862d6cfe6c2bded0f346025e5691057a47af30d69e19ce3166b8"
+      }
+    ]
+  },
+  "WC05": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C2: a commit read as on the branch is kept 60 seconds, then the branch is read again; a branch rewritten in between is seen",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "b4a284bad11edcf91662d2ecb35ebfb5101ba4b6480c6092bef9b30c75e87374"
+      }
+    ]
+  },
+  "WC07": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C14: a named document commit AHEAD of the published branch (not merged yet) stays could-not-look: the page 503, the reference 503 document_unavailable; d",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "42c72872aa5b498fb0e47d0e9b937f9c489b7845adc2c70b7bf18b74f4a6b816"
+      }
+    ]
+  },
+  "WC08": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C14: a named document commit AHEAD of the published branch (not merged yet) stays could-not-look: the page 503, the reference 503 document_unavailable; d",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "065218276953c4a081267c0cbfceba659822cb0548788e2078b5d5b95853c998"
+      }
+    ]
+  },
+  "WC09": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C15: when the sealed check's second read of the named document finds its commit off the published branch, the answer is document_off_branch, not document",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "09b45bb567ddcebcf1ddf6d80c5f4b2b4bb13439bcaa4bf21d7164a21c71ae92"
+      }
+    ]
+  },
+  "WC10": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C6: the sealed check holds the receipt's signer name to the key id of the entry its verifier matches: another name is receipt_unsigned",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "07106f3f27f5ba517641ab4e43a8fa6f98f8c23a3c234d97f7bef98317a2fb87"
+      }
+    ]
+  },
+  "WC12": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (H34, H39, H40): a replay rechecks its stamp; a re-send of a written file rechecks the stamp without its history, and says so when the stamp is go",
+          "R-WIDE C3: a registration sent again whose stamp is gone is 409 stamp_record_unreadable, codes only, whether the root projects it or only its file is held",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "d1311819cc9679ed08eec715d696b9df767103419a922e720a51acc3d0d59922"
+      }
+    ]
+  },
+  "WC11": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C3: a registration sent again whose stamp is gone is 409 stamp_record_unreadable, codes only, whether the root projects it or only its file is held",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "109f495e37213ca3986afb493927d15311615dd5be666a26412061ca84fffecd"
+      }
+    ]
+  },
+  "WC13": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "MUST-FAIL GAP (X01, X06, X07; since unit R-L4c, c4, a file at the claim's path that is not the claim): the party-supplied comparison names the field: a file of ",
+          "R-N2 m10 (since unit R-L4, the root's projection): registration_recorded on the projection path and on the abandoned branch",
+          "R-WIDE C3: a file at the registration's path that holds another registration is 409 registration_record_unreadable, codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "380f669652feac3d7f000e837c9b6b9043d7fdc2b3035df09bdc6d59981bb319"
+      }
+    ]
+  },
+  "WC14": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 4,
+        "failing_tests": [
+          "TEST 3, ITEM 2A: a stamp history that cannot be read, cannot be parsed, or names no commit is a 503 and writes nothing; stamp_commit is never written null",
+          "R-WIDE C3: a stamp whose history names no commit is 409 stamp_history_unreadable, codes only",
+          "(d) BROKEN when the immediate read does not see the stamp's commit, or reads another; COULD NOT LOOK when the history cannot be read",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "ce0b1914592d58fd6b5a381e541617bff6f8f224e1f6a037295e5214b847bb58"
+      }
+    ]
+  },
+  "WC15": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "MUST-FAIL GAP (H22, H28): a confirming read that is not a case, and a root re-read that fails after the projection lost, are 503 with the projection not known",
+          "R-WIDE C3: a root that fails its schema on the confirming read is 409 registration_unconfirmed, codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "ada0fc10794d1c0e12d7441bbd56e0bfa95c31a4216c8d8ca33695183c620884"
+      }
+    ]
+  },
+  "WC16": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 6,
+        "failing_tests": [
+          "R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the",
+          "R-N4 R1 sweep (since unit R-L, L1, no listing): every refusal the withdrawal handler gives, first request and second, never says 'nothing was withdrawn' and cla",
+          "MUST-FAIL GAP (W03-W07): the shared readers and the lock keep every other handler's tail as it was: '; ' or ', and ' before a clause",
+          "R-WIDE C18: the operator's reference with a projected file it cannot read, and a withdrawn root naming an off-branch commit, answer codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th",
+          "R-WIDE C18: the operat"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "27a258d36a28929b15b461559517d832b61fbeb6e3210cff6190e599028e25c1"
+      }
+    ]
+  },
+  "WC17": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, codes only s",
+          "R-WIDE C18: the operator's reference with a projected file it cannot read, and a withdrawn root naming an off-branch commit, answer codes only",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "e1da7845776e1db3261dc602387febf7f78fb5a2a893bb3b636f1fa0efa48e55"
+      }
+    ]
+  },
+  "WC18": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-N3 N3: the offline receipt check is partial: it prints ok false, offline_partial, whether the signature holds against the supplied document, what it did not c",
+          "R-WIDE C5: the online refusal-receipt checker answers signature_valid, never ok, and names what it did not check",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "e0218bb68439046717597af1c49bf61b1ed68e9ab06a8bdd4553978992f04d0c"
+      }
+    ]
+  },
+  "WC19": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-N3 N3: the offline receipt check is partial: it prints ok false, offline_partial, whether the signature holds against the supplied document, what it did not c",
+          "R-WIDE C5: the online refusal-receipt checker answers signature_valid, never ok, and names what it did not check",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "774d2af7bcbed0247c9c6c4db9b5c1e08448c13f821c04dfc7ebd9bfb236e183"
+      }
+    ]
+  },
+  "WC20": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE C7: verifyReceiptText with no verifier named answers unknown_signer, never ok"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "94190fe242ca000624f8b39e9630d72b3bc2447270188739768a2211cb80bdbb"
+      }
+    ]
+  },
+  "WC21": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE C7: a saved answer whose receipt has no verdict digest (a tape's lone surrogate) and carries a verdict is signed_partial, never ok"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "2240f60fad0d8285f5d42e6018d20989864241d37def087927e950a28380a088"
+      }
+    ]
+  },
+  "WC22": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 3,
+        "failing_tests": [
+          "R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "827b32603bf9a5c657bf8475dae77a3948165903a67d3ff0c92e76f296b81df1"
+      }
+    ]
+  },
+  "WC23": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 10,
+        "failing_tests": [
+          "CONFORMANCE: every crossrepo case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every ledger case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every edge case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: every fuzz case gives reconcile.py's answer, byte for byte",
+          "CONFORMANCE: the three inputs 0.8.0 raised on, and the 512 bound, are COULD NOT LOOK in the Python's words",
+          "BREAK ARM: a lying reconcile that always says MATCHED is caught",
+          "BREAK ARM: a port that parses with JSON.parse (floats lose their type) is caught",
+          "R-WIDE C8: two tapes of one side keep both counts, by tape; reconcile.py's answer keeps only the second's, by side",
+          "CONFORMANCE THROUGH THE ENDPOINT: the verdict field is reconcile.py's dict, byte for byte, on every fixture pair",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "038ab8651113152e284e6b329b57511cada13583d4b5908e8d9516bff86af936"
+      }
+    ]
+  },
+  "WC24": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C9: a label, an operator or a reference holding a Unicode format character (category Cf) is refused",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "f7e07531f43392bcdffa187233a548042297d6e63461a4055c3e8ae65b2d2ac6"
+      }
+    ]
+  },
+  "WC25": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C9: a label, an operator or a reference holding a Unicode format character (category Cf) is refused",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "b4e8796409bba14065240661ce2f47d34e57690d10f4d38a53bdbeebd8317b8b"
+      }
+    ]
+  },
+  "WC26": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C10: the stamp lookup (GET ?op=stamp) is bounded by the shared per-address limiter",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "96d87ea26280f747176bb98b5407f28b9f771332c6809a6018f725065c1a6f4c"
+      }
+    ]
+  },
+  "WC27": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C11: tools/seal_batch.js refuses a --claim-ttl that is not a whole number of seconds from 1 to 3600, and an empty --margin=",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "c9c463d62acbdeeb708b16be9234f2138e4ffbf6c1c04321d788e6d539990cc1"
+      }
+    ]
+  },
+  "WC28": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C11: tools/seal_batch.js refuses a --claim-ttl that is not a whole number of seconds from 1 to 3600, and an empty --margin=",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "90b71e5d915528a7d03d3cbf6cd6f8cd9460f61408825fff70158298314c42f9"
+      }
+    ]
+  },
+  "WC29": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C11: tools/seal_batch.js refuses a --claim-ttl that is not a whole number of seconds from 1 to 3600, and an empty --margin=",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "a4baecf3b023a97df8149826a7cdb5337b7d7d41349daf5aea46886196ba96f2"
+      }
+    ]
+  },
+  "WC30": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "survived",
+        "exit": 0,
+        "failing": 0,
+        "failing_tests": [],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "2f31b60d89d4718d90553e70f1af142cd333635c4de6e898ee3259f8f9b8bec2"
+      }
+    ]
+  },
+  "WC31": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE C12: when the Windows ACL step fails (icacls refuses, or USERNAME is unset) the tool exits 2, removes the key file and prints no entry"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "809b1c5b2d7d9ce0f6c39a74156f3ff245d983f859a67a5095b036c682c65f58"
+      }
+    ]
+  },
+  "WC32": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "R-WIDE C12: when the Windows ACL step fails (icacls refuses, or USERNAME is unset) the tool exits 2, removes the key file and prints no entry"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "7cc28c6b95bce1dc9581959ce19f4ef80b4e84900ef000bd288f984ac6fb44c8"
+      }
+    ]
+  },
+  "WC33": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 1,
+        "failing_tests": [
+          "(d) BROKEN when the immediate read does not see the stamp's commit, or reads another; COULD NOT LOOK when the history cannot be read"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "47073e2943d0199662750db4b2217c1c674111b6cf5de571d0f8515d6d478eaf"
+      }
+    ]
+  },
+  "WC34": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C4: the README tells a stranger to compare key_fp, never key_id, when two roles show one key id",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "3a77cf6657aaba719282d9d71a9e0ab84e7ceabc85eaa4bacee4fed2c5331b6f"
+      }
+    ]
+  },
+  "WC35": {
+    "runs": [
+      {
+        "date": "2026-10-15",
+        "result": "caught",
+        "exit": 1,
+        "failing": 2,
+        "failing_tests": [
+          "R-WIDE C13: the README says how credits arrive in one true sentence, and never that they are added by hand after every purchase",
+          "R-N2 B2 (since unit R-N3, N8, every body): every response the case and reconcile suites reach, 2xx included, each 5xx and each signer or config refusal among th"
+        ],
+        "head": "56e10f423be2b456138df53e568c80b1f4ed91b5",
+        "porcelain": "",
+        "defect_sha256": "ee5fb510fe1ecbf5426a12c9253bc5e6b051c89cc736aa4de81b79cec8685674"
+      }
+    ]
+  }
+}

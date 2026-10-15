@@ -84,7 +84,8 @@ function parseArgs(argv) {
   for (const a of argv) {
     if (a === "--quiet") out.quiet = true;
     else if (a.startsWith("--margin=")) out.margin = a.slice(9) === "" ? NaN : Number(a.slice(9));
-    else if (a.startsWith("--claim-ttl=")) out.claimTtl = a.slice(12) === "" ? NaN : Number(a.slice(12));
+    // an empty --claim-ttl= reads 0, which the bound below refuses (WC30)
+    else if (a.startsWith("--claim-ttl=")) out.claimTtl = Number(a.slice(12));
     else if (a.startsWith("--now=")) out.now = new Date(a.slice(6));
     else if (a === "--help" || a === "-h") out.help = true;
     else {
