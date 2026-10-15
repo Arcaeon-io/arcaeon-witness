@@ -360,18 +360,20 @@ test("MUST-FAIL GAP (S12, P06): a reason the words do not know claims no chain a
   assert.equal(CP._internal.mismatchWords("case_served_differs", "case file"), "the case file there is not shown to be this case file in canonical form (json-c14n:v1)");
 });
 
-// Since unit R-AB the single-party page states no time (the one-sentence
-// shape), and the case is read single party by key_fp.
-test("MUST-FAIL GAP (P31; since unit R-AB): a single-party page of an unsealed case is the same page before and after its deadline, and never the EXPIRED page", async () => {
+// Since unit R-AB the single-party page states no time; since unit R-ABf
+// (B1) the page reads the projected files before it judges a root single
+// party, so a key_fp written over in an unsigned root, its file holding
+// another key, is the inconsistent page, before and after the deadline.
+test("MUST-FAIL GAP (P31; since unit R-ABf): an unsealed root whose b.key_fp is overwritten with a's is the inconsistent page before and after its deadline, never the single-party or EXPIRED page", async () => {
   const c = await committedCase("RJ2 gap single party");
   const k = storedCase(c.id);
   gh.seed(PINS, C.casePath(c.id), { ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_fp: k.commitments.a.key_fp } } }, { keepHistory: true });
-  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: one key_fp in both entries");
+  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: the stored key_fp reads one key");
   const dl = Date.parse(DEADLINE);
   const before = await casePage(c.id, { now: dl - 2000 });
-  assert.equal(before.status, 200, before.html.slice(0, 200));
+  assert.equal(before.status, 503, before.html.slice(0, 200));
   const after = await casePage(c.id, { now: dl + 1000 });
   assert.equal(after.html, before.html);
-  assert.match(after.html, /<h1>Case: SINGLE PARTY<\/h1>/);
-  assert.doesNotMatch(after.html, /EXPIRED|past its deadline/);
+  assert.ok(after.html.includes("<code>case_record_inconsistent</code>"));
+  assert.doesNotMatch(after.html, /SINGLE PARTY|EXPIRED|past its deadline/);
 });

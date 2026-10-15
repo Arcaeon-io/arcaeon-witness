@@ -361,7 +361,9 @@ test("H08 (commit step 4b; since unit R-L4 the other role's PROJECTION, not its 
   assert.deepEqual([k.commitments.a, C.singleParty(k)], [null, false]);
 });
 
-test("H07 (reference, the words for single_party): the refusal says one key registered both roles", async () => {
+// Since unit R-ABf (m-a) the reference's single_party is codes only, as the
+// reveal's.
+test("H07 (reference, single_party; since unit R-ABf codes only): the refusal is 409 single_party with the case id and no sentence", async () => {
   const { id } = await racedSingleParty("H07");
   const k = gh.read(PINS, C.casePath(id));
   // the stored record as a VERDICT (a forger's, or a build before fix A)
@@ -374,8 +376,7 @@ test("H07 (reference, the words for single_party): the refusal says one key regi
   await H.handleCaseReference(req("case-reference", { case_id: id, cross_reference: { operator: "second-operator.example", reference: "r-1", url: "https://second-operator.example/r/1" } },
     { authorization: "Bearer case-test-operator-key-0031" }), res, { now: REVEAL_AT, env: KD.deployedFor(gh, { [H.OPERATOR_KEY_ENV]: "case-test-operator-key-0031" }, KEYS_DOC), keyDocument: KEYS_DOC });
   assert.equal(res._status, 409, JSON.stringify(res._body));
-  assert.equal(res._body.error_code, "single_party");
-  assert.match(res._body.error, /one key registered both of its roles/);
+  assert.deepEqual(res._body, { ok: false, error_code: "single_party", case_id: id });
 });
 
 // =============================================================================

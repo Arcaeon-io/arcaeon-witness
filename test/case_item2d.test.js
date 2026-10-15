@@ -242,7 +242,11 @@ test("FIX 1 (planted): a schema-valid VERDICT with an unbound receipt, and one w
       assert.ok(!p.html.includes(absent), `${name}: the page shows ${absent}`);
     }
     for (const l of C.LIMITS) assert.ok(p.html.includes(l.replace(/&/g, "&amp;")), `${name}: the limits`);
-    assert.deepEqual(gh.getLog.slice(reads), [C.casePath(id)], `${name}: the case file alone was read (no pin, no reference row)`);
+    // since unit R-ABf (B1) the projected registration files are read
+    // before the sealed check: the case file and those two, no pin and no
+    // reference row
+    assert.deepEqual(gh.getLog.slice(reads), [C.casePath(id), REG.pathOf(gh, id, "a"), REG.pathOf(gh, id, "b")],
+      `${name}: the case file and its projected files were read (no pin, no reference row)`);
     // one vocabulary: the sealer's retry refuses the same record by the same code
     const anchored = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
     assert.deepEqual([anchored.ok, anchored.code, anchored.reason], [false, code, reason], name);

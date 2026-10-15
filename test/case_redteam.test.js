@@ -599,7 +599,10 @@ test("A + B DECISION (narrowed by unit R-AB): no page says two parties; the sing
   assert.equal(/two parties/i.test(two.html), false, "the sealed page");
 });
 
-test("FIX A: a VERDICT whose two entries share a public key (key_fp; since unit R-AB) (signed by the case key) is still not sealed: page, sealed check, sealer and reference all refuse it", async () => {
+// Since unit R-ABf (B1) the readers read the projected files before they
+// judge a root single party: a key_fp overwritten in a root signed by the
+// case key, its file holding another key, does not agree with itself.
+test("FIX A: a VERDICT whose b.key_fp is overwritten with a's (signed by the case key) is still not sealed: since unit R-ABf the page, the sealer and the reference read it case_record_inconsistent; the sealed check alone reads no file", async () => {
   const { id, a } = await sealedCase({ scope_digest: sha("A forged verdict"), party_a: ATTACKER, party_b: HONEST }, { pinFails: true });
   const k = storedCase(id);
   const forged = S.signCase({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_fp: k.commitments.a.key_fp } } },
@@ -609,15 +612,16 @@ test("FIX A: a VERDICT whose two entries share a public key (key_fp; since unit 
   gh.seed(PINS, C.casePath(id), forged);
   assert.deepEqual(await S.sealedRecordReason(forged, KEYS_DOC), { code: "single_party", reason: "same_key_both_roles" });
   const page = await casePage(id);
-  assert.match(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
+  assert.equal(page.status, 503);
+  assert.ok(page.html.includes("<code>case_record_inconsistent</code>"));
+  assert.doesNotMatch(page.html, /<h1>Case: SINGLE PARTY<\/h1>/);
   assert.equal(page.html.includes("honest-party-account"), false);
   assert.equal(page.html.includes("<h2>The verdict</h2>"), false);
   const one = await S.anchorCase(id, { now: REVEAL_AT + 60000, keyDocument: KEYS_DOC });
-  assert.deepEqual(one, { ok: false, code: "not_sealed", status: "VERDICT", reason: "single_party" });
+  assert.deepEqual(one, { ok: false, code: "case_record_inconsistent", role: "b", reason: "projection_differs_from_file" });
   assert.equal(gh.has(PINS, S.pinPaths(id).seq), false, "no pin");
   const ref = await reference({ ...proofOf(id, a), cross_reference: XREF });
-  assert.equal(ref.status, 409, JSON.stringify(ref.body));
-  assert.equal(ref.body.error_code, "single_party");
+  assert.deepEqual([ref.status, ref.body], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(ref.body));
   assert.deepEqual(referenceFiles(id), []);
 });
 

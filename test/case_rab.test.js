@@ -407,6 +407,46 @@ async function withdrawnBy(scope, role) {
   assert.equal((await withdraw(c.id, c[role])).status, 201);
   return c;
 }
+// A VERDICT whose two entries share a key_fp AND agree with their files
+// (unit R-ABf, B1): sealed with role a under ALICE, then role b's file
+// written again under ALICE_AGAIN (the same commitment) and the root
+// projecting it, signed again (a record no build of this service writes).
+async function verdictOneKey(scope) {
+  const s = await sealedCase(scope, { a: ALICE });
+  const v = storedCase(s.id);
+  const old = v.commitments.b;
+  const rec = C.registrationRecord({ case_id: s.id, role: "b", commitment_sha256: old.commitment_sha256, registered_at: old.registered_at,
+    stamp_commit: old.stamp_commit, stamped_at: old.stamped_at, ...REG.keyFields({ case_id: s.id, role: "b", commitment_sha256: old.commitment_sha256 }, ALICE_AGAIN) });
+  const rpath = REG.recordPath(rec);
+  gh.seed(PINS, rpath, rec);
+  const text = gh._repoMap(PINS).get(rpath).content;
+  const b = { ...C.commitmentEntry(rec), key_fp: C.keyFpOf(rec.verifier), registration_sha256: sha(Buffer.from(text, "utf8")), claim_sha256: C.claimSha256(rec) };
+  const k = signByHand(withoutSig({ ...v, commitments: { ...v.commitments, b } }), caseSigner());
+  assert.deepEqual(C.validateCase(k), { ok: true });
+  gh.seed(PINS, C.casePath(s.id), k);
+  assert.equal((await S.projectedRegistrations(k)).ok, true, "fixture: the root agrees with its files");
+  assert.equal(C.singleParty(k), true, "fixture: one key");
+  return s;
+}
+// A root whose b.key_fp is overwritten with a's while file b holds another
+// key (unit R-ABf, B1): it does not agree with its files.
+const forgedFp = (k) => ({ ...k, commitments: { ...k.commitments, b: { ...k.commitments.b, key_fp: k.commitments.a.key_fp } } });
+// Every GET of `path` in the pins repository fails while `fn` runs.
+async function unreadable(path, fn) {
+  const viaMock = global.fetch;
+  global.fetch = async (url, o) => {
+    if (((o && o.method) || "GET") === "GET" && decoded(url).includes(`/repos/${PINS}/contents/${path}`)) {
+      return { ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" };
+    }
+    return viaMock(url, o);
+  };
+  try {
+    return await fn();
+  } finally {
+    global.fetch = viaMock;
+  }
+}
+
 const V3_ANCHOR_NOTE = "This row has no pin of its own. It is recorded by the pins-repository commit that writes it. A later pin of the case " +
   "may list that commit. This row is anchored only if a pin that lists it is, and no anchoring is asserted here.";
 const textOf = (html) => html.replace(/<style[\s\S]*?<\/style>/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -520,7 +560,10 @@ test("R-AB 2: two public keys that share a key id (test/fixtures/key_id_collisio
   assert.match((await casePage(id)).html, /<h2>The verdict<\/h2>/);
 });
 
-test("R-AB 2: a stored case whose two entries share a key_fp under two key ids is single party wherever it is read: the reveal (409 single_party, nothing written), the sealed check, the sealer, the reference", async () => {
+// Since unit R-ABf (B1) a root is read as single party only once it agrees
+// with its files: a VERDICT whose b.key_fp was overwritten with a's while
+// file b holds another key is case_record_inconsistent wherever it is read.
+test("R-AB 2 (since unit R-ABf, B1): a stored case whose two entries share a key_fp and agree with their files is single party wherever it is read; one whose key_fp was overwritten is case_record_inconsistent on the page, the sealer and the reference", async () => {
   const c = await racedOneKey("RAB 2 one key two names");
   const k = storedCase(c.id);
   assert.equal(C.singleParty(k), true);
@@ -528,18 +571,24 @@ test("R-AB 2: a stored case whose two entries share a key_fp under two key ids i
   const r = await reveal(c);
   assert.deepEqual([r.status, r.body.error_code], [409, "single_party"], JSON.stringify(r.body).slice(0, 300));
   assert.equal(rootSha(c.id), root, "nothing written");
-  // a VERDICT signed over such entries (a record no build of this service writes)
+  // a VERDICT signed over such entries, b's key_fp overwritten with a's
+  // (a record no build of this service writes)
   const s = await sealedCase("RAB 2 forged verdict");
   const v = storedCase(s.id);
-  const forged = signByHand(withoutSig({ ...v, commitments: { ...v.commitments, b: { ...v.commitments.b, key_fp: v.commitments.a.key_fp } } }), caseSigner());
+  const forged = signByHand(withoutSig(forgedFp(v)), caseSigner());
   assert.deepEqual(C.validateCase(forged), { ok: true });
   assert.notEqual(forged.commitments.a.key_id, forged.commitments.b.key_id);
   gh.seed(PINS, C.casePath(s.id), forged);
+  // the sealed check alone reads no file: the readers read the files first
   assert.deepEqual(await S.sealedRecordReason(forged, DOC), { code: "single_party", reason: "same_key_both_roles" });
   const one = await S.anchorCase(s.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
-  assert.deepEqual([one.ok, one.code, one.reason], [false, "not_sealed", "single_party"]);
+  assert.deepEqual([one.ok, one.code, one.role, one.reason], [false, "case_record_inconsistent", "b", "projection_differs_from_file"]);
   const ref = await reference(s);
-  assert.deepEqual([ref.status, ref.body.error_code], [409, "single_party"], JSON.stringify(ref.body).slice(0, 300));
+  assert.deepEqual([ref.status, ref.body], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(ref.body).slice(0, 300));
+  const p = await casePage(s.id);
+  assert.equal(p.status, 503);
+  assert.ok(p.html.includes("<code>case_record_inconsistent</code>"));
+  assert.equal(p.html.includes(CP.SINGLE_PARTY_SENTENCE), false);
 });
 
 test("R-AB 2: the seal refuses a COMMITTED case whose entries share a key_fp under two key ids", async () => {
@@ -595,10 +644,8 @@ test("R-AB 6: a single-key stored case's page is the one-sentence shape at 200: 
     assert.equal(p.html.includes(s), false, s);
   }
   assert.doesNotMatch(textOf(p.html), /\bholds?\b|holder|held by|one party|two parties|who /i);
-  // a VERDICT read so: the same page
-  const s = await sealedCase("RAB 6 verdict");
-  const v = storedCase(s.id);
-  gh.seed(PINS, C.casePath(s.id), signByHand(withoutSig({ ...v, commitments: { ...v.commitments, b: { ...v.commitments.b, key_fp: v.commitments.a.key_fp } } }), caseSigner()));
+  // a VERDICT read so, its root agreeing with its files: the same page
+  const s = await verdictOneKey("RAB 6 verdict");
   const pv = await casePage(s.id);
   assert.equal(pv.status, 200);
   assert.ok(pv.html.includes(`<p class="notice">${esc(CP.SINGLE_PARTY_SENTENCE)}</p><p class="muted"><code>single_party</code> &middot; `));
@@ -753,4 +800,140 @@ test("MUST-FAIL GAP (K07): singleParty reads one key only from two key_fp values
   assert.notEqual(k.commitments.a.key_id, k.commitments.b.key_id, "fixture: two keys");
   assert.equal(C.singleParty({ ...k, commitments: { a: bare(k.commitments.a), b: bare(k.commitments.b) } }), false);
   assert.equal(C.singleParty(k), false, "control: the stored form");
+});
+
+// =============================================================================
+// UNIT R-ABf (the fixes for R-AB)
+// =============================================================================
+
+// --- B1: the files are read before a root is judged single party ---
+
+test("R-ABf B1: a COMMITTED root whose b.key_fp is overwritten with a's while file b holds another key reads case_record_inconsistent on the page and the sealer, never the single-party page", async () => {
+  const c = await committedCase("RABf B1 committed");
+  const k = storedCase(c.id);
+  gh.seed(PINS, C.casePath(c.id), forgedFp(k));
+  assert.equal(C.singleParty(storedCase(c.id)), true, "fixture: the stored key_fp reads one key");
+  const p = await casePage(c.id);
+  assert.equal(p.status, 503);
+  assert.ok(p.html.includes("<code>case_record_inconsistent</code>"), p.html.slice(0, 1500));
+  assert.equal(p.html.includes(CP.SINGLE_PARTY_SENTENCE), false, "the page never says one key signs both roles");
+  const one = await S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual([one.ok, one.code, one.role, one.reason], [false, "case_record_inconsistent", "b", "projection_differs_from_file"]);
+  const r = await reveal(c);
+  assert.deepEqual([r.status, r.body.error_code], [503, "case_record_inconsistent"], "the reveal, as before");
+});
+
+test("R-ABf B1: a single-key VERDICT whose root agrees with its files is single party everywhere: the page 200, the sealer not_sealed single_party, the reference 409 single_party, codes only (m-a)", async () => {
+  const s = await verdictOneKey("RABf B1 verdict one key");
+  const p = await casePage(s.id);
+  assert.equal(p.status, 200);
+  assert.ok(p.html.includes(CP.SINGLE_PARTY_SENTENCE));
+  const one = await S.anchorCase(s.id, { now: REVEAL_AT + 60000, keyDocument: DOC });
+  assert.deepEqual([one.ok, one.code, one.reason], [false, "not_sealed", "single_party"]);
+  const ref = await reference(s);
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.deepEqual(ref.body, { ok: false, error_code: "single_party", case_id: s.id });
+  const op = await reference(s, { role: "b" });
+  assert.deepEqual([op.status, op.body.error_code], [409, "single_party"]);
+});
+
+test("R-ABf B1: a single-key root whose registration file cannot be read is could-not-look: the page 503 (never the single-party page), the sealer could_not_look, the reference 503", async () => {
+  const c = await racedOneKey("RABf B1 unread");
+  const rpath = REG.pathOf(gh, c.id, "b");
+  const p = await unreadable(rpath, () => casePage(c.id));
+  assert.equal(p.status, 503);
+  assert.equal(p.html.includes(CP.SINGLE_PARTY_SENTENCE), false);
+  assert.ok(p.html.includes(`<p class="notice">${esc(CP.UNREAD_SENTENCE)}</p><p class="muted"><code>could_not_look</code> &middot; `), p.html.slice(0, 2000));
+  const one = await unreadable(rpath, () => S.anchorCase(c.id, { now: REVEAL_AT + 60000, keyDocument: DOC }));
+  assert.deepEqual([one.ok, one.code], [false, "could_not_look"]);
+  // read again once the file reads: the single-party page
+  assert.ok((await casePage(c.id)).html.includes(CP.SINGLE_PARTY_SENTENCE));
+});
+
+test("R-ABf B1: the reference reads the projected files before the sealed check, for the operator too: a forged key_fp is 503 case_record_inconsistent, codes only, and nothing is written", async () => {
+  const s = await sealedCase("RABf B1 operator");
+  const v = storedCase(s.id);
+  gh.seed(PINS, C.casePath(s.id), signByHand(withoutSig(forgedFp(v)), caseSigner()));
+  const puts = gh.putLog.length;
+  const res = makeRes();
+  await H.handleCaseReference(req("case-reference", { case_id: s.id, cross_reference: XREF }, { authorization: "Bearer case-operator-key-0171-rab" }), res,
+    { now: REVEAL_AT + 1800000, env: KD.deployed(gh, { ...KEYS, [H.OPERATOR_KEY_ENV]: "case-operator-key-0171-rab" }, DOC), keyDocument: DOC });
+  assert.deepEqual([res._status, parsed(res)], [503, { ok: false, error_code: "case_record_inconsistent" }], JSON.stringify(parsed(res)));
+  assert.equal(gh.putLog.length, puts, "nothing written");
+});
+
+// --- M2: a named commit definitely off the published branch is a known refusal ---
+
+// A sealed case naming a document served at a commit off the published
+// branch (diverged), its case signature good.
+async function sealedOffBranch(scope) {
+  const c = await committedCase(scope);
+  const compared = RECONCILE.compare(c.a.tape, c.b.tape, { env: KEYS, now: REVEAL_AT, keyDocument: DOC });
+  const named = KD.docWith(KD.entry(CASE_KEY, { note: "the off-branch document" }), KD.reconcileEntry(RECEIPT_KEY));
+  const side = KD.serveOffBranch(gh, named, "9".repeat(40));
+  const k = S.sealCase(storedCase(c.id), {
+    reveals: { a: { tape_sha256: c.a.tape_sha256, salt: c.a.salt }, b: { tape_sha256: c.b.tape_sha256, salt: c.b.salt } },
+    receipt: S.storableReceipt(compared.receipt).receipt, crossReference: null, revealedAt: C.utcSeconds(REVEAL_AT),
+    signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side },
+  }, S.loadCaseSigner(KEYS, { keyDocument: named }));
+  gh.seed(PINS, C.casePath(c.id), k);
+  return { ...c, k, side };
+}
+
+test("R-ABf M2: a sealed case naming a commit definitely off the published branch: the one reader answers document_off_branch; the reference 409 document_off_branch, codes only; the page 200, saying so; the sealer refuses it, never could_not_look", async () => {
+  const c = await sealedOffBranch("RABf M2 off branch");
+  assert.deepEqual(await S.sealedRecordReason(c.k, DOC), { code: "document_off_branch", reason: "commit_not_on_branch", document: "named", document_commit: c.side });
+  const puts = gh.putLog.length;
+  const ref = await reference(c);
+  assert.equal(ref.status, 409, JSON.stringify(ref.body));
+  assert.deepEqual(ref.body, { ok: false, error_code: "document_off_branch", case_id: c.id, reason: "commit_not_on_branch" });
+  assert.equal(gh.putLog.length, puts, "nothing written");
+  const p = await casePage(c.id);
+  assert.equal(p.status, 200);
+  assert.ok(p.html.includes("is not on the published branch"));
+  const run = await sealerRun();
+  assert.deepEqual(run.could_not_look, []);
+  assert.deepEqual(run.refused.filter((x) => x.case_id === c.id), [{ case_id: c.id, code: "document_off_branch", reason: "commit_not_on_branch" }]);
+});
+
+test("R-ABf M2: a named commit the repository does not have (404) stays a could-not-look: the reference 503 document_unavailable, the page 503", async () => {
+  const s = await sealedCase("RABf M2 not found");
+  const v = storedCase(s.id);
+  gh.seed(PINS, C.casePath(s.id), signByHand(withoutSig({ ...v, signed_under: { ...v.signed_under, document_commit: "6".repeat(40) } }), caseSigner()));
+  const ref = await reference(s);
+  assert.deepEqual([ref.status, ref.body.error_code], [503, "document_unavailable"], JSON.stringify(ref.body));
+  assert.equal((await casePage(s.id)).status, 503);
+});
+
+test("R-ABf M2: a withdrawal record naming a commit off the published branch: the retried withdrawal and the refusal receipt are 409 document_off_branch, with words, never the bare code; verifyRefusalReceipt says document_off_branch", async () => {
+  const c = await withdrawnBy("RABf M2 withdrawn", "b");
+  const w = storedCase(c.id);
+  const named = KD.docWith(KD.entry(CASE_KEY, { note: "the off-branch document" }), KD.reconcileEntry(RECEIPT_KEY));
+  const side = KD.serveOffBranch(gh, named, "8".repeat(40));
+  gh.seed(PINS, C.casePath(c.id), signByHand(withoutSig({ ...w, signed_under: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side } }), caseSigner()));
+  const r = await withdraw(c.id, c.b);
+  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [409, "document_off_branch", "commit_not_on_branch"], JSON.stringify(r.body));
+  assert.ok(r.body.error.includes("the key document it names is at a commit that is not on the published branch"), r.body.error);
+  const rr = await reveal(c, { body: ownOpening(c, "a") });
+  assert.deepEqual([rr.status, rr.body.error_code], [409, "document_off_branch"]);
+  const good = await withdrawnBy("RABf M2 receipt", "b");
+  const receipt = (await reveal(good, { body: ownOpening(good, "a") })).body.refusal_receipt;
+  assert.deepEqual(await S.verifyRefusalReceipt({ ...receipt, signed_under: { ...receipt.signed_under, document_commit: side } }, DOC),
+    { ok: false, reason: "document_off_branch", detail: "commit_not_on_branch" });
+});
+
+// --- m-b: UNSEALED_WORDS.document_unavailable is still reached ---
+
+test("R-ABf m-b: the withdrawn root's could-not-look (unconfirmedWithdrawal) still prints UNSEALED_WORDS.document_unavailable, so the words stay", async () => {
+  const c = await withdrawnBy("RABf m-b", "b");
+  S._internal.clearDocumentCache();
+  gh.forceRawFailure(1000, 503);
+  let r;
+  try {
+    r = await withdraw(c.id, c.b);
+  } finally {
+    gh.forceRawFailure(0);
+  }
+  assert.deepEqual([r.status, r.body.error_code], [503, "document_unavailable"]);
+  assert.ok(r.body.error.includes("the key document it names could not be read on this request, which is not a no"), r.body.error);
 });

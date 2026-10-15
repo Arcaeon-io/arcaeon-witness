@@ -317,8 +317,10 @@ test("R-N2 m6: a receipt naming a commit definitely off the published branch has
   const rr = (await reveal(c, { body: ownOpening(c, "a") })).body.refusal_receipt;
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
   // since unit R-SIG the one reader's code, with its reason as detail
+  // (since unit R-ABf, M2, a commit definitely off the branch is its own
+  // known refusal, document_off_branch, never a could-not-look)
   assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC),
-    { ok: false, reason: "document_unavailable", detail: "commit_not_on_branch" });
+    { ok: false, reason: "document_off_branch", detail: "commit_not_on_branch" });
   S._internal.clearDocumentCache();
   gh.forceCompareFailure(1, 503, S.KEY_DOCUMENT_REPO);
   assert.deepEqual(await S.verifyRefusalReceipt(rr, DOC), { ok: false, reason: "document_unavailable", detail: "compare_http_503" });

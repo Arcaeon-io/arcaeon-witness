@@ -269,7 +269,7 @@ test("ANCESTRY: commitOnBranch is one compare read of compare/<branch>...<commit
   assert.deepEqual(await S.commitOnBranch(gh.headOf(PINS) || gh.seed(PINS, "x.json", {}), { repo: store.REPO, branch: store.BRANCH }), { on: true });
 });
 
-test("ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is document_unavailable, never valid; so is a branch read that fails", async () => {
+test("ANCESTRY: a sealed case naming a document commit that is not on the published branch (a side branch's, or a fork's the raw host serves) is never valid: since unit R-ABf (M2) document_off_branch, a known refusal, the page at 200; a branch read that fails is document_unavailable", async () => {
   const c = await committedCase("ancestry");
   const compared = RECONCILE.compare(c.a.tape, c.b.tape, { env: KEYS, now: REVEAL_AT, keyDocument: DOC });
   const st = S.storableReceipt(compared.receipt);
@@ -281,10 +281,10 @@ test("ANCESTRY: a sealed case naming a document commit that is not on the publis
     signedUnder: { document_sha256: KD.sha256(canonicalBytes(named)), document_commit: side },
   }, S.loadCaseSigner(KEYS, { keyDocument: named }));
   const got = await S.sealedRecordReason(k, DOC);
-  assert.deepEqual(got, { code: "document_unavailable", reason: "commit_not_on_branch", document: "named", document_commit: side });
+  assert.deepEqual(got, { code: "document_off_branch", reason: "commit_not_on_branch", document: "named", document_commit: side });
   gh.seed(PINS, C.casePath(c.id), k);
   const p = await pageOf(c.id, DOC);
-  assert.equal(p.status, 503);
+  assert.equal(p.status, 200);
   // a branch read that fails
   const s2 = await sealedCase("ancestry fails");
   S._internal.clearDocumentCache();
@@ -514,7 +514,8 @@ test("R-I2 m4: a compare 404 is off only on a branch that exists: a branch that 
   }, S.loadCaseSigner(KEYS, { keyDocument: named }));
   gh.seed(PINS, C.casePath(c.id), k);
   const p = await pageOf(c.id, DOC);
-  assert.equal(p.status, 503);
+  // since unit R-ABf (M2): a known refusal, so 200, not the retry-safe 503
+  assert.equal(p.status, 200);
   assert.ok(p.html.includes("is not on the published branch"), "says what it is");
   assert.ok(!p.html.includes("try again"), "no retry will change it");
 });

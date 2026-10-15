@@ -300,8 +300,10 @@ test("R-N N1, N3: a refusal on a withdrawn case with the requester's own valid o
   // under the NAMED document: a commit off the published branch is not a document, and a sha256 that is not the commit's is not it
   const off = KD.serveOffBranch(gh, DOC, "4".repeat(40));
   // (since unit R-SIG the one reader's codes, with its reason as detail)
+  // (since unit R-ABf, M2, a commit definitely off the branch is its own
+  // known refusal, document_off_branch, never a could-not-look)
   assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_commit: off } }, DOC),
-    { ok: false, reason: "document_unavailable", detail: "commit_not_on_branch" });
+    { ok: false, reason: "document_off_branch", detail: "commit_not_on_branch" });
   assert.deepEqual(await S.verifyRefusalReceipt({ ...rr, signed_under: { ...rr.signed_under, document_sha256: "e".repeat(64) } }, DOC),
     { ok: false, reason: "signature_invalid", detail: "document_sha256_mismatch" });
   // a key the CURRENT document does not list in its role, or lists revoked, does not hold
