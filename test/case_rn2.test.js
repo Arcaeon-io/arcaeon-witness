@@ -450,8 +450,12 @@ test("MUST-FAIL GAP (C03, C11): the loaders' codes: a reconcile key the document
   assert.equal(S.sealingDocument({ [S.DEPLOY_COMMIT_ENV]: "a".repeat(40) }, { keyDocument: { not: "a key document" } }).code, "carried_document_unreadable");
   assert.equal(S.sealingDocument({}, { keyDocument: DOC }).code, "deploy_commit_unknown");
   assert.equal(S.sealingDocument({ [S.DEPLOY_COMMIT_ENV]: "x" }, { keyDocument: DOC }).code, "deploy_commit_malformed");
+  // since unit R-WIDE (A5) a document listing no active reconcile key offers
+  // no sealing (409 sealing_not_offered): the unpublished key here is the
+  // deployment's, beside the one the document lists
   const c = await committedCase("RN2 gap unpublished reconcile");
-  const r = await reveal(c, { keyDocument: KD.docWith(KD.entry(CASE_KEY)) });
+  const unlisted = { ...KEYS, [receipts.SIGNER_ENV]: checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-15rn2-unlisted").signer };
+  const r = await reveal(c, { env: unlisted });
   assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "signer_unavailable", "reconcile_key_unpublished"]);
 });
 

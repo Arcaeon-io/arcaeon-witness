@@ -449,7 +449,12 @@ test("MUST-FAIL GAP (L11): a withdrawn record whose kept projection names one ke
   const c = await committedCase("RL5 gap one key");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const w = storedCase(c.id);
-  const one = { ...w, commitments: { ...w.commitments, b: { ...w.commitments.b, key_id: w.commitments.a.key_id } } };
+  // since unit R-WIDE (A3) the withdrawn page shows a record only once it
+  // verifies, so the planted record is signed with the case key (since unit
+  // R-AB one key is one key_fp)
+  const { sig: _s, signed_by: _b, sig_reason: _r, ...unsigned } = w; // eslint-disable-line no-unused-vars
+  const one = S.signCase({ ...unsigned, commitments: { ...w.commitments, b: { ...w.commitments.b, key_id: w.commitments.a.key_id, key_fp: w.commitments.a.key_fp } } },
+    S.loadCaseSigner(KEYS, { keyDocument: DOC }));
   assert.deepEqual(C.validateCase(one), { ok: true }, "fixture: a valid record");
   assert.equal(C.singleParty(one), false);
   gh.seed(PINS, C.casePath(c.id), one);

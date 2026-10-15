@@ -465,8 +465,12 @@ test("P07 (since unit R-SIG, the withdrawn page's signature cell, through the on
   assert.match(listed.html, /the signature verified under the key document this record names/, "control");
   const unlisted = await page(ID, S.PUBLISHED_KEYS);
   assert.equal(unlisted.status, 200);
-  assert.match(unlisted.html, /its signature is not confirmed: signer_unlisted \(case_key_not_listed\)/);
+  // since unit R-WIDE (A3) a withdrawal record that does not verify is the
+  // one-sentence page with its code, and none of its detail
+  assert.ok(unlisted.html.includes(CP.WITHDRAWAL_UNVERIFIED_SENTENCE), unlisted.html.slice(0, 2000));
+  assert.ok(unlisted.html.includes("<code>signer_unlisted</code>"));
   assert.ok(!unlisted.html.includes("the signature verified"));
+  assert.ok(!unlisted.html.includes("withdrawn on presentation"));
 });
 
 test("P08 (pinnedHtml): a pin file holding another chain reads as a conflict on the page, never as pinned", async () => {

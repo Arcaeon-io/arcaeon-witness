@@ -32,6 +32,17 @@ function esc(s) {
   }[c]));
 }
 
+// One line (unit R-WIDE, A6): the key document this deployment carries,
+// confirmed at the commit it was built from, or why not.
+function deploymentDocumentLine(d) {
+  const at = d.commit ? `<code>${esc(d.commit.slice(0, 12))}</code>` : "a commit this deployment does not know";
+  if (d.state === "confirmed") return `<p class="muted">The key document this deployment carries is confirmed at commit ${at} on the published branch.</p>`;
+  if (d.state === "deployment_document_off_branch") {
+    return `<p class="muted"><code>deployment_document_off_branch</code>: the commit this deployment was built from (${at}) is not on the published branch of the key document's repository, so every reveal, withdrawal, reference and refusal receipt is answered 503 and nothing is signed; this is an operator fault, not a sender's, and no request can finish it until the deployment is rebuilt from the published branch.</p>`;
+  }
+  return `<p class="muted"><code>document_unavailable</code>: the key document this deployment carries could not be named and confirmed at ${at} when this page was read (${esc(d.reason)}).</p>`;
+}
+
 function statusBadge(status, overdueSeconds) {
   if (status === "current") return `<span class="badge badge-green">current</span>`;
   if (status === "publisher_heartbeat_current") {
@@ -94,7 +105,7 @@ module.exports = async (req, res) => {
     retiredCount, retiredNamespaces,
     degraded, indeterminate, overallOk,
     namespaces,
-    caseAnchors, caseErr, caseAnchorNote,
+    caseAnchors, caseErr, caseAnchorNote, deploymentDocument,
   } = await gatherStatusData();
 
   // Audit states, only when the flag is on. A namespace nobody has ever
@@ -360,6 +371,7 @@ ${brandMark.FAVICON_LINK}
       <tbody>${caseRowHtml}</tbody>
     </table>
     ${casePartialHtml}
+    ${deploymentDocumentLine(deploymentDocument)}
   </div>
 
   <h2>Conflict observations</h2>

@@ -302,13 +302,15 @@ test("FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecor
   assert.ok(live.invalid.every((x) => x.reason === "reference_unknown_field"));
   assert.equal(live.unread, 1);
   assert.equal(live.partial, true);
-  // the page says so in words, and never states one record as the live count
+  // the page says so in words: since unit R-WIDE (A1) the line counts rows
+  // read, not operators, and from a read that did not see every row it never
+  // says that no row was appended
   const p = await casePage(id);
   const cell = recordsCell(p.html);
-  assert.match(cell, /^the live count could not be established when this page was read/);
-  assert.ok(!/^one record/.test(cell) && !/^two records/.test(cell), cell);
-  assert.match(cell, /at seal time: one record/, "the count at seal time is still stated, as that");
+  assert.match(cell, /^no valid reference row was among the rows read when this page was read/);
+  assert.ok(!/^no reference row was appended/.test(cell) && !/record/.test(cell.split("<br>")[0]), cell);
   assert.match(cell, /20 reference row\(s\) are not valid/);
+  assert.match(cell, /1 more reference row\(s\) were not read when this page was read/);
   // the reference answer reads the count back the same way: null, never 1
   const r = await reference({ case_id: id, cross_reference: { ...XREF, reference: "fix 2, row 22" } }, { env: OPERATOR_ENV, headers: { authorization: `Bearer ${OPERATOR_KEY}` } });
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -326,7 +328,7 @@ test("FIX 2 (planted): twenty invalid reference rows then a valid one: liveRecor
   gh._repoMap(PINS).delete(C.referencePath(id, 21));
   const whole = await S.liveRecords(sealed, { keyDocument: KEYS_DOC });
   assert.deepEqual([whole.records, whole.indeterminate, whole.partial], [1, false, false]);
-  assert.match(recordsCell((await casePage(id)).html), /^one record/);
+  assert.match(recordsCell((await casePage(id)).html), /^no reference row was appended/);
   // a valid row INSIDE the window settles it at 2 whatever is left unread
   gh.seed(PINS, C.referencePath(id, 5), row(5));
   for (let seq = 21; seq <= 25; seq += 1) gh.seed(PINS, C.referencePath(id, seq), { ...row(seq), extra: true });

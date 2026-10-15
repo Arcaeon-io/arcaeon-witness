@@ -356,11 +356,13 @@ test("DESIGN N (3), since unit R-N (N1, N3): the refusal carries a refusal recei
   assert.deepEqual(gh.putLog.slice(writes), [], "nothing written");
   assert.deepEqual(storedCase(c.id), record);
   assert.equal((await casePage(c.id)).html, before);
-  // with no reconcile key that the document lists: no receipt at all (N1)
+  // with no reconcile key that the document lists: no receipt at all (N1);
+  // since unit R-WIDE (A5, the architect's ruling) such a document offers no
+  // sealing, 409 sealing_not_offered, codes only (a 503 until then)
   const d = await committedCase("N receipt unsigned");
   assert.equal((await withdraw(d.id, d.a)).status, 201);
   const u = await reveal(d, { keyDocument: KD.docWith(KD.entry(CASE_KEY)), body: { ...revealBody(d.id, d.a, d.b), role: "b" } });
-  assert.deepEqual([u.status, u.body.error_code], [503, "signer_unavailable"]);
+  assert.deepEqual([u.status, u.body.error_code], [409, "sealing_not_offered"]);
   assert.equal(Object.prototype.hasOwnProperty.call(u.body, "refusal_receipt"), false);
 });
 

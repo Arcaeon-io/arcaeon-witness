@@ -680,12 +680,15 @@ test('GPT-5.6 §2B: "Before either submits the joint reveal, B sends case-withdr
   assert.equal(storedCase(id).status, "WITHDRAWN");
 });
 
-test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which side prevented the comparison": it names the withdrawing role (by_role), and the page says so', async () => {
+// unit R-WIDE (A2, the architect's ruling): the page names the preimage
+// presented, never a side ("by role b, at T" until then): whoever holds a
+// role's opening can present it.
+test('GPT-5.6 §2B: "The public root is redacted. It does not identify ... which side prevented the comparison": it names the role whose preimage was presented (by_role), and the page says so, in those words', async () => {
   const { id, b } = await committedCase({ scope_digest: sha("2B side") });
   assert.equal((await withdraw(proofOf(id, b))).status, 201);
   assert.equal(storedCase(id).withdrawal.by_role, "b");
   const page = await casePage(id);
-  assert.match(page.html, /by role b, at /);
+  assert.match(page.html, /withdrawn on presentation of role b&#39;s commitment preimage, at /);
 });
 
 // unit R-N (T1): the redacted root carries no label (design:

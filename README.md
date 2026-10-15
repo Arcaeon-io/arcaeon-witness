@@ -781,7 +781,13 @@ commit of the key document it was sealed under, and every reader holds that
 commit to this branch (`lib/_case_seal.js` `commitOnBranch`): a commit that
 is not on it is not a published document, and the case reads as could not
 look. The joint reveal refuses to seal from a deployment whose own commit is
-not on it. A preview deployment of another branch sets it to that branch.
+not on it. A deployment whose own commit is ahead of the branch or diverged
+from it answers every reveal, withdrawal, reference and refusal receipt
+503 `deployment_document_off_branch`, codes only, and the status page says
+so in one line. This is an operator fault, not a sender's: no request can
+finish it until the deployment is rebuilt from the published branch. A
+commit the repository does not show yet is 503 `document_unavailable`,
+which a re-send can finish. A preview deployment of another branch sets it to that branch.
 The operator's shell must set the same value as the deployment it checks:
 `tools/preview_dry_run.js` holds the preview's sealed cases to it in its
 steps (e) and (f).
@@ -806,7 +812,11 @@ party that names its role and carries its own opening gets a refusal
 receipt: `{kind: "comparison_refused", v: 1, case_id, at, reason:
 "case_withdrawn", role, commitment_sha256, signed_under, signed_by, sig,
 sig_reason: null}`, signed with the service's reconcile key under the key
-document `signed_under` names.
+document `signed_under` names. While the key document this service carries
+lists no active reconcile key, no case is sealed and no refusal receipt is
+issued: the reveal and the refusal receipt answer 409
+`sealing_not_offered`, codes only, before anything is compared. Publishing
+a reconcile key is a deploy step.
 
 ### One signature reader
 
@@ -843,8 +853,7 @@ Withdrawal before the reveal closes that case; it does not recall a tape a
 counterparty already holds, and no verdict ever binds a key that did not
 sign in the case that produced it.
 
-A withdrawal (`?op=case-withdraw`) proves the requesting role by its
-commitment preimage, takes the case's lock, writes the signed withdrawal
+A withdrawal (`?op=case-withdraw`) is accepted on presentation of a role's commitment preimage, takes the case's lock, writes the signed withdrawal
 record over the OPEN or COMMITTED case, writes the withdrawn marker, and
 answers. A withdrawal that loses to a seal or the deadline writes nothing to
 the pins repository. A registration projected between a withdrawal's read
@@ -852,7 +861,11 @@ of the case and its write makes the withdrawal write nothing and answer
 503 `store_error`; sent again, it keeps the new registration. A withdrawal request that wrote nothing says "This
 request wrote nothing." The record carries a reason only when the request
 names one (`party_choice`, `deadline` or `other`); otherwise it has none,
-and the case page says "No reason was given."
+and the case page says "No reason was given." The page says the case was
+withdrawn on presentation of role a's commitment preimage (or b's), at the
+time written: it names what was presented, never a party, since whoever
+holds a role's opening can present it, and the sender of a joint reveal
+holds both.
 
 The withdrawal record keeps the case root's `commitments` exactly as they
 stood when it was written, inside the signed record. Every reader of a
@@ -896,10 +909,15 @@ release under a case's pin namespace (`latest.json`, and `0000000N.json`
 for N above 1) are left where they are and ignored, and no case code reads
 the daily anchor files under `anchors/`.
 
-A registration file is signed by the registering party over the case,
-role and commitment; its registered_at, stamp_commit and stamped_at are
-the service's unsigned arrival note until a seal copies them into signed
-bytes.
+A registration file is signed by the key that registered it; this service does not bind that key to the party label or to the commitment's preimage. The signature covers the case, role and commitment; the file's
+registered_at, stamp_commit and stamped_at are the service's unsigned
+arrival note until a seal copies them into signed bytes. A registration
+signs only the case, the role and the commitment hash, so anyone holding a
+key can register a role whose commitment hash they know. When the opening
+names a party's `key_id`, a registration of that party's role under
+another key id is refused 409 `key_mismatch`, codes only, and nothing is
+written; a key id is a name and a 32-bit hash, so this compares names and
+binds no key.
 
 A registration file is a claim, and it stands only once the case root
 projects it. Each claim has its own file,
@@ -940,7 +958,7 @@ no code reads or writes them.
 
 ### A reference row's sentence
 
-A second operator's reference row is signed and create-only, and carries a
+A reference row is signed and create-only, and carries a
 fixed sentence about its anchoring, `anchor_note`, with `note_version: 4`:
 "This row has no pin of its own. It is recorded by the pins-repository
 commit that writes it, and no anchoring is asserted here." Versions 2 and 3
@@ -950,7 +968,11 @@ neither is counted. A row's `appended_by` says what was presented:
 `preimage:a` or `preimage:b` (that role's commitment preimage, which both
 parties hold after the reveal) or `operator` (the operator's key); the
 page says "appended on presentation of role a's commitment preimage" or
-"appended with the operator key". A case holds at most 500
+"appended with the operator key". The page's records line says only what
+was read: "N reference rows were appended", and for each row the preimage
+or the operator key that appended it. When the reveal carried a cross_reference, the page says "one cross-reference was recorded by the sender of the reveal; this service did not contact the operator it names":
+whoever sent the reveal typed it, and the service contacts no operator. A
+case holds at most 500
 reference rows; the 501st is refused 409 `row_limit`. A row is never
 refused for its case's pin or anchoring: no pin and no anchor is read for a
 row, and its answer names no commit. The case page shows each row with a

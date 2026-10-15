@@ -309,13 +309,15 @@ test("FIX 2 (GPT's planted test): three valid distinct signer keys configured an
   // reconcile key yet: a deployment carrying it seals nothing. With no
   // commit it cannot name its document (document_unavailable); with one that
   // serves it on the published branch (unit R-I: the reveal reads it there),
-  // its reconcile key is unpublished (signer_unavailable). Nothing is compared.
+  // it lists no active reconcile key, so (since unit R-WIDE, A5) it offers no
+  // sealing: 409 sealing_not_offered, codes only (signer_unavailable, 503,
+  // until then). Nothing is compared.
   const plain = await committedCase({ over: { scope_digest: sha("default document") } });
   KD.serve(gh, S.PUBLISHED_KEYS, "c".repeat(40));
-  for (const [env, code] of [[SIGNED, "document_unavailable"], [{ ...SIGNED, [S.DEPLOY_COMMIT_ENV]: "c".repeat(40) }, "signer_unavailable"]]) {
+  for (const [env, status, code] of [[SIGNED, 503, "document_unavailable"], [{ ...SIGNED, [S.DEPLOY_COMMIT_ENV]: "c".repeat(40) }, 409, "sealing_not_offered"]]) {
     const res = makeRes();
     await H.handleCaseReveal(req("case-reveal", revealBody(plain.id, plain.a, plain.b)), res, { now: REVEAL_AT, env });
-    assert.equal(res._status, 503, JSON.stringify(res._body));
+    assert.equal(res._status, status, JSON.stringify(res._body));
     assert.equal(parsed(res).error_code, code);
   }
   assert.equal(storedCase(plain.id).status, "COMMITTED");
@@ -1008,7 +1010,9 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.ok(pv.includes("2026-10-10T09:00:00Z"), "the reveal time");
   assert.match(pv, /<span class="word pass">MATCHED<\/span>/);
   assert.match(pv, /none: every call matched \(5 matched\)/);
-  assert.match(pv, /one record: this service&#39;s/);
+  // unit R-WIDE (A1): the records line says what was read, and counts no
+  // operator ("one record: this service's" until then)
+  assert.equal(/<th>records<\/th><td>(.*?)<\/td>/.exec(pv)[1], "no reference row was appended");
   // unit R-PIN: the pin line, and the fixed sentence under it; never "anchored"
   assert.match(pv, /Pinned at commit <a href="https:\/\/github\.com\/test-owner\/test-pins\/commit\/[0-9a-f]{40}" rel="nofollow noopener noreferrer">[0-9a-f]{12}<\/a> \(the pins repository&#39;s commit time, [^)]+\)/);
   assert.ok(pv.includes("Daily anchor records and their OpenTimestamps proofs are in <code>anchors/</code> in the pins repository; this page does not check them"), "the fixed sentence");
@@ -1044,14 +1048,15 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   // VERDICT, pending
   const p = await sealedCase({ over: { scope_digest: sha("page pending") }, pinFails: true });
   assert.match((await casePage(p.id)).html, /Not pinned: no pin file is present under this case's namespace \(not_pinned\)\./); // unit R-PIN
-  // ALTERED: the word and the first divergence; and a reference row makes it two records, with the cross-reference shown
+  // ALTERED: the word and the first divergence; and a reference row, counted as a row with what appended it (unit R-WIDE, A1), with the cross-reference shown
   const alt = await committedWith({ scope_digest: sha("page altered") }, ALT_AGENT, ALT_TOOL);
   assert.equal((await reveal(revealBody(alt.id, alt.a, alt.b))).status, 201);
   assert.equal((await reference({ ...proofOf(alt.id, alt.b), cross_reference: XREF })).status, 201);
   const pa = await casePage(alt.id);
   assert.match(pa.html, /<span class="word fail">ALTERED<\/span>/);
   assert.match(pa.html, /at call 2/);
-  assert.match(pa.html, /two records: a second operator holds a record of this case \(at seal time: one record/);
+  assert.ok(pa.html.includes("1 reference row was appended: row 1 on presentation of role b&#39;s commitment preimage"), "the row and what appended it");
+  assert.doesNotMatch(pa.html, /second operator|two records/);
   assert.ok(pa.html.includes(XREF.reference) && pa.html.includes(`href="${XREF.url}"`), "the cross-reference");
 
   // WITHDRAWN: the redacted record only, and the sentence about the registrations
@@ -1059,7 +1064,8 @@ test("PAGE: each status renders what the design lists (OPEN, COMMITTED, VERDICT 
   assert.equal((await withdraw(proofOf(w.id, w.a))).status, 201);
   const pw = await casePage(w.id);
   assert.match(pw.html, /<h1>Case: WITHDRAWN<\/h1>/);
-  assert.match(pw.html, /by role a, at 2026-10-10T09:00:00Z/);
+  // unit R-WIDE (A2): what was presented, never a party ("by role a, at T" until then)
+  assert.ok(pw.html.includes("withdrawn on presentation of role a&#39;s commitment preimage, at 2026-10-10T09:00:00Z"));
   assert.ok(pw.html.includes(S.WITHDRAWN_REGISTRATIONS_NOTE), "registrations remain public, in words");
   // (the first limit itself says "Labels are recorded, never verified"; the
   // page's own labels sentence, beside the labels, is what must be absent)

@@ -367,7 +367,11 @@ test("R-SIG 1: a reference row signed by a key published only later never verifi
   assert.ok(p.html.includes("reference row 1 is not counted: signature_invalid (signer_unpublished)"), cell(p.html, "records"));
 });
 
-test("R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says its signature does not verify, and why", async () => {
+// since unit R-WIDE (A3, the architect's ruling) the withdrawn page fails
+// closed: a record that does not verify is the one-sentence page with its
+// code, and nothing from the record (its signed-by cell, with the reason,
+// until then)
+test("R-SIG 2: a withdrawal record signed by a key published only later never verifies: the withdrawn page says only that it does not verify, with its code", async () => {
   const c = await committedCase("RSIG 2");
   assert.equal((await withdraw(c.id, c.b)).status, 201);
   const planted = signByHand({ ...withoutSig(storedCase(c.id)), signed_under: suOf(DOC) }, laterSigner());
@@ -376,10 +380,10 @@ test("R-SIG 2: a withdrawal record signed by a key published only later never ve
   const a = await S.signedUnderReason(planted, "case", CURRENT);
   assert.deepEqual([a.code, a.reason], ["signature_invalid", "signer_unpublished"]);
   const p = await pageUnder(c.id, CURRENT);
-  assert.match(p.html, /<h1>Case: WITHDRAWN<\/h1>/);
-  const signed = cell(p.html, "signed by");
-  assert.ok(signed && signed.includes("signature_invalid (signer_unpublished)"), signed);
-  assert.doesNotMatch(signed, /verifies|verified/);
+  assert.match(p.html, /<h1>Case: WITHDRAWAL RECORD DOES NOT VERIFY<\/h1>/);
+  assert.ok(p.html.includes(esc(CP.WITHDRAWAL_UNVERIFIED_SENTENCE)) && p.html.includes("<code>signature_invalid</code>"), p.html.slice(0, 2000));
+  assert.equal(cell(p.html, "signed by"), null);
+  assert.doesNotMatch(p.html, /verified under/);
 });
 
 test("R-SIG 3: one tampered signature, one answer: a seal, a reference row, a withdrawal record and a refusal receipt, each with a signature byte flipped, read signature_invalid by every reader", async () => {
@@ -569,19 +573,28 @@ test("R-SIG: sig_reason is non-null only on an OPEN or COMMITTED root, and there
   }
 });
 
-test("R-SIG rule 11 (ruled): the registration file sentence, on the page and in the README", async () => {
-  const SENTENCE = "A registration file is signed by the registering party over the case, role and commitment; its registered_at, stamp_commit and " +
-    "stamped_at are the service's unsigned arrival note until a seal copies them into signed bytes.";
+// since unit R-WIDE (A4, the architect's ruling) the sentence says the file
+// is signed by the key that registered it and binds that key to nothing
+// else ("signed by the registering party over the case, role and
+// commitment" until then)
+test("R-SIG rule 11 (ruled; reworded by R-WIDE A4): the registration file sentence, on the page and in the README", async () => {
+  const SENTENCE = "A registration file is signed by the key that registered it; this service does not bind that key to the party label or to the " +
+    "commitment's preimage. The signature covers the case, role and commitment; the file's registered_at, stamp_commit and stamped_at are the " +
+    "service's unsigned arrival note until a seal copies them into signed bytes.";
   const c = await committedCase("RSIG rule 11");
   assert.ok((await casePage(c.id, NOW + 60000)).html.includes(esc(SENTENCE)));
   assert.ok(README().includes(SENTENCE));
 });
 
+// since unit R-WIDE (A5) the description does not describe a reconcile key
+// the document does not list ("The reconcile key (role reconcile) signs ..."
+// until then)
 test("R-SIG rule 12: the key document's description names every signed record and its key", () => {
   const d = S.PUBLISHED_KEYS.description;
-  assert.ok(d.includes("Sealed cases, withdrawal records and reference rows are signed by a case key (role case, or no role). The reconcile key " +
-    "(role reconcile) signs each sealed case's reconcile receipt and each refusal receipt. Each signed record names its key in signed_by and the " +
-    "commit of this document it was signed under in signed_under."), d);
+  assert.ok(d.includes("Sealed cases, withdrawal records and reference rows are signed by a case key (role case, or no role). A reconcile key " +
+    "(role reconcile), once this document lists one active, signs each sealed case's reconcile receipt and each refusal receipt; while this " +
+    "document lists no active reconcile key, this service seals no case and issues no refusal receipt (it answers sealing_not_offered). Each " +
+    "signed record names its key in signed_by and the commit of this document it was signed under in signed_under."), d);
 });
 
 test("R-SIG: the page prints no 'unsigned:' cell; an open or committed case's signed-by row is the fixed sentence", async () => {
@@ -668,9 +681,11 @@ test("MUST-FAIL GAP (V03, V10): the withdrawn page's signed-by cell names the co
   } finally {
     gh.forceRawFailure(0);
   }
-  const no = cell(html, "signed by");
-  assert.equal(no, `<code>${esc(rec.signed_by)}</code>: the key document this record names could not be read when this page was read (http_503), ` +
-    "so its signature is not confirmed");
+  // since unit R-WIDE (A3) a document that could not be read is the
+  // could-not-look page, 503, with no signed-by cell (the cell said so until then)
+  assert.equal(cell(html, "signed by"), null);
+  assert.match(html, /<h1>Case: COULD NOT LOOK<\/h1>/);
+  assert.ok(html.includes("<code>http_503</code>"), html.slice(0, 2000));
 });
 
 test("MUST-FAIL GAP (V09): the does-not-verify page names the failed check in words for signature_invalid", async () => {

@@ -682,6 +682,17 @@ async function checkChunkedReveal(ctx) {
     return broken(`case-reveal with ${sent} answered HTTP 503 document_unavailable (${json.reason}): the preview's key document is not the ` +
       "one at the commit it names on its published branch, so the preview seals nothing");
   }
+  // Unit R-WIDE (A6): the preview's own commit off its published branch has
+  // its own code; (A5) a key document that lists no active reconcile key
+  // offers no sealing. Each is its configuration: BROKEN.
+  if (ans.status === 503 && json && json.error_code === "deployment_document_off_branch") {
+    return broken(`case-reveal with ${sent} answered HTTP 503 deployment_document_off_branch: the commit the preview was built from is not on ` +
+      "its published branch, so the preview seals nothing");
+  }
+  if (ans.status === 409 && json && json.error_code === "sealing_not_offered") {
+    return broken(`case-reveal with ${sent} answered HTTP 409 sealing_not_offered: the preview's key document lists no active reconcile key, ` +
+      "so the preview seals nothing");
+  }
   if (ans.status === 503 && json && json.error_code === "case_signer_unavailable") {
     return broken(`case-reveal with ${sent} answered HTTP 503 case_signer_unavailable (${json.reason}): the published case signer is not ` +
       "installed, so the preview seals nothing");

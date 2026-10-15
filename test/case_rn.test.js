@@ -266,7 +266,10 @@ test("R-N N1 (BLOCKER): with no reconcile signer the refusal is 503 signer_unava
   const cases = [
     ["no reconcile key set", { [S.CASE_SIGNER_ENV]: CASE_KEY.signer }, DOC],
     ["a reconcile key that does not parse", { ...KEYS, [receipts.SIGNER_ENV]: "not a key" }, DOC],
-    ["a reconcile key the document carries does not list", KEYS, KD.docWith(KD.entry(CASE_KEY))],
+    // since unit R-WIDE (A5) a document that lists no active reconcile key
+    // offers no sealing (409 sealing_not_offered, test/case_rwide.test.js);
+    // here the document lists one, and the deployment's key is another
+    ["a reconcile key the document carries does not list", { ...KEYS, [receipts.SIGNER_ENV]: checkpoint.generateKey("arcaeon.io/reconcile-test/2026-10-15rn-unlisted").signer }, DOC],
   ];
   for (const [name, env, keyDocument] of cases) {
     const r = await reveal(c, { env, keyDocument, body: ownOpening(c, "a") });

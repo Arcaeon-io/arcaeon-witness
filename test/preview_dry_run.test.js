@@ -866,9 +866,21 @@ test("MUST-FAIL GAP (T04, unit R-PIN): a case the pass did not pin, not pending 
 
 test("MUST-FAIL GAP (PD01, unit R-I): a preview whose reveal says its bundled key document is not the one at its commit, or that its commit is off its branch, is BROKEN in (e), saying so; a document it could not read stays COULD NOT LOOK", async (t) => {
   const other = { ...TEST_DOC, keys: TEST_DOC.keys.map((e) => ({ ...e, note: `${e.note} (another copy)` })) };
-  for (const [commit, reason] of [[KD.serve(gh, other), "bundled_document_differs"], [KD.serveOffBranch(gh, TEST_DOC, "4".repeat(40)), "commit_not_on_branch"]]) {
+  for (const [commit, reason] of [[KD.serve(gh, other), "bundled_document_differs"]]) {
     const r = await dryRun(t, { preview: { signer: { env: { ...SIGNER.env, [S.DEPLOY_COMMIT_ENV]: commit }, keyDocument: TEST_DOC } } });
     assert.equal(word(r, "e"), "BROKEN", r.show);
     assert.match(r.by.e.line, new RegExp(`answered HTTP 503 document_unavailable \\(${reason}\\): the preview's key document is not the one at the commit it names on its published branch, so the preview seals nothing$`));
   }
+  // since unit R-WIDE (A6) a commit off the branch is its own code
+  const off = await dryRun(t, { preview: { signer: { env: { ...SIGNER.env, [S.DEPLOY_COMMIT_ENV]: KD.serveOffBranch(gh, TEST_DOC, "4".repeat(40)) }, keyDocument: TEST_DOC } } });
+  assert.equal(word(off, "e"), "BROKEN", off.show);
+  assert.match(off.by.e.line, /answered HTTP 503 deployment_document_off_branch: the commit the preview was built from is not on its published branch, so the preview seals nothing$/);
+});
+
+test("R-WIDE A5: a preview whose key document lists no active reconcile key is BROKEN in (e): it answers 409 sealing_not_offered and seals nothing", async (t) => {
+  const bare = { ...TEST_DOC, keys: TEST_DOC.keys.filter((e) => e.role !== "reconcile") };
+  assert.ok(bare.keys.length < TEST_DOC.keys.length, "fixture: the test document lists a reconcile key");
+  const r = await dryRun(t, { preview: { signer: { env: { ...SIGNER.env, [S.DEPLOY_COMMIT_ENV]: KD.serve(gh, bare) }, keyDocument: bare } } });
+  assert.equal(word(r, "e"), "BROKEN", r.show);
+  assert.match(r.by.e.line, /answered HTTP 409 sealing_not_offered: the preview's key document lists no active reconcile key, so the preview seals nothing$/);
 });

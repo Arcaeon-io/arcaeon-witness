@@ -239,7 +239,11 @@ test("I2: a reveal whose commit's document cannot be read, or whose commit is no
   const side = "5".repeat(40);
   KD.serveOffBranch(gh, DOC, side);
   r = await reveal(revealBody(c.id, c.a, c.b), { env: { ...KEYS, [S.DEPLOY_COMMIT_ENV]: side } });
-  assert.deepEqual([r.status, r.body.error_code, r.body.reason], [503, "document_unavailable", "commit_not_on_branch"]);
+  // since unit R-WIDE (A6, the architect's ruling) the deployment's own
+  // commit off the branch has its own code, codes only (document_unavailable
+  // with reason commit_not_on_branch until then)
+  assert.deepEqual(r.body, { ok: false, error_code: "deployment_document_off_branch", case_id: c.id });
+  assert.equal(r.status, 503);
   assert.deepEqual(storedCase(c.id), before, "no attempt written");
   // a deployment of another branch names that branch
   gh.setBranch(S.KEY_DOCUMENT_REPO, "preview-branch");

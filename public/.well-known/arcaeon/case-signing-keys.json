@@ -1,14 +1,14 @@
 {
   "schema": "arcaeon-signing-keys/1",
   "issuer": "arcaeon.io",
-  "description": "Ed25519 public keys used to sign the records of the Arcaeon witness case protocol (arcaeon-case/1). Sealed cases, withdrawal records and reference rows are signed by a case key (role case, or no role). The reconcile key (role reconcile) signs each sealed case's reconcile receipt and each refusal receipt. Each signed record names its key in signed_by and the commit of this document it was signed under in signed_under. signed_by is the key id <key name>+<8 hex>; find that key id here, in that role, and check the record's signature with the verifier string beside it. The signature is Ed25519 over the json-c14n:v1 bytes of the whole record minus sig. One public key is listed once, in one role: a case key is never the witness log's key or the reconcile key.",
+  "description": "Ed25519 public keys used to sign the records of the Arcaeon witness case protocol (arcaeon-case/1). Sealed cases, withdrawal records and reference rows are signed by a case key (role case, or no role). A reconcile key (role reconcile), once this document lists one active, signs each sealed case's reconcile receipt and each refusal receipt; while this document lists no active reconcile key, this service seals no case and issues no refusal receipt (it answers sealing_not_offered). Each signed record names its key in signed_by and the commit of this document it was signed under in signed_under. signed_by is the key id <key name>+<8 hex>; find that key id here, in that role, and check the record's signature with the verifier string beside it. The signature is Ed25519 over the json-c14n:v1 bytes of the whole record minus sig. One public key is listed once, in one role: a case key is never the witness log's key or a reconcile key.",
   "matching": "Match on key_id, then use verifier: <key name>+<8 lowercase hex of sha256(name || 0x0a || 0x01 || public key)[0:4]>+<base64(0x01 || 32-byte Ed25519 public key)>, the signed-note verifier format of the witness log. key_id is the verifier without its base64 tail. Compare key bytes, not names.",
   "status_meaning": {
     "active": "Listed for its role. A record this key signed verifies under a document that lists it active.",
     "revoked": "Its private half is believed exposed. A record this key signed is not shown as holding, whenever it was signed: this document does not order a signature against a revocation."
   },
   "rotation": "Rotation adds a new key with status active. The previous key stays listed active with a note that it no longer signs, so the records it signed keep verifying. A key is marked revoked only if its private half is believed exposed. Dates in this document are information and are not enforced. A reader holds a record to the document it names, at a commit on this repository's published branch, and each key that signed it must also be listed here, in its role, when the record is read. The service signs only with a key listed here as active in its role, and before it seals it confirms that this document is the one at the commit it names.",
-  "updated": "2026-10-14",
+  "updated": "2026-10-15",
   "keys": [
     {
       "key_id": "case-2026-10+295a9a61",
