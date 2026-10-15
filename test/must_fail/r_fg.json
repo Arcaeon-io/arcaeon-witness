@@ -1,0 +1,114 @@
+[
+ {
+  "id": "RF01",
+  "file": "lib/_case_seal.js",
+  "find": "const MAX_REFERENCE_ROWS = 40;",
+  "replace": "const MAX_REFERENCE_ROWS = 41;",
+  "what": "1: the cap is 41"
+ },
+ {
+  "id": "RF02",
+  "file": "lib/_case_seal.js",
+  "find": "    if (!e || e.type !== \"file\") continue;",
+  "replace": "    if (!e) continue;",
+  "what": "2: a directory in the listing is counted as a file"
+ },
+ {
+  "id": "RF03",
+  "file": "lib/_case_seal.js",
+  "find": "    files += 1;\n",
+  "replace": "",
+  "what": "2: no file is counted"
+ },
+ {
+  "id": "RF04",
+  "file": "lib/_case_seal.js",
+  "find": "    listed,\n",
+  "replace": "    listed: 0,\n",
+  "what": "2: the page is told no file is listed"
+ },
+ {
+  "id": "RF05",
+  "file": "lib/_case_seal.js",
+  "find": "    highest: seqs.length ? seqs[seqs.length - 1] : 0,",
+  "replace": "    highest: 0,",
+  "what": "2: the page is told the highest seq is 0"
+ },
+ {
+  "id": "RF06",
+  "file": "lib/_case_http.js",
+  "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS || listing.files >= SEAL.MAX_REFERENCE_ROWS) {",
+  "replace": "    if (listing.files >= SEAL.MAX_REFERENCE_ROWS) {",
+  "what": "2: the highest seq is not held to the cap"
+ },
+ {
+  "id": "RF07",
+  "file": "lib/_case_http.js",
+  "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS || listing.files >= SEAL.MAX_REFERENCE_ROWS) {",
+  "replace": "    if (seq > SEAL.MAX_REFERENCE_ROWS) {",
+  "what": "2: the listed file count is not held to the cap"
+ },
+ {
+  "id": "RF08",
+  "file": "lib/_case_http.js",
+  "find": "    if (seq > SEAL.MAX_REFERENCE_ROWS || listing.files >= SEAL.MAX_REFERENCE_ROWS) {",
+  "replace": "    if (seq > SEAL.MAX_REFERENCE_ROWS || listing.files > SEAL.MAX_REFERENCE_ROWS) {",
+  "what": "2: 40 files listed is not the cap"
+ },
+ {
+  "id": "RF09",
+  "file": "lib/_case_http.js",
+  "find": "      return refuse(res, new Refusal(409, \"row_limit\", \"\", { case_id, count: listing.files, limit: SEAL.MAX_REFERENCE_ROWS }));",
+  "replace": "      return refuse(res, new Refusal(409, \"row_limit\", \"\", { case_id, count: seqs.length, limit: SEAL.MAX_REFERENCE_ROWS }));",
+  "what": "2: count is the rows, not the files listed"
+ },
+ {
+  "id": "RF10",
+  "file": "lib/_case_http.js",
+  "find": "      return refuse(res, new Refusal(409, \"row_limit\", \"\", { case_id, count: listing.files, limit: SEAL.MAX_REFERENCE_ROWS }));",
+  "replace": "      return refuse(res, new Refusal(409, \"row_limit\", \"this case takes no more reference rows\", { case_id, count: listing.files, limit: SEAL.MAX_REFERENCE_ROWS }));",
+  "what": "2: the 409 body carries a sentence"
+ },
+ {
+  "id": "RF11",
+  "file": "lib/_case_http.js",
+  "find": "      return refuse(res, new Refusal(409, \"row_limit\", \"\", { case_id, count: listing.files, limit: SEAL.MAX_REFERENCE_ROWS }));",
+  "replace": "      return refuse(res, new Refusal(409, \"row_limit\", \"\", { case_id, count: listing.files }));",
+  "what": "2: the 409 body has no limit"
+ },
+ {
+  "id": "RF12",
+  "file": "lib/_case_http.js",
+  "find": "    // the judge reads the row's named document: a read it could not make is",
+  "replace": "    await quotaStore().putFile(`case_references/${case_id}/${proof === null ? \"operator\" : proof.role}.json`, { kind: \"case-reference-quota\", v: 1, count: 1 }, \"a counter\");\n    // the judge reads the row's named document: a read it could not make is",
+  "what": "3: a reference writes a counter in the usage repository again"
+ },
+ {
+  "id": "RF13",
+  "file": "lib/_case_page.js",
+  "find": "    if (atRowLimit(live)) lines.push(`<span class=\"muted\">${esc(ROW_LIMIT_SENTENCE)}</span>`);",
+  "replace": "    if (false) lines.push(`<span class=\"muted\">${esc(ROW_LIMIT_SENTENCE)}</span>`);",
+  "what": "2: the page never says the case reached the cap"
+ },
+ {
+  "id": "RF14",
+  "file": "lib/_case_page.js",
+  "find": "  return live.ok && (live.highest + 1 > SEAL.MAX_REFERENCE_ROWS || live.listed >= SEAL.MAX_REFERENCE_ROWS);",
+  "replace": "  return live.ok && (live.highest + 1 > SEAL.MAX_REFERENCE_ROWS);",
+  "what": "2: the page's cap ignores the listed file count"
+ },
+ {
+  "id": "RF15",
+  "file": "lib/_case_page.js",
+  "find": "  return live.ok && (live.highest + 1 > SEAL.MAX_REFERENCE_ROWS || live.listed >= SEAL.MAX_REFERENCE_ROWS);",
+  "replace": "  return live.ok && (live.listed >= SEAL.MAX_REFERENCE_ROWS);",
+  "what": "2: the page's cap ignores the highest seq"
+ },
+ {
+  "id": "RF16",
+  "file": "README.md",
+  "find": "case takes at most 40 reference rows, for every appender, the operator too;\nthe 41st is refused 409 `row_limit`.",
+  "replace": "case holds at most 500\nreference rows; the 501st is refused 409 `row_limit`.",
+  "what": "1: the README says 500"
+ }
+]
