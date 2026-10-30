@@ -29,8 +29,11 @@ function idsFor(tag) {
 }
 
 function scenarios(test, makeStore) {
+  // Through the webhook's own entry (billing.applyAccountEvent), so the
+  // unverified-reference rule is exercised on every store.
   const apply = (s, event, now) =>
-    s.applyStripeEvent({ event_id: event.id, type: event.type, fact: billing.factFromEvent(event), now });
+    billing.applyAccountEvent(s, { event_id: event.id, type: event.type, fact: billing.factFromEvent(event), now });
+  const isoOf = (ms) => new Date(ms).toISOString();
 
   async function debitN(s, account_id, count, now, tag = "r") {
     let ok = 0;
@@ -64,10 +67,22 @@ function scenarios(test, makeStore) {
     return { account, cus, sub, sub2, ps, pe, lookup };
   }
 
+  // The account's stored customer, making one first if it has none (what the
+  // checkout endpoint does before any session exists).
+  async function customerOf(s, account) {
+    const a = await s.getAccount(account);
+    if (a && a.stripe_customer_id) return a.stripe_customer_id;
+    const cus = idsFor("pk").cus;
+    const r = await s.setStripeCustomer({ account_id: account, customer_id: cus });
+    assert.equal(r.ok, true);
+    return r.customer_id;
+  }
+
   async function buyPack(s, account, { pack = "pins_1000", at = T0, pi } = {}) {
     const session = ev.nextId("cs_test_");
     const payment_intent = pi || ev.nextId("pi_");
-    const r = await apply(s, ev.checkoutPackEvent({ account, session, pack, pi: payment_intent, created: at }), at);
+    const cus = await customerOf(s, account);
+    const r = await apply(s, ev.checkoutPackEvent({ account, session, pack, pi: payment_intent, created: at, cus }), at);
     return { session, pi: payment_intent, outcome: r.outcome };
   }
 
@@ -132,8 +147,9 @@ function scenarios(test, makeStore) {
     const account = await s._createAccount();
     const session = ev.nextId("cs_test_");
     const pi = ev.nextId("pi_");
-    const e1 = ev.checkoutPackEvent({ account, session, pi, created: T0 });
-    const e2 = ev.checkoutPackEvent({ account, session, pi, type: "checkout.session.async_payment_succeeded", created: T0 + 1000 });
+    const cus = await customerOf(s, account);
+    const e1 = ev.checkoutPackEvent({ account, session, pi, created: T0, cus });
+    const e2 = ev.checkoutPackEvent({ account, session, pi, type: "checkout.session.async_payment_succeeded", created: T0 + 1000, cus });
     assert.equal((await apply(s, e1, T0)).outcome, "pack_credited");
     assert.equal((await apply(s, e2, T0)).outcome, "already_credited");
     const packs = await s.listPacks(account);
@@ -144,7 +160,7 @@ function scenarios(test, makeStore) {
   test("J3: the same event delivered to two workers at once has one effect", async () => {
     const s = await makeStore();
     const account = await s._createAccount();
-    const e = ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+    const e = ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: await customerOf(s, account) });
     const rs = await Promise.all([apply(s, e, T0), apply(s, e, T0)]);
     assert.deepEqual(rs.map((r) => r.outcome).sort(), ["duplicate", "pack_credited"]);
     assert.equal((await s.listPacks(account)).length, 1);
@@ -655,9 +671,10 @@ function scenarios(test, makeStore) {
     const a = await s._createAccount();
     const session = ev.nextId("cs_test_");
     const pi = ev.nextId("pi_");
-    await apply(s, ev.checkoutPackEvent({ account: a, session, pi, created: T0 }), T0);
+    const cus = await customerOf(s, a);
+    await apply(s, ev.checkoutPackEvent({ account: a, session, pi, created: T0, cus }), T0);
     await apply(s, ev.refundEvent({ pi, amount: 2000, refunded: 2000, created: T0 + 1000 }), T0 + 1000);
-    const late = ev.checkoutPackEvent({ account: a, session, pi, created: T0 });
+    const late = ev.checkoutPackEvent({ account: a, session, pi, created: T0, cus });
     assert.equal((await apply(s, late, T0 + 2000)).outcome, "already_credited");
     assert.equal((await s.pinStatus({ account_id: a, now: T0 + 3000 })).pack_balance, 0);
   });
@@ -708,8 +725,9 @@ function scenarios(test, makeStore) {
       const e = ev.checkoutSubEvent({ account: victim, cus: attacker.cus, sub: attacker.sub, created: T0, ref });
       e.data.object.metadata = { account_id: victim };
       const r = await apply(s, e, T0);
-      assert.equal(r.outcome, "ignored_unverified_reference", `ref ${ref.slice(0, 12)}`);
+      assert.equal(r.outcome, "unverified_unresolved", `ref ${ref.slice(0, 12)}`);
       assert.equal(r.account_id, null);
+      assert.equal((await apply(s, e, T0)).outcome, "unverified_unresolved", "not recorded: Stripe's retry is answered the same");
     }
     // The attacker's own subscription events find no account (not linked).
     const sub = ev.subEvent({ type: "customer.subscription.created", sub: attacker.sub, cus: attacker.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 });
@@ -723,15 +741,33 @@ function scenarios(test, makeStore) {
     assert.equal(st.monthly_allowance, 3000);
   });
 
-  test("REF: a paid pack under a bad reference is recorded as ignored_unverified_reference and never credited (a repeat is a duplicate)", async () => {
+  test("REF UNVERIFIED + MARK + OWN CUSTOMER (round 2, item 3): a paid pack whose ref does not verify (secret rotated) is credited on the server mark and the account's own customer; a repeat is a duplicate", async () => {
     const s = await makeStore();
-    const a = await s._createAccount();
-    // Our signed shape with a wrong mac. (A bare uuid on a payment checkout is
-    // no longer ours at all: not an account event, see the FACTS test.)
+    const { account: a, cus } = await linkedAccount(s, "uv");
+    // Our signed shape with a wrong mac: what every ref looks like after the
+    // secret is rotated. (A bare uuid on a payment checkout without our mark
+    // is not ours at all: not an account event, see the FACTS test.)
     const bad = `${a}.${Math.floor(T0 / 1000) + 7200}.${"0".repeat(64)}`;
-    const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: bad });
-    assert.equal((await apply(s, e, T0)).outcome, "ignored_unverified_reference");
+    const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: bad, cus, pack: "pins_200" });
+    assert.equal((await apply(s, e, T0)).outcome, "pack_credited");
     assert.equal((await apply(s, e, T0)).outcome, "duplicate");
+    assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 200);
+  });
+
+  test("REF UNVERIFIED otherwise (round 2, item 3): another customer, no mark, or a mark naming no account is answered unverified_unresolved (retryable), never recorded, never credited", async () => {
+    const s = await makeStore();
+    const { account: a } = await linkedAccount(s, "uw");
+    const bad = `${a}.${Math.floor(T0 / 1000) + 7200}.${"0".repeat(64)}`;
+    const session = ev.nextId("cs_test_");
+    const cases = [
+      ev.checkoutPackEvent({ account: a, session, pi: ev.nextId("pi_"), created: T0, ref: bad, cus: idsFor("ux").cus }),
+      ev.checkoutPackEvent({ account: a, session, pi: ev.nextId("pi_"), created: T0, ref: bad, cus: idsFor("uy").cus, mark: false }),
+      ev.checkoutPackEvent({ account: "00000000-0000-4000-8000-00000000f00d", session, pi: ev.nextId("pi_"), created: T0, ref: bad, cus: idsFor("uz").cus }),
+    ];
+    for (const e of cases) {
+      assert.equal((await apply(s, e, T0)).outcome, "unverified_unresolved");
+      assert.equal((await apply(s, e, T0)).outcome, "unverified_unresolved", "a retry is not a duplicate: nothing was recorded");
+    }
     assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 0);
     assert.equal((await s.listPacks(a)).length, 0);
   });
@@ -750,11 +786,11 @@ function scenarios(test, makeStore) {
     assert.equal(f.kind, "unverified_reference");
     assert.match(f.reason, /expired/);
     const r = await apply(s, e, late);
-    assert.equal(r.outcome, "ignored_unverified_reference");
+    assert.equal(r.outcome, "unverified_unresolved");
     assert.equal(r.account_id, null);
-    // A pack bought on an expired ref is not credited either.
-    const p = ev.checkoutPackEvent({ account: victim, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: late, ref });
-    assert.equal((await apply(s, p, late)).outcome, "ignored_unverified_reference");
+    // A pack bought on an expired ref by another customer is not credited either.
+    const p = ev.checkoutPackEvent({ account: victim, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: late, ref, cus: atk.cus });
+    assert.equal((await apply(s, p, late)).outcome, "unverified_unresolved");
     assert.equal((await s.pinStatus({ account_id: victim, now: late })).pack_balance, 0);
     // The owner's fresh ref, on the owner's customer, still works.
     assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: mine.cus, sub: mine.sub, created: late }), late)).outcome, "linked");
@@ -767,7 +803,7 @@ function scenarios(test, makeStore) {
     const e = ev.checkoutSubEvent({ account: a, cus, sub, created: T0 + 3 * DAY, sessionCreated: T0 + 2 * HOUR, ref });
     assert.equal((await apply(s, e, T0 + 3 * DAY)).outcome, "linked");
     const p = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 + 3 * DAY,
-      sessionCreated: T0 + HOUR, ref });
+      sessionCreated: T0 + HOUR, ref, cus });
     assert.equal((await apply(s, p, T0 + 3 * DAY)).outcome, "pack_credited");
   });
 
@@ -787,7 +823,7 @@ function scenarios(test, makeStore) {
     assert.equal(st.status, "active");
     assert.equal(st.monthly_allowance, 3000);
     // The owner's next checkout is on the same customer: it is simply theirs.
-    const r = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 + 2 * HOUR }), T0 + 2 * HOUR);
+    const r = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 + 2 * HOUR, cus }), T0 + 2 * HOUR);
     assert.equal(r.outcome, "pack_credited");
   });
 
@@ -923,11 +959,184 @@ function scenarios(test, makeStore) {
     assert.equal(b.window_end, "2027-12-20T18:00:00.000Z", "the last month of the year ends at period_end");
   });
 
-  test("I13/LINK: a refund or dispute on a charge that is not a pack changes nothing; one customer cannot serve two accounts", async () => {
+  // ------------------------------------------------ round 2 (review fixes)
+
+  // Item 1. Stripe's monthly periods from a Jan 31 09:00 anchor: Jan 31 ->
+  // Feb 28 -> Mar 31 -> Apr 30 -> May 31 -> Jun 30. Each period is exactly one
+  // window: one reset at its start and none inside it.
+  test("WINDOW 29-31 (round 2, item 1): Stripe-shaped monthly renewals from Jan 31 09:00 reset exactly once per period, never inside one (Mar 28 is not a new month)", async () => {
+    const s = await makeStore();
+    const anchor = Date.UTC(2027, 0, 31, 9, 0, 0);
+    const starts = [0, 1, 2, 3, 4, 5].map((k) => addMonthsUTC(anchor, k));
+    assert.deepEqual(starts.map(isoOf), ["2027-01-31T09:00:00.000Z", "2027-02-28T09:00:00.000Z", "2027-03-31T09:00:00.000Z",
+      "2027-04-30T09:00:00.000Z", "2027-05-31T09:00:00.000Z", "2027-06-30T09:00:00.000Z"]);
+    const { account, cus, sub } = await subscribe(s, { ps: anchor, tag: "w31" });
+    for (let i = 0; i < 5; i++) {
+      const ps = starts[i];
+      const pe = starts[i + 1];
+      if (i > 0) {
+        const r = await apply(s, ev.invoiceEvent({ sub, cus, ps, pe, created: ps + 1000 }), ps + 1000);
+        assert.equal(r.outcome, "subscription_applied");
+      }
+      assert.equal(await debitN(s, account, 1, ps + 2000, `w${i}`), 1);
+      for (let t = ps + 2000; t < pe; t += DAY / 2) {
+        const st = await s.pinStatus({ account_id: account, now: t });
+        assert.equal(st.window_start, isoOf(ps), `period ${i} at ${isoOf(t)}: the window is the period`);
+        assert.equal(st.window_end, isoOf(pe), `period ${i} at ${isoOf(t)}`);
+        assert.equal(st.monthly_used, 1, `period ${i} at ${isoOf(t)}: no second reset inside the period`);
+      }
+      const last = await s.pinStatus({ account_id: account, now: pe - 1 });
+      assert.equal(last.monthly_used, 1, `period ${i}: still the same month one ms before its end`);
+    }
+  });
+
+  test("WINDOW provisional (round 2, item 1): the renewal is late after a Feb 28 period: the month our clock opens at period_end (Mar 31) is on the fixed anchor, not period_start + 1 (Mar 28); the late invoice does not reset again", async () => {
+    const s = await makeStore();
+    const anchor = Date.UTC(2027, 0, 31, 9, 0, 0);
+    const { account, cus, sub } = await subscribe(s, { ps: anchor, tag: "wpr" });
+    const feb = addMonthsUTC(anchor, 1);
+    const mar = addMonthsUTC(anchor, 2);
+    await apply(s, ev.invoiceEvent({ sub, cus, ps: feb, pe: mar, created: feb + 1000 }), feb + 1000);
+    await debitN(s, account, 3, Date.UTC(2027, 2, 29, 12), "wpr");
+    const apr2 = Date.UTC(2027, 3, 2, 12);
+    const st = await s.pinStatus({ account_id: account, now: apr2 });
+    assert.equal(st.window_start, isoOf(mar), "the provisional month starts at period_end, Mar 31 09:00");
+    assert.equal(st.window_end, isoOf(addMonthsUTC(anchor, 3)), "and ends on the anchor clock, Apr 30 09:00");
+    assert.equal(st.monthly_used, 0);
+    await debitN(s, account, 2, apr2, "wpr2");
+    await apply(s, ev.invoiceEvent({ sub, cus, ps: mar, pe: addMonthsUTC(anchor, 3), created: apr2 + 1000 }), apr2 + 1000);
+    assert.equal((await s.pinStatus({ account_id: account, now: apr2 + 2000 })).monthly_used, 2, "the late renewal confirms the same window");
+  });
+
+  test("YEARLY ANCHOR Feb 29 (round 2, item 1): monthly windows inside year two stay on the Feb 29 anchor (Mar 29), not on year two's moving period_start (Feb 28 + 1 = Mar 28)", async () => {
+    const s = await makeStore();
+    const anchor = Date.UTC(2028, 1, 29, 9, 0, 0);
+    const { account, cus, sub } = await linkedAccount(s, "yfeb");
+    const pe1 = addMonthsUTC(anchor, 12);
+    assert.equal(isoOf(pe1), "2029-02-28T09:00:00.000Z");
+    await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: anchor }), anchor);
+    await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, lookup: "account_yearly", ps: anchor, pe: pe1, created: anchor, anchor }), anchor);
+    await apply(s, ev.invoiceEvent({ sub, cus, lookup: "account_yearly", ps: anchor, pe: pe1, created: anchor + 1000 }), anchor + 1000);
+    // Year one: Feb 29 -> Mar 29 -> Apr 29.
+    assert.equal((await s.pinStatus({ account_id: account, now: Date.UTC(2028, 2, 29, 10) })).window_start, "2028-03-29T09:00:00.000Z");
+    // Year two: Stripe's period runs Feb 28 2029 -> Feb 28 2030 on the same anchor.
+    const pe2 = addMonthsUTC(anchor, 24);
+    await apply(s, ev.subEvent({ sub, cus, lookup: "account_yearly", ps: pe1, pe: pe2, created: pe1 + 500, anchor }), pe1 + 500);
+    await apply(s, ev.invoiceEvent({ sub, cus, lookup: "account_yearly", ps: pe1, pe: pe2, created: pe1 + 1000 }), pe1 + 1000);
+    await debitN(s, account, 1, Date.UTC(2029, 2, 1, 12), "yfeb");
+    const mar28 = await s.pinStatus({ account_id: account, now: Date.UTC(2029, 2, 28, 12) });
+    assert.equal(mar28.window_start, "2029-02-28T09:00:00.000Z");
+    assert.equal(mar28.window_end, "2029-03-29T09:00:00.000Z");
+    assert.equal(mar28.monthly_used, 1, "no reset on Mar 28");
+    const mar29 = await s.pinStatus({ account_id: account, now: Date.UTC(2029, 2, 29, 10) });
+    assert.equal(mar29.window_start, "2029-03-29T09:00:00.000Z");
+    assert.equal(mar29.monthly_used, 0, "the reset is on the anchor's day");
+  });
+
+  // Item 2. The positive server mark and the customer lock on packs.
+  test("CUSTOMER LOCK on packs (round 2, item 2): a verified, marked pack session on another customer is ignored_customer_mismatch and credits nothing; on the account's own customer it credits", async () => {
+    const s = await makeStore();
+    const { account, cus } = await linkedAccount(s, "cl");
+    const other = idsFor("clo").cus;
+    const r1 = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: other }), T0);
+    assert.equal(r1.outcome, "ignored_customer_mismatch");
+    const r2 = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 }), T0);
+    assert.equal(r2.outcome, "ignored_customer_mismatch", "no customer at all is a mismatch too");
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 })).pack_balance, 0);
+    const r3 = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus }), T0);
+    assert.equal(r3.outcome, "pack_credited");
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 })).pack_balance, 1000);
+  });
+
+  test("SERVER MARK (round 2, item 2): a verified ref without our metadata.account_id, or with one naming another account, credits no pack and links no plan, even on the account's own customer", async () => {
+    const s = await makeStore();
+    const { account, cus, sub } = await linkedAccount(s, "sm");
+    const p1 = ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus, mark: false });
+    assert.equal((await apply(s, p1, T0)).outcome, "ignored_no_server_mark");
+    const p2 = ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus });
+    p2.data.object.metadata.account_id = "00000000-0000-4000-8000-0000000000aa";
+    assert.equal((await apply(s, p2, T0)).outcome, "ignored_no_server_mark");
+    const l1 = ev.checkoutSubEvent({ account, cus, sub, created: T0, mark: false });
+    assert.equal((await apply(s, l1, T0)).outcome, "ignored_no_server_mark");
+    assert.equal((await apply(s, l1, T0)).outcome, "duplicate", "recorded: a final refusal");
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 })).pack_balance, 0);
+    assert.equal((await s.listPacks(account)).length, 0);
+  });
+
+  // Item 4. Refunds and disputes on a plan invoice's charge.
+  async function subscribePaid(s, tag) {
+    const { account, cus, sub, sub2 } = await linkedAccount(s, tag);
+    const ps = T0;
+    const pe = addMonthsUTC(ps, 1);
+    const inv = ev.nextId("in_");
+    const pi = ev.nextId("pi_");
+    const charge = ev.nextId("ch_");
+    await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: ps }), ps);
+    await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, ps, pe, created: ps }), ps);
+    await apply(s, ev.invoiceEvent({ sub, cus, ps, pe, created: ps + 1000, inv, pi, charge, amount: 900 }), ps + 1000);
+    return { account, cus, sub, sub2, ps, pe, inv, pi, charge };
+  }
+
+  test("PLAN DISPUTE (round 2, item 4): an open dispute on the plan invoice's charge holds the plan (allowance 0, use kept); won releases it; lost holds it", async () => {
+    const s = await makeStore();
+    const { account, pi, charge } = await subscribePaid(s, "pd");
+    assert.equal(await debitN(s, account, 5, T0 + HOUR, "pd"), 5);
+    const open = await apply(s, ev.disputeEvent({ pi, charge, status: "needs_response", created: T0 + DAY }), T0 + DAY);
+    assert.equal(open.outcome, "plan_hold");
+    let st = await s.pinStatus({ account_id: account, now: T0 + DAY + 1000 });
+    assert.equal(st.monthly_allowance, 0);
+    assert.equal(st.monthly_used, 5);
+    assert.equal((await s.debitPins({ account_id: account, request_id: "pd-held", n: 1, now: T0 + DAY + 2000 })).ok, false);
+    const won = await apply(s, ev.disputeEvent({ type: "charge.dispute.closed", pi, charge, status: "won", created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(won.outcome, "plan_release");
+    st = await s.pinStatus({ account_id: account, now: T0 + 2 * DAY + 1000 });
+    assert.equal(st.monthly_allowance, 3000);
+    assert.equal(st.monthly_used, 5, "release is not a reset");
+    const s2 = await subscribePaid(s, "pl");
+    await apply(s, ev.disputeEvent({ pi: s2.pi, charge: s2.charge, created: T0 + DAY }), T0 + DAY);
+    const lost = await apply(s, ev.disputeEvent({ type: "charge.dispute.closed", pi: s2.pi, charge: s2.charge, status: "lost", created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(lost.outcome, "plan_hold");
+    assert.equal((await s.pinStatus({ account_id: s2.account, now: T0 + 3 * DAY })).monthly_allowance, 0);
+  });
+
+  test("PLAN REFUND (round 2, item 4): a full refund of the current period's invoice ends that period's allowance; a partial one does not; the next paid period gets its 3000", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, pe, inv, pi, charge } = await subscribePaid(s, "pr");
+    await debitN(s, account, 7, T0 + HOUR, "pr");
+    const part = await apply(s, ev.refundEvent({ pi, charge, inv, cus, amount: 900, refunded: 300, created: T0 + DAY }), T0 + DAY);
+    assert.equal(part.outcome, "plan_refund_partial");
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 + DAY + 1000 })).monthly_allowance, 3000);
+    const full = await apply(s, ev.refundEvent({ pi, charge, inv, cus, amount: 900, refunded: 900, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(full.outcome, "plan_refund_voided");
+    const st = await s.pinStatus({ account_id: account, now: T0 + 2 * DAY + 1000 });
+    assert.equal(st.monthly_allowance, 0);
+    assert.equal(st.monthly_left, 0);
+    await apply(s, ev.invoiceEvent({ sub, cus, ps: pe, pe: addMonthsUTC(pe, 1), created: pe + 1000 }), pe + 1000);
+    const next = await s.pinStatus({ account_id: account, now: pe + 2000 });
+    assert.equal(next.monthly_allowance, 3000);
+    assert.equal(next.monthly_used, 0);
+  });
+
+  test("PLAN REFUND by the charge's customer (round 2, item 4): a refund on an invoice charge whose payment intent was never seen resolves by the invoice and the charge's customer", async () => {
+    const s = await makeStore();
+    const { account, cus, inv } = await subscribePaid(s, "pc");
+    const r = await apply(s, ev.refundEvent({ pi: ev.nextId("pi_"), inv, cus, amount: 900, refunded: 900, created: T0 + DAY }), T0 + DAY);
+    assert.equal(r.outcome, "plan_refund_voided");
+    assert.equal(r.account_id, account);
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 + DAY + 1000 })).monthly_allowance, 0);
+    // An invoice charge on a customer no account holds is unresolved.
+    const nobody = await apply(s, ev.refundEvent({ pi: ev.nextId("pi_"), inv: ev.nextId("in_"), cus: idsFor("pz").cus, amount: 900, refunded: 900, created: T0 + DAY }), T0 + DAY);
+    assert.equal(nobody.outcome, "unresolved");
+  });
+
+  test("I13/LINK: a refund or dispute on a charge that is neither a pack nor a plan invoice changes nothing; one customer cannot serve two accounts", async () => {
     const s = await makeStore();
     const { account, cus } = await subscribe(s);
     const r = await apply(s, ev.refundEvent({ pi: ev.nextId("pi_"), amount: 900, refunded: 900, created: T0 }), T0);
     assert.equal(r.outcome, "unresolved");
+    const d = await apply(s, ev.disputeEvent({ pi: ev.nextId("pi_"), created: T0 }), T0);
+    assert.equal(d.outcome, "unresolved");
+    assert.equal((await s.pinStatus({ account_id: account, now: T0 + 1000 })).monthly_allowance, 3000);
     const other = await s._createAccount();
     const r2 = await apply(s, ev.checkoutSubEvent({ account: other, cus, sub: ev.nextId("sub_"), created: T0 }), T0);
     assert.equal(r2.outcome, "ignored_customer_mismatch");

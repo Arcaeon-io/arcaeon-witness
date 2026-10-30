@@ -78,9 +78,10 @@ test("FACTS: cancel_at inside the period moves the effective end earlier and cou
 test("I3 LEDGER: a full refund of a pack with 200 left removes the 200 and records the 800 spent as a shortfall (counts only)", async () => {
   const s = accountdb.memoryStore();
   const a = await s._createAccount();
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_i3ledger1" });
   const pi = ev.nextId("pi_");
   const fact = (e) => billing.factFromEvent(e);
-  const ck = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0 });
+  const ck = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0, cus: "cus_i3ledger1" });
   await s.applyStripeEvent({ event_id: ck.id, type: ck.type, fact: fact(ck), now: T0 });
   await s.debitPins({ account_id: a, request_id: "spend", n: 810, now: T0 });
   const rf = ev.refundEvent({ pi, amount: 2000, refunded: 2000, created: T0 + 1000 });
@@ -157,12 +158,13 @@ test("PROBE 6: a lost dispute records as shortfall the pins spent and not alread
   const fact = (e) => billing.factFromEvent(e);
   const put = (e, now) => s.applyStripeEvent({ event_id: e.id, type: e.type, fact: fact(e), now });
   const pi = ev.nextId("pi_");
-  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0 }), T0);
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_probe6" });
+  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0, cus: "cus_probe6" }), T0);
   await s.debitPins({ account_id: a, request_id: "spend", n: 10 + 300, now: T0 });
   await put(ev.disputeEvent({ type: "charge.dispute.closed", pi, status: "lost", created: T0 + 1000 }), T0 + 1000);
   assert.equal(s._ledger(a).find((r) => r.entry === "pack_void").shortfall, 300);
   const pi2 = ev.nextId("pi_");
-  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: pi2, created: T0 + 2000 }), T0 + 2000);
+  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: pi2, created: T0 + 2000, cus: "cus_probe6" }), T0 + 2000);
   await s.debitPins({ account_id: a, request_id: "spend2", n: 100, now: T0 + 2000 });
   await put(ev.refundEvent({ pi: pi2, amount: 2000, refunded: 400, created: T0 + 3000 }), T0 + 3000); // 200 units off
   await put(ev.disputeEvent({ type: "charge.dispute.closed", pi: pi2, status: "lost", created: T0 + 4000 }), T0 + 4000);
@@ -212,7 +214,8 @@ test("WEBHOOK: a signed account event goes to the account branch; the repeat ans
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_whpack1" });
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: "cus_whpack1" });
   const r1 = await post(e);
   assert.equal(r1._status, 200);
   assert.equal(r1._body.outcome, "pack_credited");
@@ -226,7 +229,8 @@ test("J8/J10/J9/J11: wrong secret, no header, a timestamp 301 s old, or a re-ser
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_whpack1" });
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: "cus_whpack1" });
   const raw = Buffer.from(JSON.stringify(e), "utf8");
   assert.equal((await post(e, { header: stripeSigHeader("whsec_wrong", raw) }))._status, 400);
   assert.equal((await post(e, { header: null }))._status, 400);
@@ -241,7 +245,8 @@ test("J12: during a secret roll the header carries two v1 signatures; the one ma
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_whpack1" });
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: "cus_whpack1" });
   const raw = Buffer.from(JSON.stringify(e), "utf8");
   const t = Math.floor(Date.now() / 1000);
   const good = stripeSigHeader(SECRET, raw, t).split(",")[1];
@@ -281,24 +286,64 @@ test("WEBHOOK: no account store configured -> 503 for subscription events (retry
   assert.match(lr._body.skipped, /client_reference_id/);
 });
 
-test("WEBHOOK: a forged checkout reference answers 200 (no retry) and is recorded ignored_unverified_reference with no account", async () => {
+// console.error, captured for one call (the operator's line is the point).
+async function capturingErrors(fn) {
+  const lines = [];
+  const prev = console.error;
+  console.error = (...a) => { lines.push(a.join(" ")); };
+  try {
+    const out = await fn();
+    return { out, lines };
+  } finally {
+    console.error = prev;
+  }
+}
+
+test("WEBHOOK UNVERIFIED (round 2, item 3): a forged or unverifiable checkout reference on a customer that is not the named account's answers 503 (Stripe retries), is not recorded, and is logged", async () => {
   const s = accountdb.memoryStore();
   useStore(s);
   const victim = await s._createAccount();
+  await s.setStripeCustomer({ account_id: victim, customer_id: "cus_victim1" });
   const e = ev.checkoutSubEvent({ account: victim, cus: "cus_forger1", sub: "sub_forger1", created: T0, ref: victim });
-  const r = await post(e);
+  const { out: r, lines } = await capturingErrors(() => post(e));
+  assert.equal(r._status, 503);
+  assert.equal(r._body.reason, "unverified_reference");
+  assert.equal(s._stripeEvents().length, 0, "not recorded as handled");
+  assert.ok(lines.some((l) => l.includes(e.id) && /did not verify/.test(l)), lines.join("\n"));
+  assert.equal(s._account(victim).stripe_customer_id, "cus_victim1");
+});
+
+test("WEBHOOK UNVERIFIED + MARK + OWN CUSTOMER (round 2, item 3): the secret was rotated; the session carries our mark and the account's own customer: credited, 200, and the unverified ref is logged", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s);
+  const a = await s._createAccount();
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_rot1" });
+  const ref = billing.mintAccountRef(a, T0, "the-secret-before-the-rotation-0123");
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref, cus: "cus_rot1", pack: "pins_200" });
+  const { out: r, lines } = await capturingErrors(() => post(e));
   assert.equal(r._status, 200);
-  assert.equal(r._body.outcome, "ignored_unverified_reference");
-  const row = s._stripeEvents().find((x) => x.event_id === e.id);
-  assert.equal(row.account_id, null);
-  assert.equal(s._account(victim).stripe_customer_id, null);
+  assert.equal(r._body.outcome, "pack_credited");
+  assert.ok(lines.some((l) => l.includes(e.id) && /did not verify/.test(l)), lines.join("\n"));
+  assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 200);
+});
+
+test("WEBHOOK REFUND/DISPUTE LOG (round 2, item 4): every refund and dispute event is logged with its outcome, resolved or not", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s);
+  const rf = ev.refundEvent({ pi: ev.nextId("pi_"), amount: 900, refunded: 900, created: T0 });
+  const { out: r1, lines: l1 } = await capturingErrors(() => post(rf));
+  assert.equal(r1._status, 200);
+  assert.ok(l1.some((l) => l.includes(rf.id) && l.includes("charge.refunded")), l1.join("\n"));
+  const dp = ev.disputeEvent({ pi: ev.nextId("pi_"), created: T0 });
+  const { lines: l2 } = await capturingErrors(() => post(dp));
+  assert.ok(l2.some((l) => l.includes(dp.id) && l.includes("charge.dispute.created")), l2.join("\n"));
 });
 
 test("WEBHOOK: a bare uuid on a payment checkout is not ours: 200, and no stripe_events row", async () => {
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: a });
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: a, mark: false });
   const r = await post(e);
   assert.equal(r._status, 200);
   assert.equal(r._body.outcome, undefined);
@@ -316,10 +361,12 @@ test("WEBHOOK: a Stripe retry days after the ref expired is honoured (session.cr
   const r = await post(ok);
   assert.equal(r._status, 200);
   assert.equal(r._body.outcome, "linked");
-  const replay = ev.checkoutSubEvent({ account: a, cus: "cus_retry1", sub: "sub_replay1", created: T0 + 5 * ev.DAY, ref });
+  // A replay made after the ref ran out, on someone else's customer: 503
+  // (round 2, item 3: an unverified ref is never recorded as handled).
+  const replay = ev.checkoutSubEvent({ account: a, cus: "cus_replay1", sub: "sub_replay1", created: T0 + 5 * ev.DAY, ref });
   const r2 = await post(replay);
-  assert.equal(r2._status, 200);
-  assert.equal(r2._body.outcome, "ignored_unverified_reference");
+  assert.equal(r2._status, 503);
+  assert.equal(r2._body.reason, "unverified_reference");
   assert.equal(s._account(a).stripe_customer_id, "cus_retry1");
 });
 
@@ -343,7 +390,8 @@ test("WEBHOOK: a test-mode account event is skipped by the livemode gate", async
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_whpack1" });
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, cus: "cus_whpack1" });
   e.livemode = false;
   const r = await post(e);
   assert.equal(r._status, 200);

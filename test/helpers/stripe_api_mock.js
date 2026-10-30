@@ -5,8 +5,9 @@
 // check, recorded calls), never the network. Not a test file.
 //
 // Honours Idempotency-Key the way Stripe does: the same key on the same path
-// returns the first result again, so two creates with one key are one
-// customer. `paidEvent(session, ...)` builds the checkout.session.completed
+// with the same body returns the first result again, so two creates with one
+// key are one customer (or one session); the same key with another body is
+// a 400 idempotency_error. `paidEvent(session, ...)` builds the checkout.session.completed
 // Stripe would send after SOMEONE paid that session: the session's customer
 // is the one WE put on it, whoever held the card.
 
@@ -34,6 +35,7 @@ class MockStripeApi {
     this.customers = new Map();
     this.sessions = new Map();
     this.idem = new Map();
+    this.idemBody = new Map(); // key -> the body it was first used with
     this.fail = null; // (path, method) => {status, body} | null
     this.seq = 0;
   }
@@ -55,7 +57,13 @@ class MockStripeApi {
       if (f) return fakeResponse(f.status, f.body);
     }
     const idemKey = call.idempotencyKey ? `${method} ${u.pathname} ${call.idempotencyKey}` : null;
-    if (idemKey && this.idem.has(idemKey)) return fakeResponse(200, this.idem.get(idemKey));
+    const bodyText = typeof opts.body === "string" ? opts.body : "";
+    if (idemKey && this.idem.has(idemKey)) {
+      if (this.idemBody.get(idemKey) !== bodyText) {
+        return fakeResponse(400, { error: { type: "idempotency_error", message: "Keys for idempotent requests can only be used with the same parameters they were first used with." } });
+      }
+      return fakeResponse(200, this.idem.get(idemKey));
+    }
 
     let out;
     if (method === "POST" && u.pathname === "/v1/customers") {
@@ -90,7 +98,7 @@ class MockStripeApi {
     } else {
       return fakeResponse(404, { error: { message: "mock: unknown stripe path" } });
     }
-    if (idemKey) this.idem.set(idemKey, out);
+    if (idemKey) { this.idem.set(idemKey, out); this.idemBody.set(idemKey, bodyText); }
     return fakeResponse(200, out);
   };
 

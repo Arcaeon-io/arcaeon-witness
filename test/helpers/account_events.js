@@ -18,8 +18,9 @@ const DAY = 24 * 60 * 60 * 1000;
 let n = 0;
 const nextId = (p) => `${p}${Date.now().toString(36)}${(++n).toString(36)}`.replace(/[^A-Za-z0-9_]/g, "");
 
+// anchor: Stripe's billing_cycle_anchor (ms); omitted from the object when not given.
 function subEvent({ id, type = "customer.subscription.updated", sub, cus, status = "active", lookup = "account_monthly",
-  ps, pe, cape = false, cancelAt = null, created, account = null }) {
+  ps, pe, cape = false, cancelAt = null, created, account = null, anchor }) {
   return {
     id: id || nextId("evt_"),
     type,
@@ -29,6 +30,7 @@ function subEvent({ id, type = "customer.subscription.updated", sub, cus, status
       object: {
         id: sub, object: "subscription", customer: cus, status, cancel_at_period_end: cape, created: sec(created),
         cancel_at: cancelAt === null ? null : sec(cancelAt),
+        ...(anchor === undefined ? {} : { billing_cycle_anchor: sec(anchor) }),
         metadata: account ? { account_ref: signed(account, created) } : {},
         items: { data: [{ price: { lookup_key: lookup }, current_period_start: sec(ps), current_period_end: sec(pe) }] },
       },
@@ -36,7 +38,10 @@ function subEvent({ id, type = "customer.subscription.updated", sub, cus, status
   };
 }
 
-function invoiceEvent({ id, type = "invoice.paid", sub, cus, lookup = "account_monthly", ps, pe, created, account = null }) {
+// inv / pi / charge / amount: the invoice id and the payment it was paid by
+// (a refund or dispute on that charge finds the plan payment by them).
+function invoiceEvent({ id, type = "invoice.paid", sub, cus, lookup = "account_monthly", ps, pe, created, account = null,
+  inv, pi = null, charge = null, amount = 900 }) {
   return {
     id: id || nextId("evt_"),
     type,
@@ -44,7 +49,8 @@ function invoiceEvent({ id, type = "invoice.paid", sub, cus, lookup = "account_m
     livemode: true,
     data: {
       object: {
-        id: nextId("in_"), object: "invoice", customer: cus, created: sec(created),
+        id: inv || nextId("in_"), object: "invoice", customer: cus, created: sec(created),
+        payment_intent: pi, charge, amount_paid: amount,
         parent: { subscription_details: { subscription: sub, metadata: account ? { account_ref: signed(account, created) } : {} } },
         lines: { data: [{ price: { lookup_key: lookup }, period: { start: sec(ps), end: sec(pe) } }] },
       },
@@ -54,7 +60,9 @@ function invoiceEvent({ id, type = "invoice.paid", sub, cus, lookup = "account_m
 
 // sessionCreated: the session's own `created` (defaults to the event time);
 // a Stripe retry keeps it while event delivery time moves on.
-function checkoutSubEvent({ id, account, cus, sub, created, ref, sessionCreated }) {
+// mark: the server's metadata.account_id (lib/_account_checkout.js sets it on
+// every session it makes); mark:false is a session we did not make.
+function checkoutSubEvent({ id, account, cus, sub, created, ref, sessionCreated, mark = true }) {
   const r = ref === undefined ? signed(account, created) : ref;
   return {
     id: id || nextId("evt_"),
@@ -63,13 +71,14 @@ function checkoutSubEvent({ id, account, cus, sub, created, ref, sessionCreated 
     livemode: true,
     data: { object: { id: nextId("cs_test_"), created: sec(sessionCreated === undefined ? created : sessionCreated),
       mode: "subscription", customer: cus, subscription: sub,
-      client_reference_id: r, metadata: {}, payment_status: "paid" } },
+      client_reference_id: r, metadata: mark && account ? { account_id: account } : {}, payment_status: "paid" } },
   };
 }
 
 const PACK_CENTS = { pins_200: 500, pins_1000: 2000 };
+// cus: the session's customer (the account's own, on a server session).
 function checkoutPackEvent({ id, type = "checkout.session.completed", account, session, pack = "pins_1000", pi,
-  amount, currency = "usd", paymentStatus = "paid", created, ref, sessionCreated }) {
+  amount, currency = "usd", paymentStatus = "paid", created, ref, sessionCreated, cus = null, mark = true }) {
   const r = ref === undefined ? signed(account, created) : ref;
   return {
     id: id || nextId("evt_"),
@@ -78,27 +87,30 @@ function checkoutPackEvent({ id, type = "checkout.session.completed", account, s
     livemode: true,
     data: { object: { id: session, created: sec(sessionCreated === undefined ? created : sessionCreated),
       mode: "payment", payment_status: paymentStatus, payment_intent: pi,
-      amount_total: amount === undefined ? PACK_CENTS[pack] : amount, currency, client_reference_id: r, metadata: { pack } } },
+      amount_total: amount === undefined ? PACK_CENTS[pack] : amount, currency, client_reference_id: r, customer: cus,
+      metadata: mark && account ? { pack, account_id: account } : { pack } } },
   };
 }
 
-function refundEvent({ id, pi, amount, refunded, created }) {
+// inv / cus: the charge's invoice and customer (a subscription invoice charge has both).
+function refundEvent({ id, pi, amount, refunded, created, inv = null, cus = null, charge }) {
   return {
     id: id || nextId("evt_"),
     type: "charge.refunded",
     created: sec(created),
     livemode: true,
-    data: { object: { id: nextId("ch_"), object: "charge", payment_intent: pi, amount, amount_refunded: refunded } },
+    data: { object: { id: charge || nextId("ch_"), object: "charge", payment_intent: pi, amount, amount_refunded: refunded,
+      invoice: inv, customer: cus } },
   };
 }
 
-function disputeEvent({ id, type = "charge.dispute.created", pi, status = "needs_response", created }) {
+function disputeEvent({ id, type = "charge.dispute.created", pi, status = "needs_response", created, charge }) {
   return {
     id: id || nextId("evt_"),
     type,
     created: sec(created),
     livemode: true,
-    data: { object: { id: nextId("dp_"), object: "dispute", charge: nextId("ch_"), payment_intent: pi, status } },
+    data: { object: { id: nextId("dp_"), object: "dispute", charge: charge || nextId("ch_"), payment_intent: pi, status } },
   };
 }
 

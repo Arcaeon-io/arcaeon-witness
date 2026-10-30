@@ -13,11 +13,12 @@ const billing = require("../lib/_account_billing.js");
 
 const SQL = fs.readFileSync(path.join(__dirname, "..", "supabase", "migrations", "2026_10_31_account_v2.sql"), "utf8");
 const CODE = SQL.replace(/--[^\n]*/g, "");
-const NEW_TABLES = ["account_packs", "pin_ledger"];
+const NEW_TABLES = ["account_packs", "pin_ledger", "account_plan_payments"];
 const FORBIDDEN = new Set(["content", "text", "body", "note", "notes", "message", "messages", "payload", "data", "record", "records"]);
 const FUNCTIONS = ["account_roll", "account_recompute_packs", "account_debit_pins", "account_pin_status",
   "account_check_customer", "account_set_stripe_customer", "account_apply_subscription", "account_apply_pack_credit",
-  "account_apply_pack_refund", "account_apply_pack_dispute", "account_apply_stripe_event"];
+  "account_apply_pack_refund", "account_apply_pack_dispute", "account_apply_plan_refund", "account_apply_plan_dispute",
+  "account_apply_stripe_event"];
 
 function columns(table) {
   const m = CODE.match(new RegExp(`create table if not exists public\\.${table}\\s*\\(([\\s\\S]*?)\\n\\);`));
@@ -36,7 +37,7 @@ test("V2 NO CONTENT: no new or added column is content-shaped", () => {
 
 test("V2 RLS: on for the new tables, revoked from anon and authenticated, no policy, no security definer", () => {
   for (const t of NEW_TABLES) assert.match(CODE, new RegExp(`alter table public\\.${t}\\s+enable row level security`), t);
-  assert.match(CODE, /revoke all on public\.account_packs, public\.pin_ledger from anon, authenticated;/);
+  assert.match(CODE, /revoke all on public\.account_packs, public\.pin_ledger, public\.account_plan_payments from anon, authenticated;/);
   assert.doesNotMatch(CODE, /create\s+policy/i);
   assert.doesNotMatch(CODE, /security\s+definer/i);
 });
@@ -77,10 +78,14 @@ test("V2 ONE WRITER: only account_set_stripe_customer writes stripe_customer_id;
 
 test("V2 NUMBERS: 3000 paid, 10 free, pack units by id, statuses: the SQL and the JS say the same", () => {
   const roll = CODE.slice(CODE.indexOf("function public.account_roll("), CODE.indexOf("function public.account_recompute_packs("));
-  assert.match(roll, new RegExp(`v_allow := ${billing.PAID_MONTHLY_PINS};`));
+  // Round 2: the paid 3000, unless the plan is held back by its own payments.
+  assert.match(roll, new RegExp(`v_allow := case when v_held then 0 else ${billing.PAID_MONTHLY_PINS} end;`));
   assert.match(roll, new RegExp(`v_allow := ${billing.FREE_MONTHLY_PINS};`));
   assert.match(roll, /set timezone = 'UTC'/);
   assert.match(roll, /make_interval\(months => v_k\)/);
+  // Round 2: the clock counts from the fixed anchor, never from period_start + k.
+  assert.match(roll, /v_anchor := coalesce\(a\.cycle_anchor, a\.period_start\);/);
+  assert.doesNotMatch(roll, /a\.period_start \+ make_interval\(months => v_k/);
   for (const [id, p] of Object.entries(billing.ACCOUNT_PACKS)) {
     assert.match(CODE, new RegExp(`when '${id}' then ${p.pins}`), id);
   }

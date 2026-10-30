@@ -34,7 +34,8 @@ function setup({ prices = PRICES, env = {} } = {}) {
   const api = accountApi.createAccountApi({
     getStore: () => store,
     now: () => clock.t,
-    env: { WITNESS_STRIPE_SECRET_KEY: SK, WITNESS_BASE_URL: "https://witness.test", ACCOUNT_REF_SECRET: process.env.ACCOUNT_REF_SECRET, ...env },
+    env: { WITNESS_STRIPE_SECRET_KEY: SK, WITNESS_BASE_URL: "https://witness.test", ACCOUNT_REF_SECRET: process.env.ACCOUNT_REF_SECRET,
+      ACCOUNT_CHECKOUT_ENABLED: "true", ...env },
     fetchImpl: stripe.handle,
   });
   return { store, clock, stripe, api };
@@ -170,7 +171,22 @@ test("CHECKOUT REFUSED: bad bodies are 400; both plan and pack is 400; nothing i
   assert.equal(stripe.calls.length, 0);
 });
 
-test("CHECKOUT FAILS CLOSED: no WITNESS_STRIPE_SECRET_KEY is 503 (no bare STRIPE_SECRET_KEY fallback); no ACCOUNT_REF_SECRET is 503; a missing price is 503 naming the lookup key", async () => {
+// What a caller may never read in a refusal (round 2, item 6): our env var
+// names, Stripe lookup keys, or other operator detail.
+const OPERATOR_DETAIL = /WITNESS_|ACCOUNT_REF_SECRET|ACCOUNT_CHECKOUT_ENABLED|SUPABASE|STRIPE_SECRET|lookup|account_monthly|account_yearly|price_mock|\/v1\//i;
+
+async function capturingErrors(fn) {
+  const lines = [];
+  const prev = console.error;
+  console.error = (...a) => { lines.push(a.join(" ")); };
+  try {
+    return { out: await fn(), lines };
+  } finally {
+    console.error = prev;
+  }
+}
+
+test("CHECKOUT FAILS CLOSED: no WITNESS_STRIPE_SECRET_KEY is 503 (no bare STRIPE_SECRET_KEY fallback); no ACCOUNT_REF_SECRET is 503; a missing price is 503", async () => {
   const noKey = setup({ env: { WITNESS_STRIPE_SECRET_KEY: "", STRIPE_SECRET_KEY: "sk_other_product" } });
   let k = await newKey(noKey.store);
   let r = await checkout(noKey.api, { key: k.api_key, body: { plan: "monthly" } });
@@ -190,7 +206,6 @@ test("CHECKOUT FAILS CLOSED: no WITNESS_STRIPE_SECRET_KEY is 503 (no bare STRIPE
   r = await checkout(noPrice.api, { key: k.api_key, body: { plan: "yearly" } });
   assert.equal(r._status, 503);
   assert.equal(r._body.reason, "price_not_configured");
-  assert.match(r._body.error, /account_yearly/);
   assert.equal(noPrice.stripe.countOf("POST", "/v1/checkout/sessions"), 0);
 });
 
@@ -239,6 +254,82 @@ test("WIRING: ?op=account-checkout dispatches and vercel.json rewrites /api/acco
   const cfg = require("../vercel.json");
   const map = Object.fromEntries(cfg.rewrites.map((r) => [r.source, r.destination]));
   assert.equal(map["/api/account/checkout"], "/api/balance?op=account-checkout");
+});
+
+// ---------------------------------------------- round 2 (review fixes)
+
+test("RELEASE GATE (round 2, item 5): checkout is refused 503 checkout_disabled unless ACCOUNT_CHECKOUT_ENABLED is exactly true; nothing reaches Stripe; open, it works", async () => {
+  for (const v of [undefined, "", "false", "1", "TRUE ", "yes"]) {
+    const env = { ACCOUNT_CHECKOUT_ENABLED: v };
+    const closed = setup({ env });
+    const k = await newKey(closed.store);
+    const r = await checkout(closed.api, { key: k.api_key, body: { plan: "monthly" } });
+    assert.equal(r._status, 503, `ACCOUNT_CHECKOUT_ENABLED=${JSON.stringify(v)}`);
+    assert.equal(r._body.reason, "checkout_disabled");
+    assert.equal(closed.stripe.calls.length, 0);
+    const p = await checkout(closed.api, { key: k.api_key, body: { pack: "pins_200" } });
+    assert.equal(p._status, 503);
+  }
+  const open = setup({ env: { ACCOUNT_CHECKOUT_ENABLED: "true" } });
+  const k = await newKey(open.store);
+  assert.equal((await checkout(open.api, { key: k.api_key, body: { plan: "monthly" } }))._status, 201);
+});
+
+test("ERROR BODIES (round 2, item 6): every checkout refusal is a reason code and a plain sentence with no env var or lookup-key name; the operator detail goes to console.error", async () => {
+  const cases = [
+    { name: "gate", s: setup({ env: { ACCOUNT_CHECKOUT_ENABLED: "" } }), body: { plan: "monthly" }, reason: "checkout_disabled", log: /ACCOUNT_CHECKOUT_ENABLED/ },
+    { name: "no secret key", s: setup({ env: { WITNESS_STRIPE_SECRET_KEY: "" } }), body: { plan: "monthly" }, reason: "stripe_not_configured", log: /WITNESS_STRIPE_SECRET_KEY/ },
+    { name: "no ref secret", s: setup({ env: { ACCOUNT_REF_SECRET: "" } }), body: { plan: "monthly" }, reason: "account_ref_not_configured", log: /ACCOUNT_REF_SECRET/ },
+    { name: "no price", s: setup({ prices: { account_monthly: PRICES.account_monthly } }), body: { plan: "yearly" }, reason: "price_not_configured", log: /account_yearly/ },
+    { name: "stripe down", s: setup(), body: { plan: "monthly" }, reason: "stripe_error", log: /\/v1\/checkout\/sessions/, fail: true },
+  ];
+  for (const c of cases) {
+    const k = await newKey(c.s.store);
+    if (c.fail) c.s.stripe.fail = (path) => (path === "/v1/checkout/sessions" ? { status: 500, body: {} } : null);
+    const { out: r, lines } = await capturingErrors(() => checkout(c.s.api, { key: k.api_key, body: c.body }));
+    assert.equal(r._body.reason, c.reason, c.name);
+    assert.equal(typeof r._body.error, "string", c.name);
+    assert.ok(r._body.error.length > 10, c.name);
+    assert.ok(!OPERATOR_DETAIL.test(JSON.stringify(r._body)), `${c.name}: ${JSON.stringify(r._body)}`);
+    assert.ok(lines.some((l) => c.log.test(l)), `${c.name}: operator line logged: ${lines.join(" | ")}`);
+  }
+  // No account store: the same rule.
+  const api = accountApi.createAccountApi({ getStore: () => null, env: { ACCOUNT_CHECKOUT_ENABLED: "true" } });
+  const { out: r, lines } = await capturingErrors(() => checkout(api, { key: "ak_" + "y".repeat(43), body: { plan: "monthly" } }));
+  assert.equal(r._body.reason, "account_store_not_configured");
+  assert.ok(!OPERATOR_DETAIL.test(JSON.stringify(r._body)), JSON.stringify(r._body));
+  assert.ok(lines.some((l) => /SUPABASE_URL/.test(l)), lines.join(" | "));
+});
+
+test("DOUBLE SUBMIT (round 2, item 7): two plan checkouts for one account inside the same few minutes carry one Idempotency-Key and one body, so Stripe answers ONE session; another plan, or a later bucket, is a new session", async () => {
+  const { api, stripe, store, clock } = setup();
+  const { account_id, api_key } = await newKey(store);
+  const [a, b] = await Promise.all([
+    checkout(api, { key: api_key, body: { plan: "monthly" } }),
+    checkout(api, { key: api_key, body: { plan: "monthly" } }),
+  ]);
+  assert.equal(a._status, 201, JSON.stringify(a._body));
+  assert.equal(b._status, 201, JSON.stringify(b._body));
+  clock.t += 60 * 1000; // a third click a minute later
+  const c = await checkout(api, { key: api_key, body: { plan: "monthly" } });
+  assert.equal(c._status, 201, JSON.stringify(c._body));
+  assert.equal(a._body.session_id, b._body.session_id);
+  assert.equal(c._body.session_id, a._body.session_id);
+  assert.equal(stripe.sessions.size, 1, "one open plan session at Stripe");
+  const posts = stripe.calls.filter((x) => x.method === "POST" && x.path === "/v1/checkout/sessions");
+  assert.equal(posts.length, 3);
+  const keys = new Set(posts.map((x) => x.idempotencyKey));
+  assert.equal(keys.size, 1);
+  const [key] = keys;
+  assert.ok(key && key.includes(account_id) && key.includes("monthly"), key);
+  // Another plan is another purchase.
+  const y = await checkout(api, { key: api_key, body: { plan: "yearly" } });
+  assert.notEqual(y._body.session_id, a._body.session_id);
+  // A later bucket is a new session.
+  clock.t += 30 * 60 * 1000;
+  const later = await checkout(api, { key: api_key, body: { plan: "monthly" } });
+  assert.equal(later._status, 201, JSON.stringify(later._body));
+  assert.notEqual(later._body.session_id, a._body.session_id);
 });
 
 // ------------------------------------------- the lockout gap, end to end

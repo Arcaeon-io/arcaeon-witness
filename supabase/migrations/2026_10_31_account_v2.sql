@@ -7,9 +7,14 @@
 -- this file and refuses a content-shaped column name.
 --
 -- The rules (the owner's): $9/month (lookup key account_monthly) or $99/year
--- (account_yearly). 3,000 pins a month, reset monthly, use it or lose it; the
--- yearly plan resets to 3,000 on our own monthly anniversary clock inside the
--- paid year (period_start + k months), no pool. Packs (pins_200 = 200,
+-- (account_yearly). 3,000 pins a month, reset monthly, use it or lose it. A
+-- monthly plan's month is Stripe's billing period [period_start,
+-- period_end); the yearly plan resets to 3,000 on our own monthly
+-- anniversary clock inside the paid year, counted from the subscription's
+-- FIXED anchor (cycle_anchor: Stripe's billing_cycle_anchor, else the first
+-- period_start), never from the moving period_start; no pool. A full refund
+-- of the current period's plan invoice ends that period's 3,000; an open or
+-- lost dispute on a plan invoice holds the allowance at 0 (round 2). Packs (pins_200 = 200,
 -- pins_1000 = 1,000) never expire and are spent only after the month's 3,000.
 -- No plan in force (never paid, or lapsed: canceled, unpaid, incomplete,
 -- incomplete_expired, paused): 10 a month, on the UTC calendar month (owner
@@ -57,6 +62,11 @@ alter table public.accounts add column if not exists cancel_at_period_end boolea
 alter table public.accounts add column if not exists sub_event_at timestamptz;
 alter table public.accounts add column if not exists window_start timestamptz;
 alter table public.accounts add column if not exists window_end timestamptz;
+-- Round 2: the fixed anchor of the monthly clock, and the plan held back by
+-- its own payments (a dispute: plan_hold; a full refund: plan_void_until).
+alter table public.accounts add column if not exists cycle_anchor timestamptz;
+alter table public.accounts add column if not exists plan_hold boolean not null default false;
+alter table public.accounts add column if not exists plan_void_until timestamptz;
 
 -- Free accounts made under v1 had 100 (and 30 under an earlier v2); the
 -- owner's no-plan number is 10.
@@ -106,6 +116,29 @@ create table if not exists public.pin_ledger (
   unique (account_id, idempotency_key)
 );
 
+-- --------------------------------------------------- account_plan_payments
+-- One row per paid plan invoice (round 2), written by invoice.paid on the
+-- account's own customer, so a refund or dispute on its charge finds the
+-- plan. Counts and ids only.
+create table if not exists public.account_plan_payments (
+  invoice_id        text        primary key check (invoice_id ~ '^in_[A-Za-z0-9_]{1,255}$'),
+  account_id        uuid        not null references public.accounts (id) on delete restrict,
+  payment_intent    text        check (payment_intent is null or payment_intent ~ '^pi_[A-Za-z0-9_]{1,255}$'),
+  charge_id         text        check (charge_id is null or charge_id ~ '^(ch|py)_[A-Za-z0-9_]{1,255}$'),
+  amount_paid_cents integer     not null default 0 check (amount_paid_cents >= 0),
+  refunded_cents    integer     not null default 0 check (refunded_cents >= 0),
+  period_start      timestamptz,
+  period_end        timestamptz,
+  dispute_status    text        check (dispute_status is null or dispute_status in
+                                  ('needs_response', 'under_review', 'warning_needs_response',
+                                   'warning_under_review', 'won', 'lost', 'warning_closed')),
+  dispute_event_at  timestamptz,
+  created_at        timestamptz not null default now()
+);
+create index if not exists account_plan_payments_account_idx on public.account_plan_payments (account_id);
+create index if not exists account_plan_payments_pi_idx on public.account_plan_payments (payment_intent) where payment_intent is not null;
+create index if not exists account_plan_payments_charge_idx on public.account_plan_payments (charge_id) where charge_id is not null;
+
 -- ----------------------------------------------------- stripe_events: more
 alter table public.stripe_events add column if not exists account_id uuid
   references public.accounts (id) on delete set null;
@@ -115,7 +148,8 @@ alter table public.stripe_events add column if not exists outcome text
 -- ------------------------------------------------------ row level security
 alter table public.account_packs enable row level security;
 alter table public.pin_ledger    enable row level security;
-revoke all on public.account_packs, public.pin_ledger from anon, authenticated;
+alter table public.account_plan_payments enable row level security;
+revoke all on public.account_packs, public.pin_ledger, public.account_plan_payments from anon, authenticated;
 
 -- --------------------------------------------------------- account_roll
 -- Moves the account into the monthly window `p_now` falls in. Resets
@@ -128,17 +162,23 @@ set search_path = public
 set timezone = 'UTC'
 as $$
 declare
-  a       public.accounts%rowtype;
-  v_paid  boolean;
-  v_s     timestamptz;
-  v_e     timestamptz;
-  v_allow integer;
-  v_k     integer;
+  a        public.accounts%rowtype;
+  v_paid   boolean;
+  v_s      timestamptz;
+  v_e      timestamptz;
+  v_allow  integer;
+  v_k      integer;
+  v_anchor timestamptz;
+  v_t      timestamptz;
+  v_held   boolean;
 begin
   select * into a from public.accounts ac where ac.id = p_account_id for update;
   if not found then return; end if;
   v_paid := a.plan in ('monthly', 'yearly') and a.status in ('active', 'trialing')
             and a.period_start is not null and a.period_end is not null;
+  -- Held back by its own payments (round 2): a dispute, or a full refund of
+  -- the current period's invoice.
+  v_held := a.plan_hold or (a.plan_void_until is not null and p_now < a.plan_void_until);
   if a.status = 'past_due' and a.plan in ('monthly', 'yearly')
      and a.window_start is not null and a.window_end is not null and p_now < a.window_end
      and (a.period_start is null or a.window_start < a.period_start) then
@@ -147,7 +187,7 @@ begin
     -- (window_start >= period_start) belongs to the unpaid period: not kept.
     v_s := a.window_start;
     v_e := a.window_end;
-    v_allow := a.monthly_allowance;
+    v_allow := case when v_held then 0 else a.monthly_allowance end;
   elsif v_paid then
     if p_now >= a.period_end and a.cancel_at_period_end then
       -- A cancel is scheduled and the period is over: no new month.
@@ -155,18 +195,40 @@ begin
       v_e := a.period_end;
       v_allow := 0;
     else
-      if p_now < a.period_start then
-        v_k := 0;
+      -- The monthly plan's window is exactly the billing period; the yearly
+      -- plan's are the FIXED anchor + k months, clipped to the period; past
+      -- period_end with no renewal seen, a provisional month opens at
+      -- period_end and runs to the next anchor month. Never period_start + k:
+      -- a renewal's period_start moves (Jan 31 -> Feb 28 -> Mar 31), and
+      -- Feb 28 + 1 month (Mar 28) would reset a second time inside a period.
+      v_anchor := coalesce(a.cycle_anchor, a.period_start);
+      if p_now < a.period_end then
+        if a.plan = 'monthly' then
+          v_s := a.period_start;
+          v_e := a.period_end;
+        else
+          v_t := greatest(p_now, a.period_start);
+          if v_anchor > v_t then
+            v_s := a.period_start;
+            v_e := least(a.period_start + interval '1 month', a.period_end);
+          else
+            v_k := ((extract(year from v_t) - extract(year from v_anchor)) * 12
+                    + extract(month from v_t) - extract(month from v_anchor))::integer;
+            if v_anchor + make_interval(months => v_k) > v_t then v_k := v_k - 1; end if;
+            if v_k < 0 then v_k := 0; end if;
+            v_s := greatest(v_anchor + make_interval(months => v_k), a.period_start);
+            v_e := least(v_anchor + make_interval(months => v_k + 1), a.period_end);
+          end if;
+        end if;
       else
-        v_k := ((extract(year from p_now) - extract(year from a.period_start)) * 12
-                + extract(month from p_now) - extract(month from a.period_start))::integer;
-        if a.period_start + make_interval(months => v_k) > p_now then v_k := v_k - 1; end if;
+        v_k := ((extract(year from p_now) - extract(year from v_anchor)) * 12
+                + extract(month from p_now) - extract(month from v_anchor))::integer;
+        if v_anchor + make_interval(months => v_k) > p_now then v_k := v_k - 1; end if;
         if v_k < 0 then v_k := 0; end if;
+        v_s := greatest(v_anchor + make_interval(months => v_k), a.period_end);
+        v_e := v_anchor + make_interval(months => v_k + 1);
       end if;
-      v_s := a.period_start + make_interval(months => v_k);
-      v_e := a.period_start + make_interval(months => v_k + 1);
-      if p_now < a.period_end and v_e > a.period_end then v_e := a.period_end; end if;
-      v_allow := 3000;
+      v_allow := case when v_held then 0 else 3000 end;
     end if;
   else
     v_s := date_trunc('month', p_now);
@@ -426,6 +488,15 @@ begin
 
   v_r := public.account_check_customer(p_account_id, f->>'customer_id');
   if v_r is not null then return v_r; end if;
+  -- A paid plan invoice is recorded whatever the guards below decide about
+  -- the period (round 2): a refund or dispute on its charge must find it.
+  if jsonb_typeof(f->'payment') = 'object' and f->'payment'->>'invoice_id' is not null then
+    insert into public.account_plan_payments (invoice_id, account_id, payment_intent, charge_id, amount_paid_cents,
+                                              period_start, period_end)
+    values (f->'payment'->>'invoice_id', p_account_id, f->'payment'->>'payment_intent', f->'payment'->>'charge_id',
+            coalesce((f->'payment'->>'amount')::integer, 0), v_ps, v_pe)
+    on conflict (invoice_id) do nothing;
+  end if;
 
   if a.stripe_subscription_id is not null and v_sub is distinct from a.stripe_subscription_id then
     v_terminal := a.status in ('canceled', 'incomplete_expired') or a.plan = 'free';
@@ -445,7 +516,18 @@ begin
     if v_only is not null and not (a.status = any (v_only)) then return 'ignored_status'; end if;
   end if;
 
+  -- The fixed anchor (lib/_account_billing.js applySubscription): Stripe's
+  -- billing_cycle_anchor when given; else, on a new subscription, a plan
+  -- change or none held yet, the period this event starts.
   update public.accounts ac set
+    cycle_anchor = case
+      when f->>'anchor' is not null then (f->>'anchor')::timestamptz
+      when v_ps is not null and v_pe is not null
+           and (v_switch or ac.period_start is null or v_ps >= ac.period_start)
+           and (v_switch or ac.stripe_subscription_id is null or ac.cycle_anchor is null
+                or (v_plan is not null and v_plan <> ac.plan))
+        then v_ps
+      else ac.cycle_anchor end,
     stripe_subscription_id = v_sub,
     period_start = case when v_ps is not null and v_pe is not null
                          and (v_switch or ac.period_start is null or v_ps >= ac.period_start)
@@ -475,7 +557,12 @@ as $$
 declare
   v_units bigint;
   v_n     integer;
+  v_r     text;
 begin
+  -- The customer lock (round 2): a pack counts only on the account's own
+  -- stored customer, the one our checkout put on the session.
+  v_r := public.account_check_customer(p_account_id, f->>'customer_id');
+  if v_r is not null then return v_r; end if;
   -- Units from the catalogue by pack id, never from the event.
   v_units := case f->>'pack_id' when 'pins_200' then 200 when 'pins_1000' then 1000 else null end;
   if v_units is null then return 'ignored_unknown_pack'; end if;
@@ -579,6 +666,86 @@ begin
 end;
 $$;
 
+-- Plan invoices (round 2). A full refund of the CURRENT period's invoice
+-- ends that period's allowance (plan_void_until = its period_end); a partial
+-- one records the cumulative amount; a past period's changes nothing.
+create or replace function public.account_apply_plan_refund(p_account_id uuid, f jsonb, p_now timestamptz)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  pp       public.account_plan_payments%rowtype;
+  v_amount bigint := (f->>'amount')::bigint;
+  v_ref    bigint := (f->>'amount_refunded')::bigint;
+  v_r      text;
+begin
+  select * into pp from public.account_plan_payments x
+   where x.account_id = p_account_id
+     and ((f->>'payment_intent' is not null and x.payment_intent = f->>'payment_intent')
+       or (f->>'charge_id' is not null and x.charge_id = f->>'charge_id')
+       or (f->>'invoice_id' is not null and x.invoice_id = f->>'invoice_id'))
+   limit 1 for update;
+  if not found then return 'ignored_no_payment'; end if;
+  if f->>'customer_id' is not null then
+    v_r := public.account_check_customer(p_account_id, f->>'customer_id');
+    if v_r is not null then return v_r; end if;
+  end if;
+  if v_amount is null or v_amount <= 0 or v_ref is null then return 'ignored_bad_amount'; end if;
+  if v_ref <= pp.refunded_cents then return 'refund_no_change'; end if;
+  update public.account_plan_payments x set refunded_cents = v_ref where x.invoice_id = pp.invoice_id;
+  if v_ref < v_amount then return 'plan_refund_partial'; end if;
+  if pp.period_end is null or p_now >= pp.period_end then return 'plan_refund_past_period'; end if;
+  update public.accounts ac
+     set plan_void_until = greatest(coalesce(ac.plan_void_until, pp.period_end), pp.period_end), updated_at = now()
+   where ac.id = p_account_id;
+  return 'plan_refund_voided';
+end;
+$$;
+
+-- An open or lost dispute on a plan invoice's charge holds the allowance at
+-- 0; won or warning_closed releases it. Staleness as for a pack's dispute.
+create or replace function public.account_apply_plan_dispute(p_account_id uuid, f jsonb)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  pp    public.account_plan_payments%rowtype;
+  v_new text := f->>'dispute_status';
+  v_at  timestamptz := (f->>'at')::timestamptz;
+begin
+  select * into pp from public.account_plan_payments x
+   where x.account_id = p_account_id
+     and ((f->>'payment_intent' is not null and x.payment_intent = f->>'payment_intent')
+       or (f->>'charge_id' is not null and x.charge_id = f->>'charge_id'))
+   limit 1 for update;
+  if not found then return 'ignored_no_payment'; end if;
+  if pp.dispute_status in ('won', 'lost', 'warning_closed') and v_new not in ('won', 'lost', 'warning_closed') then
+    return 'ignored_stale';
+  end if;
+  if pp.dispute_status is not null and pp.dispute_event_at is not null and v_at is not null
+     and v_at < pp.dispute_event_at then
+    return 'ignored_stale';
+  end if;
+  update public.account_plan_payments x
+     set dispute_status = v_new, dispute_event_at = coalesce(v_at, x.dispute_event_at)
+   where x.invoice_id = pp.invoice_id;
+  update public.accounts ac
+     set plan_hold = exists (select 1 from public.account_plan_payments x
+                              where x.account_id = p_account_id
+                                and x.dispute_status in ('needs_response', 'under_review', 'warning_needs_response',
+                                                         'warning_under_review', 'lost')),
+         updated_at = now()
+   where ac.id = p_account_id;
+  if v_new in ('needs_response', 'under_review', 'warning_needs_response', 'warning_under_review', 'lost') then
+    return 'plan_hold';
+  end if;
+  if v_new in ('won', 'warning_closed') then return 'plan_release'; end if;
+  return 'plan_dispute_no_change';
+end;
+$$;
+
 -- ---------------------------------------------- account_apply_stripe_event
 -- p_fact is the JSON lib/_account_billing.js factFromEvent() made from a
 -- verified event. Returns (outcome, account_id); outcome 'duplicate' for an
@@ -606,20 +773,36 @@ begin
     return;
   end if;
 
-  -- A checkout whose account reference does not verify (lib/_account_billing.js
-  -- verifyAccountRef): recorded with no account, nothing linked or credited.
-  if v_kind = 'unverified_reference' then
+  -- A final refusal with no account, recorded so a repeat is a duplicate:
+  -- no_server_mark (a verified ref without our metadata.account_id for it).
+  -- An unverified reference is decided before this function, in
+  -- lib/_account_billing.js applyAccountEvent (round 2); one that reaches
+  -- here is recorded the same way.
+  if v_kind in ('unverified_reference', 'no_server_mark') then
     insert into public.stripe_events (event_id, type, account_id, processed_at, outcome)
-    values (p_event_id, p_type, null, now(), 'ignored_unverified_reference')
+    values (p_event_id, p_type, null, now(), 'ignored_' || v_kind)
     on conflict (event_id) do nothing;
     get diagnostics v_n = row_count;
-    return query select (case when v_n = 0 then 'duplicate' else 'ignored_unverified_reference' end)::text, null::uuid;
+    return query select (case when v_n = 0 then 'duplicate' else 'ignored_' || v_kind end)::text, null::uuid;
     return;
   end if;
 
   v_acc := null;
   if v_kind in ('pack_refund', 'pack_dispute') then
+    -- The pack with the payment intent; else the plan payment with the
+    -- payment intent, charge or invoice; else (a refund on an invoice
+    -- charge) the account holding the charge's customer.
     select ap.account_id into v_acc from public.account_packs ap where ap.payment_intent = p_fact->>'payment_intent';
+    if v_acc is null then
+      select pp.account_id into v_acc from public.account_plan_payments pp
+       where (p_fact->>'payment_intent' is not null and pp.payment_intent = p_fact->>'payment_intent')
+          or (p_fact->>'charge_id' is not null and pp.charge_id = p_fact->>'charge_id')
+          or (p_fact->>'invoice_id' is not null and pp.invoice_id = p_fact->>'invoice_id')
+       limit 1;
+    end if;
+    if v_acc is null and v_kind = 'pack_refund' and p_fact->>'invoice_id' is not null and p_fact->>'customer_id' is not null then
+      select ac.id into v_acc from public.accounts ac where ac.stripe_customer_id = p_fact->>'customer_id';
+    end if;
   else
     if coalesce(p_fact->>'account_hint', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
       v_hint := (p_fact->>'account_hint')::uuid;
@@ -666,12 +849,14 @@ begin
     v_out := public.account_apply_pack_credit(v_acc, p_fact);
   elsif v_kind = 'pack_refund' then
     v_out := public.account_apply_pack_refund(v_acc, p_fact);
+    if v_out = 'ignored_no_pack' then v_out := public.account_apply_plan_refund(v_acc, p_fact, p_now); end if;
   elsif v_kind = 'pack_dispute' then
     v_out := public.account_apply_pack_dispute(v_acc, p_fact);
+    if v_out = 'ignored_no_pack' then v_out := public.account_apply_plan_dispute(v_acc, p_fact); end if;
   else
     v_out := 'ignored_kind';
   end if;
-  if v_out in ('linked', 'subscription_applied') then
+  if v_out in ('linked', 'subscription_applied', 'plan_hold', 'plan_release', 'plan_dispute_no_change', 'plan_refund_voided') then
     perform public.account_roll(v_acc, p_now);
   end if;
 
@@ -691,6 +876,8 @@ revoke all on function public.account_apply_subscription(uuid, jsonb) from publi
 revoke all on function public.account_apply_pack_credit(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.account_apply_pack_refund(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.account_apply_pack_dispute(uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.account_apply_plan_refund(uuid, jsonb, timestamptz) from public, anon, authenticated;
+revoke all on function public.account_apply_plan_dispute(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.account_apply_stripe_event(text, text, jsonb, timestamptz) from public, anon, authenticated;
 
 -- The helpers run as the caller (no security definer), so service_role
@@ -705,4 +892,6 @@ grant execute on function public.account_apply_subscription(uuid, jsonb) to serv
 grant execute on function public.account_apply_pack_credit(uuid, jsonb) to service_role;
 grant execute on function public.account_apply_pack_refund(uuid, jsonb) to service_role;
 grant execute on function public.account_apply_pack_dispute(uuid, jsonb) to service_role;
+grant execute on function public.account_apply_plan_refund(uuid, jsonb, timestamptz) to service_role;
+grant execute on function public.account_apply_plan_dispute(uuid, jsonb) to service_role;
 grant execute on function public.account_apply_stripe_event(text, text, jsonb, timestamptz) to service_role;
