@@ -26,6 +26,7 @@ const ROOT = path.join(__dirname, "..");
 const ALLOWED_DELETE = {
   "lib/_balance.js": "private usage/balance store (GITHUB_USAGE_REPO), not the pin repo; no callers",
   "tools/ceiling_probe.js": "deletes only the throwaway probe repository it created itself",
+  "lib/_accountdb.js": "account store (Supabase Postgres, not GitHub): deletes only auth_challenges rows, the single-use take and the expired sweep",
 };
 
 function jsFiles(dir) {
@@ -56,6 +57,12 @@ test("no DELETE path against the public record in lib/, api/, tools/", () => {
   const m = bal.match(/fetch\(`\$\{API\}\/repos\/\$\{(\w+)\}[^`]*`,\s*\{\s*method:\s*"DELETE"/);
   assert.ok(m, "could not find the DELETE call in _balance.js; re-audit the allowlist");
   assert.equal(m[1], "USAGE_REPO");
+  // Every DELETE in the account store targets auth_challenges, and nothing else.
+  const adb = read("lib/_accountdb.js");
+  const adbDeletes = [...adb.matchAll(/"DELETE",\s*`([^`?]*)/g)].map((x) => x[1]);
+  assert.ok(adbDeletes.length >= 1, "could not find the DELETE calls in _accountdb.js; re-audit the allowlist");
+  assert.deepEqual([...new Set(adbDeletes)], ["/auth_challenges"]);
+  assert.equal((adb.match(/["'`]DELETE["'`]/g) || []).length, adbDeletes.length, "a DELETE in _accountdb.js this check did not read");
   // The pin store itself exports nothing that deletes.
   const store = require("../lib/_store.js");
   assert.deepEqual(Object.keys(store).filter((k) => /del|remove|rm/i.test(k)), []);
