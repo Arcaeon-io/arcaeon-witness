@@ -55,13 +55,13 @@ function scenarios(test, makeStore) {
 
   // ------------------------------------------------------------ free tier
 
-  test("FREE: no plan gets 30 a month on the UTC calendar month; the 31st pin is refused; next month resets", async () => {
+  test("FREE: no plan gets 10 a month on the UTC calendar month; the 11th pin is refused; next month resets", async () => {
     const s = await makeStore();
     const a = await s._createAccount();
-    assert.equal(await debitN(s, a, 31, T0), 30);
+    assert.equal(await debitN(s, a, 11, T0), 10);
     const st = await s.pinStatus({ account_id: a, now: T0 });
     assert.equal(st.plan, "free");
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
     assert.equal(st.monthly_left, 0);
     assert.equal(st.window_end, "2026-12-01T00:00:00.000Z");
     const r = await s.debitPins({ account_id: a, request_id: "next-month", n: 1, now: Date.UTC(2026, 11, 1) });
@@ -83,7 +83,7 @@ function scenarios(test, makeStore) {
     assert.equal(st.window_end, new Date(pe).toISOString());
   });
 
-  test("A2 (incomplete): subscription.created incomplete gives no plan in force, only the free 30", async () => {
+  test("A2 (incomplete): subscription.created incomplete gives no plan in force, only the free 10", async () => {
     const s = await makeStore();
     const account = await s._createAccount();
     const { cus, sub } = idsFor("inc");
@@ -92,7 +92,7 @@ function scenarios(test, makeStore) {
       pe: addMonthsUTC(T0, 1), created: T0 }), T0);
     const st = await s.pinStatus({ account_id: account, now: T0 });
     assert.equal(st.status, "incomplete");
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
   });
 
   // ------------------------------------------------------ duplicates (J1-J3)
@@ -287,7 +287,7 @@ function scenarios(test, makeStore) {
 
   // -------------------------------------------- failed payment (E1-E7)
 
-  test("E1-E3: renewal payment fails -> past_due keeps access with a fresh 3000; a second failure changes nothing; recovery does not reset again", async () => {
+  test("E1-E3: renewal payment fails -> past_due gets no new month (the free 10); a second failure changes nothing; recovery starts the paid month once", async () => {
     const s = await makeStore();
     const { account, cus, sub, pe } = await subscribe(s);
     await debitN(s, account, 2999, T0 + DAY);
@@ -297,28 +297,135 @@ function scenarios(test, makeStore) {
     let st = await s.pinStatus({ account_id: account, now: pe + 2000 });
     assert.equal(st.status, "past_due");
     assert.equal(st.monthly_used, 0);
-    assert.equal(st.monthly_allowance, 3000, "past_due keeps access (the decision: keep access)");
-    assert.equal(await debitN(s, account, 40, pe + 3000), 40);
+    assert.equal(st.monthly_allowance, 10, "past_due: no new monthly reset, the paid window ended, so the no-plan 10");
+    assert.equal(await debitN(s, account, 40, pe + 3000), 10);
     const f2 = ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, ps: pe, pe: pe2, created: pe + 3 * DAY });
     await apply(s, f2, pe + 3 * DAY);
     st = await s.pinStatus({ account_id: account, now: pe + 3 * DAY });
     assert.equal(st.status, "past_due");
-    assert.equal(st.monthly_used, 40);
+    assert.equal(st.monthly_used, 10);
     const ok = ev.invoiceEvent({ sub, cus, ps: pe, pe: pe2, created: pe + 4 * DAY });
     await apply(s, ok, pe + 4 * DAY);
     st = await s.pinStatus({ account_id: account, now: pe + 4 * DAY });
     assert.equal(st.status, "active");
-    assert.equal(st.monthly_used, 40, "recovery is the same period: no second 3000");
+    assert.equal(st.monthly_used, 0, "recovery: the paid month from period_start");
+    assert.equal(st.monthly_allowance, 3000);
+    assert.equal(st.window_end, new Date(pe2).toISOString());
+    assert.equal(await debitN(s, account, 7, pe + 4 * DAY + 1), 7);
+    await apply(s, ev.invoiceEvent({ sub, cus, ps: pe, pe: pe2, created: pe + 5 * DAY }), pe + 5 * DAY);
+    st = await s.pinStatus({ account_id: account, now: pe + 5 * DAY });
+    assert.equal(st.monthly_used, 7, "a second invoice.paid for the same period does not reset again");
   });
 
-  test("E4/E7: unpaid falls back to the free 30 (packs still spend); deletion leaves the account free with its packs", async () => {
+  // ------------------------------------- no plan in force and past_due (v2 rule)
+
+  test("NO PLAN 10: never paid, and every lapsed status (canceled, unpaid, incomplete, incomplete_expired, paused) get 10 on the UTC month", async () => {
+    const s = await makeStore();
+    const fresh = await s._createAccount();
+    assert.equal(await debitN(s, fresh, 11, T0, "np"), 10);
+    let st = await s.pinStatus({ account_id: fresh, now: T0 });
+    assert.equal(st.monthly_allowance, 10);
+    assert.equal(st.window_start, "2026-11-01T00:00:00.000Z");
+    for (const status of ["unpaid", "incomplete", "incomplete_expired", "paused", "canceled"]) {
+      const { account, cus, sub, ps, pe } = await subscribe(s, { tag: "lp" });
+      const type = status === "canceled" ? "customer.subscription.deleted" : "customer.subscription.updated";
+      await apply(s, ev.subEvent({ type, sub, cus, status, ps, pe, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+      st = await s.pinStatus({ account_id: account, now: T0 + 2 * DAY });
+      assert.equal(st.status, status);
+      assert.equal(st.monthly_allowance, 10, status);
+      st = await s.pinStatus({ account_id: account, now: Date.UTC(2026, 11, 2) });
+      assert.equal(st.monthly_allowance, 10, `${status}: next calendar month`);
+      assert.equal(st.monthly_used, 0, `${status}: next calendar month resets`);
+      assert.equal(await debitN(s, account, 11, Date.UTC(2026, 11, 2), "lp"), 10, status);
+    }
+  });
+
+  test("PAST_DUE KEEPS ITS WINDOW: the current window's 3000 and its use stay while past_due; at the window's end it drops to 10, no new month", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, pe } = await subscribe(s, { tag: "pk" });
+    await debitN(s, account, 100, T0 + DAY, "pk");
+    // A billing change mid-window whose invoice fails: Stripe moves the period
+    // to the change and marks the subscription past_due.
+    const sw = T0 + 10 * DAY;
+    await apply(s, ev.subEvent({ sub, cus, status: "past_due", ps: sw, pe: addMonthsUTC(sw, 1), created: sw }), sw);
+    let st = await s.pinStatus({ account_id: account, now: sw + HOUR });
+    assert.equal(st.status, "past_due");
+    assert.equal(st.monthly_allowance, 3000, "keeps the window it is in");
+    assert.equal(st.monthly_used, 100, "and what it used");
+    assert.equal(st.window_end, new Date(pe).toISOString());
+    assert.equal(await debitN(s, account, 5, sw + 2 * HOUR, "pk2"), 5);
+    st = await s.pinStatus({ account_id: account, now: addMonthsUTC(sw, 1) + DAY });
+    assert.equal(st.monthly_allowance, 10, "the window ended while past_due: the no-plan 10");
+    assert.equal(st.monthly_used, 0);
+    assert.equal(st.window_start, "2026-12-01T00:00:00.000Z");
+    assert.equal(st.window_end, "2027-01-01T00:00:00.000Z");
+    st = await s.pinStatus({ account_id: account, now: Date.UTC(2027, 0, 5) });
+    assert.equal(st.monthly_allowance, 10, "still past_due a month later: still 10, never a new 3000");
+  });
+
+  test("PAST_DUE -> ACTIVE: recovery resumes 3000 on the anniversary clock from period_start", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, pe } = await subscribe(s, { tag: "pa" });
+    const pe2 = addMonthsUTC(pe, 1);
+    await apply(s, ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, ps: pe, pe: pe2, created: pe + HOUR }), pe + HOUR);
+    let st = await s.pinStatus({ account_id: account, now: pe + 2 * HOUR });
+    assert.equal(st.monthly_allowance, 10);
+    const back = pe + 6 * DAY;
+    await apply(s, ev.subEvent({ sub, cus, status: "active", ps: pe, pe: pe2, created: back }), back);
+    st = await s.pinStatus({ account_id: account, now: back + 1000 });
+    assert.equal(st.status, "active");
+    assert.equal(st.monthly_allowance, 3000);
+    assert.equal(st.monthly_used, 0);
+    assert.equal(st.window_start, new Date(pe).toISOString(), "the anniversary window from period_start, not the recovery day");
+    assert.equal(st.window_end, new Date(pe2).toISOString());
+  });
+
+  test("PAST_DUE after our provisional reset: the window granted on our clock for the unpaid period is not kept", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, pe } = await subscribe(s, { tag: "pr" });
+    // A pin lands after period_end, before Stripe's renewal outcome: the clock rolls provisionally.
+    await debitN(s, account, 4, pe + 10 * 60 * 1000, "pr");
+    assert.equal((await s.pinStatus({ account_id: account, now: pe + 20 * 60 * 1000 })).monthly_allowance, 3000);
+    const pe2 = addMonthsUTC(pe, 1);
+    await apply(s, ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, ps: pe, pe: pe2, created: pe + HOUR }), pe + HOUR);
+    const st = await s.pinStatus({ account_id: account, now: pe + 2 * HOUR });
+    assert.equal(st.status, "past_due");
+    assert.equal(st.monthly_allowance, 10, "the renewal failed: no 3000 for the unpaid period");
+    assert.equal(st.monthly_left, 6);
+    assert.equal(await debitN(s, account, 7, pe + 3 * HOUR, "pr2"), 6);
+  });
+
+  test("YEARLY RENEWAL FAILS: past_due gets no new year of resets (10 a calendar month), recovery resumes on the anniversary", async () => {
+    const s = await makeStore();
+    const ps = Date.UTC(2026, 10, 15, 8);
+    const { account, cus, sub, pe } = await subscribe(s, { ps, lookup: "account_yearly", tag: "yf" });
+    assert.equal((await s.pinStatus({ account_id: account, now: addMonthsUTC(ps, 11) + DAY })).monthly_allowance, 3000);
+    const pe2 = addMonthsUTC(pe, 12);
+    await debitN(s, account, 2, pe + 30 * 60 * 1000, "yf"); // the provisional roll, too
+    await apply(s, ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, lookup: "account_yearly", ps: pe, pe: pe2, created: pe + HOUR }), pe + HOUR);
+    for (let k = 0; k < 4; k++) {
+      const at = addMonthsUTC(pe, k) + 2 * DAY;
+      const st = await s.pinStatus({ account_id: account, now: at });
+      assert.equal(st.status, "past_due");
+      assert.equal(st.monthly_allowance, 10, `month ${k} of the unpaid year: 10`);
+    }
+    const back = addMonthsUTC(pe, 3) + 5 * DAY;
+    await apply(s, ev.invoiceEvent({ sub, cus, lookup: "account_yearly", ps: pe, pe: pe2, created: back }), back);
+    const st = await s.pinStatus({ account_id: account, now: back + 1000 });
+    assert.equal(st.status, "active");
+    assert.equal(st.monthly_allowance, 3000);
+    assert.equal(st.window_start, new Date(addMonthsUTC(pe, 3)).toISOString());
+    assert.equal(st.window_end, new Date(addMonthsUTC(pe, 4)).toISOString());
+  });
+
+  test("E4/E7: unpaid falls back to the free 10 (packs still spend); deletion leaves the account free with its packs", async () => {
     const s = await makeStore();
     const { account, cus, sub, ps, pe } = await subscribe(s);
     await buyPack(s, account, { pack: "pins_200", at: T0 + HOUR });
     await apply(s, ev.subEvent({ sub, cus, status: "unpaid", ps, pe, created: T0 + 20 * DAY }), T0 + 20 * DAY);
     let st = await s.pinStatus({ account_id: account, now: T0 + 20 * DAY });
     assert.equal(st.status, "unpaid");
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
     assert.equal(st.pack_balance, 200);
     await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: T0 + 50 * DAY }), T0 + 50 * DAY);
     st = await s.pinStatus({ account_id: account, now: T0 + 50 * DAY });
@@ -335,7 +442,7 @@ function scenarios(test, makeStore) {
     assert.equal(r.outcome, "ignored_no_plan");
     const st = await s.pinStatus({ account_id: account, now: T0 });
     assert.equal(st.plan, "free");
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
   });
 
   // ------------------------------------------------------- cancel (F1-F5)
@@ -358,7 +465,7 @@ function scenarios(test, makeStore) {
     st = await s.pinStatus({ account_id: account, now: pe + 2000 });
     assert.equal(st.plan, "free");
     assert.equal(st.status, "canceled");
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
   });
 
   test("F3: un-cancelling before the end clears the flag; the renewal then resets as normal", async () => {
@@ -397,9 +504,9 @@ function scenarios(test, makeStore) {
     await apply(s, ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, ps: pe, pe: pe2, created: pe + 1000 }), pe + 1000);
     const { outcome } = await buyPack(s, account, { pack: "pins_200", at: pe + 2000 });
     assert.equal(outcome, "pack_credited");
-    const r = await s.debitPins({ account_id: account, request_id: "pd-1", n: 3001, now: pe + 3000 });
+    const r = await s.debitPins({ account_id: account, request_id: "pd-1", n: 11, now: pe + 3000 });
     assert.equal(r.ok, true);
-    assert.equal(r.from_monthly, 3000);
+    assert.equal(r.from_monthly, 10, "past_due after the window ended: the no-plan 10 first");
     assert.equal(r.from_packs, 1);
     const st = await s.pinStatus({ account_id: account, now: pe + 4000 });
     assert.equal(st.status, "past_due");
@@ -411,9 +518,9 @@ function scenarios(test, makeStore) {
     const a = await s._createAccount();
     const p1 = await buyPack(s, a, { pack: "pins_200", at: T0 });
     const p2 = await buyPack(s, a, { pack: "pins_1000", at: T0 + 1000 });
-    const r = await s.debitPins({ account_id: a, request_id: "c4", n: 30 + 201, now: T0 + 2000 });
+    const r = await s.debitPins({ account_id: a, request_id: "c4", n: 10 + 201, now: T0 + 2000 });
     assert.equal(r.ok, true);
-    assert.equal(r.from_monthly, 30);
+    assert.equal(r.from_monthly, 10);
     assert.equal(r.from_packs, 201);
     const packs = await s.listPacks(a);
     assert.deepEqual(packs.map((p) => [p.purchase_ref, p.units_remaining]), [[p1.session, 0], [p2.session, 999]]);
@@ -422,7 +529,7 @@ function scenarios(test, makeStore) {
   test("RACE (C3): two debits for the last pin at the same instant -> exactly one wins", async () => {
     const s = await makeStore();
     const a = await s._createAccount();
-    await debitN(s, a, 29, T0);
+    await debitN(s, a, 9, T0);
     const rs = await Promise.all([
       s.debitPins({ account_id: a, request_id: "race-a", n: 1, now: T0 }),
       s.debitPins({ account_id: a, request_id: "race-b", n: 1, now: T0 }),
@@ -430,14 +537,14 @@ function scenarios(test, makeStore) {
     assert.equal(rs.filter((r) => r.ok).length, 1);
     assert.equal(rs.find((r) => !r.ok).reason, "no_pins_left");
     const st = await s.pinStatus({ account_id: a, now: T0 });
-    assert.equal(st.monthly_used, 30);
+    assert.equal(st.monthly_used, 10);
   });
 
   test("RACE: twenty parallel debits against 3 pins left (1 monthly + a pack with 2) -> exactly 3 succeed, nothing negative", async () => {
     const s = await makeStore();
     const a = await s._createAccount();
     const p = await buyPack(s, a, { pack: "pins_200", at: T0 });
-    await s.debitPins({ account_id: a, request_id: "pre", n: 29 + 198, now: T0 });
+    await s.debitPins({ account_id: a, request_id: "pre", n: 9 + 198, now: T0 });
     const rs = await Promise.all(Array.from({ length: 20 }, (_, i) =>
       s.debitPins({ account_id: a, request_id: `par-${i}`, n: 1, now: T0 })));
     assert.equal(rs.filter((r) => r.ok).length, 3);
@@ -492,7 +599,7 @@ function scenarios(test, makeStore) {
     const s = await makeStore();
     const a = await s._createAccount();
     const { pi } = await buyPack(s, a, { pack: "pins_1000", at: T0 });
-    await s.debitPins({ account_id: a, request_id: "use", n: 30 + 400, now: T0 + 1000 });
+    await s.debitPins({ account_id: a, request_id: "use", n: 10 + 400, now: T0 + 1000 });
     const r = await apply(s, ev.refundEvent({ pi, amount: 2000, refunded: 1200, created: T0 + 2000 }), T0 + 2000);
     assert.equal(r.outcome, "pack_refunded");
     const [p] = await s.listPacks(a);
@@ -505,7 +612,7 @@ function scenarios(test, makeStore) {
     const s = await makeStore();
     const a = await s._createAccount();
     const { pi } = await buyPack(s, a, { pack: "pins_1000", at: T0 });
-    await s.debitPins({ account_id: a, request_id: "use", n: 30 + 400, now: T0 + 1000 });
+    await s.debitPins({ account_id: a, request_id: "use", n: 10 + 400, now: T0 + 1000 });
     const e = ev.refundEvent({ pi, amount: 2000, refunded: 600, created: T0 + 2000 });
     await apply(s, e, T0 + 2000);
     let [p] = await s.listPacks(a);
@@ -535,7 +642,7 @@ function scenarios(test, makeStore) {
     const s = await makeStore();
     const a = await s._createAccount();
     const { pi } = await buyPack(s, a, { pack: "pins_200", at: T0 });
-    await s.debitPins({ account_id: a, request_id: "m", n: 30, now: T0 });
+    await s.debitPins({ account_id: a, request_id: "m", n: 10, now: T0 });
     await apply(s, ev.disputeEvent({ pi, status: "needs_response", created: T0 + 1000 }), T0 + 1000);
     const r = await s.debitPins({ account_id: a, request_id: "held", n: 1, now: T0 + 2000 });
     assert.equal(r.ok, false);
@@ -719,19 +826,19 @@ function scenarios(test, makeStore) {
     assert.equal(st.monthly_allowance, 3000);
   });
 
-  test("PROBE 2: cancel mid-month moves the allowance to the free 30 at once (no extra 30 on top of pins used), fresh 30 next month", async () => {
+  test("PROBE 2: cancel mid-month moves the allowance to the free 10 at once (no extra 10 on top of pins used), fresh 10 next month", async () => {
     const s = await makeStore();
     const { account, cus, sub, ps, pe } = await subscribe(s);
     await debitN(s, account, 200, T0 + HOUR);
     const at = T0 + 5 * DAY;
     await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: at }), at);
     let st = await s.pinStatus({ account_id: account, now: at + 1000 });
-    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_allowance, 10);
     assert.equal(st.monthly_left, 0);
     assert.equal(st.window_end, "2026-12-01T00:00:00.000Z");
     st = await s.pinStatus({ account_id: account, now: Date.UTC(2026, 11, 1) });
     assert.equal(st.monthly_used, 0);
-    assert.equal(st.monthly_left, 30);
+    assert.equal(st.monthly_left, 10);
   });
 
   test("PROBE 3: yearly across the year boundary (anchor Nov 30) and monthly -> yearly in December keep the anniversary", async () => {

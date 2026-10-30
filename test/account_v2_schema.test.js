@@ -62,7 +62,7 @@ test("V2 ATOMIC: the debit takes the account row lock and the packs in order; ev
   assert.match(CODE, /on conflict \(purchase_ref\) do nothing;/);
 });
 
-test("V2 NUMBERS: 3000 paid, 30 free, pack units by id, statuses: the SQL and the JS say the same", () => {
+test("V2 NUMBERS: 3000 paid, 10 free, pack units by id, statuses: the SQL and the JS say the same", () => {
   const roll = CODE.slice(CODE.indexOf("function public.account_roll("), CODE.indexOf("function public.account_recompute_packs("));
   assert.match(roll, new RegExp(`v_allow := ${billing.PAID_MONTHLY_PINS};`));
   assert.match(roll, new RegExp(`v_allow := ${billing.FREE_MONTHLY_PINS};`));
@@ -72,5 +72,10 @@ test("V2 NUMBERS: 3000 paid, 30 free, pack units by id, statuses: the SQL and th
     assert.match(CODE, new RegExp(`when '${id}' then ${p.pins}`), id);
   }
   for (const s of billing.STATUSES) assert.match(CODE, new RegExp(`'${s}'`), s);
-  assert.match(CODE, /alter column monthly_allowance set default 30;/);
+  assert.match(CODE, /alter column monthly_allowance set default 10;/);
+  assert.match(CODE, /update public\.accounts set monthly_allowance = 10 where plan = 'free' and monthly_allowance in \(100, 30\);/);
+  // Paid (a plan in force) is active or trialing; past_due keeps its current window only.
+  assert.match(roll, /a\.status in \('active', 'trialing'\)/);
+  assert.doesNotMatch(roll, /'trialing', 'past_due'/);
+  assert.match(roll, /a\.status = 'past_due'/);
 });

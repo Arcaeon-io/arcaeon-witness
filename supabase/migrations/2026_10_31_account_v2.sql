@@ -11,7 +11,14 @@
 -- yearly plan resets to 3,000 on our own monthly anniversary clock inside the
 -- paid year (period_start + k months), no pool. Packs (pins_200 = 200,
 -- pins_1000 = 1,000) never expire and are spent only after the month's 3,000.
--- No plan in force: the free 30 a month, on the UTC calendar month.
+-- No plan in force (never paid, or lapsed: canceled, unpaid, incomplete,
+-- incomplete_expired, paused): 10 a month, on the UTC calendar month (owner
+-- + council, 2026-10-30: was 30; not the witness per-key daily free cap).
+-- A plan in force = plan monthly or yearly AND status active or trialing.
+-- past_due keeps the monthly window it is in (its 3,000 and what it used)
+-- but gets no new monthly reset; when that window ends while still past_due
+-- it falls to the no-plan 10 on the calendar month. Back to active, the
+-- anniversary windows resume from period_start.
 --
 -- Atomicity. Every write goes through one of three functions, each one
 -- transaction, each taking the account row lock (select ... for update)
@@ -36,7 +43,7 @@ alter table public.accounts drop constraint if exists accounts_status_check;
 alter table public.accounts add constraint accounts_status_check
   check (status in ('active', 'trialing', 'past_due', 'unpaid', 'incomplete',
                     'incomplete_expired', 'paused', 'canceled'));
-alter table public.accounts alter column monthly_allowance set default 30;
+alter table public.accounts alter column monthly_allowance set default 10;
 
 alter table public.accounts add column if not exists stripe_subscription_id text
   check (stripe_subscription_id is null or stripe_subscription_id ~ '^sub_[A-Za-z0-9]{1,255}$');
@@ -46,8 +53,9 @@ alter table public.accounts add column if not exists sub_event_at timestamptz;
 alter table public.accounts add column if not exists window_start timestamptz;
 alter table public.accounts add column if not exists window_end timestamptz;
 
--- Free accounts made under v1 had 100; the owner's free number is 30.
-update public.accounts set monthly_allowance = 30 where plan = 'free' and monthly_allowance = 100;
+-- Free accounts made under v1 had 100 (and 30 under an earlier v2); the
+-- owner's no-plan number is 10.
+update public.accounts set monthly_allowance = 10 where plan = 'free' and monthly_allowance in (100, 30);
 
 -- ----------------------------------------------------------- account_packs
 -- One row per pack bought. Keyed by the Checkout Session id, so the same
@@ -124,9 +132,18 @@ declare
 begin
   select * into a from public.accounts ac where ac.id = p_account_id for update;
   if not found then return; end if;
-  v_paid := a.plan in ('monthly', 'yearly') and a.status in ('active', 'trialing', 'past_due')
+  v_paid := a.plan in ('monthly', 'yearly') and a.status in ('active', 'trialing')
             and a.period_start is not null and a.period_end is not null;
-  if v_paid then
+  if a.status = 'past_due' and a.plan in ('monthly', 'yearly')
+     and a.window_start is not null and a.window_end is not null and p_now < a.window_end
+     and (a.period_start is null or a.window_start < a.period_start) then
+    -- past_due keeps the window it is in, while it lasts; no new month. A
+    -- window our clock opened at period_end before the renewal failed
+    -- (window_start >= period_start) belongs to the unpaid period: not kept.
+    v_s := a.window_start;
+    v_e := a.window_end;
+    v_allow := a.monthly_allowance;
+  elsif v_paid then
     if p_now >= a.period_end and a.cancel_at_period_end then
       -- A cancel is scheduled and the period is over: no new month.
       v_s := coalesce(a.window_start, a.period_start);
@@ -149,7 +166,7 @@ begin
   else
     v_s := date_trunc('month', p_now);
     v_e := v_s + interval '1 month';
-    v_allow := 30;
+    v_allow := 10;
   end if;
 
   if a.window_start is null or v_s > a.window_start then
@@ -594,8 +611,9 @@ begin
          select 1 from public.accounts ac
           where ac.id = v_acc and ac.stripe_subscription_id is not null
             and ac.plan in ('monthly', 'yearly') and ac.status in ('active', 'trialing', 'past_due')) then
-      -- The linked customer holds no plan in force on this account (a leaked
-      -- ref paid first and never activated, or canceled): the owner's
+      -- The linked customer holds no plan on this account, in force (active,
+      -- trialing) or past_due (a live subscription the owner may be fixing):
+      -- a leaked ref paid first and never activated, or canceled. The owner's
       -- verified checkout takes it back, recorded as its own outcome.
       if exists (select 1 from public.accounts ac
                   where ac.stripe_customer_id = p_fact->>'customer_id' and ac.id <> v_acc) then
