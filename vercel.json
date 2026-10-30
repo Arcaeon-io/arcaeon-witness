@@ -23,6 +23,18 @@
     {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
+    },
+    {
+      "source": "/api/account/challenge",
+      "destination": "/api/balance?op=account-challenge"
+    },
+    {
+      "source": "/api/account/verify",
+      "destination": "/api/balance?op=account-verify"
+    },
+    {
+      "source": "/api/account/devices",
+      "destination": "/api/balance?op=account-devices"
     }
   ],
   "functions": {
