@@ -107,11 +107,14 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   // stops at the first invalid pair — so the length check below is what
   // actually rejects a junk v1, not the try/catch. Reject non-hex explicitly
   // rather than relying on a truncation happening to produce a length mismatch.
-  if (v1s.some((v1) => !/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0)) {
+  // A malformed extra v1 is skipped, not fatal: only well-formed 64-hex
+  // values are compared (timing-safe), and at least one must match.
+  const wellFormed = v1s.filter((v1) => /^[0-9a-fA-F]{64}$/.test(v1));
+  if (wellFormed.length === 0) {
     return { ok: false, reason: "malformed v1 signature" };
   }
   const expectedBuf = Buffer.from(expected, "hex");
-  const matched = v1s.some((v1) => {
+  const matched = wellFormed.some((v1) => {
     const gotBuf = Buffer.from(v1, "hex");
     return expectedBuf.length === gotBuf.length && crypto.timingSafeEqual(expectedBuf, gotBuf);
   });

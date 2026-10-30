@@ -5,6 +5,11 @@
 
 "use strict";
 
+// Tests sign checkout references with a fixed test secret (never a real one).
+if (!process.env.ACCOUNT_REF_SECRET) process.env.ACCOUNT_REF_SECRET = "test-account-ref-secret-0123456789";
+const { mintAccountRef } = require("../../lib/_account_billing.js");
+const signed = (account) => (account ? mintAccountRef(account) : undefined);
+
 const sec = (ms) => Math.floor(ms / 1000);
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -22,7 +27,7 @@ function subEvent({ id, type = "customer.subscription.updated", sub, cus, status
       object: {
         id: sub, object: "subscription", customer: cus, status, cancel_at_period_end: cape,
         cancel_at: cancelAt === null ? null : sec(cancelAt),
-        metadata: account ? { account_id: account } : {},
+        metadata: account ? { account_ref: signed(account) } : {},
         items: { data: [{ price: { lookup_key: lookup }, current_period_start: sec(ps), current_period_end: sec(pe) }] },
       },
     },
@@ -38,34 +43,36 @@ function invoiceEvent({ id, type = "invoice.paid", sub, cus, lookup = "account_m
     data: {
       object: {
         id: nextId("in_"), object: "invoice", customer: cus,
-        parent: { subscription_details: { subscription: sub, metadata: account ? { account_id: account } : {} } },
+        parent: { subscription_details: { subscription: sub, metadata: account ? { account_ref: signed(account) } : {} } },
         lines: { data: [{ price: { lookup_key: lookup }, period: { start: sec(ps), end: sec(pe) } }] },
       },
     },
   };
 }
 
-function checkoutSubEvent({ id, account, cus, sub, created }) {
+function checkoutSubEvent({ id, account, cus, sub, created, ref }) {
+  const r = ref === undefined ? signed(account) : ref;
   return {
     id: id || nextId("evt_"),
     type: "checkout.session.completed",
     created: sec(created),
     livemode: true,
     data: { object: { id: nextId("cs_test_"), mode: "subscription", customer: cus, subscription: sub,
-      client_reference_id: account, metadata: { account_id: account }, payment_status: "paid" } },
+      client_reference_id: r, metadata: {}, payment_status: "paid" } },
   };
 }
 
 const PACK_CENTS = { pins_200: 500, pins_1000: 2000 };
 function checkoutPackEvent({ id, type = "checkout.session.completed", account, session, pack = "pins_1000", pi,
-  amount, currency = "usd", paymentStatus = "paid", created }) {
+  amount, currency = "usd", paymentStatus = "paid", created, ref }) {
+  const r = ref === undefined ? signed(account) : ref;
   return {
     id: id || nextId("evt_"),
     type,
     created: sec(created),
     livemode: true,
     data: { object: { id: session, mode: "payment", payment_status: paymentStatus, payment_intent: pi,
-      amount_total: amount === undefined ? PACK_CENTS[pack] : amount, currency, metadata: { account_id: account, pack } } },
+      amount_total: amount === undefined ? PACK_CENTS[pack] : amount, currency, client_reference_id: r, metadata: { pack } } },
   };
 }
 

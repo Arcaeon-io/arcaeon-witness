@@ -277,8 +277,11 @@ end;
 $$;
 
 -- ------------------------------------------------------ account_pin_status
+-- An unknown account answers one row, outcome 'not_found', every other
+-- column null: never another account's numbers, never pack data.
+drop function if exists public.account_pin_status(uuid, timestamptz);
 create or replace function public.account_pin_status(p_account_id uuid, p_now timestamptz default now())
-returns table (plan text, status text, monthly_used integer, monthly_allowance integer, monthly_left integer,
+returns table (outcome text, plan text, status text, monthly_used integer, monthly_allowance integer, monthly_left integer,
                window_start timestamptz, window_end timestamptz, pack_balance bigint,
                period_end timestamptz, cancel_at_period_end boolean)
 language plpgsql
@@ -287,9 +290,14 @@ set timezone = 'UTC'
 as $$
 #variable_conflict use_column
 begin
+  if not exists (select 1 from public.accounts ac where ac.id = p_account_id) then
+    return query select 'not_found'::text, null::text, null::text, null::integer, null::integer, null::integer,
+                        null::timestamptz, null::timestamptz, null::bigint, null::timestamptz, null::boolean;
+    return;
+  end if;
   perform public.account_roll(p_account_id, p_now);
   return query
-    select ac.plan, ac.status, ac.monthly_used, ac.monthly_allowance,
+    select 'ok'::text, ac.plan, ac.status, ac.monthly_used, ac.monthly_allowance,
            greatest(0, ac.monthly_allowance - ac.monthly_used), ac.window_start, ac.window_end,
            ac.pack_balance, ac.period_end, ac.cancel_at_period_end
       from public.accounts ac where ac.id = p_account_id;
@@ -534,6 +542,17 @@ begin
   select se.account_id into v_acc from public.stripe_events se where se.event_id = p_event_id;
   if found then
     return query select 'duplicate'::text, v_acc;
+    return;
+  end if;
+
+  -- A checkout whose account reference does not verify (lib/_account_billing.js
+  -- verifyAccountRef): recorded with no account, nothing linked or credited.
+  if v_kind = 'unverified_reference' then
+    insert into public.stripe_events (event_id, type, account_id, processed_at, outcome)
+    values (p_event_id, p_type, null, now(), 'ignored_unverified_reference')
+    on conflict (event_id) do nothing;
+    get diagnostics v_n = row_count;
+    return query select (case when v_n = 0 then 'duplicate' else 'ignored_unverified_reference' end)::text, null::uuid;
     return;
   end if;
 

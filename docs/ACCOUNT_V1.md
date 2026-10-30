@@ -61,6 +61,7 @@ Issuing the API key is a separate insert after the agent is made. If that one in
 |---|---|
 | `SUPABASE_URL` | the project URL. Without it the account endpoints answer 503 |
 | `SUPABASE_SERVICE_ROLE_KEY` | the service role key, sent only as request headers to PostgREST, never logged and never in an error message. Without it the endpoints answer 503 |
+| `ACCOUNT_REF_SECRET` | signs and checks the checkout account reference (16+ characters). Unset means no checkout links or credits an account |
 | `ACCOUNT_POW_BITS` | proof of work difficulty, a whole number from 1 to 32. Unset or anything else means 20. It can be made easier but never turned off |
 
 The migration has not been applied to any database by this change.
@@ -96,6 +97,8 @@ Account events come in on the existing `/api/stripe-webhook`. They use the same 
 | `invoice.payment_failed` | past_due, and access is kept (the decision). Never starts a plan on an account that has none |
 | `charge.refunded` | takes off the units the refund pays for (pro rata to the amount paid, rounded up, counted on the running total refunded). Spent pins stay spent, and the spent part is written down as a shortfall |
 | `charge.dispute.*` | open: the pack is held, not spendable. Won or warning_closed: live again. Lost: voided. A later won releases it again |
+
+The checkout reference is signed. `client_reference_id` can be set by anyone (a Payment Link takes it from the URL), so a bare account id is never trusted. A link or pack checkout must carry `<account_id>.<hex HMAC-SHA256(ACCOUNT_REF_SECRET, "arcaeon-checkout-v1\n" + account_id)>`, made by `mintAccountRef()`, in `client_reference_id` or `metadata.account_ref`. It is checked with a timing-safe compare before anything is linked or credited. A missing or bad reference is recorded in `stripe_events` as `ignored_unverified_reference`, with no account. Nothing is linked and no pack is credited: a paid pack in that state waits for a person to look at it. Subscription and invoice events only use a signed `metadata.account_ref`. Otherwise they find the account by its linked customer. If `ACCOUNT_REF_SECRET` is unset (or shorter than 16 characters), nothing verifies.
 
 Duplicates and order. The event id is written in the same transaction as the change, so a repeated id does nothing. A canceled subscription never comes back. An older event never overwrites a newer one for the same subscription. A period never moves backward. A new month opens only when the window start moves forward, so a late or repeated renewal never resets the month twice. If an event names an account that is not linked yet, the webhook answers 503 and Stripe retries it later.
 
