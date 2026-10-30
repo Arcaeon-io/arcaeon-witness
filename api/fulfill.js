@@ -179,7 +179,7 @@ function resolvePack(session) {
   const cents = Number(session && session.amount_total);
   if (currency === "usd" && Number.isFinite(cents)) {
     for (const [id, p] of Object.entries(balance.PACKS)) {
-      if (p.price_usd * 100 === cents) return { pack: id, source: "amount_total" };
+      if (!p.by_id_only && p.price_usd * 100 === cents) return { pack: id, source: "amount_total" };
     }
   }
   return null;
@@ -222,7 +222,7 @@ function successHtml(record, creditBalance, consentStored) {
     "Your Arcaeon witness key",
     `<h1>Payment verified — your witness key</h1>
 ${copyBox("key", record.key)}
-<p><b>${esc(String(record.credits))} prepaid pins</b> are on your balance (plus the free tier: 100 pins/month). Your key pins any namespace starting with <code>${esc(ns)}</code>.</p>
+<p><b>${esc(String(record.credits))} prepaid pins</b> are on your balance (plus the free tier: ${esc(String(meter.PLAN_CAPS.free))} pins/month). Your key pins any namespace starting with <code>${esc(ns)}</code>.</p>
 <p class="muted">Check your balance any time at <a href="${esc(BASE_URL)}/api/balance">${esc(BASE_URL)}/api/balance</a> — you paste the key on the page; the link itself carries nothing.</p>
 <p class="warn">Save this key now. This page re-shows it any time via your Stripe receipt link — treat that link like the key itself.</p>
 <h2>Install the client</h2>

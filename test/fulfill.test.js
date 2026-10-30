@@ -895,3 +895,34 @@ test("BREAK ARM: a hand-built green carrying a prefix cannot reach the page; onl
     assert.throws(() => fulfill.renderPrefix(redV), (e) => e instanceof verdictLib.RedVerdictError);
   });
 });
+
+test("owner's packs (Thu 2026-10-29): pins_200 and pins_1000 resolve by metadata or price map, never by amount", async () => {
+  const id1 = sid();
+  stripe.seed(paidSession({
+    id: id1, metadata: { pack: "pins_200" }, amount_total: 500,
+    line_items: { data: [{ price: { id: "price_unmapped" } }] },
+  }));
+  const r1 = await call({ query: { session_id: id1 }, headers: JSON_HDR });
+  assert.equal(r1._status, 200);
+  assert.equal(r1._body.credits, 200); // not 1,000: $5 is also mini's price
+
+  const id2 = sid();
+  stripe.seed(paidSession({
+    id: id2, metadata: { pack: "pins_1000" }, amount_total: 2000,
+    line_items: { data: [{ price: { id: "price_unmapped" } }] },
+  }));
+  const r2 = await call({ query: { session_id: id2 }, headers: JSON_HDR });
+  assert.equal(r2._status, 200);
+  assert.equal(r2._body.credits, 1000);
+
+  // $20 with no map and no metadata: no legacy pack costs $20, and the new
+  // pack is by id only, so the buyer goes to manual fulfillment, not a guess.
+  const id3 = sid();
+  stripe.seed(paidSession({
+    id: id3, amount_total: 2000, metadata: {},
+    line_items: { data: [{ price: { id: "price_unmapped" } }] },
+  }));
+  const r3 = await call({ query: { session_id: id3 }, headers: JSON_HDR });
+  assert.equal(r3._status, 409);
+  assert.equal(r3._body.reason, "unmapped_purchase");
+});
