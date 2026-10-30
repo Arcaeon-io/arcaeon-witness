@@ -313,7 +313,7 @@ test("DEVICES: register then list, scoped to the key's account; duplicates 409; 
   assert.equal(dup._status, 409);
   assert.equal(dup._body.reason, "device_exists");
 
-  for (const body of [{ name: "", public_key: dev.public_key }, { name: "a".repeat(65), public_key: dev.public_key }, { name: "bad\nname", public_key: dev.public_key }]) {
+  for (const body of [{ name: "", public_key: dev.public_key }, { name: "a".repeat(65), public_key: dev.public_key }, { name: "bad\nname", public_key: dev.public_key }, { name: "bad\u0085name", public_key: dev.public_key }, { name: "bad\u2028name", public_key: dev.public_key }, { name: "bad\u009bname", public_key: dev.public_key }]) {
     const r = await call(api.devices, { method: "POST", headers: auth(a.api_key), body });
     assert.equal(r._body.reason, "bad_name");
   }
