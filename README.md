@@ -51,7 +51,7 @@ silently:
 - On grant, `X-Meter-Cap` / `X-Meter-Used` are set on the success response
   too, so callers can see how much headroom is left.
 
-Default plan is **free: 100 pins/month**. Per-key overrides (including
+Default plan is **free: 10 pins/month** (owner, Fri 2026-10-30; was 30, was 100 before). Per-key overrides (including
 explicit unlimited) live in the `WITNESS_PLANS` env var — JSON keyed by
 `sha256(key)`, e.g. `{"<sha256 of a key>": {"plan": "internal"}}` (defers
 to the built-in `internal` plan, which is unlimited but still counted) or
@@ -98,7 +98,7 @@ audit 2026-08-23) and the claim was deleted rather than left pointing at
 a 404 in a document meant to be checked. When a real purchase path ships,
 its source of truth gets named here, and not before.
 
-- Free 100/mo stays the default and is unaffected: a key that has never
+- Free 10/mo stays the default and is unaffected: a key that has never
   purchased credits behaves exactly as before this build.
 - Once the free monthly cap is spent, a purchased credit balance is the
   additive overflow pool — `api/pin.js` decrements one credit per pin only
