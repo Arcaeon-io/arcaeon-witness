@@ -15,7 +15,7 @@ The account holds counts and paid status, never content. No table has a column f
 
 Tables: `accounts`, `agents`, `people`, `api_keys`, `auth_challenges`, `stripe_events`, `devices`. Row level security is on for every table and there are no policies, so only the service role can read or write them. The two database functions (`account_create_agent`, `account_register_device`) can only be run by the service role.
 
-The endpoints live at `/api/account/challenge`, `/api/account/verify` and `/api/account/devices`. Under the hood `vercel.json` rewrites them onto `api/balance.js` with `?op=account-challenge`, `?op=account-verify` and `?op=account-devices`, because `api/` is already at the hosting plan's 12 function cap. This is the same trick `/api/stamp` and `/api/prefix-available` use.
+The endpoints live at `/api/account/challenge`, `/api/account/verify` and `/api/account/devices` (phase 2 adds `/api/account/pins`, phase 3 `/api/account/checkout`). Under the hood `vercel.json` rewrites them onto `api/balance.js` with `?op=account-challenge`, `?op=account-verify`, `?op=account-devices`, `?op=account-pins` and `?op=account-checkout`, because `api/` is already at the hosting plan's 12 function cap. This is the same trick `/api/stamp` and `/api/prefix-available` use.
 
 ## Signing up an agent
 
@@ -61,8 +61,10 @@ Issuing the API key is a separate insert after the agent is made. If that one in
 |---|---|
 | `SUPABASE_URL` | the project URL. Without it the account endpoints answer 503 |
 | `SUPABASE_SERVICE_ROLE_KEY` | the service role key, sent only as request headers to PostgREST, never logged and never in an error message. Without it the endpoints answer 503 |
-| `ACCOUNT_REF_SECRET` | signs and checks the checkout account reference (16+ characters). Unset means no checkout links or credits an account |
+| `ACCOUNT_REF_SECRET` | signs and checks the checkout account reference (16+ characters). Unset means no checkout session can be made and no checkout links or credits an account |
 | `ACCOUNT_POW_BITS` | proof of work difficulty, a whole number from 1 to 32. Unset or anything else means 20. It can be made easier but never turned off |
+| `WITNESS_STRIPE_SECRET_KEY` | the witness product's Stripe secret key, used by `/api/account/checkout` to make the account's customer and its Checkout Sessions. Sent only as a request header to Stripe. Unset means checkout answers 503. There is no fallback to a bare `STRIPE_SECRET_KEY` (that one is another product's; an object *created* in the wrong Stripe account would take money our webhook never hears of) |
+| `WITNESS_BASE_URL` | where Stripe sends the payer after checkout (`/status?account_checkout=complete` or `=canceled`). Default `https://arcaeon-witness.vercel.app` |
 
 The migration has not been applied to any database by this change.
 
@@ -91,7 +93,7 @@ Account events come in on the existing `/api/stripe-webhook`. They use the same 
 
 | event | what it does |
 |---|---|
-| `checkout.session.completed`, subscription mode | links the Stripe customer to `metadata.account_id` (or `client_reference_id`) |
+| `checkout.session.completed`, subscription mode | confirms a checkout on the account's own customer (see phase 3): notes the subscription id, opens the window. Never sets or moves the customer |
 | `checkout.session.completed` / `.async_payment_succeeded`, payment mode, `metadata.account_id` + `metadata.pack` | credits the pack once per Checkout Session, and only if it is paid, in USD, and at least the pack's price |
 | `customer.subscription.created` / `.updated` / `.paused` / `.resumed` | status, plan from the price lookup key, period, cancel at period end (a `cancel_at` inside the period moves the end earlier) |
 | `customer.subscription.deleted` | status canceled, plan free. Packs are kept |
@@ -100,9 +102,32 @@ Account events come in on the existing `/api/stripe-webhook`. They use the same 
 | `charge.refunded` | takes off the units the refund pays for (pro rata to the amount paid, rounded up, counted on the running total refunded). Spent pins stay spent, and the spent part is written down as a shortfall |
 | `charge.dispute.*` | open: the pack is held, not spendable. Won or warning_closed: live again. Lost: voided. A later won releases it again |
 
-The checkout reference is signed. `client_reference_id` can be set by anyone (a Payment Link takes it from the URL), so a bare account id is never trusted. A link or pack checkout must carry `<account_id>.<exp_unix>.<hex HMAC-SHA256(ACCOUNT_REF_SECRET, "arcaeon-checkout-v2\n" + account_id + "\n" + exp_unix)>`, made by `mintAccountRef(account_id, now)` (exp = now + 2 hours), in `client_reference_id` or `metadata.account_ref`. It is checked with a timing-safe compare before anything is linked or credited, and it only counts when the checkout session's own `created` is at or before `exp`. That is the session time, not the time the webhook lands, so Stripe's retries days later still verify. A leaked checkout URL is good for two hours. An expired ref with a good MAC is refused like a bad one (reason "expired"). The v1 ref (no expiry) is gone. A bare account id in `client_reference_id` on a payment checkout is not ours at all: it stays on the legacy path and leaves no `stripe_events` row. A missing or bad reference is recorded in `stripe_events` as `ignored_unverified_reference`, with no account. Nothing is linked and no pack is credited: a paid pack in that state waits for a person to look at it. Subscription and invoice events only use a signed `metadata.account_ref`. Otherwise they find the account by its linked customer. If `ACCOUNT_REF_SECRET` is unset (or shorter than 16 characters), nothing verifies.
+The checkout reference is signed. `client_reference_id` can be set by anyone (a Payment Link takes it from the URL), so a bare account id is never trusted. A link or pack checkout must carry `<account_id>.<exp_unix>.<hex HMAC-SHA256(ACCOUNT_REF_SECRET, "arcaeon-checkout-v2\n" + account_id + "\n" + exp_unix)>`, made by `mintAccountRef(account_id, now)` (exp = now + 2 hours), in `client_reference_id` or `metadata.account_ref`. It is checked with a timing-safe compare before anything is credited or confirmed, and it only counts when the checkout session's own `created` is at or before `exp`. That is the session time, not the time the webhook lands, so Stripe's retries days later still verify. An expired ref with a good MAC is refused like a bad one (reason "expired"). The v1 ref (no expiry) is gone. A bare account id in `client_reference_id` on a payment checkout is not ours at all: it stays on the legacy path and leaves no `stripe_events` row. A missing or bad reference is recorded in `stripe_events` as `ignored_unverified_reference`, with no account. Nothing is credited: a paid pack in that state waits for a person to look at it. Subscription and invoice events only use a signed `metadata.account_ref`. Otherwise they find the account by its customer. If `ACCOUNT_REF_SECRET` is unset (or shorter than 16 characters), nothing verifies.
 
-Relink. If an account is linked to customer X and a verified checkout arrives from customer Y, the account is relinked to Y, outcome `relinked` in `stripe_events`, when X holds no plan on it (no subscription on a paid plan in active, trialing or past_due). past_due is not a plan in force for the allowance, but it still protects the link: the subscription is live at Stripe and the owner may be fixing a card. This is how an owner takes back an account someone else paid on first with a leaked ref and never activated or canceled. While X holds a plan (in force, or past_due) the checkout is refused as `ignored_customer_mismatch`. A Y already linked to another account is refused as `ignored_customer_linked_elsewhere`. Only a checkout relinks; subscription and invoice events never do.
+The customer rule. The reference says *which account*; it never says *whose money*. `accounts.stripe_customer_id` is written by exactly one path, the checkout endpoint in phase 3 (`account_set_stripe_customer`, set once, never moved), and every Stripe event is held to it: an event whose customer is not the account's own stored customer is `ignored_customer_mismatch`, whatever reference it carries, whether the account holds a plan or not, and an account with no customer yet refuses every event. No event ever sets, changes or relinks the customer; there is no relink. So a leaked reference pasted into a Payment Link and paid by a stranger (a new Stripe customer) links nothing, and a leaked checkout session URL (phase 3) can only be paid *for* the account, on the account's own customer. The stranger's own subscription then belongs to no account (503, Stripe retries, then gives up).
+
+## Phase 3: the server makes the checkout
+
+| piece | file |
+|---|---|
+| the Stripe calls and the rules | `lib/_account_checkout.js` |
+| the route | `lib/_account_api.js` (`checkout`), rewritten from `/api/account/checkout` onto `/api/balance?op=account-checkout` |
+| the store half | `setStripeCustomer`, `getAccount` in `lib/_accountdb.js`; `account_set_stripe_customer` in the v2 migration |
+| tests | `test/account_checkout.test.js`, the LEAKED LINK / NO RELINK / NO CUSTOMER cases in `test/helpers/account_billing_scenarios.js`; Stripe's API is the double in `test/helpers/stripe_api_mock.js` |
+
+Why. With Payment Links, Stripe makes a new customer for whoever pays, and the account had to learn its customer from the first paid checkout. The signed reference stopped a stranger choosing *which* account, but a fresh checkout URL that leaked inside its two hours still let a stranger pay first and put *their* customer on the owner's account; the owner was then refused until that subscription died. Now the server makes the Checkout Session, and the payer's identity is not used for anything.
+
+`POST /api/account/checkout` with `Authorization: Bearer <api key>` and a body of `{"plan": "monthly"}`, `{"plan": "yearly"}`, `{"pack": "pins_200"}` or `{"pack": "pins_1000"}` (exactly one of plan or pack). The server:
+
+1. Makes the account's Stripe customer if it has none: `POST /v1/customers` with `metadata.account_id` and an `Idempotency-Key` bound to the account id, then stores it with `setStripeCustomer`, which sets only when the column is still null. Two first calls at once make one customer (Stripe's idempotency key on its side, set-if-null on ours). Every later checkout reuses it. If the session step fails after this, the customer is kept and the retry reuses it.
+2. Finds the price by its lookup key (`account_monthly`, `account_yearly`, `pins_200`, `pins_1000`), never a typed-in price id. No active price with that key is 503 `price_not_configured`, naming the key.
+3. Creates the Checkout Session with `customer` = the account's customer, `client_reference_id` and `metadata.account_ref` = a fresh signed reference, `metadata.account_id`, `subscription_data.metadata.account_ref` and `.account_id` (so renewal events can name the account), `metadata.pack` for a pack, and `expires_at` two hours out: the session dies with the reference.
+
+Answer: 201 `{ok, session_id, url, expires_at, mode, plan|pack, customer_id, account_id}`. Send the payer to `url`. Whoever pays it pays for this account on this customer. A plan checkout while the account's customer already holds a plan (active, trialing or past_due) is 409 `plan_already_held`; a pack is always allowed. Other refusals: 401 `missing_api_key` / `unknown_api_key`, 400 `bad_body` / `bad_item` / `bad_plan` / `bad_pack`, 405, 429 (the shared per-IP limiter: every call makes a Stripe object), 503 `stripe_not_configured` / `account_ref_not_configured` / `account_store_not_configured`, 502 `stripe_error` (names the Stripe step and HTTP status only, never the key or Stripe's text) / `account_store_error`.
+
+Payment Links. Account plans and account packs are bought through this endpoint only. The per-key witness packs (`mini`, `starter`, ... in `lib/_balance.js`, fulfilled by `/api/fulfill` and the legacy webhook path) keep their Payment Links untouched: they have no account. A Payment Link for an account price, if one exists in Stripe, should be deactivated: a checkout from it carries a stranger's customer and is refused as `ignored_customer_mismatch`, so it can only take someone's money for nothing.
+
+Stripe setup this needs (a person, in the dashboard): four active prices with lookup keys `account_monthly` ($9/month), `account_yearly` ($99/year), `pins_200` ($5 one-time) and `pins_1000` ($20 one-time); `WITNESS_STRIPE_SECRET_KEY` set in the Vercel project; the webhook endpoint from phase 2 subscribed to the checkout, subscription, invoice, refund and dispute events. No live Stripe call was made by this change.
 
 Duplicates and order. The event id is written in the same transaction as the change, so a repeated id does nothing. A canceled subscription never comes back. An older event never overwrites a newer one for the same subscription. A period never moves backward. A new month opens only when the window start moves forward, so a late or repeated renewal never resets the month twice. If an event names an account that is not linked yet, the webhook answers 503 and Stripe retries it later.
 
@@ -112,7 +137,8 @@ The migration has not been applied to any database by this change. No live Strip
 
 ## What is NOT built yet
 
-* **Re-fetching from Stripe.** The outside test plan treats every event as a hint and fetches the object again before acting on it. That needs a live Stripe call, and this build makes none. The guards above stand in for it.
+* **Re-fetching from Stripe.** The outside test plan treats every event as a hint and fetches the object again before acting on it. That needs a live Stripe call on the webhook path, and this build makes none there (the checkout endpoint is the only code that calls Stripe, and only to create). The guards above stand in for it.
+* **A customer portal / changing plan.** `plan_already_held` refuses a second plan; moving monthly to yearly or canceling still happens in Stripe's dashboard (or a portal session, not built).
 * **Plan-change top ups, trials, pending updates, the 30-day unpaid cancel job, account deletion refunds.** See the plan's groups D, G, L and M.
 * **People sign in.** The `people` table exists. Magic link sign in, and a person attaching an agent by having it sign a link nonce, are not built.
 * **Witness pin debit against Postgres.** Pins are still metered and charged by the existing GitHub backed meter and balance. `account_debit_pins` exists and is tested, but `/api/pin` does not call it yet, and live keys and balances have not been imported.

@@ -2,8 +2,15 @@
 // the outside test plan (case ids in the names), written against the store
 // INTERFACE only, so the same cases run against any store:
 //   test/account_billing.test.js runs them on the in-memory store.
-// A store needs: _createAccount(), applyStripeEvent, debitPins, pinStatus,
-// listPacks. Not a test file itself (no top-level test() calls).
+// A store needs: _createAccount(), setStripeCustomer, applyStripeEvent,
+// debitPins, pinStatus, listPacks. Not a test file itself (no top-level
+// test() calls).
+//
+// The customer. In the real flow the checkout endpoint makes the account's
+// Stripe customer and stores it BEFORE any Checkout Session exists
+// (lib/_account_checkout.js); every event then carries that customer.
+// `linkedAccount` below does the store half of that. An event whose customer
+// is not the stored one is ignored_customer_mismatch, always.
 
 "use strict";
 
@@ -34,11 +41,22 @@ function scenarios(test, makeStore) {
     return ok;
   }
 
-  // An account on the monthly plan from `ps`, linked the way a real checkout
-  // links it: checkout.session.completed, subscription.created, invoice.paid.
-  async function subscribe(s, { ps = T0, lookup = "account_monthly", months = 1, tag = "m" } = {}) {
+  // An account whose Stripe customer the checkout endpoint has made and
+  // stored (the step before any session exists).
+  async function linkedAccount(s, tag = "ac") {
     const account = await s._createAccount();
-    const { cus, sub, sub2 } = idsFor(tag);
+    const ids = idsFor(tag);
+    const r = await s.setStripeCustomer({ account_id: account, customer_id: ids.cus });
+    assert.equal(r.ok, true);
+    assert.equal(r.set, true);
+    return { account, ...ids };
+  }
+
+  // An account on the monthly plan from `ps`, the way a real checkout does
+  // it: the customer stored, then checkout.session.completed on that
+  // customer, subscription.created, invoice.paid.
+  async function subscribe(s, { ps = T0, lookup = "account_monthly", months = 1, tag = "m" } = {}) {
+    const { account, cus, sub, sub2 } = await linkedAccount(s, tag);
     const pe = addMonthsUTC(ps, lookup === "account_yearly" ? 12 : months);
     await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: ps }), ps);
     await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, lookup, ps, pe, created: ps }), ps);
@@ -85,8 +103,7 @@ function scenarios(test, makeStore) {
 
   test("A2 (incomplete): subscription.created incomplete gives no plan in force, only the free 10", async () => {
     const s = await makeStore();
-    const account = await s._createAccount();
-    const { cus, sub } = idsFor("inc");
+    const { account, cus, sub } = await linkedAccount(s, "inc");
     await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: T0 }), T0);
     await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, status: "incomplete", ps: T0,
       pe: addMonthsUTC(T0, 1), created: T0 }), T0);
@@ -135,14 +152,14 @@ function scenarios(test, makeStore) {
 
   // --------------------------------------------------------- order (J4-J5)
 
-  test("J4: invoice.paid before the account is linked is unresolved (not recorded), then lands on Stripe's retry", async () => {
+  test("J4: invoice.paid for a customer no account holds is unresolved (not recorded), then lands on Stripe's retry once the customer is stored", async () => {
     const s = await makeStore();
     const account = await s._createAccount();
     const { cus, sub } = idsFor("j4");
     const pe = addMonthsUTC(T0, 1);
     const paid = ev.invoiceEvent({ sub, cus, ps: T0, pe, created: T0 + 1000 });
     assert.equal((await apply(s, paid, T0 + 1000)).outcome, "unresolved");
-    await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: T0 }), T0 + 2000);
+    await s.setStripeCustomer({ account_id: account, customer_id: cus });
     const retry = await apply(s, paid, T0 + 60000);
     assert.equal(retry.outcome, "subscription_applied", "the retry is applied, not answered duplicate");
     const st = await s.pinStatus({ account_id: account, now: T0 + 60000 });
@@ -150,13 +167,21 @@ function scenarios(test, makeStore) {
     assert.equal(st.monthly_allowance, 3000);
   });
 
-  test("J4b: an invoice that carries subscription metadata.account_id resolves without the checkout event", async () => {
+  test("J4b: an invoice that carries subscription metadata.account_ref resolves without the checkout event, when its customer is the account's own", async () => {
     const s = await makeStore();
-    const account = await s._createAccount();
-    const { cus, sub } = idsFor("j4b");
+    const { account, cus, sub } = await linkedAccount(s, "j4b");
     const r = await apply(s, ev.invoiceEvent({ sub, cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account }), T0);
     assert.equal(r.outcome, "subscription_applied");
     assert.equal((await s.pinStatus({ account_id: account, now: T0 })).plan, "monthly");
+    // The same invoice shape for an account with no customer, or from another
+    // customer, names the account and is still refused: the ref alone never links.
+    const bare = await s._createAccount();
+    const other = idsFor("j4c");
+    assert.equal((await apply(s, ev.invoiceEvent({ sub: other.sub, cus: other.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account: bare }), T0)).outcome,
+      "ignored_customer_mismatch");
+    assert.equal((await apply(s, ev.invoiceEvent({ sub: other.sub, cus: other.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 + 1, account }), T0)).outcome,
+      "ignored_customer_mismatch");
+    assert.equal((await s.pinStatus({ account_id: bare, now: T0 })).plan, "free");
   });
 
   test("J5: an old subscription.updated (active) arriving after .deleted changes nothing (canceled is terminal)", async () => {
@@ -435,8 +460,7 @@ function scenarios(test, makeStore) {
 
   test("FIRST INVOICE FAILS: a payment_failed for an account with no plan never grants the 3000", async () => {
     const s = await makeStore();
-    const account = await s._createAccount();
-    const { cus, sub } = idsFor("ff");
+    const { account, cus, sub } = await linkedAccount(s, "ff");
     await apply(s, ev.checkoutSubEvent({ account, cus, sub, created: T0 }), T0);
     const r = await apply(s, ev.invoiceEvent({ type: "invoice.payment_failed", sub, cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 }), T0);
     assert.equal(r.outcome, "ignored_no_plan");
@@ -675,7 +699,8 @@ function scenarios(test, makeStore) {
 
   test("REF: a forged reference (bare account id, wrong mac, other secret) links nothing; the victim can still subscribe", async () => {
     const s = await makeStore();
-    const victim = await s._createAccount();
+    const mine = await linkedAccount(s, "vic");
+    const victim = mine.account;
     const attacker = idsFor("atk");
     const otherSecret = billing.mintAccountRef(victim, T0, "some-other-secret-0123456789");
     const wrongMac = victim + "." + "0".repeat(64);
@@ -690,8 +715,7 @@ function scenarios(test, makeStore) {
     const sub = ev.subEvent({ type: "customer.subscription.created", sub: attacker.sub, cus: attacker.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 });
     assert.equal((await apply(s, sub, T0)).outcome, "unresolved");
     assert.equal((await s.pinStatus({ account_id: victim, now: T0 })).plan, "free");
-    // The victim's own checkout, signed by us, links and subscribes.
-    const mine = idsFor("vic");
+    // The victim's own checkout, signed by us, on the victim's own customer, subscribes.
     assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: mine.cus, sub: mine.sub, created: T0 }), T0)).outcome, "linked");
     await apply(s, ev.invoiceEvent({ sub: mine.sub, cus: mine.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 + 1000 }), T0 + 1000);
     const st = await s.pinStatus({ account_id: victim, now: T0 + 2000 });
@@ -712,11 +736,12 @@ function scenarios(test, makeStore) {
     assert.equal((await s.listPacks(a)).length, 0);
   });
 
-  // ------------------------- ref expiry and the mismatch relink (round 2)
+  // ------------------- ref expiry, and the customer rule (rounds 2 and 3)
 
   test("REF EXPIRY: a signed ref replayed after its two hours is refused (ignored_unverified_reference, reason expired); nothing is linked", async () => {
     const s = await makeStore();
-    const victim = await s._createAccount();
+    const mine = await linkedAccount(s, "ry");
+    const victim = mine.account;
     const atk = idsFor("rx");
     const ref = billing.mintAccountRef(victim, T0);
     const late = T0 + 2 * HOUR + 1000; // the session is made after the ref ran out
@@ -731,15 +756,13 @@ function scenarios(test, makeStore) {
     const p = ev.checkoutPackEvent({ account: victim, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: late, ref });
     assert.equal((await apply(s, p, late)).outcome, "ignored_unverified_reference");
     assert.equal((await s.pinStatus({ account_id: victim, now: late })).pack_balance, 0);
-    // The owner's fresh ref still links.
-    const mine = idsFor("ry");
+    // The owner's fresh ref, on the owner's customer, still works.
     assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: mine.cus, sub: mine.sub, created: late }), late)).outcome, "linked");
   });
 
   test("REF RETRY: a session created inside the window is honoured when Stripe delivers (or retries) it days later", async () => {
     const s = await makeStore();
-    const a = await s._createAccount();
-    const { cus, sub } = idsFor("rr");
+    const { account: a, cus, sub } = await linkedAccount(s, "rr");
     const ref = billing.mintAccountRef(a, T0);
     const e = ev.checkoutSubEvent({ account: a, cus, sub, created: T0 + 3 * DAY, sessionCreated: T0 + 2 * HOUR, ref });
     assert.equal((await apply(s, e, T0 + 3 * DAY)).outcome, "linked");
@@ -748,41 +771,81 @@ function scenarios(test, makeStore) {
     assert.equal((await apply(s, p, T0 + 3 * DAY)).outcome, "pack_credited");
   });
 
-  test("RELINK: an account an attacker linked (no plan in force) is relinked by the owner's verified checkout; the attacker's later events are refused", async () => {
+  test("LEAKED LINK (the lockout gap): a stranger pays the owner's session inside the 2 hours: the session is on the owner's customer, so the plan lands on the owner; no mismatch, no relink, nothing to cancel", async () => {
     const s = await makeStore();
-    const victim = await s._createAccount();
-    const atk = idsFor("ra");
-    // The attacker pays first on a leaked, still-valid ref; their payment never completes.
-    assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: atk.cus, sub: atk.sub, created: T0 }), T0)).outcome, "linked");
-    const own = idsFor("ro");
-    const r = await apply(s, ev.checkoutSubEvent({ account: victim, cus: own.cus, sub: own.sub, created: T0 + HOUR }), T0 + HOUR);
-    assert.equal(r.outcome, "relinked");
-    assert.equal(r.account_id, victim);
-    const inv = await apply(s, ev.invoiceEvent({ sub: own.sub, cus: own.cus, ps: T0 + HOUR, pe: addMonthsUTC(T0 + HOUR, 1), created: T0 + HOUR + 1000 }), T0 + HOUR + 1000);
-    assert.equal(inv.outcome, "subscription_applied");
-    const st = await s.pinStatus({ account_id: victim, now: T0 + 2 * HOUR });
+    const { account, cus, sub } = await linkedAccount(s, "lk");
+    // The server made the session on the owner's customer `cus` with the
+    // owner's signed ref. The URL leaks; a stranger pays it an hour later.
+    // Stripe completes THAT session: customer `cus`, whoever held the card.
+    const paid = ev.checkoutSubEvent({ account, cus, sub, created: T0 + HOUR, sessionCreated: T0 });
+    assert.equal((await apply(s, paid, T0 + HOUR)).outcome, "linked");
+    const pe = addMonthsUTC(T0 + HOUR, 1);
+    await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, ps: T0 + HOUR, pe, created: T0 + HOUR + 1000 }), T0 + HOUR + 1000);
+    await apply(s, ev.invoiceEvent({ sub, cus, ps: T0 + HOUR, pe, created: T0 + HOUR + 2000 }), T0 + HOUR + 2000);
+    const st = await s.pinStatus({ account_id: account, now: T0 + 2 * HOUR });
     assert.equal(st.plan, "monthly");
+    assert.equal(st.status, "active");
     assert.equal(st.monthly_allowance, 3000);
-    // The attacker's own subscription, signed with the same leaked ref, is a mismatch now.
-    const late = ev.subEvent({ type: "customer.subscription.created", sub: atk.sub, cus: atk.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account: victim });
-    assert.equal((await apply(s, late, T0 + 3 * HOUR)).outcome, "ignored_customer_mismatch");
-    assert.equal((await s.pinStatus({ account_id: victim, now: T0 + 3 * HOUR })).plan, "monthly");
+    // The owner's next checkout is on the same customer: it is simply theirs.
+    const r = await apply(s, ev.checkoutPackEvent({ account, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 + 2 * HOUR }), T0 + 2 * HOUR);
+    assert.equal(r.outcome, "pack_credited");
   });
 
-  test("RELINK: a canceled attacker subscription no longer holds the account; the owner's verified checkout relinks it", async () => {
+  test("NO RELINK: a verified checkout on another customer is refused whether the account holds a plan or not; a leaked ref on a Payment Link links nothing", async () => {
     const s = await makeStore();
+    // No plan at all: still refused (there is no 'relink' of an idle account).
+    const idle = await linkedAccount(s, "nr");
+    const atk = idsFor("na");
+    const r0 = await apply(s, ev.checkoutSubEvent({ account: idle.account, cus: atk.cus, sub: atk.sub, created: T0 }), T0);
+    assert.equal(r0.outcome, "ignored_customer_mismatch");
+    assert.equal(r0.account_id, idle.account);
+    // The stranger's subscription events, even naming the account with the
+    // owner's ref, are a mismatch; without the ref they are nobody's.
+    const named = ev.subEvent({ type: "customer.subscription.created", sub: atk.sub, cus: atk.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account: idle.account });
+    assert.equal((await apply(s, named, T0 + 1000)).outcome, "ignored_customer_mismatch");
+    const bare = ev.invoiceEvent({ sub: atk.sub, cus: atk.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 + 1000 });
+    assert.equal((await apply(s, bare, T0 + 2000)).outcome, "unresolved");
+    assert.equal((await s.pinStatus({ account_id: idle.account, now: T0 + 2000 })).plan, "free");
+    // The owner's own checkout still works afterwards.
+    assert.equal((await apply(s, ev.checkoutSubEvent({ account: idle.account, cus: idle.cus, sub: idle.sub, created: T0 + 3000 }), T0 + 3000)).outcome, "linked");
+    // A canceled plan does not open the account to another customer either.
     const { account, cus, sub, ps, pe } = await subscribe(s, { tag: "rc" });
     await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: T0 + DAY }), T0 + DAY);
     const own = idsFor("rd");
-    // A customer already linked to another account is never taken by a relink.
     const elsewhere = await subscribe(s, { tag: "re" });
-    const r0 = await apply(s, ev.checkoutSubEvent({ account, cus: elsewhere.cus, sub: own.sub2, created: T0 + 2 * DAY }), T0 + 2 * DAY);
-    assert.equal(r0.outcome, "ignored_customer_linked_elsewhere");
-    const r = await apply(s, ev.checkoutSubEvent({ account, cus: own.cus, sub: own.sub, created: T0 + 2 * DAY }), T0 + 2 * DAY);
-    assert.equal(r.outcome, "relinked");
+    const r1 = await apply(s, ev.checkoutSubEvent({ account, cus: elsewhere.cus, sub: own.sub2, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(r1.outcome, "ignored_customer_mismatch");
+    const r2 = await apply(s, ev.checkoutSubEvent({ account, cus: own.cus, sub: own.sub, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(r2.outcome, "ignored_customer_mismatch");
+    // And a new subscription on the account's own customer resumes it.
+    const r3 = await apply(s, ev.checkoutSubEvent({ account, cus, sub: own.sub, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(r3.outcome, "linked");
   });
 
-  test("MISMATCH: an account whose customer has a plan in force (active, trialing, past_due) is NOT relinked by another verified checkout", async () => {
+  test("NO CUSTOMER, NO LINK: an account with no stored customer refuses every verified checkout and subscription event; the event path never writes stripe_customer_id", async () => {
+    const s = await makeStore();
+    const a = await s._createAccount();
+    const { cus, sub } = idsFor("nc");
+    assert.equal((await apply(s, ev.checkoutSubEvent({ account: a, cus, sub, created: T0 }), T0)).outcome, "ignored_customer_mismatch");
+    assert.equal((await apply(s, ev.subEvent({ type: "customer.subscription.created", sub, cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account: a }), T0)).outcome,
+      "ignored_customer_mismatch");
+    assert.equal((await apply(s, ev.invoiceEvent({ sub, cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 + 1000 }), T0 + 1000)).outcome, "unresolved");
+    const acct = await s.getAccount(a);
+    assert.equal(acct.stripe_customer_id, null);
+    assert.equal((await s.pinStatus({ account_id: a, now: T0 })).plan, "free");
+    // The store's setter is set-if-null, and one customer belongs to one account.
+    assert.equal((await s.setStripeCustomer({ account_id: a, customer_id: cus })).set, true);
+    const again = await s.setStripeCustomer({ account_id: a, customer_id: idsFor("nc2").cus });
+    assert.equal(again.ok, true);
+    assert.equal(again.set, false);
+    assert.equal(again.customer_id, cus);
+    const b = await s._createAccount();
+    assert.deepEqual(await s.setStripeCustomer({ account_id: b, customer_id: cus }), { ok: false, reason: "customer_taken" });
+    assert.equal((await s.setStripeCustomer({ account_id: "00000000-0000-4000-8000-00000000dead", customer_id: cus })).reason, "unknown_account");
+    assert.equal((await s.getAccount(a)).stripe_customer_id, cus);
+  });
+
+  test("MISMATCH: an account whose customer has a plan in force (active, trialing, past_due) refuses another customer's verified checkout", async () => {
     const s = await makeStore();
     for (const status of ["active", "trialing", "past_due"]) {
       const { account, cus, sub, ps, pe } = await subscribe(s, { tag: "mm" });
@@ -860,15 +923,17 @@ function scenarios(test, makeStore) {
     assert.equal(b.window_end, "2027-12-20T18:00:00.000Z", "the last month of the year ends at period_end");
   });
 
-  test("I13/LINK: a refund or dispute on a charge that is not a pack changes nothing; one customer cannot link two accounts", async () => {
+  test("I13/LINK: a refund or dispute on a charge that is not a pack changes nothing; one customer cannot serve two accounts", async () => {
     const s = await makeStore();
     const { account, cus } = await subscribe(s);
     const r = await apply(s, ev.refundEvent({ pi: ev.nextId("pi_"), amount: 900, refunded: 900, created: T0 }), T0);
     assert.equal(r.outcome, "unresolved");
     const other = await s._createAccount();
     const r2 = await apply(s, ev.checkoutSubEvent({ account: other, cus, sub: ev.nextId("sub_"), created: T0 }), T0);
-    assert.equal(r2.outcome, "ignored_customer_linked_elsewhere");
+    assert.equal(r2.outcome, "ignored_customer_mismatch");
+    assert.deepEqual(await s.setStripeCustomer({ account_id: other, customer_id: cus }), { ok: false, reason: "customer_taken" });
     assert.equal((await s.pinStatus({ account_id: account, now: T0 })).plan, "monthly");
+    assert.equal((await s.pinStatus({ account_id: other, now: T0 })).plan, "free");
   });
 }
 

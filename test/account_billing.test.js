@@ -310,30 +310,33 @@ test("WEBHOOK: a Stripe retry days after the ref expired is honoured (session.cr
   const s = accountdb.memoryStore();
   useStore(s, () => T0 + 5 * ev.DAY);
   const a = await s._createAccount();
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_retry1" });
   const ref = billing.mintAccountRef(a, T0);
   const ok = ev.checkoutSubEvent({ account: a, cus: "cus_retry1", sub: "sub_retry1", created: T0 + 5 * ev.DAY, sessionCreated: T0 + 60 * 1000, ref });
   const r = await post(ok);
   assert.equal(r._status, 200);
   assert.equal(r._body.outcome, "linked");
-  const replay = ev.checkoutSubEvent({ account: a, cus: "cus_replay1", sub: "sub_replay1", created: T0 + 5 * ev.DAY, ref });
+  const replay = ev.checkoutSubEvent({ account: a, cus: "cus_retry1", sub: "sub_replay1", created: T0 + 5 * ev.DAY, ref });
   const r2 = await post(replay);
   assert.equal(r2._status, 200);
   assert.equal(r2._body.outcome, "ignored_unverified_reference");
   assert.equal(s._account(a).stripe_customer_id, "cus_retry1");
 });
 
-test("WEBHOOK: the relink is its own outcome in stripe_events", async () => {
+test("WEBHOOK: a verified checkout on another customer is ignored_customer_mismatch in stripe_events, recorded against the account, and the customer does not move", async () => {
   const s = accountdb.memoryStore();
   useStore(s);
   const a = await s._createAccount();
-  await post(ev.checkoutSubEvent({ account: a, cus: "cus_atkrl1", sub: "sub_atkrl1", created: T0 }));
-  const e = ev.checkoutSubEvent({ account: a, cus: "cus_ownrl1", sub: "sub_ownrl1", created: T0 + 1000 });
+  await s.setStripeCustomer({ account_id: a, customer_id: "cus_ownrl1" });
+  const e = ev.checkoutSubEvent({ account: a, cus: "cus_atkrl1", sub: "sub_atkrl1", created: T0 });
   const r = await post(e);
-  assert.equal(r._body.outcome, "relinked");
+  assert.equal(r._status, 200);
+  assert.equal(r._body.outcome, "ignored_customer_mismatch");
   const row = s._stripeEvents().find((x) => x.event_id === e.id);
-  assert.equal(row.outcome, "relinked");
+  assert.equal(row.outcome, "ignored_customer_mismatch");
   assert.equal(row.account_id, a);
   assert.equal(s._account(a).stripe_customer_id, "cus_ownrl1");
+  assert.ok(s._stripeEvents().every((x) => x.outcome !== "relinked"), "there is no relink outcome any more");
 });
 
 test("WEBHOOK: a test-mode account event is skipped by the livemode gate", async () => {

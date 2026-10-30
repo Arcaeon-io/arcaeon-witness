@@ -20,9 +20,14 @@
 -- it falls to the no-plan 10 on the calendar month. Back to active, the
 -- anniversary windows resume from period_start.
 --
--- Atomicity. Every write goes through one of three functions, each one
+-- Atomicity. Every write goes through one of four functions, each one
 -- transaction, each taking the account row lock (select ... for update)
 -- before touching the account or its packs:
+--   account_set_stripe_customer  the ONLY writer of stripe_customer_id: the
+--                            checkout endpoint stores the customer it made at
+--                            Stripe for this account, once (set-if-null).
+--                            Events only compare against it
+--                            (account_check_customer); none ever sets it.
 --   account_debit_pins       monthly first, then live packs oldest first; all
 --                            or nothing, never negative; idempotent by
 --                            request id (pin_ledger unique key).
@@ -325,8 +330,13 @@ $$;
 -- Each runs inside account_apply_stripe_event, which already holds the row
 -- lock. Each returns the outcome name.
 
--- null when linked (or already linked to this customer); else the refusal.
-create or replace function public.account_link_customer(p_account_id uuid, p_customer text)
+-- The one rule about customers on the event side: an event counts for an
+-- account only when its customer IS the account's stored customer. Never
+-- writes. An account with no customer yet, or an event with none, is a
+-- mismatch too (fail closed). null when it matches; else the refusal.
+-- (Replaces account_link_customer, which could set the column from an event.)
+drop function if exists public.account_link_customer(uuid, text);
+create or replace function public.account_check_customer(p_account_id uuid, p_customer text)
 returns text
 language plpgsql
 set search_path = public
@@ -334,15 +344,46 @@ as $$
 declare
   v_cur text;
 begin
-  if p_customer is null then return null; end if;
   select ac.stripe_customer_id into v_cur from public.accounts ac where ac.id = p_account_id;
-  if v_cur = p_customer then return null; end if;
-  if v_cur is not null then return 'ignored_customer_mismatch'; end if;
+  if p_customer is null or v_cur is null or v_cur <> p_customer then return 'ignored_customer_mismatch'; end if;
+  return null;
+end;
+$$;
+
+-- The ONLY writer of accounts.stripe_customer_id: the authenticated checkout
+-- endpoint (lib/_account_checkout.js) made the customer at Stripe for this
+-- account and stores it here, once. Set-if-null under the row lock: an
+-- account that already has one keeps it ('already_set', and which). A
+-- customer another account holds is refused ('customer_taken'; the unique
+-- constraint would say the same). No Stripe event reaches this function.
+create or replace function public.account_set_stripe_customer(p_account_id uuid, p_customer text)
+returns table (outcome text, customer_id text)
+language plpgsql
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  a public.accounts%rowtype;
+begin
+  select * into a from public.accounts ac where ac.id = p_account_id for update;
+  if not found then
+    return query select 'unknown_account'::text, null::text;
+    return;
+  end if;
+  if a.stripe_customer_id is not null then
+    return query select 'already_set'::text, a.stripe_customer_id;
+    return;
+  end if;
+  if p_customer is null or p_customer !~ '^cus_[A-Za-z0-9]{1,64}$' then
+    return query select 'bad_customer'::text, null::text;
+    return;
+  end if;
   if exists (select 1 from public.accounts ac where ac.stripe_customer_id = p_customer and ac.id <> p_account_id) then
-    return 'ignored_customer_linked_elsewhere';
+    return query select 'customer_taken'::text, null::text;
+    return;
   end if;
   update public.accounts ac set stripe_customer_id = p_customer, updated_at = now() where ac.id = p_account_id;
-  return null;
+  return query select 'set'::text, p_customer;
 end;
 $$;
 
@@ -375,10 +416,8 @@ begin
     select array_agg(x) into v_only from jsonb_array_elements_text(f->'only_from') as t(x);
   end if;
 
-  if a.stripe_customer_id is not null and f->>'customer_id' is not null
-     and a.stripe_customer_id <> f->>'customer_id' then
-    return 'ignored_customer_mismatch';
-  end if;
+  v_r := public.account_check_customer(p_account_id, f->>'customer_id');
+  if v_r is not null then return v_r; end if;
 
   if a.stripe_subscription_id is not null and v_sub is distinct from a.stripe_subscription_id then
     v_terminal := a.status in ('canceled', 'incomplete_expired') or a.plan = 'free';
@@ -397,9 +436,6 @@ begin
     if v_req then return 'ignored_no_plan'; end if;
     if v_only is not null and not (a.status = any (v_only)) then return 'ignored_status'; end if;
   end if;
-
-  v_r := public.account_link_customer(p_account_id, f->>'customer_id');
-  if v_r is not null then return v_r; end if;
 
   update public.accounts ac set
     stripe_subscription_id = v_sub,
@@ -604,31 +640,17 @@ begin
   perform 1 from public.accounts ac where ac.id = v_acc for update;
 
   if v_kind = 'link' then
-    -- A link fact only comes from a checkout whose signed ref verified
-    -- (lib/_account_billing.js verifyAccountRef, v2 with expiry).
-    v_out := public.account_link_customer(v_acc, p_fact->>'customer_id');
-    if v_out = 'ignored_customer_mismatch' and not exists (
-         select 1 from public.accounts ac
-          where ac.id = v_acc and ac.stripe_subscription_id is not null
-            and ac.plan in ('monthly', 'yearly') and ac.status in ('active', 'trialing', 'past_due')) then
-      -- The linked customer holds no plan on this account, in force (active,
-      -- trialing) or past_due (a live subscription the owner may be fixing):
-      -- a leaked ref paid first and never activated, or canceled. The owner's
-      -- verified checkout takes it back, recorded as its own outcome.
-      if exists (select 1 from public.accounts ac
-                  where ac.stripe_customer_id = p_fact->>'customer_id' and ac.id <> v_acc) then
-        v_out := 'ignored_customer_linked_elsewhere';
-      else
-        update public.accounts ac set stripe_customer_id = p_fact->>'customer_id', updated_at = now()
-         where ac.id = v_acc;
-        v_out := 'relinked';
-      end if;
-    end if;
-    if v_out is null or v_out = 'relinked' then
+    -- A checkout whose signed ref verified (lib/_account_billing.js
+    -- verifyAccountRef). It confirms a session on the account's OWN customer,
+    -- the one account_set_stripe_customer stored before the session existed;
+    -- it never sets or moves the customer. Any other customer (a Payment
+    -- Link paid with a leaked ref) or an account with no customer: refused.
+    v_out := public.account_check_customer(v_acc, p_fact->>'customer_id');
+    if v_out is null then
       update public.accounts ac
          set stripe_subscription_id = coalesce(ac.stripe_subscription_id, p_fact->>'subscription_id'), updated_at = now()
        where ac.id = v_acc;
-      v_out := coalesce(v_out, 'linked');
+      v_out := 'linked';
     end if;
   elsif v_kind = 'subscription' then
     v_out := public.account_apply_subscription(v_acc, p_fact);
@@ -641,7 +663,7 @@ begin
   else
     v_out := 'ignored_kind';
   end if;
-  if v_out in ('linked', 'relinked', 'subscription_applied') then
+  if v_out in ('linked', 'subscription_applied') then
     perform public.account_roll(v_acc, p_now);
   end if;
 
@@ -655,7 +677,8 @@ revoke all on function public.account_roll(uuid, timestamptz) from public, anon,
 revoke all on function public.account_recompute_packs(uuid) from public, anon, authenticated;
 revoke all on function public.account_debit_pins(uuid, text, integer, timestamptz) from public, anon, authenticated;
 revoke all on function public.account_pin_status(uuid, timestamptz) from public, anon, authenticated;
-revoke all on function public.account_link_customer(uuid, text) from public, anon, authenticated;
+revoke all on function public.account_check_customer(uuid, text) from public, anon, authenticated;
+revoke all on function public.account_set_stripe_customer(uuid, text) from public, anon, authenticated;
 revoke all on function public.account_apply_subscription(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.account_apply_pack_credit(uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.account_apply_pack_refund(uuid, jsonb) from public, anon, authenticated;
@@ -668,7 +691,8 @@ grant execute on function public.account_roll(uuid, timestamptz) to service_role
 grant execute on function public.account_recompute_packs(uuid) to service_role;
 grant execute on function public.account_debit_pins(uuid, text, integer, timestamptz) to service_role;
 grant execute on function public.account_pin_status(uuid, timestamptz) to service_role;
-grant execute on function public.account_link_customer(uuid, text) to service_role;
+grant execute on function public.account_check_customer(uuid, text) to service_role;
+grant execute on function public.account_set_stripe_customer(uuid, text) to service_role;
 grant execute on function public.account_apply_subscription(uuid, jsonb) to service_role;
 grant execute on function public.account_apply_pack_credit(uuid, jsonb) to service_role;
 grant execute on function public.account_apply_pack_refund(uuid, jsonb) to service_role;
