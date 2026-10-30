@@ -383,3 +383,4 @@ test("WIRING: api/ stays at or under the 12-function cap (the reason the account
   const fns = walk(path.join(__dirname, "..", "api"));
   assert.ok(fns.length <= 12, `api/ has ${fns.length} functions: ${fns.join(", ")}`);
 });
+
