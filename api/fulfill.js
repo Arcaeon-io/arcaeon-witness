@@ -91,6 +91,10 @@ const meter = require("../lib/_meter.js");
 const keys = require("../lib/_keys.js");
 const welcome = require("../lib/_welcome_email.js");
 const verdict = require("../lib/_verdict.js");
+// Only for its session classifier: pins_200 / pins_1000 are the same Stripe
+// prices on the per-key Payment Links and the account's own checkout, and an
+// account session must never mint or credit a key here (see below).
+const accountBilling = require("../lib/_account_billing.js");
 // Only for keyPrefixFor: the WITNESS_KEYS env lookup that pin.js runs at pin
 // time, reused to resolve a legacy fulfillment record's prefix (see
 // judgeFulfillment below).
@@ -446,6 +450,23 @@ module.exports = async (req, res) => {
       { error: "session is from the wrong Stripe mode", reason: "livemode_mismatch" },
       "Wrong environment",
       "This checkout session belongs to a different Stripe mode (test vs live) than this service.");
+  }
+
+  // Account sessions are not ours. POST /api/account/checkout makes them on
+  // the account's own customer, with metadata.account_id / account_ref and a
+  // signed client_reference_id, and the account webhook branch credits the
+  // account (keyed on this session id). The packs are the same prices as the
+  // Payment Links (pins_200, pins_1000), so without this refusal anyone
+  // holding the session id could mint a key here and be credited a second
+  // time for one payment. Refused before the paid gate: nothing is minted,
+  // nothing credited, on any visit. A one-time Payment Link session is never
+  // an account session (lib/_account_billing.js isAccountCheckoutSession).
+  if (accountBilling.isAccountCheckoutSession(session)) {
+    console.error(`[fulfill] account checkout session sent to /api/fulfill: ${sid.slice(0, 24)}… — refused, nothing minted or credited`);
+    return deny(req, res, 409,
+      { error: "this checkout belongs to an account; its pins are credited to the account, not to a witness key", reason: "account_session" },
+      "This purchase belongs to your account",
+      "This checkout was made for an account, so its pins go to that account (check GET /api/account/pins with the account's api key). No witness key is minted for it.");
   }
 
   // The paid gate: complete AND paid. An async payment method (ACH etc.) can
