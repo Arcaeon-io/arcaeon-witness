@@ -105,6 +105,64 @@ test("RESET LEDGER: one monthly_reset row per window, however many times it is r
   assert.equal(s._ledger(a).filter((r) => r.entry === "monthly_reset").length, 1);
 });
 
+test("REF: mint and verify round trip; a missing or short secret fails closed; tampering with either half fails", () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  const ref = billing.mintAccountRef(id);
+  assert.match(ref, /^[0-9a-f-]{36}\.[0-9a-f]{64}$/);
+  assert.ok(ref.length <= 200, "fits Stripe's client_reference_id limit");
+  assert.equal(billing.verifyAccountRef(ref), id);
+  assert.equal(billing.verifyAccountRef(ref, ""), null);
+  assert.equal(billing.verifyAccountRef(ref, "short"), null);
+  assert.throws(() => billing.mintAccountRef(id, ""));
+  assert.throws(() => billing.mintAccountRef("not-a-uuid"));
+  const other = "11111111-2222-4333-8444-555555555556";
+  assert.equal(billing.verifyAccountRef(other + ref.slice(36)), null, "a mac for one account does not cover another");
+  assert.equal(billing.verifyAccountRef(ref.slice(0, -1) + (ref.endsWith("0") ? "1" : "0")), null);
+  assert.equal(billing.verifyAccountRef(ref.toUpperCase()), null);
+});
+
+test("PROBE 5: a new account starts at the free 30 before any roll (memory store; the SQL default is checked in the PGlite run)", async () => {
+  const s = accountdb.memoryStore();
+  const a = await s._createAccount();
+  assert.equal(s._account(a).monthly_allowance, 30);
+  const { account_id } = await s.createAgentWithAccount("A".repeat(43));
+  assert.equal(s._account(account_id).monthly_allowance, 30);
+});
+
+test("PROBE 6: a lost dispute records as shortfall the pins spent and not already covered by a refund", async () => {
+  const s = accountdb.memoryStore();
+  const a = await s._createAccount();
+  const fact = (e) => billing.factFromEvent(e);
+  const put = (e, now) => s.applyStripeEvent({ event_id: e.id, type: e.type, fact: fact(e), now });
+  const pi = ev.nextId("pi_");
+  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0 }), T0);
+  await s.debitPins({ account_id: a, request_id: "spend", n: 30 + 300, now: T0 });
+  await put(ev.disputeEvent({ type: "charge.dispute.closed", pi, status: "lost", created: T0 + 1000 }), T0 + 1000);
+  assert.equal(s._ledger(a).find((r) => r.entry === "pack_void").shortfall, 300);
+  const pi2 = ev.nextId("pi_");
+  await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: pi2, created: T0 + 2000 }), T0 + 2000);
+  await s.debitPins({ account_id: a, request_id: "spend2", n: 100, now: T0 + 2000 });
+  await put(ev.refundEvent({ pi: pi2, amount: 2000, refunded: 400, created: T0 + 3000 }), T0 + 3000); // 200 units off
+  await put(ev.disputeEvent({ type: "charge.dispute.closed", pi: pi2, status: "lost", created: T0 + 4000 }), T0 + 4000);
+  const voids = s._ledger(a).filter((r) => r.entry === "pack_void");
+  assert.equal(voids[1].shortfall, 100);
+});
+
+test("SIG (outside read 7): a malformed extra v1 does not reject a header that also carries a valid one; all-malformed, stale or wrong still fail", () => {
+  const raw = Buffer.from('{"id":"evt_sig"}', "utf8");
+  const t = Math.floor(Date.now() / 1000);
+  const good = stripeSigHeader(SECRET, raw, t).split(",")[1];
+  const v = (h) => webhook.verifyStripeSignature(raw, h, SECRET);
+  assert.equal(v(`t=${t},v1=zz-not-hex,${good}`).ok, true);
+  assert.equal(v(`t=${t},${good},v1=abc`).ok, true);
+  assert.equal(v(`t=${t},v1=zz,v1=abc`).ok, false);
+  assert.equal(v(`t=${t},v1=${"0".repeat(64)},v1=nothex`).ok, false);
+  const old = t - 301;
+  const oldGood = stripeSigHeader(SECRET, raw, old).split(",")[1];
+  assert.equal(v(`t=${old},v1=junk,${oldGood}`).ok, false, "tolerance still applies");
+  assert.equal(v(`t=${t},v1=junk`).ok, false);
+});
+
 // --------------------------------------------------------- the webhook
 
 let restoreDeps = null;
@@ -199,6 +257,19 @@ test("WEBHOOK: no account store configured -> 503 for subscription events (retry
   const lr = await post(legacy);
   assert.equal(lr._status, 200);
   assert.match(lr._body.skipped, /client_reference_id/);
+});
+
+test("WEBHOOK: a forged checkout reference answers 200 (no retry) and is recorded ignored_unverified_reference with no account", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s);
+  const victim = await s._createAccount();
+  const e = ev.checkoutSubEvent({ account: victim, cus: "cus_forger1", sub: "sub_forger1", created: T0, ref: victim });
+  const r = await post(e);
+  assert.equal(r._status, 200);
+  assert.equal(r._body.outcome, "ignored_unverified_reference");
+  const row = s._stripeEvents().find((x) => x.event_id === e.id);
+  assert.equal(row.account_id, null);
+  assert.equal(s._account(victim).stripe_customer_id, null);
 });
 
 test("WEBHOOK: a test-mode account event is skipped by the livemode gate", async () => {

@@ -481,7 +481,7 @@ function scenarios(test, makeStore) {
     assert.equal(billing.factFromEvent(mk({ pack: "pins_1000", amount: 500 })).kind, "ignore", "a $5 payment is not a $20 pack");
     assert.equal(billing.factFromEvent(mk({ pack: "mini" })).kind, "ignore");
     assert.equal(billing.factFromEvent(mk({ currency: "eur" })).kind, "ignore");
-    const ghost = ev.checkoutPackEvent({ account: "00000000-0000-4000-8000-000000000000", session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
+    const ghost = ev.checkoutPackEvent({ account: "00000000-0000-4000-8000-000000000000", /* signed, but no such account */ session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 });
     assert.equal((await apply(s, ghost, T0)).outcome, "unresolved");
     assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 0);
   });
@@ -562,6 +562,104 @@ function scenarios(test, makeStore) {
     await apply(s, ev.disputeEvent({ type: "charge.dispute.updated", pi, status: "won", created: T0 + 9000 }), T0 + 9000);
     assert.equal((await s.listPacks(a)).find((x) => x.purchase_ref === session).state, "live");
     assert.equal((await s.pinStatus({ account_id: a, now: T0 + 9000 })).pack_balance, 200);
+  });
+
+  // ------------------------------------------- the signed checkout reference
+
+  test("REF: a forged reference (bare account id, wrong mac, other secret) links nothing; the victim can still subscribe", async () => {
+    const s = await makeStore();
+    const victim = await s._createAccount();
+    const attacker = idsFor("atk");
+    const otherSecret = billing.mintAccountRef(victim, "some-other-secret-0123456789");
+    const wrongMac = victim + "." + "0".repeat(64);
+    for (const ref of [victim, wrongMac, otherSecret, "garbage"]) {
+      const e = ev.checkoutSubEvent({ account: victim, cus: attacker.cus, sub: attacker.sub, created: T0, ref });
+      e.data.object.metadata = { account_id: victim };
+      const r = await apply(s, e, T0);
+      assert.equal(r.outcome, "ignored_unverified_reference", `ref ${ref.slice(0, 12)}`);
+      assert.equal(r.account_id, null);
+    }
+    // The attacker's own subscription events find no account (not linked).
+    const sub = ev.subEvent({ type: "customer.subscription.created", sub: attacker.sub, cus: attacker.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 });
+    assert.equal((await apply(s, sub, T0)).outcome, "unresolved");
+    assert.equal((await s.pinStatus({ account_id: victim, now: T0 })).plan, "free");
+    // The victim's own checkout, signed by us, links and subscribes.
+    const mine = idsFor("vic");
+    assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: mine.cus, sub: mine.sub, created: T0 }), T0)).outcome, "linked");
+    await apply(s, ev.invoiceEvent({ sub: mine.sub, cus: mine.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0 + 1000 }), T0 + 1000);
+    const st = await s.pinStatus({ account_id: victim, now: T0 + 2000 });
+    assert.equal(st.plan, "monthly");
+    assert.equal(st.monthly_allowance, 3000);
+  });
+
+  test("REF: a paid pack under a bad reference is recorded as ignored_unverified_reference and never credited (a repeat is a duplicate)", async () => {
+    const s = await makeStore();
+    const a = await s._createAccount();
+    const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: a });
+    assert.equal((await apply(s, e, T0)).outcome, "ignored_unverified_reference");
+    assert.equal((await apply(s, e, T0)).outcome, "duplicate");
+    assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 0);
+    assert.equal((await s.listPacks(a)).length, 0);
+  });
+
+  test("NOT FOUND: pin status for an account that does not exist returns nothing (no pack data)", async () => {
+    const s = await makeStore();
+    const a = await s._createAccount();
+    await buyPack(s, a, { at: T0 });
+    assert.equal(await s.pinStatus({ account_id: "00000000-0000-4000-8000-00000000abcd", now: T0 }), null);
+  });
+
+  // --------------------------------------- JS vs SQL divergence probes
+
+  test("PROBE 1: after cancel the plan is free, and a new subscription seen only through invoice.paid is accepted", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, sub2, ps, pe } = await subscribe(s);
+    await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: T0 + DAY }), T0 + DAY);
+    let st = await s.pinStatus({ account_id: account, now: T0 + DAY });
+    assert.equal(st.plan, "free");
+    assert.equal(st.status, "canceled");
+    const t2 = T0 + 3 * DAY;
+    const r = await apply(s, ev.invoiceEvent({ sub: sub2, cus, ps: t2, pe: addMonthsUTC(t2, 1), created: t2 }), t2);
+    assert.equal(r.outcome, "subscription_applied");
+    st = await s.pinStatus({ account_id: account, now: t2 + 1000 });
+    assert.equal(st.plan, "monthly");
+    assert.equal(st.status, "active");
+    assert.equal(st.monthly_used, 0);
+    assert.equal(st.monthly_allowance, 3000);
+  });
+
+  test("PROBE 2: cancel mid-month moves the allowance to the free 30 at once (no extra 30 on top of pins used), fresh 30 next month", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, ps, pe } = await subscribe(s);
+    await debitN(s, account, 200, T0 + HOUR);
+    const at = T0 + 5 * DAY;
+    await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: at }), at);
+    let st = await s.pinStatus({ account_id: account, now: at + 1000 });
+    assert.equal(st.monthly_allowance, 30);
+    assert.equal(st.monthly_left, 0);
+    assert.equal(st.window_end, "2026-12-01T00:00:00.000Z");
+    st = await s.pinStatus({ account_id: account, now: Date.UTC(2026, 11, 1) });
+    assert.equal(st.monthly_used, 0);
+    assert.equal(st.monthly_left, 30);
+  });
+
+  test("PROBE 3: yearly across the year boundary (anchor Nov 30) and monthly -> yearly in December keep the anniversary", async () => {
+    const s = await makeStore();
+    const ps = Date.UTC(2026, 10, 30, 6);
+    const { account } = await subscribe(s, { ps, lookup: "account_yearly", tag: "yb" });
+    const ends = [];
+    for (let k = 0; k < 4; k++) ends.push((await s.pinStatus({ account_id: account, now: addMonthsUTC(ps, k) + HOUR })).window_end);
+    assert.deepEqual(ends, ["2026-12-30T06:00:00.000Z", "2027-01-30T06:00:00.000Z", "2027-02-28T06:00:00.000Z", "2027-03-30T06:00:00.000Z"]);
+
+    const m = await subscribe(s, { ps: Date.UTC(2026, 10, 15), tag: "my" });
+    const sw = Date.UTC(2026, 11, 20, 18);
+    const ype = addMonthsUTC(sw, 12);
+    await apply(s, ev.subEvent({ sub: m.sub, cus: m.cus, lookup: "account_yearly", ps: sw, pe: ype, created: sw }), sw);
+    const a = await s.pinStatus({ account_id: m.account, now: sw + HOUR });
+    assert.equal(a.window_end, "2027-01-20T18:00:00.000Z");
+    assert.equal(a.period_end, "2027-12-20T18:00:00.000Z");
+    const b = await s.pinStatus({ account_id: m.account, now: Date.UTC(2027, 11, 1) });
+    assert.equal(b.window_end, "2027-12-20T18:00:00.000Z", "the last month of the year ends at period_end");
   });
 
   test("I13/LINK: a refund or dispute on a charge that is not a pack changes nothing; one customer cannot link two accounts", async () => {
