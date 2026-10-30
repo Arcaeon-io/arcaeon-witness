@@ -39,9 +39,9 @@ test("CLOCK: add months in UTC clamps to the month's last day (Jan 31 -> Feb 28,
   assert.equal(monthsSince(jan31, Date.UTC(2027, 11, 31, 9)), 11);
 });
 
-test("RULES: the owner's numbers: 3,000 a month paid, 30 free; pins_200 = 200 for $5, pins_1000 = 1,000 for $20; lookup keys", () => {
+test("RULES: the owner's numbers: 3,000 a month paid, 10 free; pins_200 = 200 for $5, pins_1000 = 1,000 for $20; lookup keys", () => {
   assert.equal(billing.PAID_MONTHLY_PINS, 3000);
-  assert.equal(billing.FREE_MONTHLY_PINS, 30);
+  assert.equal(billing.FREE_MONTHLY_PINS, 10);
   assert.deepEqual({ ...billing.ACCOUNT_PACKS.pins_200 }, { price_usd: 5, pins: 200 });
   assert.deepEqual({ ...billing.ACCOUNT_PACKS.pins_1000 }, { price_usd: 20, pins: 1000 });
   assert.deepEqual({ ...billing.PLAN_BY_LOOKUP }, { account_monthly: "monthly", account_yearly: "yearly" });
@@ -82,14 +82,14 @@ test("I3 LEDGER: a full refund of a pack with 200 left removes the 200 and recor
   const fact = (e) => billing.factFromEvent(e);
   const ck = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0 });
   await s.applyStripeEvent({ event_id: ck.id, type: ck.type, fact: fact(ck), now: T0 });
-  await s.debitPins({ account_id: a, request_id: "spend", n: 830, now: T0 });
+  await s.debitPins({ account_id: a, request_id: "spend", n: 810, now: T0 });
   const rf = ev.refundEvent({ pi, amount: 2000, refunded: 2000, created: T0 + 1000 });
   await s.applyStripeEvent({ event_id: rf.id, type: rf.type, fact: fact(rf), now: T0 + 1000 });
   const row = s._ledger(a).find((r) => r.entry === "pack_refund");
   assert.equal(row.pack_delta, -200);
   assert.equal(row.shortfall, 800);
   const debit = s._ledger(a).find((r) => r.entry === "debit");
-  assert.equal(debit.monthly_delta, -30);
+  assert.equal(debit.monthly_delta, -10);
   assert.equal(debit.pack_delta, -800);
   // Counts only: no ledger row or event row carries anything but numbers and ids.
   for (const r of [...s._ledger(a), ...s._stripeEvents()]) {
@@ -143,12 +143,12 @@ test("FACTS (outside read, Gemini low): a bare uuid client_reference_id is not a
   assert.equal(billing.isAccountEvent(ck({ client_reference_id: id, mode: "subscription" })), true, "subscription mode is ours either way");
 });
 
-test("PROBE 5: a new account starts at the free 30 before any roll (memory store; the SQL default is checked in the PGlite run)", async () => {
+test("PROBE 5: a new account starts at the free 10 before any roll (memory store; the SQL default is checked in the PGlite run)", async () => {
   const s = accountdb.memoryStore();
   const a = await s._createAccount();
-  assert.equal(s._account(a).monthly_allowance, 30);
+  assert.equal(s._account(a).monthly_allowance, 10);
   const { account_id } = await s.createAgentWithAccount("A".repeat(43));
-  assert.equal(s._account(account_id).monthly_allowance, 30);
+  assert.equal(s._account(account_id).monthly_allowance, 10);
 });
 
 test("PROBE 6: a lost dispute records as shortfall the pins spent and not already covered by a refund", async () => {
@@ -158,7 +158,7 @@ test("PROBE 6: a lost dispute records as shortfall the pins spent and not alread
   const put = (e, now) => s.applyStripeEvent({ event_id: e.id, type: e.type, fact: fact(e), now });
   const pi = ev.nextId("pi_");
   await put(ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi, created: T0 }), T0);
-  await s.debitPins({ account_id: a, request_id: "spend", n: 30 + 300, now: T0 });
+  await s.debitPins({ account_id: a, request_id: "spend", n: 10 + 300, now: T0 });
   await put(ev.disputeEvent({ type: "charge.dispute.closed", pi, status: "lost", created: T0 + 1000 }), T0 + 1000);
   assert.equal(s._ledger(a).find((r) => r.entry === "pack_void").shortfall, 300);
   const pi2 = ev.nextId("pi_");
@@ -360,8 +360,8 @@ test("ROUTE: GET /api/account/pins (balance.js ?op=account-pins) shows the allow
   assert.equal(await accountApi.dispatch(req, res, api), true);
   assert.equal(res._status, 200);
   assert.equal(res._body.plan, "free");
-  assert.equal(res._body.monthly_allowance, 30);
-  assert.equal(res._body.monthly_left, 30);
+  assert.equal(res._body.monthly_allowance, 10);
+  assert.equal(res._body.monthly_left, 10);
   assert.equal(res._body.pack_balance, 0);
   const none = makeRes();
   await accountApi.dispatch(makeReq({ method: "GET", query: { op: "account-pins" } }), none, api);
