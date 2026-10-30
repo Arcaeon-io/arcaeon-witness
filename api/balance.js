@@ -38,9 +38,9 @@ const meter = require("../lib/_meter.js");
 const balance = require("../lib/_balance.js");
 const issuedKeys = require("../lib/_keys.js");
 const { baseUrl, esc, wantsJson, pageShell, copyBox } = require("../lib/_page.js");
-// The account routes (/api/account/challenge, /verify, /devices) are co-hosted
-// here by vercel.json rewrites onto ?op=account-*, because api/ is at the
-// Vercel Hobby 12-function cap. See lib/_account_api.js.
+// The account routes (/api/account/challenge, /verify, /devices, /pins,
+// /checkout) are co-hosted here by vercel.json rewrites onto ?op=account-*,
+// because api/ is at the Vercel Hobby 12-function cap. See lib/_account_api.js.
 const accountApi = require("../lib/_account_api.js");
 
 // HTML strictly opt-in: an explicit text/html Accept AND not the JSON

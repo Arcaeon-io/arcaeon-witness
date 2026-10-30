@@ -16,8 +16,8 @@ const CODE = SQL.replace(/--[^\n]*/g, "");
 const NEW_TABLES = ["account_packs", "pin_ledger"];
 const FORBIDDEN = new Set(["content", "text", "body", "note", "notes", "message", "messages", "payload", "data", "record", "records"]);
 const FUNCTIONS = ["account_roll", "account_recompute_packs", "account_debit_pins", "account_pin_status",
-  "account_link_customer", "account_apply_subscription", "account_apply_pack_credit", "account_apply_pack_refund",
-  "account_apply_pack_dispute", "account_apply_stripe_event"];
+  "account_check_customer", "account_set_stripe_customer", "account_apply_subscription", "account_apply_pack_credit",
+  "account_apply_pack_refund", "account_apply_pack_dispute", "account_apply_stripe_event"];
 
 function columns(table) {
   const m = CODE.match(new RegExp(`create table if not exists public\\.${table}\\s*\\(([\\s\\S]*?)\\n\\);`));
@@ -60,6 +60,19 @@ test("V2 ATOMIC: the debit takes the account row lock and the packs in order; ev
   assert.match(apply, /on conflict \(event_id\) do nothing;/);
   assert.match(apply, /perform 1 from public\.accounts ac where ac\.id = v_acc for update;/);
   assert.match(CODE, /on conflict \(purchase_ref\) do nothing;/);
+});
+
+test("V2 ONE WRITER: only account_set_stripe_customer writes stripe_customer_id; the event path only compares; no relink remains", () => {
+  const writes = [...CODE.matchAll(/set\s+stripe_customer_id\s*=/gi)];
+  assert.equal(writes.length, 1, "exactly one UPDATE sets stripe_customer_id");
+  const setter = CODE.slice(CODE.indexOf("function public.account_set_stripe_customer("), CODE.indexOf("function public.account_apply_subscription("));
+  assert.match(setter, /set\s+stripe_customer_id\s*=/i);
+  assert.match(setter, /for update/);
+  assert.doesNotMatch(CODE, /relink/i);
+  assert.doesNotMatch(CODE, /linked_elsewhere/);
+  const check = CODE.slice(CODE.indexOf("function public.account_check_customer("), CODE.indexOf("function public.account_set_stripe_customer("));
+  assert.doesNotMatch(check, /update\s/i, "the check never writes");
+  assert.match(check, /ignored_customer_mismatch/);
 });
 
 test("V2 NUMBERS: 3000 paid, 10 free, pack units by id, statuses: the SQL and the JS say the same", () => {

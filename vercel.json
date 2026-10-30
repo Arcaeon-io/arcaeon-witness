@@ -39,6 +39,10 @@
     {
       "source": "/api/account/pins",
       "destination": "/api/balance?op=account-pins"
+    },
+    {
+      "source": "/api/account/checkout",
+      "destination": "/api/balance?op=account-checkout"
     }
   ],
   "functions": {
