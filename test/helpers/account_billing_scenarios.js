@@ -570,7 +570,7 @@ function scenarios(test, makeStore) {
     const s = await makeStore();
     const victim = await s._createAccount();
     const attacker = idsFor("atk");
-    const otherSecret = billing.mintAccountRef(victim, "some-other-secret-0123456789");
+    const otherSecret = billing.mintAccountRef(victim, T0, "some-other-secret-0123456789");
     const wrongMac = victim + "." + "0".repeat(64);
     for (const ref of [victim, wrongMac, otherSecret, "garbage"]) {
       const e = ev.checkoutSubEvent({ account: victim, cus: attacker.cus, sub: attacker.sub, created: T0, ref });
@@ -595,11 +595,102 @@ function scenarios(test, makeStore) {
   test("REF: a paid pack under a bad reference is recorded as ignored_unverified_reference and never credited (a repeat is a duplicate)", async () => {
     const s = await makeStore();
     const a = await s._createAccount();
-    const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: a });
+    // Our signed shape with a wrong mac. (A bare uuid on a payment checkout is
+    // no longer ours at all: not an account event, see the FACTS test.)
+    const bad = `${a}.${Math.floor(T0 / 1000) + 7200}.${"0".repeat(64)}`;
+    const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: bad });
     assert.equal((await apply(s, e, T0)).outcome, "ignored_unverified_reference");
     assert.equal((await apply(s, e, T0)).outcome, "duplicate");
     assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 0);
     assert.equal((await s.listPacks(a)).length, 0);
+  });
+
+  // ------------------------- ref expiry and the mismatch relink (round 2)
+
+  test("REF EXPIRY: a signed ref replayed after its two hours is refused (ignored_unverified_reference, reason expired); nothing is linked", async () => {
+    const s = await makeStore();
+    const victim = await s._createAccount();
+    const atk = idsFor("rx");
+    const ref = billing.mintAccountRef(victim, T0);
+    const late = T0 + 2 * HOUR + 1000; // the session is made after the ref ran out
+    const e = ev.checkoutSubEvent({ account: victim, cus: atk.cus, sub: atk.sub, created: late, ref });
+    const f = billing.factFromEvent(e);
+    assert.equal(f.kind, "unverified_reference");
+    assert.match(f.reason, /expired/);
+    const r = await apply(s, e, late);
+    assert.equal(r.outcome, "ignored_unverified_reference");
+    assert.equal(r.account_id, null);
+    // A pack bought on an expired ref is not credited either.
+    const p = ev.checkoutPackEvent({ account: victim, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: late, ref });
+    assert.equal((await apply(s, p, late)).outcome, "ignored_unverified_reference");
+    assert.equal((await s.pinStatus({ account_id: victim, now: late })).pack_balance, 0);
+    // The owner's fresh ref still links.
+    const mine = idsFor("ry");
+    assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: mine.cus, sub: mine.sub, created: late }), late)).outcome, "linked");
+  });
+
+  test("REF RETRY: a session created inside the window is honoured when Stripe delivers (or retries) it days later", async () => {
+    const s = await makeStore();
+    const a = await s._createAccount();
+    const { cus, sub } = idsFor("rr");
+    const ref = billing.mintAccountRef(a, T0);
+    const e = ev.checkoutSubEvent({ account: a, cus, sub, created: T0 + 3 * DAY, sessionCreated: T0 + 2 * HOUR, ref });
+    assert.equal((await apply(s, e, T0 + 3 * DAY)).outcome, "linked");
+    const p = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0 + 3 * DAY,
+      sessionCreated: T0 + HOUR, ref });
+    assert.equal((await apply(s, p, T0 + 3 * DAY)).outcome, "pack_credited");
+  });
+
+  test("RELINK: an account an attacker linked (no plan in force) is relinked by the owner's verified checkout; the attacker's later events are refused", async () => {
+    const s = await makeStore();
+    const victim = await s._createAccount();
+    const atk = idsFor("ra");
+    // The attacker pays first on a leaked, still-valid ref; their payment never completes.
+    assert.equal((await apply(s, ev.checkoutSubEvent({ account: victim, cus: atk.cus, sub: atk.sub, created: T0 }), T0)).outcome, "linked");
+    const own = idsFor("ro");
+    const r = await apply(s, ev.checkoutSubEvent({ account: victim, cus: own.cus, sub: own.sub, created: T0 + HOUR }), T0 + HOUR);
+    assert.equal(r.outcome, "relinked");
+    assert.equal(r.account_id, victim);
+    const inv = await apply(s, ev.invoiceEvent({ sub: own.sub, cus: own.cus, ps: T0 + HOUR, pe: addMonthsUTC(T0 + HOUR, 1), created: T0 + HOUR + 1000 }), T0 + HOUR + 1000);
+    assert.equal(inv.outcome, "subscription_applied");
+    const st = await s.pinStatus({ account_id: victim, now: T0 + 2 * HOUR });
+    assert.equal(st.plan, "monthly");
+    assert.equal(st.monthly_allowance, 3000);
+    // The attacker's own subscription, signed with the same leaked ref, is a mismatch now.
+    const late = ev.subEvent({ type: "customer.subscription.created", sub: atk.sub, cus: atk.cus, ps: T0, pe: addMonthsUTC(T0, 1), created: T0, account: victim });
+    assert.equal((await apply(s, late, T0 + 3 * HOUR)).outcome, "ignored_customer_mismatch");
+    assert.equal((await s.pinStatus({ account_id: victim, now: T0 + 3 * HOUR })).plan, "monthly");
+  });
+
+  test("RELINK: a canceled attacker subscription no longer holds the account; the owner's verified checkout relinks it", async () => {
+    const s = await makeStore();
+    const { account, cus, sub, ps, pe } = await subscribe(s, { tag: "rc" });
+    await apply(s, ev.subEvent({ type: "customer.subscription.deleted", sub, cus, status: "canceled", ps, pe, created: T0 + DAY }), T0 + DAY);
+    const own = idsFor("rd");
+    // A customer already linked to another account is never taken by a relink.
+    const elsewhere = await subscribe(s, { tag: "re" });
+    const r0 = await apply(s, ev.checkoutSubEvent({ account, cus: elsewhere.cus, sub: own.sub2, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(r0.outcome, "ignored_customer_linked_elsewhere");
+    const r = await apply(s, ev.checkoutSubEvent({ account, cus: own.cus, sub: own.sub, created: T0 + 2 * DAY }), T0 + 2 * DAY);
+    assert.equal(r.outcome, "relinked");
+  });
+
+  test("MISMATCH: an account whose customer has a plan in force (active, trialing, past_due) is NOT relinked by another verified checkout", async () => {
+    const s = await makeStore();
+    for (const status of ["active", "trialing", "past_due"]) {
+      const { account, cus, sub, ps, pe } = await subscribe(s, { tag: "mm" });
+      if (status !== "active") {
+        await apply(s, ev.subEvent({ sub, cus, status, ps, pe, created: T0 + 5000 }), T0 + 5000);
+      }
+      const other = idsFor("mo");
+      const r = await apply(s, ev.checkoutSubEvent({ account, cus: other.cus, sub: other.sub, created: T0 + HOUR }), T0 + HOUR);
+      assert.equal(r.outcome, "ignored_customer_mismatch", status);
+      // The original customer still drives the account.
+      const again = await apply(s, ev.invoiceEvent({ sub, cus, ps, pe, created: T0 + 2 * HOUR }), T0 + 2 * HOUR);
+      assert.equal(again.outcome, "subscription_applied", status);
+      const no = await apply(s, ev.invoiceEvent({ sub: other.sub, cus: other.cus, ps, pe, created: T0 + 3 * HOUR }), T0 + 3 * HOUR);
+      assert.equal(no.outcome, "unresolved", status);
+    }
   });
 
   test("NOT FOUND: pin status for an account that does not exist returns nothing (no pack data)", async () => {

@@ -105,20 +105,42 @@ test("RESET LEDGER: one monthly_reset row per window, however many times it is r
   assert.equal(s._ledger(a).filter((r) => r.entry === "monthly_reset").length, 1);
 });
 
-test("REF: mint and verify round trip; a missing or short secret fails closed; tampering with either half fails", () => {
+test("REF: v2 mint and verify round trip with a two-hour expiry; a missing or short secret fails closed; tampering with any part fails; v1 refs are gone", () => {
   const id = "11111111-2222-4333-8444-555555555555";
-  const ref = billing.mintAccountRef(id);
-  assert.match(ref, /^[0-9a-f-]{36}\.[0-9a-f]{64}$/);
+  const now = Date.UTC(2026, 10, 3, 12);
+  const t = Math.floor(now / 1000);
+  const ref = billing.mintAccountRef(id, now);
+  assert.match(ref, /^[0-9a-f-]{36}\.[0-9]+\.[0-9a-f]{64}$/);
   assert.ok(ref.length <= 200, "fits Stripe's client_reference_id limit");
-  assert.equal(billing.verifyAccountRef(ref), id);
-  assert.equal(billing.verifyAccountRef(ref, ""), null);
-  assert.equal(billing.verifyAccountRef(ref, "short"), null);
-  assert.throws(() => billing.mintAccountRef(id, ""));
-  assert.throws(() => billing.mintAccountRef("not-a-uuid"));
+  const [rid, exp, mac] = ref.split(".");
+  assert.equal(rid, id);
+  assert.equal(Number(exp), t + 7200, "exp = now + 2 hours");
+  const want = crypto.createHmac("sha256", process.env.ACCOUNT_REF_SECRET).update(`arcaeon-checkout-v2\n${id}\n${exp}`).digest("hex");
+  assert.equal(mac, want, "the MAC covers the domain, the account id and the expiry");
+  assert.equal(billing.verifyAccountRef(ref, t), id);
+  assert.equal(billing.verifyAccountRef(ref, t + 7200), id, "created exactly at exp is still inside");
+  assert.equal(billing.verifyAccountRef(ref, t + 7201), null, "created after exp is refused");
+  assert.equal(billing.verifyAccountRef(ref), null, "no created time, no account");
+  assert.equal(billing.verifyAccountRef(ref, t, ""), null);
+  assert.equal(billing.verifyAccountRef(ref, t, "short"), null);
+  assert.throws(() => billing.mintAccountRef(id, now, ""));
+  assert.throws(() => billing.mintAccountRef("not-a-uuid", now));
   const other = "11111111-2222-4333-8444-555555555556";
-  assert.equal(billing.verifyAccountRef(other + ref.slice(36)), null, "a mac for one account does not cover another");
-  assert.equal(billing.verifyAccountRef(ref.slice(0, -1) + (ref.endsWith("0") ? "1" : "0")), null);
-  assert.equal(billing.verifyAccountRef(ref.toUpperCase()), null);
+  assert.equal(billing.verifyAccountRef(other + ref.slice(36), t), null, "a mac for one account does not cover another");
+  assert.equal(billing.verifyAccountRef(`${id}.${Number(exp) + 86400}.${mac}`, t), null, "the expiry cannot be pushed out");
+  assert.equal(billing.verifyAccountRef(ref.slice(0, -1) + (ref.endsWith("0") ? "1" : "0"), t), null);
+  assert.equal(billing.verifyAccountRef(ref.toUpperCase(), t), null);
+  const v1 = id + "." + crypto.createHmac("sha256", process.env.ACCOUNT_REF_SECRET).update("arcaeon-checkout-v1\n" + id).digest("hex");
+  assert.equal(billing.verifyAccountRef(v1, t), null, "a v1 ref no longer verifies");
+});
+
+test("FACTS (outside read, Gemini low): a bare uuid client_reference_id is not an account event; only the signed shape (or our metadata / subscription mode) is", () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  const ck = (o) => ({ type: "checkout.session.completed", data: { object: { mode: "payment", metadata: {}, ...o } } });
+  assert.equal(billing.isAccountEvent(ck({ client_reference_id: id })), false);
+  assert.equal(billing.isAccountEvent(ck({ client_reference_id: ` ${id.toUpperCase()} ` })), false);
+  assert.equal(billing.isAccountEvent(ck({ client_reference_id: billing.mintAccountRef(id, Date.UTC(2026, 10, 3)) })), true);
+  assert.equal(billing.isAccountEvent(ck({ client_reference_id: id, mode: "subscription" })), true, "subscription mode is ours either way");
 });
 
 test("PROBE 5: a new account starts at the free 30 before any roll (memory store; the SQL default is checked in the PGlite run)", async () => {
@@ -270,6 +292,48 @@ test("WEBHOOK: a forged checkout reference answers 200 (no retry) and is recorde
   const row = s._stripeEvents().find((x) => x.event_id === e.id);
   assert.equal(row.account_id, null);
   assert.equal(s._account(victim).stripe_customer_id, null);
+});
+
+test("WEBHOOK: a bare uuid on a payment checkout is not ours: 200, and no stripe_events row", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s);
+  const a = await s._createAccount();
+  const e = ev.checkoutPackEvent({ account: a, session: ev.nextId("cs_test_"), pi: ev.nextId("pi_"), created: T0, ref: a });
+  const r = await post(e);
+  assert.equal(r._status, 200);
+  assert.equal(r._body.outcome, undefined);
+  assert.equal(s._stripeEvents().length, 0);
+  assert.equal((await s.pinStatus({ account_id: a, now: T0 })).pack_balance, 0);
+});
+
+test("WEBHOOK: a Stripe retry days after the ref expired is honoured (session.created is inside the window); a replay made after it is not", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s, () => T0 + 5 * ev.DAY);
+  const a = await s._createAccount();
+  const ref = billing.mintAccountRef(a, T0);
+  const ok = ev.checkoutSubEvent({ account: a, cus: "cus_retry1", sub: "sub_retry1", created: T0 + 5 * ev.DAY, sessionCreated: T0 + 60 * 1000, ref });
+  const r = await post(ok);
+  assert.equal(r._status, 200);
+  assert.equal(r._body.outcome, "linked");
+  const replay = ev.checkoutSubEvent({ account: a, cus: "cus_replay1", sub: "sub_replay1", created: T0 + 5 * ev.DAY, ref });
+  const r2 = await post(replay);
+  assert.equal(r2._status, 200);
+  assert.equal(r2._body.outcome, "ignored_unverified_reference");
+  assert.equal(s._account(a).stripe_customer_id, "cus_retry1");
+});
+
+test("WEBHOOK: the relink is its own outcome in stripe_events", async () => {
+  const s = accountdb.memoryStore();
+  useStore(s);
+  const a = await s._createAccount();
+  await post(ev.checkoutSubEvent({ account: a, cus: "cus_atkrl1", sub: "sub_atkrl1", created: T0 }));
+  const e = ev.checkoutSubEvent({ account: a, cus: "cus_ownrl1", sub: "sub_ownrl1", created: T0 + 1000 });
+  const r = await post(e);
+  assert.equal(r._body.outcome, "relinked");
+  const row = s._stripeEvents().find((x) => x.event_id === e.id);
+  assert.equal(row.outcome, "relinked");
+  assert.equal(row.account_id, a);
+  assert.equal(s._account(a).stripe_customer_id, "cus_ownrl1");
 });
 
 test("WEBHOOK: a test-mode account event is skipped by the livemode gate", async () => {
