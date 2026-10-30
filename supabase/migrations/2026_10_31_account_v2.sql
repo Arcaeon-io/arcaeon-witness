@@ -587,12 +587,30 @@ begin
   perform 1 from public.accounts ac where ac.id = v_acc for update;
 
   if v_kind = 'link' then
+    -- A link fact only comes from a checkout whose signed ref verified
+    -- (lib/_account_billing.js verifyAccountRef, v2 with expiry).
     v_out := public.account_link_customer(v_acc, p_fact->>'customer_id');
-    if v_out is null then
+    if v_out = 'ignored_customer_mismatch' and not exists (
+         select 1 from public.accounts ac
+          where ac.id = v_acc and ac.stripe_subscription_id is not null
+            and ac.plan in ('monthly', 'yearly') and ac.status in ('active', 'trialing', 'past_due')) then
+      -- The linked customer holds no plan in force on this account (a leaked
+      -- ref paid first and never activated, or canceled): the owner's
+      -- verified checkout takes it back, recorded as its own outcome.
+      if exists (select 1 from public.accounts ac
+                  where ac.stripe_customer_id = p_fact->>'customer_id' and ac.id <> v_acc) then
+        v_out := 'ignored_customer_linked_elsewhere';
+      else
+        update public.accounts ac set stripe_customer_id = p_fact->>'customer_id', updated_at = now()
+         where ac.id = v_acc;
+        v_out := 'relinked';
+      end if;
+    end if;
+    if v_out is null or v_out = 'relinked' then
       update public.accounts ac
          set stripe_subscription_id = coalesce(ac.stripe_subscription_id, p_fact->>'subscription_id'), updated_at = now()
        where ac.id = v_acc;
-      v_out := 'linked';
+      v_out := coalesce(v_out, 'linked');
     end if;
   elsif v_kind = 'subscription' then
     v_out := public.account_apply_subscription(v_acc, p_fact);
@@ -605,7 +623,7 @@ begin
   else
     v_out := 'ignored_kind';
   end if;
-  if v_out in ('linked', 'subscription_applied') then
+  if v_out in ('linked', 'relinked', 'subscription_applied') then
     perform public.account_roll(v_acc, p_now);
   end if;
 
