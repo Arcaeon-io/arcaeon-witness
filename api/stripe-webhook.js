@@ -44,6 +44,11 @@
 
 const crypto = require("crypto");
 const balance = require("../lib/_balance.js");
+// The account (phase 2) rides this same endpoint, signing secret and
+// signature check: subscription, invoice, refund and dispute events, plus
+// checkout sessions that carry metadata.account_id or mode=subscription.
+// Every other event takes the legacy path below, unchanged.
+const accountBilling = require("../lib/_account_billing.js");
 
 // NOTE: the `config` export is attached at the BOTTOM of this file, after the
 // handler is assigned to module.exports. It used to be set here, on line 40 —
@@ -70,15 +75,21 @@ const TOLERANCE_SECONDS = 300; // guards against replaying an old, valid signatu
 
 function verifyStripeSignature(rawBody, sigHeader, secret) {
   if (!sigHeader) return { ok: false, reason: "missing stripe-signature header" };
+  // During a signing-secret roll Stripe sends up to two v1 signatures (one
+  // per secret) for up to 24 hours; any one matching is enough. Every v1 is
+  // collected, not just the last one seen.
   const parts = {};
+  const v1s = [];
   for (const kv of sigHeader.split(",")) {
     const i = kv.indexOf("=");
     if (i < 1) continue;
-    parts[kv.slice(0, i)] = kv.slice(i + 1);
+    const k = kv.slice(0, i).trim();
+    const v = kv.slice(i + 1).trim();
+    if (k === "v1") v1s.push(v);
+    else parts[k] = v;
   }
   const t = parts.t;
-  const v1 = parts.v1;
-  if (!t || !v1) return { ok: false, reason: "malformed stripe-signature header" };
+  if (!t || v1s.length === 0) return { ok: false, reason: "malformed stripe-signature header" };
 
   // Sign over the RAW BYTES. The previous form was `` `${t}.${rawBody}` ``,
   // which stringifies the Buffer through its default utf-8 decoding before
@@ -96,12 +107,15 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   // stops at the first invalid pair — so the length check below is what
   // actually rejects a junk v1, not the try/catch. Reject non-hex explicitly
   // rather than relying on a truncation happening to produce a length mismatch.
-  if (!/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0) {
+  if (v1s.some((v1) => !/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0)) {
     return { ok: false, reason: "malformed v1 signature" };
   }
   const expectedBuf = Buffer.from(expected, "hex");
-  const gotBuf = Buffer.from(v1, "hex");
-  if (expectedBuf.length !== gotBuf.length || !crypto.timingSafeEqual(expectedBuf, gotBuf)) {
+  const matched = v1s.some((v1) => {
+    const gotBuf = Buffer.from(v1, "hex");
+    return expectedBuf.length === gotBuf.length && crypto.timingSafeEqual(expectedBuf, gotBuf);
+  });
+  if (!matched) {
     return { ok: false, reason: "signature mismatch" };
   }
   const age = Math.abs(Date.now() / 1000 - Number(t));
@@ -145,6 +159,20 @@ module.exports = async (req, res) => {
     event = JSON.parse(rawBody.toString("utf8"));
   } catch {
     return res.status(400).json({ error: "invalid JSON payload" });
+  }
+
+  if (accountBilling.isAccountEvent(event)) {
+    // Same livemode rule as the legacy path below.
+    const expectedLiveAcct =
+      String(process.env.WITNESS_STRIPE_LIVEMODE ?? "true").toLowerCase() !== "false";
+    if (typeof event.livemode === "boolean" && event.livemode !== expectedLiveAcct) {
+      return res.status(200).json({
+        ok: true,
+        skipped: `livemode mismatch (event.livemode=${event.livemode}, expected=${expectedLiveAcct})`,
+        event_id: event.id,
+      });
+    }
+    return accountBilling.handleAccountEvent(event, res);
   }
 
   // H2 (quad-check 2026-08-16): async payment methods (ACH, Klarna, etc.)
@@ -320,3 +348,5 @@ module.exports = async (req, res) => {
 // bodyParser MUST stay disabled: Stripe signs the raw request bytes, and a
 // re-serialized parse does not reproduce them byte for byte.
 module.exports.config = { api: { bodyParser: false } };
+// Exported for reuse and tests; not a route.
+module.exports.verifyStripeSignature = verifyStripeSignature;

@@ -65,11 +65,50 @@ Issuing the API key is a separate insert after the agent is made. If that one in
 
 The migration has not been applied to any database by this change.
 
+## Phase 2: the subscription and the pin allowance
+
+| piece | file |
+|---|---|
+| Postgres schema and functions | `supabase/migrations/2026_10_31_account_v2.sql` |
+| the rules, the Stripe event mapping, the webhook branch | `lib/_account_billing.js` |
+| store methods (memory and PostgREST) | `lib/_accountdb.js` |
+| tests | `test/account_billing.test.js`, `test/account_v2_schema.test.js`, cases in `test/helpers/account_billing_scenarios.js` |
+
+### The rules
+
+* The plan is $9 a month (Stripe price lookup key `account_monthly`) or $99 a year (`account_yearly`), renewing on its own.
+* A paid plan gets 3,000 pins a month. They reset each month and unused pins are lost. The yearly plan resets too: our own clock counts months from the start of the paid year (the start plus 1, 2, ... 11 months; the 31st becomes the last day of a shorter month). There is no yearly pool.
+* Packs never expire. `pins_200` is 200 pins for $5 and `pins_1000` is 1,000 pins for $20, matched by id, never by amount. A pack is spent only after the month's 3,000 are gone, oldest pack first.
+* With no plan in force (free, canceled, unpaid, incomplete, paused) an account gets 30 pins a month, on the UTC calendar month. Packs can be spent in every status.
+* A debit never goes below zero. It takes everything it asks for or nothing. It is safe to retry under the same request id: the second call answers `replay: true` and charges nothing more.
+
+### Stripe events
+
+Account events come in on the existing `/api/stripe-webhook`. They use the same signing secret (`WITNESS_STRIPE_WEBHOOK_SECRET`) and the same `verifyStripeSignature`, which now accepts either of the two `v1` signatures Stripe sends while a secret is being rolled. Account events are subscription, invoice, refund and dispute events, plus any Checkout Session with `mode: subscription` or a `metadata.account_id`. Every other event goes down the old pack path, unchanged.
+
+| event | what it does |
+|---|---|
+| `checkout.session.completed`, subscription mode | links the Stripe customer to `metadata.account_id` (or `client_reference_id`) |
+| `checkout.session.completed` / `.async_payment_succeeded`, payment mode, `metadata.account_id` + `metadata.pack` | credits the pack once per Checkout Session, and only if it is paid, in USD, and at least the pack's price |
+| `customer.subscription.created` / `.updated` / `.paused` / `.resumed` | status, plan from the price lookup key, period, cancel at period end (a `cancel_at` inside the period moves the end earlier) |
+| `customer.subscription.deleted` | status canceled, plan free. Packs are kept |
+| `invoice.paid` | status active, plan from the line's lookup key, and the period from the line. A newer period start opens a fresh month |
+| `invoice.payment_failed` | past_due, and access is kept (the decision). Never starts a plan on an account that has none |
+| `charge.refunded` | takes off the units the refund pays for (pro rata to the amount paid, rounded up, counted on the running total refunded). Spent pins stay spent, and the spent part is written down as a shortfall |
+| `charge.dispute.*` | open: the pack is held, not spendable. Won or warning_closed: live again. Lost: voided. A later won releases it again |
+
+Duplicates and order. The event id is written in the same transaction as the change, so a repeated id does nothing. A canceled subscription never comes back. An older event never overwrites a newer one for the same subscription. A period never moves backward. A new month opens only when the window start moves forward, so a late or repeated renewal never resets the month twice. If an event names an account that is not linked yet, the webhook answers 503 and Stripe retries it later.
+
+Read your allowance with `GET /api/account/pins` and `Authorization: Bearer <api key>` (rewritten to `/api/balance?op=account-pins`).
+
+The migration has not been applied to any database by this change. No live Stripe call is made anywhere.
+
 ## What is NOT built yet
 
-* **Stripe subscription lifecycle.** The `stripe_events` table and the plan, status, allowance and period columns exist, but nothing writes them. Checkout, invoice paid, payment failed, and subscription updated or deleted all come later.
+* **Re-fetching from Stripe.** The outside test plan treats every event as a hint and fetches the object again before acting on it. That needs a live Stripe call, and this build makes none. The guards above stand in for it.
+* **Plan-change top ups, trials, pending updates, the 30-day unpaid cancel job, account deletion refunds.** See the plan's groups D, G, L and M.
 * **People sign in.** The `people` table exists. Magic link sign in, and a person attaching an agent by having it sign a link nonce, are not built.
-* **Witness pin debit against Postgres.** Pins are still metered and charged by the existing GitHub backed meter and balance. The account's `monthly_used`, `monthly_allowance` and `pack_balance` are not read or written by `/api/pin` yet, and live keys and balances have not been imported.
+* **Witness pin debit against Postgres.** Pins are still metered and charged by the existing GitHub backed meter and balance. `account_debit_pins` exists and is tested, but `/api/pin` does not call it yet, and live keys and balances have not been imported.
 * **Relay.** Devices are a registry only. Nothing moves between devices.
 * **Key management.** No endpoint lists, revokes or rotates API keys yet, and agents' `last_seen` only moves on a repeat sign up.
 * **A shared rate limit.** The IP limit on `/challenge` is the existing per instance limiter, so it slows a burst rather than capping it across instances.
