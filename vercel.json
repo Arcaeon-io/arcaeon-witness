@@ -35,6 +35,10 @@
     {
       "source": "/api/account/devices",
       "destination": "/api/balance?op=account-devices"
+    },
+    {
+      "source": "/api/account/pins",
+      "destination": "/api/balance?op=account-pins"
     }
   ],
   "functions": {
