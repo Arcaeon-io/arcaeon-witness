@@ -382,7 +382,15 @@ begin
     return query select 'customer_taken'::text, null::text;
     return;
   end if;
-  update public.accounts ac set stripe_customer_id = p_customer, updated_at = now() where ac.id = p_account_id;
+  begin
+    update public.accounts ac set stripe_customer_id = p_customer, updated_at = now() where ac.id = p_account_id;
+  exception when unique_violation then
+    -- Another account took this customer between the check above and now
+    -- (the two held different row locks); the unique constraint holds the
+    -- invariant, this just answers it plainly instead of raising.
+    return query select 'customer_taken'::text, null::text;
+    return;
+  end;
   return query select 'set'::text, p_customer;
 end;
 $$;
