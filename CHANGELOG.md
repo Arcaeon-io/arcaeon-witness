@@ -1,5 +1,10 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — a checkpoint monitor anyone can run (branch `checkpoint-monitor`, a tool, nothing deployed)
+
+- `tools/monitor.js`: keeps what it has seen in a state file; each run checks every checkpoint published since against the last one kept, with the day's consistency proof, through tools/follow.js. BROKEN names `rollback`, `split` (same size, another root; another log; two sources disagreeing) or `changed` (a kept checkpoint that now reads differently). The state moves only on VERIFIED. See `MONITOR.md`.
+- `test/monitor.test.js` +13 on fixtures built with lib/_logtree.js and lib/_checkpoint.js. Mutation pass: 11 breaks, 11 caught after two tests were added. Suite 659, 659 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
