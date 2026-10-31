@@ -1,5 +1,10 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — an end to end harness: pin, signed receipt, fold, checkpoint, monitor, in one process (branch `e2e-harness`, on `signed-receipts` with `checkpoint-monitor` merged in; tests only)
+
+- `test/e2e.test.js`: one fake GitHub store, receipts and the shadow batch run on. Pins in two namespaces get receipts that verify under the key document; the sealer seals them into one root, every leaf's inclusion proof holds; a checkpoint is built over every record the way tools/publish_checkpoint.js builds it (eligible paths in the order first written, envelopes of committed bytes) and signed by the log key and the receipt key; the monitor follows two days VERIFIED; an insider rewrite of an early record makes the next checkpoint BROKEN, and the receipt still names the head the witness saw. A second test: follow.js and the monitor agree on the same pair.
+- Breaking the receipt's witness_seq, the monitor's proof check, or the receipt on a pin answer fails the harness. Suite 672, 672 pass, 0 fail.
+
 ## 2026-10-31 — a checkpoint monitor anyone can run (branch `checkpoint-monitor`, a tool, nothing deployed)
 
 - `tools/monitor.js`: keeps what it has seen in a state file; each run checks every checkpoint published since against the last one kept, with the day's consistency proof, through tools/follow.js. BROKEN names `rollback`, `split` (same size, another root; another log; two sources disagreeing) or `changed` (a kept checkpoint that now reads differently). The state moves only on VERIFIED. See `MONITOR.md`.
