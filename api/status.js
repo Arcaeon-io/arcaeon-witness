@@ -14,6 +14,9 @@
 
 "use strict";
 
+const plain = require("../lib/_plain_promises.js");
+const capacity = require("../lib/_capacity.js");
+
 const store = require("../lib/_store.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
@@ -92,6 +95,14 @@ module.exports = async (req, res) => {
     degraded, indeterminate, overallOk,
     namespaces,
   } = await gatherStatusData();
+  // The merge delay promise and the capacity view, in plain words (job 12).
+  const promise = plain.promiseFromEnv();
+  let capacityView = null;
+  try {
+    capacityView = await capacity.capacityView();
+  } catch (_e) {
+    capacityView = null;
+  }
 
   // Audit states, only when the flag is on. A namespace nobody has ever
   // independently checked used to render a green "current" badge and nothing
@@ -339,6 +350,12 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
       ? `<p><strong>Conflicts could not be counted on this render</strong>${obsErr ? `: ${esc(obsErr)}` : ""}. That is not zero &mdash; browse the folder directly.</p>`
       : `<p><strong>${obsCount}</strong> conflict${obsCount === 1 ? "" : "s"} observed, ever.${obsErr ? ` (count may be incomplete: ${esc(obsErr)})` : ""}</p>`}
     ${obsListHtml}
+  </div>
+
+  <h2>Promises and capacity</h2>
+  <div class="panel">
+    <p>${esc(plain.promiseWords(promise))}</p>
+    <p>${esc(plain.capacityWords(capacityView))}</p>
   </div>
 
   <h2>Bitcoin anchor (OpenTimestamps)</h2>

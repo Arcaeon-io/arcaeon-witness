@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — the status page states the merge delay promise and the capacity view in plain words (branch `status-promise-capacity`, on top of `health-capacity`, NOT deployed)
+
+- `lib/_plain_promises.js`: the operator's merge delay promise (`WITNESS_MERGE_DELAY_HOURS`, optional `WITNESS_MERGE_DELAY_LABEL`; unset says no promise is published, unreadable promises nothing) and lib/_capacity.js's view, as sentences. A count that could not be read is never a 0; no budget, no headroom.
+- `/status` gains a "Promises and capacity" panel; `/api/status.json` gains `merge_delay_promise` and `capacity`, each with the same `words`. The capacity view adds two GitHub reads per page, behind the page's IP limit.
+- `test/status_promises.test.js` +5. Mutation pass: 6 breaks, 6 caught. Suite 662, 662 pass, 0 fail.
+
 ## 2026-10-31 — /api/health?view=capacity: writes per hour used against a labelled budget (branch `health-capacity`, NOT deployed)
 
 - `lib/_capacity.js`: the commits in the last 60 minutes on the pins repo and on the private usage repo, one commits API request each (one commit per page, the Link header's last page is the count). A count that cannot be read is `null` with a reason, never 0, and then no fraction or headroom is given.
