@@ -1,5 +1,16 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — the meter and the pending batch can move off GitHub, behind a flag (branch `meter-off-github`, NOT deployed, flag off by default)
+
+`WITNESS_USAGE_STORE=postgres` moves the meter's monthly usage file, the open Merkle batch and the seal claim into one `usage_docs` table in the account database (`supabase/migrations/2026_10_31_usage_docs.sql`), through the new `lib/_usage_store.js`. Design and cutover: `WITNESS_METER_OFF_GITHUB.md`.
+
+- Writes per pin, counted on the store fakes: before, 2 public + 2 private GitHub writes; after, 2 public GitHub writes + 2 database writes, 0 private GitHub writes.
+- Same contract as the GitHub files: absent is `null`, unreadable throws, create if absent and update if unchanged both flag the lost race as `err.conflict`. The version counter is the compare and swap.
+- Cutover adopts this month's GitHub count and any open batch on the first read (GitHub read only), so turning the flag on never resets a free tier.
+- Fails closed: database down, missing config or an unknown flag value refuse the pin 502 before any public write.
+- Not moved: credits (`lib/_balance.js`, billing) and issued keys (`lib/_keys.js`).
+- `test/usage_store_postgres.test.js` +23. Mutation pass on `lib/_usage_store.js`: 12 breaks, 11 caught, 1 equivalent. Suite 669, 669 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
