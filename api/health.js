@@ -1,4 +1,6 @@
 // GET /api/health — liveness plus a real check that the pin repo is reachable.
+// GET /api/health?view=capacity also reports GitHub writes in the last hour
+// against a labelled budget (lib/_capacity.js).
 //
 // Per-IP rate limit (2026-09-05 audit finding — see api/latest.js's comment
 // for the full reasoning): unauthenticated + unlimited + a real GitHub API
@@ -10,6 +12,10 @@
 const store = require("../lib/_store.js");
 const cors = require("../lib/_cors.js");
 const ratelimit = require("../lib/_ratelimit.js");
+// ?view=capacity adds GitHub writes in the last hour against a labelled
+// budget (lib/_capacity.js). Opt in, so a plain liveness probe still costs one
+// GitHub call; the capacity view costs two more, behind the same IP limit.
+const capacity = require("../lib/_capacity.js");
 
 module.exports = async (req, res) => {
   // GET-only CORS: answers an OPTIONS preflight with 204 and returns. See
@@ -30,9 +36,14 @@ module.exports = async (req, res) => {
     });
   }
 
+  const view = String((req.query || {}).view || "");
+  if (view !== "" && view !== "capacity") {
+    res.setHeader("cache-control", "no-store");
+    return res.status(400).json({ ok: false, error: 'view must be "capacity" or absent', reason: "unknown_view", field: "view" });
+  }
+
   const reachable = await store.repoReachable();
-  res.setHeader("cache-control", "no-store");
-  return res.status(reachable ? 200 : 503).json({
+  const out = {
     ok: reachable,
     service: "arcaeon-witness",
     store: {
@@ -41,5 +52,8 @@ module.exports = async (req, res) => {
       branch: store.BRANCH,
       reachable,
     },
-  });
+  };
+  if (view === "capacity") out.capacity = await capacity.capacityView();
+  res.setHeader("cache-control", "no-store");
+  return res.status(reachable ? 200 : 503).json(out);
 };

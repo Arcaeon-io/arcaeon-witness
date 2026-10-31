@@ -30,13 +30,16 @@
 
 const crypto = require("crypto");
 
-function fakeResponse(status, bodyObj) {
+function fakeResponse(status, bodyObj, headers = {}) {
   const bodyText = JSON.stringify(bodyObj);
+  const h = {};
+  for (const k of Object.keys(headers)) h[k.toLowerCase()] = headers[k];
   return {
     status,
     ok: status >= 200 && status < 300,
     json: async () => bodyObj,
     text: async () => bodyText,
+    headers: { get: (k) => (Object.prototype.hasOwnProperty.call(h, String(k).toLowerCase()) ? h[String(k).toLowerCase()] : null) },
   };
 }
 
@@ -61,6 +64,12 @@ class MockGitHubStore {
     // not represent a truncated tree could not test that distinction at all.
     this.treeTruncated = false;
     this.treeStatus = 200; // set to 5xx to make the tree unreadable
+    // GET /repos/<repo>/commits?since=&per_page=1 (lib/_capacity.js): one
+    // commit per successful PUT, answered the way the real API pages it, with
+    // a Link header whose rel="last" page is the count. `now` is the clock the
+    // PUTs are stamped with; `commitsStatus` set to non-200 makes it fail.
+    this.now = () => Date.now();
+    this.commitsStatus = 200;
   }
 
   _repoMap(repo) {
@@ -124,6 +133,18 @@ class MockGitHubStore {
       const tree = [];
       for (const [p, r] of this._repoMap(tm[1])) tree.push({ path: p, type: "blob", sha: r.sha });
       return fakeResponse(200, { sha: "mock-tree", tree, truncated: this.treeTruncated === true });
+    }
+
+    const cm = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/commits$/);
+    if (cm && ((opts && opts.method) || "GET") === "GET") {
+      if (this.commitsStatus !== 200) return fakeResponse(this.commitsStatus, { message: "mock: forced commits failure" });
+      const since = Date.parse(u.searchParams.get("since") || "1970-01-01T00:00:00Z");
+      const n = this.putLog.filter((p) => p.repo === cm[1] && p.at >= since).length;
+      if (n === 0) return fakeResponse(200, []);
+      const headers = n > 1
+        ? { link: `<https://api.github.com/repositories/1/commits?per_page=1&page=2>; rel="next", <https://api.github.com/repositories/1/commits?per_page=1&page=${n}>; rel="last"` }
+        : {};
+      return fakeResponse(200, [{ sha: "c" }], headers);
     }
 
     const m = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/(.+)$/);
@@ -199,7 +220,7 @@ class MockGitHubStore {
       const newSha = this._newSha();
       map.set(path, { content: decoded, sha: newSha });
       this.commitCounter += 1;
-      this.putLog.push({ repo, path, sha: newSha });
+      this.putLog.push({ repo, path, sha: newSha, at: this.now() });
       return fakeResponse(200, {
         content: { sha: newSha, path },
         commit: { sha: `commit-${this.commitCounter}` },

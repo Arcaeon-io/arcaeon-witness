@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — /api/health?view=capacity: writes per hour used against a labelled budget (branch `health-capacity`, NOT deployed)
+
+- `lib/_capacity.js`: the commits in the last 60 minutes on the pins repo and on the private usage repo, one commits API request each (one commit per page, the Link header's last page is the count). A count that cannot be read is `null` with a reason, never 0, and then no fraction or headroom is given.
+- The budget is an input, not a claim about GitHub: `WITNESS_WRITE_BUDGET_PER_HOUR` with `WITNESS_WRITE_BUDGET_LABEL` saying where the number came from. Unset: the view says so. Not a positive whole number: refused by name and not used.
+- Opt in with `?view=capacity`; plain `/api/health` is unchanged. An unknown `view` is a 400 naming the field.
+- `test/health_capacity.test.js` +11. Mutation pass on `lib/_capacity.js`: 7 breaks, 7 caught. Suite 657, 657 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.

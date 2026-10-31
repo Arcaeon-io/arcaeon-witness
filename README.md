@@ -692,6 +692,7 @@ api/fulfill.js       GET/POST /api/fulfill — Stripe checkout success_url landi
 api/distill.js           GET /api/distill — (see the file's own header for current scope)
 lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not routed); also holds computeCadenceFields, the cadence-grading function api/latest.js and api/verify.js share
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
+lib/_capacity.js  GET /api/health?view=capacity: GitHub writes (commits) in the last hour, public and private, against WITNESS_WRITE_BUDGET_PER_HOUR with its WITNESS_WRITE_BUDGET_LABEL (not routed)
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
 lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,
