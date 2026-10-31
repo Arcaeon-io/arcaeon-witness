@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
   // recursive tree fetch, an anchors/ listing), which makes it the single
   // biggest lever for draining the shared GITHUB_PIN_TOKEN budget that
   // paying customers' /api/pin calls also depend on.
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.checkShared(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");
