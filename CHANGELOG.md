@@ -1,5 +1,9 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — API.md: a plain reference for /api/pin, /api/verify, /api/pin-batch, the 402 flow and signed receipts (branch `api-reference`, docs only)
+
+- One page: each endpoint's request, its answers by status and reason, the limits, and for the parts behind flags (signed receipts, agent payments, store batches) the flag and the pull request they live in. Every status, reason and number checked against the code.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
