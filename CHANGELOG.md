@@ -1,5 +1,9 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — a checkpoint monitor anyone can run (branch `checkpoint-monitor`, a tool, nothing deployed)
+
+- `tools/monitor.js`: keeps what it has seen in a state file; each run checks every checkpoint published since against the last one kept, with the day's consistency proof, through tools/follow.js. BROKEN names `rollback`, `split` (same size, another root; another log; two sources disagreeing) or `changed` (a kept checkpoint that now reads differently). The state moves only on VERIFIED. See `MONITOR.md`.
+- `test/monitor.test.js` +13 on fixtures built with lib/_logtree.js and lib/_checkpoint.js. Mutation pass: 11 breaks, 11 caught after two tests were added. Suite 659, 659 pass, 0 fail.
 ## 2026-10-31 — signed per pin receipts in the contract's shape, behind a flag (branch `signed-receipts`, NOT deployed, off by default)
 
 - `lib/_receipt.js`: with `WITNESS_RECEIPTS=on` and `WITNESS_RECEIPT_KEY` (a hand set Ed25519 seed), `POST /api/pin` and `GET /api/latest` carry `receipt`, the contract receipt over the record: head {chain, n = rows}, namespace, witness_seq = seq, received_at = pinned_at in whole seconds, key_id, sig. Byte for byte the reference witness's own receipt for the same record and key (vectors in the tests).
