@@ -1,5 +1,10 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — everything a namespace pinned, as one bundle anyone can check offline (branch `namespace-export`, tools only)
+
+- `tools/export_namespace.js`: from a clone of the pins repo and a published checkpoint, every record of one namespace with its committed bytes, introducing commit and inclusion proof; refused unless the clone gives the checkpoint's very root. `tools/verify_namespace_bundle.js`: VERIFIED, BROKEN or COULD NOT LOOK, checking inclusion, the 1, 2, 3 run, the namespace and seq inside each record, rows never backward, the same rows never another chain, and the checkpoint's signature. See `NAMESPACE_EXPORT.md`.
+- `test/namespace_export.test.js` +8, with the checkpoint made by the real tools/publish_checkpoint.js over git fixtures. Mutation pass: 10 breaks, 10 caught after two tests were added. Suite 654, 654 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
