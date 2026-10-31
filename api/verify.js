@@ -431,6 +431,16 @@ async function handleBulk(req, res) {
 }
 
 module.exports = async (req, res) => {
+  // --- co-hosted mode: /.well-known/arcaeon-witness-key (vercel.json rewrite
+  // -> ?op=witness-key): the public key every signed receipt is checked
+  // against (lib/_receipt.js keyDocument). Cacheable: it changes only when the
+  // owner changes the key.
+  if (String((req.query || {}).op || "") === "witness-key") {
+    const doc = require("../lib/_receipt.js").keyDocument();
+    res.setHeader("cache-control", doc.status === 200 ? "public, max-age=300" : "no-store");
+    return res.status(doc.status).json(doc.body);
+  }
+
   // --- co-hosted mode: /api/stamp (vercel.json rewrite -> ?op=stamp) ---
   // A WRITE riding on a read endpoint, and it says so here rather than hiding:
   // this deployment is at the Vercel Hobby 12-function cap, so lib/_stamp.js

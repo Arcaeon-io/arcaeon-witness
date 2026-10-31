@@ -302,6 +302,13 @@ function main() {
       return 1;
     }
   }
+  // With signed receipts on (lib/_receipt.js), the receipt key signs the
+  // checkpoint too: one more line, so the key every receipt names is the key
+  // the published checkpoint carries.
+  const receiptKeys = require("../lib/_receipt.js").enabled() ? require("../lib/_receipt.js").checkpointKeys() : null;
+  if (receiptKeys) {
+    text = checkpoint.signCheckpoint(text, receiptKeys.signer);
+  }
 
   // --- consistency proof from --prev ---
   let proofDoc = null;

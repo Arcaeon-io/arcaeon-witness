@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — signed per pin receipts in the contract's shape, behind a flag (branch `signed-receipts`, NOT deployed, off by default)
+
+- `lib/_receipt.js`: with `WITNESS_RECEIPTS=on` and `WITNESS_RECEIPT_KEY` (a hand set Ed25519 seed), `POST /api/pin` and `GET /api/latest` carry `receipt`, the contract receipt over the record: head {chain, n = rows}, namespace, witness_seq = seq, received_at = pinned_at in whole seconds, key_id, sig. Byte for byte the reference witness's own receipt for the same record and key (vectors in the tests).
+- No receipt where the contract cannot carry one (a chain not 64 hex, a namespace not in contract form) or over a record read from the lagging raw mirror; `receipt_unavailable` says why.
+- The key: `/.well-known/arcaeon-witness-key` (key_id, public_key, the checkpoint verifier key, and a signed witness_statement), and one more signature line on each published checkpoint.
+- `test/receipt.test.js` +12. Mutation pass: 11 breaks, 11 caught after one test was added. Suite 657, 657 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
