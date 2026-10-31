@@ -46,6 +46,15 @@ The public half is published three ways:
 
 What a receipt proves: the holder of this key said it took in this head for this namespace as record `witness_seq` at `received_at`. It does not prove the log owner signed the head (the hosted witness is bearer key auth), and it binds a namespace and head, not one particular pin request: the contract's version 3 adds `pin_digest` for that.
 
+## Checked end to end against the seal (Sat 2026-10-31)
+
+A drill, run by hand, not part of this repo's suite since it needs the seal's repo:
+
+1. A real seal store (`arcaeon-seal-sandbox`, `python -m seal write` twice) gave the head `{n: 2, chain: 5f62c094...}`.
+2. That head was pinned through this repo's own `api/pin.js` with receipts on and a throwaway key; the answer's receipt was saved as `demo-seal.1.json` and the key document's `witness_statement` as the statement file.
+3. `python -m seal export --receipts ... --statement ...`, then `python -m seal verify-bundle bundle.zip --witness-key-id <key_id>` printed: `receipt demo-seal.1.json: witness_seq 1, head n 2, held by the ledger in the bundle; replay table row against the bundle's head: current: may proceed`, then `OK 0 problems`, exit 0.
+4. The same receipt with its head changed to n 3 was refused: `RECEIPT_UNREADABLE ... field sig: it does not verify under the witness's key`, exit 2.
+
 ## Turning it on
 
 1. The owner makes a key by hand and sets `WITNESS_RECEIPT_KEY`, and `WITNESS_RECEIPT_STARTED_AT` to the time the key went into use.
