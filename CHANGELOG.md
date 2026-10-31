@@ -1,5 +1,13 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — agents pay per pin: HTTP 402, stablecoin and self hosted Lightning adapters, behind flags (branch `agent-payments`, NOT deployed, no live keys)
+
+- `lib/_agent_pay.js`: a keyed pin past its free tier and credits gets 402 `payment_required` with one signed quote per adapter, bound to the key hash, namespace, rows, chain and intent. A paid retry (`X-Payment` or `X-L402`) is checked with the processor or the node, claimed once in a create only ledger (`payments/<adapter>/<ref>.json`, private usage repo), and charged instead of the meter. The key still decides the namespace.
+- `lib/_pay_x402.js` (processor verify, shape documented as an assumption to confirm) and `lib/_pay_l402.js` (own node, invoice only macaroon, preimage and SETTLED both checked). https only.
+- A payment is released, once, in the handler's `finally` whenever the request ends with no numbered record written, so every early return after a heal gives it back; a record that landed keeps it. A released payment stays redeemable for its own request past its quote's expiry.
+- `meterAndCharge` and `refundFailedWrite` are unchanged; two wrappers call them. Design: `AGENT_PAYMENTS.md`.
+- `test/agent_pay.test.js` +27 against mocks of both. Mutation pass: 17 breaks plus 5 on the review fixes, all caught. Suite 673, 673 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
