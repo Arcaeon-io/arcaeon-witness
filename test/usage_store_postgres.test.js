@@ -82,12 +82,13 @@ function count(repo) {
 // (the first pin also binds the deadline owner, a one time public write).
 async function writesForPins(n) {
   await pinOk("demo-count", 1, "00000001");
-  const before = { pub: count(PIN_REPO), priv: count(USAGE_REPO), pg: pg.writeLog.length };
+  const before = { pub: count(PIN_REPO), priv: count(USAGE_REPO), pg: pg.writeLog.length, rate: pg.rpcLog.length };
   for (let i = 2; i < 2 + n; i++) await pinOk("demo-count", i, `0000000${i}`.slice(-8));
   return {
     pub: count(PIN_REPO) - before.pub,
     priv: count(USAGE_REPO) - before.priv,
     pg: pg.writeLog.length - before.pg,
+    rate: pg.rpcLog.length - before.rate,
   };
 }
 
@@ -98,20 +99,22 @@ async function writesForPins(n) {
 test("WRITES PER PIN, flag off (before): 2 public + 2 private GitHub writes, 0 database writes", async () => {
   process.env.WITNESS_BATCH_SHADOW = "on";
   const w = await writesForPins(5);
-  assert.deepEqual(w, { pub: 10, priv: 10, pg: 0 }, "per pin: seq record + latest.json public, meter + pending private");
+  assert.deepEqual(w, { pub: 10, priv: 10, pg: 0, rate: 0 }, "per pin: seq record + latest.json public, meter + pending private");
 });
 
 test("WRITES PER PIN, flag on (after): 2 public GitHub writes, 0 private GitHub writes, 2 database writes", async () => {
   process.env.WITNESS_BATCH_SHADOW = "on";
   flagOn();
   const w = await writesForPins(5);
-  assert.deepEqual(w, { pub: 10, priv: 0, pg: 10 }, "a pin costs only its public writes on GitHub");
+  // `rate` is the shared per key limit's one increment per pin
+  // (lib/_pin_ratelimit.js), a database call, not a GitHub write.
+  assert.deepEqual(w, { pub: 10, priv: 0, pg: 10, rate: 5 }, "a pin costs only its public writes on GitHub");
 });
 
 test("WRITES PER PIN, flag on, shadow run off: 2 public, 0 private, 1 database write (the meter)", async () => {
   flagOn();
   const w = await writesForPins(3);
-  assert.deepEqual(w, { pub: 6, priv: 0, pg: 3 });
+  assert.deepEqual(w, { pub: 6, priv: 0, pg: 3, rate: 3 });
 });
 
 test("the public record of a pin is byte for byte the same with the flag on or off", async () => {
@@ -172,26 +175,35 @@ test("METER: a damaged row fails closed, it never reads as nothing used", async 
   assert.deepEqual(pg.read(path), { used: "lots" }, "not overwritten");
 });
 
-test("FAIL CLOSED: database down means the pin is refused 502 and nothing public is written", async () => {
+test("FAIL CLOSED: database down at the rate limiter refuses the pin 503 and writes nothing public", async () => {
   flagOn();
   pg.failNext(1, 503);
+  const res = makeRes();
+  await pinHandler(pinReq("demo-down", 3, "aaaaaaaa"), res);
+  assert.equal(res._status, 503);
+  assert.equal(res._body.reason, "rate_limit_store_unreachable");
+  assert.equal(count(PIN_REPO), 0);
+});
+
+test("FAIL CLOSED: database down at the meter refuses the pin 502 and writes nothing public", async () => {
+  flagOn();
+  pg.failNext(1, 503, 1); // the rate limit call goes through, the meter read fails
   const res = makeRes();
   await pinHandler(pinReq("demo-down", 3, "aaaaaaaa"), res);
   assert.equal(res._status, 502);
   assert.match(res._body.error, /metering store error: meter store read failed \(503\)/);
   assert.equal(count(PIN_REPO), 0, "the meter is checked before any public write");
-  assert.equal(gh.has(PIN_REPO, "pins/demo-down/latest.json"), false);
-  assert.equal(gh.has(PIN_REPO, "pins/demo-down/000001.json"), false);
 });
 
 test("FAIL CLOSED: flag on with no database configured refuses the pin, never falls back to GitHub", async () => {
   process.env.WITNESS_USAGE_STORE = "postgres";
   const res = makeRes();
   await pinHandler(pinReq("demo-nocfg", 3, "aaaaaaaa"), res);
-  assert.equal(res._status, 502);
-  assert.match(res._body.error, /not configured/);
+  assert.equal(res._status, 503);
+  assert.equal(res._body.reason, "rate_limit_store_unreachable");
   assert.equal(count(USAGE_REPO), 0);
-  assert.equal(gh.has(PIN_REPO, "pins/demo-nocfg/latest.json"), false);
+  assert.equal(count(PIN_REPO), 0);
+  await assert.rejects(() => meter.check("testkeyA"), /not configured/);
 });
 
 test("FAIL CLOSED: an unknown WITNESS_USAGE_STORE value is refused, not read as github", async () => {
@@ -199,8 +211,10 @@ test("FAIL CLOSED: an unknown WITNESS_USAGE_STORE value is refused, not read as 
   assert.throws(() => usageStore.backend(), /must be github or postgres/);
   const res = makeRes();
   await pinHandler(pinReq("demo-typo", 3, "aaaaaaaa"), res);
-  assert.equal(res._status, 502);
+  assert.equal(res._status, 503);
   assert.equal(count(USAGE_REPO), 0);
+  assert.equal(count(PIN_REPO), 0);
+  await assert.rejects(() => meter.check("testkeyA"), /must be github or postgres/);
 });
 
 // ---------------------------------------------------------------------------
@@ -262,7 +276,7 @@ test("SECRET: the service role key goes in headers only, never in an error, a re
 
 test("PRIVACY: an error message never carries the meter's key hash path", async () => {
   flagOn();
-  pg.failNext(1, 500);
+  pg.failNext(1, 500, 1);
   const res = makeRes();
   await pinHandler(pinReq("demo-priv", 3, "aaaaaaaa"), res);
   assert.equal(res._status, 502);

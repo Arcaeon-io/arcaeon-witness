@@ -8,6 +8,8 @@
 //          -> 201 | 409 {code:"23505"} when the path exists (unique violation)
 //   PATCH  /rest/v1/usage_docs?path=eq.<p>&version=eq.<n>   body {doc, version, ...}
 //          -> 200 [updated row] | 200 [] when no row matched (the lost race)
+//   POST   /rest/v1/rpc/pin_rate_hit   body {p_key_hash, p_window_start}
+//          -> 200 <hits after this one>, one atomic increment per call
 //
 // installBoth(gh, pg) routes one global fetch to the GitHub mock or to this
 // one by host, so a pin can run against both stores at once and a test can
@@ -34,13 +36,18 @@ class MockPostgrest {
     this.requests = []; // [{method, url, headers}] every request, for header checks
     this._failNext = 0;
     this._failStatus = 500;
+    this._failSkip = 0;
     this._raceNext = 0;
+    this.rateWindows = new Map(); // "hash|window_start" -> hits
+    this.rpcLog = []; // [{fn, args}] every database function call, in order
   }
 
-  // The next n requests answer `status` (a database outage).
-  failNext(n = 1, status = 500) {
+  // The next n requests answer `status` (a database outage), after letting
+  // `skip` requests through first.
+  failNext(n = 1, status = 500, skip = 0) {
     this._failNext = n;
     this._failStatus = status;
+    this._failSkip = skip;
   }
 
   // The next n PATCHes find no row at their version, as if another writer
@@ -62,9 +69,19 @@ class MockPostgrest {
     const u = new URL(String(url));
     const method = opts.method || "GET";
     this.requests.push({ method, url: String(url), headers: { ...(opts.headers || {}) } });
-    if (this._failNext > 0) {
+    if (this._failNext > 0 && this._failSkip > 0) {
+      this._failSkip -= 1;
+    } else if (this._failNext > 0) {
       this._failNext -= 1;
       return fakeResponse(this._failStatus, { message: "mock: forced database failure" });
+    }
+    if (u.pathname === "/rest/v1/rpc/pin_rate_hit" && method === "POST") {
+      const args = JSON.parse(opts.body);
+      this.rpcLog.push({ fn: "pin_rate_hit", args });
+      const k = `${args.p_key_hash}|${args.p_window_start}`;
+      const n = (this.rateWindows.get(k) || 0) + 1;
+      this.rateWindows.set(k, n);
+      return fakeResponse(200, n);
     }
     if (u.pathname !== "/rest/v1/usage_docs") {
       return fakeResponse(404, { message: `mock: unhandled path ${u.pathname}` });

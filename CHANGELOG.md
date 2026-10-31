@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — the pin rate limit: 60 per key per clock hour, documented, and shared across instances behind the same flag (branch `pin-rate-limit-shared`, on top of `meter-off-github`, NOT deployed)
+
+- `lib/_pin_ratelimit.js` replaces the Map in `api/pin.js`. The number stays 60. Windows are now clock hours in UTC, in both modes, so every instance agrees on the window (before: an hour from the key's first pin on that instance).
+- `WITNESS_USAGE_STORE=postgres`: one count per key per hour in `pin_rate_windows` (`supabase/migrations/2026_10_31_pin_rate.sql`), one atomic database call per pin. Only the key's sha256 is sent. Unreadable count: 503 `rate_limit_store_unreachable`, never admitted.
+- The 429 now names itself: `reason:"key_rate_limited"`, `limit`, `window_seconds`, `shared_across_instances`, `retry_after_seconds`, and a `Retry-After` header. README documents it.
+- `test/pin_ratelimit.test.js` +8 (three instances share one count; per instance with the flag off; the hour boundary; keys apart; fail closed on six bad answers; the 429 body). Mutation pass on `lib/_pin_ratelimit.js`: 11 breaks, 11 caught. Suite 678, 678 pass, 0 fail.
+
 ## 2026-10-31 — the meter and the pending batch can move off GitHub, behind a flag (branch `meter-off-github`, NOT deployed, flag off by default)
 
 `WITNESS_USAGE_STORE=postgres` moves the meter's monthly usage file, the open Merkle batch and the seal claim into one `usage_docs` table in the account database (`supabase/migrations/2026_10_31_usage_docs.sql`), through the new `lib/_usage_store.js`. Design and cutover: `WITNESS_METER_OFF_GITHUB.md`.
