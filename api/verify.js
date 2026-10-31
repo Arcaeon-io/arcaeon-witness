@@ -400,7 +400,7 @@ async function handleBulk(req, res) {
   // (refused above) never reaches this check at all and so never spends a
   // rate-limit unit either — it was already refused for a cheaper reason
   // and shouldn't also be charged for one it never got the chance to incur.
-  const rl = ratelimit.check(req, items.length);
+  const rl = await ratelimit.checkShared(req, items.length);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     return res.status(429).json({
@@ -474,7 +474,7 @@ module.exports = async (req, res) => {
   // so there is no key to bucket abuse on. See _ratelimit.js for the honest
   // per-instance limitation. Checked before any store read so an over-limit
   // caller costs this instance nothing beyond a Map lookup.
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.checkShared(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");

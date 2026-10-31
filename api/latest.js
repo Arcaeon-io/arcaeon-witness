@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "GET or HEAD only" });
   }
 
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.checkShared(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");

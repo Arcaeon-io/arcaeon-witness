@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
   // that's unchanged; this only adds the ACAO header and the preflight.
   if (cors.applyGetCors(req, res)) return;
 
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.checkShared(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");

@@ -134,10 +134,15 @@ pin is refused 503, `rate_limit_store_unreachable`.
 The number stays 60. Raising it is a pricing and abuse call for the owner,
 not a code one; the limit is one constant.
 
+## The per IP limit on public reads rides on it too
+
+`lib/_ratelimit.js` limits each IP to 30 calls per 10 minutes on the public read endpoints (`/api/latest`, `/api/verify` and its bulk mode by weight, `/api/health`, `/api/badge`, `/status`, the prefix check). With the flag on, `checkShared` makes that one count per IP per 10 minute slot of the clock in the `ip_rate_windows` table (`supabase/migrations/2026_10_31_ip_rate.sql`), through one atomic database call, so the call past the limit is refused on whichever instance it lands. Only a hash of the IP is sent. If the database cannot be reached, that call falls back to the per instance count and is logged: a public read keeps a limit rather than going down with the database, and never runs with none.
+
 ## Turning it on
 
-1. Apply `supabase/migrations/2026_10_31_usage_docs.sql` and
-   `supabase/migrations/2026_10_31_pin_rate.sql` to the account database.
+1. Apply `supabase/migrations/2026_10_31_usage_docs.sql`,
+   `supabase/migrations/2026_10_31_pin_rate.sql` and
+   `supabase/migrations/2026_10_31_ip_rate.sql` to the account database.
 2. Set `WITNESS_USAGE_STORE=postgres` on the Vercel project and on the sealer's
    environment (`tools/seal_batch.js`, `tools/reconcile_batches.js`), with
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.

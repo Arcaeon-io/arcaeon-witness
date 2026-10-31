@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
   // comment for the full reasoning). This calls the same expensive
   // gatherStatusData() pass as /status — unauthenticated and, until now,
   // unlimited, on the shared GITHUB_PIN_TOKEN budget.
-  const rl = ratelimit.check(req);
+  const rl = await ratelimit.checkShared(req);
   if (rl.limited) {
     res.setHeader("retry-after", String(rl.retryAfterSeconds));
     res.setHeader("cache-control", "no-store");

@@ -83,6 +83,15 @@ class MockPostgrest {
       this.rateWindows.set(k, n);
       return fakeResponse(200, n);
     }
+    if (u.pathname === "/rest/v1/rpc/ip_rate_hit" && method === "POST") {
+      const args = JSON.parse(opts.body);
+      this.rpcLog.push({ fn: "ip_rate_hit", args });
+      if (!Number.isInteger(args.p_cost) || args.p_cost < 1) return fakeResponse(400, { message: "p_cost must be at least 1" });
+      const k = `ip|${args.p_ip_hash}|${args.p_window_start}`;
+      const n = (this.rateWindows.get(k) || 0) + args.p_cost;
+      this.rateWindows.set(k, n);
+      return fakeResponse(200, n);
+    }
     if (u.pathname !== "/rest/v1/usage_docs") {
       return fakeResponse(404, { message: `mock: unhandled path ${u.pathname}` });
     }

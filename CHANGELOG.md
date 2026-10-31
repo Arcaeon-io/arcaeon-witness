@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — the per IP limit on public reads, shared across instances (branch `shared-ip-ratelimit`, on top of `pin-rate-limit-shared`, NOT deployed)
+
+- `lib/_ratelimit.js` `checkShared`: with `WITNESS_USAGE_STORE=postgres`, one count per IP per 10 minute slot in `ip_rate_windows`, one atomic database call (`ip_rate_hit`, weighted for bulk verify). Only a hash of the IP is sent. Off, it is the old per instance check. Database unreachable: that call is limited per instance and logged, never unlimited.
+- Every caller moves to it: `/api/latest`, `/api/verify` (single and bulk), `/api/health`, `/api/badge`, `/status`, the prefix check. With #4 the per key pin limit was already shared; now every per instance counter has its shared form.
+- `test/ratelimit_shared.test.js` +6. Mutation pass: 6 breaks, 6 caught. Suite 684, 684 pass, 0 fail.
+
 ## 2026-10-31 — the pin rate limit: 60 per key per clock hour, documented, and shared across instances behind the same flag (branch `pin-rate-limit-shared`, on top of `meter-off-github`, NOT deployed)
 
 - `lib/_pin_ratelimit.js` replaces the Map in `api/pin.js`. The number stays 60. Windows are now clock hours in UTC, in both modes, so every instance agrees on the window (before: an hour from the key's first pin on that instance).
