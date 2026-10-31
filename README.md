@@ -692,6 +692,7 @@ api/fulfill.js       GET/POST /api/fulfill — Stripe checkout success_url landi
 api/distill.js           GET /api/distill — (see the file's own header for current scope)
 lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not routed); also holds computeCadenceFields, the cadence-grading function api/latest.js and api/verify.js share
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
+lib/_agent_pay.js, lib/_pay_x402.js, lib/_pay_l402.js  agents pay per pin: 402 with signed quotes, stablecoin and self hosted Lightning adapters, a create only payment ledger (AGENT_PAYMENTS.md; off unless WITNESS_AGENT_PAY; not routed)
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
 lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,

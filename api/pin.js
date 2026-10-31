@@ -34,6 +34,10 @@ const issuedKeys = require("../lib/_keys.js");
 // they are. Additionally build batches and commit roots. Nothing reads the
 // roots." Off unless WITNESS_BATCH_SHADOW is on; see lib/_pending.js.
 const pending = require("../lib/_pending.js");
+// Agents pay per pin (AGENT_PAYMENTS.md): with WITNESS_AGENT_PAY on, a keyed
+// pin past its free tier and credits gets 402 with quotes, and a paid retry
+// is charged by its payment instead of the meter. Off by default.
+const agentPay = require("../lib/_agent_pay.js");
 
 // Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
 const RATE_LIMIT = 60; // pins per key per hour, per warm instance
@@ -216,6 +220,27 @@ async function meterAndCharge(key) {
     },
     headers,
   };
+}
+
+// The one charge step both write paths call. Without agent payments this is
+// exactly meterAndCharge. With them: a request carrying a payment proof is
+// charged by that payment, and a meter refusal a payment can answer becomes a
+// 402 with quotes. meterAndCharge itself is unchanged.
+async function chargeFor(key, payCtx) {
+  if (payCtx && payCtx.enabled && payCtx.proof) return agentPay.chargeWithProof(payCtx);
+  const charge = await meterAndCharge(key);
+  if (charge.deny && payCtx && payCtx.enabled && agentPay.payable(charge.deny)) {
+    return agentPay.paymentRequired(payCtx, charge);
+  }
+  return charge;
+}
+
+// The one give back step every failed write path calls: a claimed payment is
+// released for a retry (lib/_agent_pay.js release); anything else goes to
+// refundFailedWrite, unchanged.
+async function refundOrRelease(key, chargeSource, namespace, seq, cause, payCtx) {
+  if (chargeSource === "payment") return agentPay.release(payCtx, cause);
+  return refundFailedWrite(key, chargeSource, namespace, seq, cause);
 }
 
 function applyHeaders(res, headers) {
@@ -515,6 +540,7 @@ module.exports = async (req, res) => {
   // refundFailedWrite (2026-09-05): once a charge lands, a later genuine
   // write failure must refund it rather than let the charge stand for
   // nothing (see that function's header).
+  const payCtx = agentPay.contextFor(req, { key, namespace, rows, chain, intent });
   let metered = false;
   let chargeSource = null;
   let lastAttemptedSeq = null;
@@ -625,7 +651,7 @@ module.exports = async (req, res) => {
           if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
 
           if (!metered) {
-            const charge = await meterAndCharge(key);
+            const charge = await chargeFor(key, payCtx);
             applyHeaders(res, charge.headers);
             if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
             metered = true;
@@ -721,7 +747,7 @@ module.exports = async (req, res) => {
             // Reaching here means this request is about to fail (409 wedged-
             // out-of-budget, or 502 genuine store error) with no write landed
             // — but the charge above already did. Refund before throwing.
-            await refundFailedWrite(key, chargeSource, namespace, seq, err);
+            await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
             throw err;
           }
         }
@@ -749,7 +775,7 @@ module.exports = async (req, res) => {
       if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
 
       if (!metered) {
-        const charge = await meterAndCharge(key);
+        const charge = await chargeFor(key, payCtx);
         applyHeaders(res, charge.headers);
         if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
         metered = true;
@@ -824,7 +850,7 @@ module.exports = async (req, res) => {
         }
         // About to fail with no write landed, but the charge above already
         // happened — refund it before throwing (see refundFailedWrite header).
-        await refundFailedWrite(key, chargeSource, namespace, seq, err);
+        await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
         throw err;
       }
     }
@@ -833,8 +859,8 @@ module.exports = async (req, res) => {
     // converge (should be unreachable in practice). Report typed, don't spin.
     // Charged-but-unwritten residual applies here too — a charge could have
     // landed on an earlier pass before this fallthrough was ever reached.
-    await refundFailedWrite(key, chargeSource, namespace, lastAttemptedSeq,
-      new Error("namespace repair did not converge within the retry budget"));
+    await refundOrRelease(key, chargeSource, namespace, lastAttemptedSeq,
+      new Error("namespace repair did not converge within the retry budget"), payCtx);
     return res.status(409).json({
       error: "namespace is wedged and automatic repair did not converge within the retry budget",
       reason: "orphaned_seq_record",
