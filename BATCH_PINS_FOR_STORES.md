@@ -124,6 +124,24 @@ single pin. That is the point of the feature, and it is also a pricing choice:
 the owner may want to charge per store or per bucket of stores later. The
 charge is one line in `lib/_store_batch.js` handle().
 
+## A store's own latest
+
+A store keeps its proofs, and a store that loses its proof file must be able to notice. So after each batch the witness keeps one private index per namespace, `store_latest/<namespace>.json` in the private usage store (or the account database with `WITNESS_USAGE_STORE=postgres`), keyed by `sha256("store-latest:v1\n" + namespace + "\n" + store_id)`, holding each store's latest `{entry_path, leaf_index, accepted_at, leaf}`. It is one private write per batch, whatever the batch's size, under the same compare and swap as the meter. A pointer is never moved back by an older batch; at the very same time, the later write wins.
+
+The holder of a store id asks:
+
+```
+GET /api/pin-batch?namespace=acme-memory&store_id=alice
+-> 200 {ok, store_id, namespace, entry_path, leaf_index, leaf}
+-> 404 {reason: "not_found", field: "store_id"}
+```
+
+and compares the answer with its newest proof. The same entry and leaf: nothing is missing. Anything else: there is a later batch it holds no proof for, so a deleted proof file shows. The answer gives the leaf, not the path: the proof itself is the store's to keep.
+
+What this does and does not show. No key is asked: the store id is the question, so an opaque one (a hash of a name) is the better habit, since anyone who knows or guesses a store id can learn when it was last pinned and its head. Nothing is listed: a store never pinned and a namespace never used get the same 404, and a per IP limit applies. The index never reaches the public repo; the public entry stays the root alone. The leaf format is unchanged: a 64 hex head, and any field but `store_id` and `head` is still refused.
+
+Limits. The index is one file per namespace. With the GitHub store it should stay under the contents API's 1 MB read, about three thousand stores per namespace; the database store has no such limit. If the index cannot be written after the public entry landed, the batch stands and its answer says `latest_index: "not_updated"`; the next batch for that store brings the pointer up to date. An index file that is not an index is left as it is and never written over.
+
 ## Turning it on
 
 Set `WITNESS_STORE_BATCH=on` and redeploy. With it off, `?op=batch_stores`

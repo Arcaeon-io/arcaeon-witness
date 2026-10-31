@@ -456,6 +456,11 @@ async function healIfWedged(namespace, cur, latestPath) {
 }
 
 module.exports = async (req, res) => {
+  // GET /api/pin-batch: one store's latest batch entry, for the holder of its
+  // store_id (lib/_store_batch.js latest). No key: the store_id is the ask.
+  if (req.method === "GET" && String((req.query || {}).op || "") === "batch_stores") {
+    return storeBatch.latest(req, res);
+  }
   if (req.method !== "POST") {
     res.setHeader("allow", "POST");
     return res.status(405).json({ error: "POST only" });
