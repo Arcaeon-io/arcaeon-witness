@@ -1,5 +1,13 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — one witness entry for many small stores, behind a flag (branch `store-batch`, NOT deployed, off by default)
+
+`POST /api/pin-batch` (`api/pin.js?op=batch_stores`, `lib/_store_batch.js`) takes up to 1000 `(store_id, head)` pairs, builds a Merkle tree with `lib/_merkle.js`, writes one create only file `store_batches/<ns>/<root>.json` holding only the root, the count, the namespace and the time, and answers with an inclusion proof per store. `tools/verify_store_proof.js` checks one offline. Design: `BATCH_PINS_FOR_STORES.md`.
+
+- One public write per batch, charged as one pin through the same meter and the same failed write refund.
+- Store ids and heads are never public. Any field other than the two is refused by name.
+- `test/store_batch.test.js` +17 (250 stores, one write, 250 proofs verify; privacy; meter; the tool; leaf, entry and size attacks; another namespace; create only; ten named refusals; flag off). Mutation pass on `lib/_store_batch.js`: 14 breaks, 14 caught after two tests were added for misses. Suite 663, 663 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.

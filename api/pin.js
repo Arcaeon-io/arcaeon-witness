@@ -34,6 +34,9 @@ const issuedKeys = require("../lib/_keys.js");
 // they are. Additionally build batches and commit roots. Nothing reads the
 // roots." Off unless WITNESS_BATCH_SHADOW is on; see lib/_pending.js.
 const pending = require("../lib/_pending.js");
+// One public entry for many small stores (BATCH_PINS_FOR_STORES.md), reached
+// as ?op=batch_stores after the same key check. Off unless WITNESS_STORE_BATCH.
+const storeBatch = require("../lib/_store_batch.js");
 
 // Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
 const RATE_LIMIT = 60; // pins per key per hour, per warm instance
@@ -476,6 +479,12 @@ module.exports = async (req, res) => {
   }
   if (prefix === null) {
     return res.status(401).json({ error: "invalid or missing bearer key" });
+  }
+
+  if (String((req.query || {}).op || "") === "batch_stores") {
+    return storeBatch.handle(req, res, {
+      key, prefix, rateLimited, meterAndCharge, refundFailedWrite, applyHeaders,
+    });
   }
 
   // --- validate ---
