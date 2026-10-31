@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — paid pins get the signed receipt, and their record the payment reference (branch `paid-receipts`, merging `agent-payments` and `signed-receipts`, NOT deployed)
+
+- A pin bought with a payment (WITNESS_AGENT_PAY) is answered with the same contract receipt as any pin (WITNESS_RECEIPTS); the receipt is the record's and carries nothing about the payment.
+- Its public record carries `payment: {method, ref}`: the ledger's reference, a hash of the processor's payment id for the stablecoin adapter, the invoice's payment hash for Lightning. Never the payer, the processor's id, the preimage or the key. A renewal bought with a payment carries its own. An unpaid pin has no `payment` field.
+- `test/agent_pay.test.js` +3. Mutation pass: 4 breaks, 3 caught, 1 equivalent (a claimed payment exists only when the charge came from it). Suite 687, 687 pass, 0 fail.
+
 ## 2026-10-31 — signed per pin receipts in the contract's shape, behind a flag (branch `signed-receipts`, NOT deployed, off by default)
 
 - `lib/_receipt.js`: with `WITNESS_RECEIPTS=on` and `WITNESS_RECEIPT_KEY` (a hand set Ed25519 seed), `POST /api/pin` and `GET /api/latest` carry `receipt`, the contract receipt over the record: head {chain, n = rows}, namespace, witness_seq = seq, received_at = pinned_at in whole seconds, key_id, sig. Byte for byte the reference witness's own receipt for the same record and key (vectors in the tests).

@@ -460,3 +460,49 @@ test("HTTPS ONLY: an adapter whose address is not https is not offered", async (
   process.env.WITNESS_PAY_X402_API = "http://processor.test.invalid";
   assert.equal(agentPay.enabled(), false);
 });
+
+// --- job 14: a paid pin gets the same signed receipt, and its record the payment reference ---
+
+const receiptsMod = require("../lib/_receipt.js");
+const RSEED = "22".repeat(32);
+function receiptsOn() {
+  process.env.WITNESS_RECEIPTS = "on";
+  process.env.WITNESS_RECEIPT_KEY = RSEED;
+}
+const CH64 = "ab".repeat(32);
+
+test("PAID: a paid pin is answered with the same signed receipt as any pin", async () => {
+  receiptsOn();
+  const { res } = await payX402(body({ chain: CH64 }));
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  const pub = receiptsMod.keyFromEnv().publicRaw;
+  assert.deepEqual(receiptsMod.verify(res._body.receipt, pub), { ok: true });
+  assert.deepEqual(res._body.receipt.head, { chain: CH64, kind: "head", n: 5, v: 1 });
+  assert.deepEqual(res._body.receipt, receiptsMod.forRecord(res._body.pin).receipt, "the receipt is the record's, nothing more");
+});
+
+test("PAID: the public record carries the payment reference and nothing about the payer", async () => {
+  const { res, id } = await payX402();
+  const record = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json");
+  assert.deepEqual(record.payment, { method: "x402", ref: res._headers["x-payment-ref"] });
+  const text = JSON.stringify(record);
+  assert.ok(!text.includes(id), "not the processor's payment id");
+  assert.ok(!text.includes("acct_witness") && !text.includes("agentkeyA"), "no account, no key");
+  // Lightning: the invoice's payment hash.
+  const q = await pin(body({ namespace: "agent-a-ln", rows: 2 }));
+  const l = accept(q, "l402");
+  const pre = node.pay(l.payment_hash);
+  await pin(body({ namespace: "agent-a-ln", rows: 2 }), { headers: { "x-l402": `${l.token}:${pre}` } });
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-ln/latest.json").payment, { method: "l402", ref: l.payment_hash });
+  assert.ok(!JSON.stringify(gh.read(PIN_REPO, "pins/agent-a-ln/latest.json")).includes(pre), "never the preimage");
+});
+
+test("PAID: a paid renewal's record carries its own payment; an unpaid pin carries none", async () => {
+  await payX402();
+  const { res } = await payX402(body({ intent: "renew" }));
+  assert.equal(gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref, res._headers["x-payment-ref"]);
+  process.env.WITNESS_PLANS = "{}";
+  const free = await pin(body({ namespace: "agent-a-free" }));
+  assert.equal(free._status, 201);
+  assert.equal("payment" in gh.read(PIN_REPO, "pins/agent-a-free/latest.json"), false);
+});

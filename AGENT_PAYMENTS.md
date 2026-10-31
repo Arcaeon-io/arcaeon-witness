@@ -75,6 +75,10 @@ Summarized from the owner's notes, not re-checked here:
   release that itself fails is logged loudly and the record stays claimed, the
   same residual the credit refund documents.
 
+## What a paid record says
+
+With signed receipts on, a paid pin is answered with the same receipt as any pin, over the record, and nothing about the payment is in the receipt. The public record carries `payment: {method, ref}`, the ledger's own reference: for the stablecoin adapter the SHA-256 of the processor's payment id, for Lightning the invoice's payment hash. It never carries who paid, the processor's payment id itself, the preimage or the key.
+
 ## The key still decides the namespace
 
 Payment replaces the meter, never the key check. An anonymous payer could

@@ -264,6 +264,16 @@ async function refundOrRelease(key, chargeSource, namespace, seq, cause, payCtx)
   return refundFailedWrite(key, chargeSource, namespace, seq, cause);
 }
 
+// A record a payment bought carries the payment's reference, so the public
+// record says how this pin was paid for: {payment: {method, ref}}. ref is
+// the ledger's reference, a hash for the stablecoin adapter (sha256 of the
+// processor's payment id) and the invoice's payment hash for Lightning.
+// Never the payer: nothing here knows or keeps who paid.
+function paidWith(chargeSource, payCtx) {
+  if (chargeSource !== "payment" || !payCtx || !payCtx.claimed) return {};
+  return { payment: { method: payCtx.claimed.adapter, ref: payCtx.claimed.ref } };
+}
+
 function applyHeaders(res, headers) {
   if (!headers) return;
   for (const k of Object.keys(headers)) res.setHeader(k, headers[k]);
@@ -696,6 +706,7 @@ module.exports = async (req, res) => {
             });
 
             const renewal = {
+              ...paidWith(chargeSource, payCtx),
               namespace,
               rows,
               chain: chain.toLowerCase(),
@@ -822,6 +833,7 @@ module.exports = async (req, res) => {
           now: pinnedAt, seq, cadenceHours, dueBy, kind: "content_head_advance",
         });
         const pin = {
+          ...paidWith(chargeSource, payCtx),
           namespace,
           rows,
           chain: chain.toLowerCase(),
