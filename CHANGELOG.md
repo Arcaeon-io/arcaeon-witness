@@ -1,5 +1,10 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — GET /api/verify answers with the signed receipt (branch `verify-receipt`, on top of `signed-receipts`, NOT deployed)
+
+- A witnessed answer from `/api/verify` (single and bulk) carries `receipt` for the record that matched, the current head or a superseded one found in history, when `WITNESS_RECEIPTS` is on. Every record there was read through the contents API, never the raw mirror. Not witnessed: no receipt. A head the contract cannot carry: `receipt: null` and `receipt_unavailable`.
+- `test/receipt.test.js` +4. Suite 661, 661 pass, 0 fail.
+
 ## 2026-10-31 — signed per pin receipts in the contract's shape, behind a flag (branch `signed-receipts`, NOT deployed, off by default)
 
 - `lib/_receipt.js`: with `WITNESS_RECEIPTS=on` and `WITNESS_RECEIPT_KEY` (a hand set Ed25519 seed), `POST /api/pin` and `GET /api/latest` carry `receipt`, the contract receipt over the record: head {chain, n = rows}, namespace, witness_seq = seq, received_at = pinned_at in whole seconds, key_id, sig. Byte for byte the reference witness's own receipt for the same record and key (vectors in the tests).

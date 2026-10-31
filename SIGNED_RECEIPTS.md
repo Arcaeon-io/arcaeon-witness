@@ -26,6 +26,7 @@ The tests carry a receipt and a witness statement made by the reference witness'
 Where receipts appear:
 
 - `POST /api/pin`: a new head (201), a renewal (201, a new `witness_seq`) and the idempotent re-pin of the current head (200, the same receipt as before).
+- `GET /api/verify`: a witnessed answer carries the receipt of the record that matched, the current head or a superseded one found in history (every record there is read through the contents API). An answer that is not witnessed carries none.
 - `GET /api/latest`: the latest record's receipt, but only when the record was read through the contents API. A record served from the raw CDN fallback, which can lag a write by minutes, gets no receipt.
 
 A pin the contract cannot carry gets no receipt, and the answer says why in `receipt_unavailable`: `chain_not_64_hex` (the contract's head chain is a SHA-256; this witness also takes shorter chains), `namespace_not_in_contract_form` (the contract's namespace starts with a letter or digit), `receipt_key_not_configured`, `read_from_lagging_mirror`. A receipt a contract reader would refuse is never made.
