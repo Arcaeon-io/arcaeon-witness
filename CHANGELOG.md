@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — signed per pin receipts in the contract's shape, behind a flag (branch `signed-receipts`, NOT deployed, off by default)
+
+- `lib/_receipt.js`: with `WITNESS_RECEIPTS=on` and `WITNESS_RECEIPT_KEY` (a hand set Ed25519 seed), `POST /api/pin` and `GET /api/latest` carry `receipt`, the contract receipt over the record: head {chain, n = rows}, namespace, witness_seq = seq, received_at = pinned_at in whole seconds, key_id, sig. Byte for byte the reference witness's own receipt for the same record and key (vectors in the tests).
+- No receipt where the contract cannot carry one (a chain not 64 hex, a namespace not in contract form) or over a record read from the lagging raw mirror; `receipt_unavailable` says why.
+- The key: `/.well-known/arcaeon-witness-key` (key_id, public_key, the checkpoint verifier key, and a signed witness_statement), and one more signature line on each published checkpoint.
+- `test/receipt.test.js` +12. Mutation pass: 11 breaks, 11 caught after one test was added. Suite 657, 657 pass, 0 fail.
 ## 2026-10-31 — agents pay per pin: HTTP 402, stablecoin and self hosted Lightning adapters, behind flags (branch `agent-payments`, NOT deployed, no live keys)
 
 - `lib/_agent_pay.js`: a keyed pin past its free tier and credits gets 402 `payment_required` with one signed quote per adapter, bound to the key hash, namespace, rows, chain and intent. A paid retry (`X-Payment` or `X-L402`) is checked with the processor or the node, claimed once in a create only ledger (`payments/<adapter>/<ref>.json`, private usage repo), and charged instead of the meter. The key still decides the namespace.

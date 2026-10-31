@@ -38,6 +38,9 @@ const pending = require("../lib/_pending.js");
 // pin past its free tier and credits gets 402 with quotes, and a paid retry
 // is charged by its payment instead of the meter. Off by default.
 const agentPay = require("../lib/_agent_pay.js");
+// Signed per pin receipts in the contract's shape (lib/_receipt.js). Off
+// unless WITNESS_RECEIPTS is on and WITNESS_RECEIPT_KEY reads.
+const receipts = require("../lib/_receipt.js");
 
 // Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
 const RATE_LIMIT = 60; // pins per key per hour, per warm instance
@@ -659,6 +662,7 @@ module.exports = async (req, res) => {
                 ok: true,
                 note: "already witnessed (idempotent re-pin) — no renewal intent, deadline unchanged",
                 pin: cur.json,
+                ...receipts.forRecord(cur.json),
                 hint: 'to refresh next_pin_due_by without new rows, POST /api/renew (or add "intent":"renew") — it is recorded as a publisher heartbeat, never as a content advance',
               });
             }
@@ -755,6 +759,7 @@ module.exports = async (req, res) => {
                 auth_level: store.AUTH_LEVEL,
                 auth_note: store.AUTH_LEVEL_NOTE,
                 pin: renewal,
+                ...receipts.forRecord(renewal),
                 commit: put.commit && put.commit.sha,
                 public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
               });
@@ -861,6 +866,7 @@ module.exports = async (req, res) => {
             auth_level: store.AUTH_LEVEL,
             auth_note: store.AUTH_LEVEL_NOTE,
             pin,
+            ...receipts.forRecord(pin),
             commit: put.commit && put.commit.sha,
             public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
           });

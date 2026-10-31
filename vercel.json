@@ -21,6 +21,10 @@
       "destination": "/api/fulfill?op=prefix-available"
     },
     {
+      "source": "/.well-known/arcaeon-witness-key",
+      "destination": "/api/verify?op=witness-key"
+    },
+    {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
     }

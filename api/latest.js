@@ -22,6 +22,8 @@
 const store = require("../lib/_store.js");
 const verdict = require("../lib/_verdict.js");
 const ratelimit = require("../lib/_ratelimit.js");
+// Signed receipts (lib/_receipt.js), off unless WITNESS_RECEIPTS is on.
+const receipts = require("../lib/_receipt.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 
@@ -134,6 +136,10 @@ module.exports = async (req, res) => {
     freshness_note: `${note}; the authoritative record is the commit history at ${HISTORY_BASE}/pins/${ns}`,
     history: `${HISTORY_BASE}/pins/${ns}`,
     ...cadenceFields,
+    // A receipt is signed only over a commit fresh read through the contents
+    // API, never over the raw CDN fallback, which can lag a write by minutes.
+    ...(source === "github-contents-api" ? receipts.forRecord(pin)
+      : receipts.enabled() ? { receipt: null, receipt_unavailable: "read_from_lagging_mirror" } : {}),
   }, "latest", HEAD);
 
   return res.status(200).json(out);
