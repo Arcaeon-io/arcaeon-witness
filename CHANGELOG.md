@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — a local load test: writes per pin under 100 concurrent pinners (branch `load-test`, a tool, nothing deployed)
+
+- `tools/loadtest.js`: the real api/pin.js against the fake contents API with random delays; reports answers, writes per accepted pin (public, private), write attempts and lost compare and swap races, pending leaves kept and dropped, latency p50/p95/max. Results in `LOAD_TEST.md`.
+- Finding: 2 public writes a pin at any concurrency; with the shadow batch run on, the one shared pending document drops about 9 in 10 leaves at 100 concurrent pinners (3 in 10 at 10). Pins are unaffected.
+- `test/loadtest.test.js` +3 (the numbers hold together: every pin accepted, 2 public writes each, every leaf kept or counted as dropped, attempts equal landed writes plus lost races). Suite 649, 649 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
