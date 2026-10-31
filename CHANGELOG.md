@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — store batches: a store's own latest, for the holder of its store id (branch `store-batch-latest`, on top of `store-batch`, NOT deployed)
+
+- After each batch, one private index per namespace (`store_latest/<ns>.json`, keyed by a hash of namespace and store id) records each store's latest entry, leaf index and leaf. One private write per batch, compare and swap, never moved back by an older batch.
+- `GET /api/pin-batch?namespace=&store_id=` answers that for the one store named; the same 404 for any miss, no listing, a per IP limit, no key. A store that lost its proof file sees an entry it holds no proof for.
+- The leaf format is unchanged. The public entry is unchanged.
+- `test/store_batch.test.js` +11. Mutation pass: 9 breaks, 9 caught after three tests were added for misses and one fix (two batches at the same millisecond: the later write now wins). Suite 674, 674 pass, 0 fail.
+
 ## 2026-10-31 — one witness entry for many small stores, behind a flag (branch `store-batch`, NOT deployed, off by default)
 
 `POST /api/pin-batch` (`api/pin.js?op=batch_stores`, `lib/_store_batch.js`) takes up to 1000 `(store_id, head)` pairs, builds a Merkle tree with `lib/_merkle.js`, writes one create only file `store_batches/<ns>/<root>.json` holding only the root, the count, the namespace and the time, and answers with an inclusion proof per store. `tools/verify_store_proof.js` checks one offline. Design: `BATCH_PINS_FOR_STORES.md`.

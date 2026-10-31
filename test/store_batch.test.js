@@ -266,3 +266,148 @@ test("METER: a key over its cap gets the meter's refusal and nothing is written"
     delete process.env.WITNESS_PLANS;
   }
 });
+
+// --- job 9: the per store latest ---
+
+let ipN = 0;
+async function lookup(query) {
+  const res = makeRes();
+  ipN += 1;
+  await pinHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": `10.20.${ipN >> 8}.${ipN & 255}` },
+    query: { op: "batch_stores", ...query } }), res);
+  return res;
+}
+
+test("LATEST: a store asks with its store_id and gets its latest entry, leaf index and leaf", async () => {
+  const first = await post({ namespace: "demo-lat", entries: stores(3) });
+  const res = await lookup({ namespace: "demo-lat", store_id: "memory-1" });
+  assert.equal(res._status, 200, JSON.stringify(res._body));
+  assert.equal(res._body.entry_path, first._body.entry_path);
+  assert.equal(res._body.leaf_index, 1);
+  assert.deepEqual(res._body.leaf, first._body.proofs[1].proof.leaf);
+  // A later batch moves the pointer for the stores it names, and only those.
+  const second = await post({ namespace: "demo-lat", entries: [{ store_id: "memory-1", head: head("new") }] });
+  const now1 = await lookup({ namespace: "demo-lat", store_id: "memory-1" });
+  assert.equal(now1._body.entry_path, second._body.entry_path);
+  assert.equal(now1._body.leaf.head, head("new"));
+  const still = await lookup({ namespace: "demo-lat", store_id: "memory-2" });
+  assert.equal(still._body.entry_path, first._body.entry_path);
+});
+
+test("LATEST: a lost local proof is noticed, the answer lets the store check its own proof against it", async () => {
+  const r = await post({ namespace: "demo-lost", entries: stores(4) });
+  const kept = r._body.proofs[2];
+  const ans = await lookup({ namespace: "demo-lost", store_id: "memory-2" });
+  // The store compares: same entry and leaf as its proof, so nothing is missing.
+  assert.equal(ans._body.entry_path, kept.entry_path);
+  assert.deepEqual(ans._body.leaf, kept.proof.leaf);
+  // After a batch it never saw (its proof was deleted), the answer differs.
+  await post({ namespace: "demo-lost", entries: [{ store_id: "memory-2", head: head("unseen") }] });
+  const later = await lookup({ namespace: "demo-lost", store_id: "memory-2" });
+  assert.notEqual(later._body.entry_path, kept.entry_path);
+});
+
+test("LATEST: no listing; an unknown store and an unknown namespace get the same 404", async () => {
+  await post({ namespace: "demo-hid", entries: stores(2) });
+  const a = await lookup({ namespace: "demo-hid", store_id: "memory-9" });
+  const b = await lookup({ namespace: "demo-none", store_id: "memory-0" });
+  assert.equal(a._status, 404);
+  assert.deepEqual(a._body, b._body);
+  assert.equal(a._body.field, "store_id");
+});
+
+test("LATEST: the index is private, one write per batch whatever its size, and never in the public repo", async () => {
+  const before = gh.putLog.filter((p) => p.repo === USAGE_REPO).length;
+  await post({ namespace: "demo-one-write", entries: stores(300) });
+  const priv = gh.putLog.filter((p) => p.repo === USAGE_REPO).slice(before).map((p) => p.path);
+  assert.equal(priv.filter((p) => p.startsWith("store_latest/")).length, 1);
+  assert.ok(gh.has(USAGE_REPO, "store_latest/demo-one-write.json"));
+  assert.ok(!gh.putLog.some((p) => p.repo === PIN_REPO && p.path.startsWith("store_latest/")));
+  const idx = gh.read(USAGE_REPO, "store_latest/demo-one-write.json");
+  assert.equal(Object.keys(idx.stores).length, 300);
+  assert.ok(Object.keys(idx.stores).every((k) => /^[0-9a-f]{64}$/.test(k)), "keyed by hash, not by store_id");
+});
+
+test("LATEST: an older batch never moves a pointer back over a newer one", async () => {
+  const entries = [{ store_id: "memory-0", head: head("x") }];
+  const call = async (when, h) => {
+    const res = makeRes();
+    await sb.handle(makeReq({ method: "POST", body: { namespace: "demo-order", entries: [{ ...entries[0], head: h }] } }), res, {
+      key: "testkeyA", prefix: "demo-", rateLimited: () => false,
+      meterAndCharge: async () => ({ ok: true, source: "free", headers: {} }),
+      refundFailedWrite: async () => {}, applyHeaders: () => {}, now: () => new Date(when),
+    });
+    return res;
+  };
+  const newer = await call("2026-10-31T10:00:00.000Z", head("new"));
+  await call("2026-10-31T09:00:00.000Z", head("old"));
+  const ans = await lookup({ namespace: "demo-order", store_id: "memory-0" });
+  assert.equal(ans._body.entry_path, newer._body.entry_path);
+});
+
+test("LATEST: an index that cannot be written leaves the batch standing and says so", async () => {
+  gh.forceFailure(USAGE_REPO, "store_latest/demo-behind.json", 5, 500);
+  const res = await post({ namespace: "demo-behind", entries: stores(2) });
+  assert.equal(res._status, 201);
+  assert.equal(res._body.latest_index, "not_updated");
+  assert.ok(gh.has(PIN_REPO, res._body.entry_path));
+});
+
+test("LATEST: something that is not an index is never written over", async () => {
+  gh.seed(USAGE_REPO, "store_latest/demo-odd.json", { not: "an index" });
+  const res = await post({ namespace: "demo-odd", entries: stores(1) });
+  assert.equal(res._body.latest_index, "not_updated");
+  assert.deepEqual(gh.read(USAGE_REPO, "store_latest/demo-odd.json"), { not: "an index" });
+});
+
+test("LATEST: refusals name the field; flag off is not_enabled; the per IP limit applies", async () => {
+  assert.equal((await lookup({ namespace: "BAD", store_id: "a" }))._body.field, "namespace");
+  const badId = await lookup({ namespace: "demo-x", store_id: "a b" });
+  assert.equal(badId._status, 400);
+  assert.equal(badId._body.reason, "bad_store_id");
+  delete process.env.WITNESS_STORE_BATCH;
+  assert.equal((await lookup({ namespace: "demo-x", store_id: "a" }))._body.reason, "not_enabled");
+  process.env.WITNESS_STORE_BATCH = "on";
+  let last;
+  for (let i = 0; i < 40; i++) {
+    const res = makeRes();
+    await pinHandler(makeReq({ method: "GET", headers: { "x-forwarded-for": "10.99.0.1" },
+      query: { op: "batch_stores", namespace: "demo-x", store_id: "a" } }), res);
+    last = res;
+  }
+  assert.equal(last._status, 429);
+});
+
+test("LATEST: a lost race on the index re-reads and lands", async () => {
+  gh.forceConflict(USAGE_REPO, "store_latest/demo-race.json", 1);
+  const res = await post({ namespace: "demo-race", entries: stores(2) });
+  assert.equal(res._body.latest_index, "updated");
+  assert.equal((await lookup({ namespace: "demo-race", store_id: "memory-0" }))._status, 200);
+});
+
+test("LATEST: an index entry whose leaf names another store is not answered", async () => {
+  await post({ namespace: "demo-tamper", entries: stores(2) });
+  const idx = gh.read(USAGE_REPO, "store_latest/demo-tamper.json");
+  const k0 = sb.storeKey("demo-tamper", "memory-0");
+  const k1 = sb.storeKey("demo-tamper", "memory-1");
+  idx.stores[k0] = idx.stores[k1];
+  gh.seed(USAGE_REPO, "store_latest/demo-tamper.json", idx);
+  assert.equal((await lookup({ namespace: "demo-tamper", store_id: "memory-0" }))._status, 404);
+});
+
+test("LATEST: two batches at the very same time, the later write wins", async () => {
+  const when = new Date("2026-10-31T11:00:00.000Z");
+  const call = async (h) => {
+    const res = makeRes();
+    await sb.handle(makeReq({ method: "POST", body: { namespace: "demo-same-ms", entries: [{ store_id: "s", head: h }] } }), res, {
+      key: "testkeyA", prefix: "demo-", rateLimited: () => false,
+      meterAndCharge: async () => ({ ok: true, source: "free", headers: {} }),
+      refundFailedWrite: async () => {}, applyHeaders: () => {}, now: () => when,
+    });
+    return res;
+  };
+  await call(head("first"));
+  const second = await call(head("second"));
+  const ans = await lookup({ namespace: "demo-same-ms", store_id: "s" });
+  assert.equal(ans._body.entry_path, second._body.entry_path);
+});
