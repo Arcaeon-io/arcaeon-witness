@@ -227,7 +227,17 @@ async function meterAndCharge(key) {
 // charged by that payment, and a meter refusal a payment can answer becomes a
 // 402 with quotes. meterAndCharge itself is unchanged.
 async function chargeFor(key, payCtx) {
-  if (payCtx && payCtx.enabled && payCtx.proof) return agentPay.chargeWithProof(payCtx);
+  if (payCtx && payCtx.enabled && payCtx.proof) {
+    // A payment answers a spent tier, never a misconfigured key: the same rule
+    // as "Credits do not override a misconfigured account" in meterAndCharge.
+    if (typeof meter.resolveCap(meter.resolveEntry(meter.keyHash(key))) === "symbol") {
+      return {
+        deny: { status: 401, body: { error: "no usage cap configured for this key", reason: "no_cap_configured" } },
+        headers: {},
+      };
+    }
+    return agentPay.chargeWithProof(payCtx);
+  }
   const charge = await meterAndCharge(key);
   if (charge.deny && payCtx && payCtx.enabled && agentPay.payable(charge.deny)) {
     return agentPay.paymentRequired(payCtx, charge);
@@ -238,8 +248,16 @@ async function chargeFor(key, payCtx) {
 // The one give back step every failed write path calls: a claimed payment is
 // released for a retry (lib/_agent_pay.js release); anything else goes to
 // refundFailedWrite, unchanged.
+//
+// A payment is NOT released here. It is released once, in the handler's
+// finally, whenever the request ends without a record written: that covers
+// these failure paths AND every early return on a later pass after a heal
+// (a monotonic or conflict 409, the idempotent 200, a gate refusal), which a
+// call at each site would miss. A record that landed (even if latest.json then
+// failed) keeps the payment: the retry adopts that record rather than buying a
+// second one.
 async function refundOrRelease(key, chargeSource, namespace, seq, cause, payCtx) {
-  if (chargeSource === "payment") return agentPay.release(payCtx, cause);
+  if (chargeSource === "payment") return;
   return refundFailedWrite(key, chargeSource, namespace, seq, cause);
 }
 
@@ -544,345 +562,356 @@ module.exports = async (req, res) => {
   let metered = false;
   let chargeSource = null;
   let lastAttemptedSeq = null;
+  // For agent payments only: whether a numbered record landed, and so whether
+  // a claimed payment bought something (see refundOrRelease).
+  let recordLanded = false;
 
   const latestPath = `pins/${namespace}/latest.json`;
   const MAX_PASSES = 4; // 1 normal pass; extra passes only when a wedge self-heals
 
   try {
-    for (let pass = 0; pass < MAX_PASSES; pass++) {
-      // --- read the current latest pin ---
-      const cur = await store.getFile(latestPath);
+    try {
+      for (let pass = 0; pass < MAX_PASSES; pass++) {
+        // --- read the current latest pin ---
+        const cur = await store.getFile(latestPath);
 
-      // --- the head's verdict, before anything is decided against it ---
-      // Every guard below is written `cur && Number.isInteger(cur.json.rows) &&
-      // ...`, so a latest.json that was present but unreadable SKIPPED all of
-      // them: no monotonic check, no re-mint check, and `seq` fell to its
-      // default of 1 — a brand-new namespace's first pin, over a damaged head.
-      // "No head yet" is the verified-empty verdict (the store's 404) and
-      // nothing else. Refused before any charge. See lib/_verdict.js.
-      const headVerdict = verdict.judgePin(cur, { what: `pins/${namespace}/latest.json`, namespace });
-      if (!headVerdict.ok) {
-        const refused = verdict.refusal(headVerdict, "pin");
-        refused.body.note =
-          "the namespace's current head is stored but cannot be read as a pin record, so this pin was NOT " +
-          "accepted and nothing was charged: a witness that pins over a head it cannot read has stopped " +
-          "checking that it never goes backward.";
-        return res.status(refused.status).json(refused.body);
-      }
-
-      // --- renewal preconditions: a renewal may only ever RESTATE the head ---
-      // (rejections here charge nothing — no write happens)
-      if (intent === "renew") {
-        if (!cur) {
-          return res.status(404).json({
-            error: `nothing to renew: no pin recorded for namespace "${namespace}"`,
-            reason: "no_head_to_renew",
-            note: "renewal refreshes an existing head's deadline; POST /api/pin first",
-          });
+        // --- the head's verdict, before anything is decided against it ---
+        // Every guard below is written `cur && Number.isInteger(cur.json.rows) &&
+        // ...`, so a latest.json that was present but unreadable SKIPPED all of
+        // them: no monotonic check, no re-mint check, and `seq` fell to its
+        // default of 1 — a brand-new namespace's first pin, over a damaged head.
+        // "No head yet" is the verified-empty verdict (the store's 404) and
+        // nothing else. Refused before any charge. See lib/_verdict.js.
+        const headVerdict = verdict.judgePin(cur, { what: `pins/${namespace}/latest.json`, namespace });
+        if (!headVerdict.ok) {
+          const refused = verdict.refusal(headVerdict, "pin");
+          refused.body.note =
+            "the namespace's current head is stored but cannot be read as a pin record, so this pin was NOT " +
+            "accepted and nothing was charged: a witness that pins over a head it cannot read has stopped " +
+            "checking that it never goes backward.";
+          return res.status(refused.status).json(refused.body);
         }
-        if (!Number.isInteger(cur.json.rows) || rows !== cur.json.rows) {
+
+        // --- renewal preconditions: a renewal may only ever RESTATE the head ---
+        // (rejections here charge nothing — no write happens)
+        if (intent === "renew") {
+          if (!cur) {
+            return res.status(404).json({
+              error: `nothing to renew: no pin recorded for namespace "${namespace}"`,
+              reason: "no_head_to_renew",
+              note: "renewal refreshes an existing head's deadline; POST /api/pin first",
+            });
+          }
+          if (!Number.isInteger(cur.json.rows) || rows !== cur.json.rows) {
+            return res.status(409).json({
+              error: "renewal must restate the current head exactly (same rows, same chain)",
+              reason: "renewal_head_mismatch",
+              latest_rows: cur.json.rows,
+              submitted_rows: rows,
+              note: "to advance content, POST /api/pin with the new head and NO renew intent — a renewal can never record an advance",
+            });
+          }
+        }
+
+        // --- monotonic guard (rejection charges nothing) ---
+        if (cur && Number.isInteger(cur.json.rows) && rows < cur.json.rows) {
           return res.status(409).json({
-            error: "renewal must restate the current head exactly (same rows, same chain)",
-            reason: "renewal_head_mismatch",
+            error: "monotonic violation: a witness never goes backward",
             latest_rows: cur.json.rows,
             submitted_rows: rows,
-            note: "to advance content, POST /api/pin with the new head and NO renew intent — a renewal can never record an advance",
           });
         }
-      }
 
-      // --- monotonic guard (rejection charges nothing) ---
-      if (cur && Number.isInteger(cur.json.rows) && rows < cur.json.rows) {
-        return res.status(409).json({
-          error: "monotonic violation: a witness never goes backward",
-          latest_rows: cur.json.rows,
-          submitted_rows: rows,
-        });
-      }
+        // Same-length re-mint guard (reticuli's missing typed case, excelsior's
+        // two-ledger design, 2026-08-14): equal rows + identical chain is an
+        // idempotent re-pin; equal rows + DIFFERENT chain never advances accepted
+        // state — it lands in an append-only observation log and returns a typed
+        // conflict, so detection can't itself poison the namespace.
+        if (cur && Number.isInteger(cur.json.rows) && rows === cur.json.rows) {
+          if (chain.toLowerCase() === String(cur.json.chain).toLowerCase()) {
+            // --- legacy arming (atomic-raven: legacy_no_deadline must ARM) ---
+            // A head recorded before the cadence field existed carries no
+            // deadline, so it reports cadence_gradeable:false forever — and a
+            // quiet publisher re-pinning that unchanged head got the idempotent
+            // 200 below and stayed ungradeable forever with it. That is the
+            // "arms nothing" half of atomic-raven's objection: the refusal to
+            // grade was machine-readable but had no exit.
+            //
+            // So a bare re-pin of a head that has NO deadline arms the FIRST one.
+            // This is not the "refreshing a deadline must be asked for out loud"
+            // rule bending: there is no window to extend and none to launder —
+            // the only possible movement is ungradeable -> gradeable, which is
+            // strictly stronger for the consumer. It is one-time per namespace
+            // (once armed, the head has a deadline and bare re-pins are plain
+            // no-ops again), forward-only, and appendInterval keeps
+            // had_ungradeable_history:true on the record permanently, so no past
+            // stretch is retroactively graded and no armed row can pass itself
+            // off as always-having-been-under-contract.
+            const headDueMs =
+              typeof cur.json.next_pin_due_by === "string" ? Date.parse(cur.json.next_pin_due_by) : NaN;
+            const armLegacy = intent !== "renew" && !Number.isFinite(headDueMs);
 
-      // Same-length re-mint guard (reticuli's missing typed case, excelsior's
-      // two-ledger design, 2026-08-14): equal rows + identical chain is an
-      // idempotent re-pin; equal rows + DIFFERENT chain never advances accepted
-      // state — it lands in an append-only observation log and returns a typed
-      // conflict, so detection can't itself poison the namespace.
-      if (cur && Number.isInteger(cur.json.rows) && rows === cur.json.rows) {
-        if (chain.toLowerCase() === String(cur.json.chain).toLowerCase()) {
-          // --- legacy arming (atomic-raven: legacy_no_deadline must ARM) ---
-          // A head recorded before the cadence field existed carries no
-          // deadline, so it reports cadence_gradeable:false forever — and a
-          // quiet publisher re-pinning that unchanged head got the idempotent
-          // 200 below and stayed ungradeable forever with it. That is the
-          // "arms nothing" half of atomic-raven's objection: the refusal to
-          // grade was machine-readable but had no exit.
-          //
-          // So a bare re-pin of a head that has NO deadline arms the FIRST one.
-          // This is not the "refreshing a deadline must be asked for out loud"
-          // rule bending: there is no window to extend and none to launder —
-          // the only possible movement is ungradeable -> gradeable, which is
-          // strictly stronger for the consumer. It is one-time per namespace
-          // (once armed, the head has a deadline and bare re-pins are plain
-          // no-ops again), forward-only, and appendInterval keeps
-          // had_ungradeable_history:true on the record permanently, so no past
-          // stretch is retroactively graded and no armed row can pass itself
-          // off as always-having-been-under-contract.
-          const headDueMs =
-            typeof cur.json.next_pin_due_by === "string" ? Date.parse(cur.json.next_pin_due_by) : NaN;
-          const armLegacy = intent !== "renew" && !Number.isFinite(headDueMs);
+            if (intent !== "renew" && !armLegacy) {
+              // Unchanged behavior: a bare re-pin is idempotent. It records
+              // NOTHING, so it now also charges nothing — the metering used to run
+              // before this branch and burned a meter count on a pure no-op.
+              return res.status(200).json({
+                ok: true,
+                note: "already witnessed (idempotent re-pin) — no renewal intent, deadline unchanged",
+                pin: cur.json,
+                hint: 'to refresh next_pin_due_by without new rows, POST /api/renew (or add "intent":"renew") — it is recorded as a publisher heartbeat, never as a content advance',
+              });
+            }
 
-          if (intent !== "renew" && !armLegacy) {
-            // Unchanged behavior: a bare re-pin is idempotent. It records
-            // NOTHING, so it now also charges nothing — the metering used to run
-            // before this branch and burned a meter count on a pure no-op.
-            return res.status(200).json({
-              ok: true,
-              note: "already witnessed (idempotent re-pin) — no renewal intent, deadline unchanged",
-              pin: cur.json,
-              hint: 'to refresh next_pin_due_by without new rows, POST /api/renew (or add "intent":"renew") — it is recorded as a publisher heartbeat, never as a content advance',
+            // --- deadline writes are owner-gated (rejection charges nothing) ---
+            const gate = await ownerGate(namespace, key);
+            if (gate.deny) return res.status(gate.deny.status).json(gate.deny.body);
+
+            // --- renewal write path: heal-if-wedged, THEN charge, THEN write ---
+            const heal = await healIfWedged(namespace, cur, latestPath);
+            if (heal.repaired) continue;
+            if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
+
+            if (!metered) {
+              const charge = await chargeFor(key, payCtx);
+              applyHeaders(res, charge.headers);
+              if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
+              metered = true;
+              chargeSource = charge.source;
+            }
+
+            // --- renewal (excelsior's invariants; see _store.appendInterval) ---
+            const prev = cur.json;
+            const renewedAt = new Date();
+            const cadenceHours = store.resolveCadenceHours(namespace);
+            const dueBy = new Date(renewedAt.getTime() + cadenceHours * 3600_000).toISOString();
+            const seq = Number.isInteger(prev.seq) ? prev.seq + 1 : 1;
+            lastAttemptedSeq = seq;
+            const hist = store.appendInterval(prev, {
+              now: renewedAt, seq, cadenceHours, dueBy, kind: "publisher_heartbeat",
             });
-          }
 
-          // --- deadline writes are owner-gated (rejection charges nothing) ---
-          const gate = await ownerGate(namespace, key);
-          if (gate.deny) return res.status(gate.deny.status).json(gate.deny.body);
-
-          // --- renewal write path: heal-if-wedged, THEN charge, THEN write ---
-          const heal = await healIfWedged(namespace, cur, latestPath);
-          if (heal.repaired) continue;
-          if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
-
-          if (!metered) {
-            const charge = await chargeFor(key, payCtx);
-            applyHeaders(res, charge.headers);
-            if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
-            metered = true;
-            chargeSource = charge.source;
-          }
-
-          // --- renewal (excelsior's invariants; see _store.appendInterval) ---
-          const prev = cur.json;
-          const renewedAt = new Date();
-          const cadenceHours = store.resolveCadenceHours(namespace);
-          const dueBy = new Date(renewedAt.getTime() + cadenceHours * 3600_000).toISOString();
-          const seq = Number.isInteger(prev.seq) ? prev.seq + 1 : 1;
-          lastAttemptedSeq = seq;
-          const hist = store.appendInterval(prev, {
-            now: renewedAt, seq, cadenceHours, dueBy, kind: "publisher_heartbeat",
-          });
-
-          const renewal = {
-            namespace,
-            rows,
-            chain: chain.toLowerCase(),
-            pinned_at: renewedAt.toISOString(), // when THIS record was written (witness clock)
-            seq,
-            cadence_hours: cadenceHours,
-            next_pin_due_by: dueBy,
-            // The typed distinction that stops a heartbeat reading as an advance.
-            record_kind: "publisher_heartbeat",
-            // When this exact (rows, chain) head was FIRST witnessed. Renewals
-            // never move it — that's the number that exposes a log which has
-            // been "kept current" for months without producing a single row.
-            head_first_seen_at: prev.head_first_seen_at || prev.pinned_at || null,
-            renewals_since_advance:
-              (Number.isInteger(prev.renewals_since_advance) ? prev.renewals_since_advance : 0) + 1,
-            renewals_total: (Number.isInteger(prev.renewals_total) ? prev.renewals_total : 0) + 1,
-            auth_level: store.AUTH_LEVEL,
-            auth_note: store.AUTH_LEVEL_NOTE,
-            ...hist.fields,
-          };
-
-          const seqName = String(seq).padStart(8, "0");
-          try {
-            const put = await putSeqRecord(
-              namespace, seqName, renewal,
-              armLegacy
-                ? `arm ${namespace} rows=${rows} seq=${seq} (first cadence deadline on a legacy head, content unchanged)`
-                : `renew ${namespace} rows=${rows} seq=${seq} (publisher heartbeat, content unchanged)`
-            );
-            const latestPut = await store.putFile(latestPath, renewal,
-              `latest ${namespace} rows=${rows} seq=${seq} (heartbeat)`, cur.sha,
-              { rebuild: latestPointerRebuild(renewal) });
-
-            // §11 Q4, decided rather than left open: heartbeats go IN the tree.
-            // The design's own words — "Keeping them in is the conservative
-            // call and §3.1 assumes it" — and §3.1's leaf carries `record_kind`
-            // precisely so "a proof that omits it would let a heartbeat be
-            // presented as an advance." A leaf that names itself a heartbeat is
-            // not a cost; a tree that silently omits heartbeats would make the
-            // published leaf list an incomplete account of what was accepted.
-            await pending.recordAcceptedSafe(renewal);
-
-            return res.status(201).json({
-              ok: true,
-              renewed: true,
-              // How many contents-API PUT attempts this record actually cost.
-              // >2 means a 409 was retried rather than lost (task 093).
-              write_attempts: (put.attempts || 1) + (latestPut.attempts || 1),
-              latest_pointer_advanced: !latestPut.abandoned,
-              armed_cadence: armLegacy,
-              record_kind: "publisher_heartbeat",
-              note: armLegacy
-                ? "legacy head armed: this namespace had no deadline and is now under the cadence contract, forward-only — nothing before this record is graded, and had_ungradeable_history stays on the record permanently"
-                : "deadline refreshed as a publisher heartbeat — content head did NOT advance",
+            const renewal = {
+              namespace,
+              rows,
+              chain: chain.toLowerCase(),
+              pinned_at: renewedAt.toISOString(), // when THIS record was written (witness clock)
+              seq,
+              cadence_hours: cadenceHours,
               next_pin_due_by: dueBy,
-              interval_appended: hist.interval,
-              superseded_deadline_was_missed: hist.wasOverdue,
-              missed_due_at: renewal.missed_due_at || null,
-              missed_deadline_count: renewal.missed_deadline_count,
+              // The typed distinction that stops a heartbeat reading as an advance.
+              record_kind: "publisher_heartbeat",
+              // When this exact (rows, chain) head was FIRST witnessed. Renewals
+              // never move it — that's the number that exposes a log which has
+              // been "kept current" for months without producing a single row.
+              head_first_seen_at: prev.head_first_seen_at || prev.pinned_at || null,
+              renewals_since_advance:
+                (Number.isInteger(prev.renewals_since_advance) ? prev.renewals_since_advance : 0) + 1,
+              renewals_total: (Number.isInteger(prev.renewals_total) ? prev.renewals_total : 0) + 1,
               auth_level: store.AUTH_LEVEL,
               auth_note: store.AUTH_LEVEL_NOTE,
-              pin: renewal,
-              commit: put.commit && put.commit.sha,
-              public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
-            });
-          } catch (err) {
-            // A wedge the proactive check missed (contents-API read lag). Self-
-            // heal and retry rather than 502; `metered` stays true so the
-            // eventual success isn't charged twice.
-            if (err && err.wedged && pass < MAX_PASSES - 1) {
-              const reheal = await healIfWedged(namespace, cur, latestPath);
-              if (reheal.deny) return res.status(reheal.deny.status).json(reheal.deny.body);
-              continue;
+              ...hist.fields,
+            };
+
+            const seqName = String(seq).padStart(8, "0");
+            try {
+              const put = await putSeqRecord(
+                namespace, seqName, renewal,
+                armLegacy
+                  ? `arm ${namespace} rows=${rows} seq=${seq} (first cadence deadline on a legacy head, content unchanged)`
+                  : `renew ${namespace} rows=${rows} seq=${seq} (publisher heartbeat, content unchanged)`
+              );
+              recordLanded = true;
+              const latestPut = await store.putFile(latestPath, renewal,
+                `latest ${namespace} rows=${rows} seq=${seq} (heartbeat)`, cur.sha,
+                { rebuild: latestPointerRebuild(renewal) });
+
+              // §11 Q4, decided rather than left open: heartbeats go IN the tree.
+              // The design's own words — "Keeping them in is the conservative
+              // call and §3.1 assumes it" — and §3.1's leaf carries `record_kind`
+              // precisely so "a proof that omits it would let a heartbeat be
+              // presented as an advance." A leaf that names itself a heartbeat is
+              // not a cost; a tree that silently omits heartbeats would make the
+              // published leaf list an incomplete account of what was accepted.
+              await pending.recordAcceptedSafe(renewal);
+
+              return res.status(201).json({
+                ok: true,
+                renewed: true,
+                // How many contents-API PUT attempts this record actually cost.
+                // >2 means a 409 was retried rather than lost (task 093).
+                write_attempts: (put.attempts || 1) + (latestPut.attempts || 1),
+                latest_pointer_advanced: !latestPut.abandoned,
+                armed_cadence: armLegacy,
+                record_kind: "publisher_heartbeat",
+                note: armLegacy
+                  ? "legacy head armed: this namespace had no deadline and is now under the cadence contract, forward-only — nothing before this record is graded, and had_ungradeable_history stays on the record permanently"
+                  : "deadline refreshed as a publisher heartbeat — content head did NOT advance",
+                next_pin_due_by: dueBy,
+                interval_appended: hist.interval,
+                superseded_deadline_was_missed: hist.wasOverdue,
+                missed_due_at: renewal.missed_due_at || null,
+                missed_deadline_count: renewal.missed_deadline_count,
+                auth_level: store.AUTH_LEVEL,
+                auth_note: store.AUTH_LEVEL_NOTE,
+                pin: renewal,
+                commit: put.commit && put.commit.sha,
+                public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
+              });
+            } catch (err) {
+              // A wedge the proactive check missed (contents-API read lag). Self-
+              // heal and retry rather than 502; `metered` stays true so the
+              // eventual success isn't charged twice.
+              if (err && err.wedged && pass < MAX_PASSES - 1) {
+                const reheal = await healIfWedged(namespace, cur, latestPath);
+                if (reheal.deny) return res.status(reheal.deny.status).json(reheal.deny.body);
+                continue;
+              }
+              // Reaching here means this request is about to fail (409 wedged-
+              // out-of-budget, or 502 genuine store error) with no write landed
+              // — but the charge above already did. Refund before throwing.
+              await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
+              throw err;
             }
-            // Reaching here means this request is about to fail (409 wedged-
-            // out-of-budget, or 502 genuine store error) with no write landed
-            // — but the charge above already did. Refund before throwing.
-            await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
-            throw err;
           }
+          // --- head-conflict: same rows, different chain (409, charges nothing) ---
+          const obs = {
+            observed_at: new Date().toISOString(),
+            claimed: { namespace, rows, chain: chain.toLowerCase() },
+            accepted_head: { rows: cur.json.rows, chain: cur.json.chain, seq: cur.json.seq },
+            auth_result: "key-valid-for-namespace",
+            verdict: "head-conflict: same rows, different chain (re-mint signature)",
+          };
+          const obsName = obs.observed_at.replace(/[:.]/g, "-");
+          await store.putFile(`observations/${namespace}/${obsName}.json`, obs,
+            `OBSERVATION head-conflict ${namespace} rows=${rows}`);
+          return res.status(409).json({
+            error: "head-conflict: same rows, different chain — recorded as observation; accepted head unchanged",
+            accepted_head: obs.accepted_head,
+            observation: `observations/${namespace}/${obsName}.json`,
+          });
         }
-        // --- head-conflict: same rows, different chain (409, charges nothing) ---
-        const obs = {
-          observed_at: new Date().toISOString(),
-          claimed: { namespace, rows, chain: chain.toLowerCase() },
-          accepted_head: { rows: cur.json.rows, chain: cur.json.chain, seq: cur.json.seq },
-          auth_result: "key-valid-for-namespace",
-          verdict: "head-conflict: same rows, different chain (re-mint signature)",
-        };
-        const obsName = obs.observed_at.replace(/[:.]/g, "-");
-        await store.putFile(`observations/${namespace}/${obsName}.json`, obs,
-          `OBSERVATION head-conflict ${namespace} rows=${rows}`);
-        return res.status(409).json({
-          error: "head-conflict: same rows, different chain — recorded as observation; accepted head unchanged",
-          accepted_head: obs.accepted_head,
-          observation: `observations/${namespace}/${obsName}.json`,
+
+        // --- content advance write path: heal-if-wedged, THEN charge, THEN write ---
+        const heal = await healIfWedged(namespace, cur, latestPath);
+        if (heal.repaired) continue;
+        if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
+
+        if (!metered) {
+          const charge = await chargeFor(key, payCtx);
+          applyHeaders(res, charge.headers);
+          if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
+          metered = true;
+          chargeSource = charge.source;
+        }
+
+        const seq = cur && Number.isInteger(cur.json.seq) ? cur.json.seq + 1 : 1;
+        lastAttemptedSeq = seq;
+        const pinnedAt = new Date();
+        const cadenceHours = store.resolveCadenceHours(namespace);
+        const dueBy = new Date(pinnedAt.getTime() + cadenceHours * 3600_000).toISOString();
+        // Same append-only history the renewal path uses. An ADVANCE doesn't get to
+        // erase a missed deadline either: if the head moves after the window
+        // closed, the miss is recorded here exactly as a renewal would record it.
+        const hist = store.appendInterval(cur ? cur.json : null, {
+          now: pinnedAt, seq, cadenceHours, dueBy, kind: "content_head_advance",
         });
-      }
-
-      // --- content advance write path: heal-if-wedged, THEN charge, THEN write ---
-      const heal = await healIfWedged(namespace, cur, latestPath);
-      if (heal.repaired) continue;
-      if (heal.deny) return res.status(heal.deny.status).json(heal.deny.body);
-
-      if (!metered) {
-        const charge = await chargeFor(key, payCtx);
-        applyHeaders(res, charge.headers);
-        if (charge.deny) return res.status(charge.deny.status).json(charge.deny.body);
-        metered = true;
-        chargeSource = charge.source;
-      }
-
-      const seq = cur && Number.isInteger(cur.json.seq) ? cur.json.seq + 1 : 1;
-      lastAttemptedSeq = seq;
-      const pinnedAt = new Date();
-      const cadenceHours = store.resolveCadenceHours(namespace);
-      const dueBy = new Date(pinnedAt.getTime() + cadenceHours * 3600_000).toISOString();
-      // Same append-only history the renewal path uses. An ADVANCE doesn't get to
-      // erase a missed deadline either: if the head moves after the window
-      // closed, the miss is recorded here exactly as a renewal would record it.
-      const hist = store.appendInterval(cur ? cur.json : null, {
-        now: pinnedAt, seq, cadenceHours, dueBy, kind: "content_head_advance",
-      });
-      const pin = {
-        namespace,
-        rows,
-        chain: chain.toLowerCase(),
-        pinned_at: pinnedAt.toISOString(), // the witness's OWN clock
-        seq,
-        // Cadence deadline (excelsior's review): a promise, not a proof —
-        // makes a missed cadence VISIBLE to a stranger polling /api/latest,
-        // does not by itself prove tampering. See _store.resolveCadenceHours.
-        cadence_hours: cadenceHours,
-        next_pin_due_by: dueBy,
-        record_kind: "content_head_advance",
-        head_first_seen_at: pinnedAt.toISOString(),
-        renewals_since_advance: 0, // reset: the head actually moved
-        renewals_total: cur && Number.isInteger(cur.json.renewals_total) ? cur.json.renewals_total : 0,
-        auth_level: store.AUTH_LEVEL,
-        auth_note: store.AUTH_LEVEL_NOTE,
-        ...hist.fields,
-      };
-
-      // --- commit the pin, then update latest.json (2 commits, Stage-0) ---
-      const seqName = String(seq).padStart(8, "0");
-      const msg = `pin ${namespace} rows=${rows} seq=${seq}`;
-      try {
-        const put = await putSeqRecord(namespace, seqName, pin, msg);
-        const latestPut = await store.putFile(latestPath, pin,
-          `latest ${namespace} rows=${rows} seq=${seq}`,
-          cur ? cur.sha : undefined,
-          { rebuild: latestPointerRebuild(pin) });
-
-        // The record is committed. This appends its leaf to the open batch and
-        // cannot un-commit it — see lib/_pending.js recordAcceptedSafe.
-        await pending.recordAcceptedSafe(pin);
-
-        return res.status(201).json({
-          ok: true,
+        const pin = {
+          namespace,
+          rows,
+          chain: chain.toLowerCase(),
+          pinned_at: pinnedAt.toISOString(), // the witness's OWN clock
+          seq,
+          // Cadence deadline (excelsior's review): a promise, not a proof —
+          // makes a missed cadence VISIBLE to a stranger polling /api/latest,
+          // does not by itself prove tampering. See _store.resolveCadenceHours.
+          cadence_hours: cadenceHours,
+          next_pin_due_by: dueBy,
           record_kind: "content_head_advance",
-          // How many contents-API PUT attempts this record actually cost.
-          // >2 means a 409 was retried rather than lost (task 093).
-          write_attempts: (put.attempts || 1) + (latestPut.attempts || 1),
-          latest_pointer_advanced: !latestPut.abandoned,
+          head_first_seen_at: pinnedAt.toISOString(),
+          renewals_since_advance: 0, // reset: the head actually moved
+          renewals_total: cur && Number.isInteger(cur.json.renewals_total) ? cur.json.renewals_total : 0,
           auth_level: store.AUTH_LEVEL,
           auth_note: store.AUTH_LEVEL_NOTE,
-          pin,
-          commit: put.commit && put.commit.sha,
-          public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
-        });
-      } catch (err) {
-        // A wedge the proactive check missed (read lag) — self-heal and retry;
-        // `metered` stays true so the retry isn't charged again.
-        if (err && err.wedged && pass < MAX_PASSES - 1) {
-          const reheal = await healIfWedged(namespace, cur, latestPath);
-          if (reheal.deny) return res.status(reheal.deny.status).json(reheal.deny.body);
-          continue;
-        }
-        // About to fail with no write landed, but the charge above already
-        // happened — refund it before throwing (see refundFailedWrite header).
-        await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
-        throw err;
-      }
-    }
+          ...hist.fields,
+        };
 
-    // Passes exhausted — the namespace kept re-wedging faster than repair could
-    // converge (should be unreachable in practice). Report typed, don't spin.
-    // Charged-but-unwritten residual applies here too — a charge could have
-    // landed on an earlier pass before this fallthrough was ever reached.
-    await refundOrRelease(key, chargeSource, namespace, lastAttemptedSeq,
-      new Error("namespace repair did not converge within the retry budget"), payCtx);
-    return res.status(409).json({
-      error: "namespace is wedged and automatic repair did not converge within the retry budget",
-      reason: "orphaned_seq_record",
-      namespace,
-      public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
-    });
-  } catch (err) {
-    if (err && err.wedged) {
-      return res.status(409).json(orphanedSeqBody(namespace, err.seqName));
+        // --- commit the pin, then update latest.json (2 commits, Stage-0) ---
+        const seqName = String(seq).padStart(8, "0");
+        const msg = `pin ${namespace} rows=${rows} seq=${seq}`;
+        try {
+          const put = await putSeqRecord(namespace, seqName, pin, msg);
+          recordLanded = true;
+          const latestPut = await store.putFile(latestPath, pin,
+            `latest ${namespace} rows=${rows} seq=${seq}`,
+            cur ? cur.sha : undefined,
+            { rebuild: latestPointerRebuild(pin) });
+
+          // The record is committed. This appends its leaf to the open batch and
+          // cannot un-commit it — see lib/_pending.js recordAcceptedSafe.
+          await pending.recordAcceptedSafe(pin);
+
+          return res.status(201).json({
+            ok: true,
+            record_kind: "content_head_advance",
+            // How many contents-API PUT attempts this record actually cost.
+            // >2 means a 409 was retried rather than lost (task 093).
+            write_attempts: (put.attempts || 1) + (latestPut.attempts || 1),
+            latest_pointer_advanced: !latestPut.abandoned,
+            auth_level: store.AUTH_LEVEL,
+            auth_note: store.AUTH_LEVEL_NOTE,
+            pin,
+            commit: put.commit && put.commit.sha,
+            public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
+          });
+        } catch (err) {
+          // A wedge the proactive check missed (read lag) — self-heal and retry;
+          // `metered` stays true so the retry isn't charged again.
+          if (err && err.wedged && pass < MAX_PASSES - 1) {
+            const reheal = await healIfWedged(namespace, cur, latestPath);
+            if (reheal.deny) return res.status(reheal.deny.status).json(reheal.deny.body);
+            continue;
+          }
+          // About to fail with no write landed, but the charge above already
+          // happened — refund it before throwing (see refundFailedWrite header).
+          await refundOrRelease(key, chargeSource, namespace, seq, err, payCtx);
+          throw err;
+        }
+      }
+
+      // Passes exhausted — the namespace kept re-wedging faster than repair could
+      // converge (should be unreachable in practice). Report typed, don't spin.
+      // Charged-but-unwritten residual applies here too — a charge could have
+      // landed on an earlier pass before this fallthrough was ever reached.
+      await refundOrRelease(key, chargeSource, namespace, lastAttemptedSeq,
+        new Error("namespace repair did not converge within the retry budget"), payCtx);
+      return res.status(409).json({
+        error: "namespace is wedged and automatic repair did not converge within the retry budget",
+        reason: "orphaned_seq_record",
+        namespace,
+        public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
+      });
+    } catch (err) {
+      if (err && err.wedged) {
+        return res.status(409).json(orphanedSeqBody(namespace, err.seqName));
+      }
+      // A red verdict thrown from inside the write (the latest-pointer rebuild
+      // hook found the pointer present but unreadable after it moved) is a
+      // refusal with a named reason, not a generic store failure.
+      if (err instanceof verdict.RedVerdictError) {
+        const refused = verdict.refusal(err.verdict, "pin");
+        refused.body.note =
+          "the namespace's latest pointer moved during this write and what it now holds cannot be read as a pin " +
+          "record, so the pointer was NOT written over and the charge was refunded.";
+        return res.status(refused.status).json(refused.body);
+      }
+      // Generic store failure. err.message is deliberately short and carries no
+      // upstream response body — api/_store.js logs the detail server-side.
+      return res.status(502).json({ error: `pin store error: ${err.message}` });
     }
-    // A red verdict thrown from inside the write (the latest-pointer rebuild
-    // hook found the pointer present but unreadable after it moved) is a
-    // refusal with a named reason, not a generic store failure.
-    if (err instanceof verdict.RedVerdictError) {
-      const refused = verdict.refusal(err.verdict, "pin");
-      refused.body.note =
-        "the namespace's latest pointer moved during this write and what it now holds cannot be read as a pin " +
-        "record, so the pointer was NOT written over and the charge was refunded.";
-      return res.status(refused.status).json(refused.body);
+  } finally {
+    if (chargeSource === "payment" && !recordLanded) {
+      await agentPay.release(payCtx, new Error("the request ended without a record written"));
     }
-    // Generic store failure. err.message is deliberately short and carries no
-    // upstream response body — api/_store.js logs the detail server-side.
-    return res.status(502).json({ error: `pin store error: ${err.message}` });
   }
 };

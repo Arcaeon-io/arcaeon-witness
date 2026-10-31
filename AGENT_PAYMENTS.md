@@ -62,8 +62,13 @@ Summarized from the owner's notes, not re-checked here:
   one proof race on the create; exactly one wins.
 * A pin that writes nothing (a refusal, or the idempotent re-pin of the
   current head) never reaches the charge step, so its proof is not spent.
-* **Failed write:** if the write fails after the claim, the record moves to
-  `released`, and the same proof is accepted again for the same request. That
+* **No write, no charge:** whenever the request ends without a numbered
+  record written, for any reason (a failed write, or an early refusal on a
+  later pass after a heal adopted another writer's record), the record moves to
+  `released` once, in the handler's `finally`, and the same proof is accepted
+  again for the same request, even after its quote expired. A record that did
+  land (even if the latest pointer then failed) keeps the payment: the retry
+  adopts that record and cannot buy a second one. That
   is this path's refund, and it keeps the promise the credit path keeps
   (`refundFailedWrite`): a charge that buys no write is given back. No money is
   sent back automatically. The agent's retry spends what it already paid. A
@@ -91,6 +96,8 @@ the account path's agent registration is the natural source.
 | one adapter cannot quote | 402 with the other, `unavailable` names the one down | | no |
 | no adapter can quote | 503 `payment_unavailable` | | no |
 | write fails after the claim | 502, payment released | given back | no |
+| a heal on a later pass ends in a refusal | that refusal, payment released | given back | no |
+| key with no cap configured, even with a proof | 401 `no_cap_configured` | no | no |
 
 ## The adapters
 
@@ -120,6 +127,7 @@ invoices and cannot spend.
 | setting | meaning |
 |---|---|
 | `WITNESS_AGENT_PAY` | on, to offer payment at all |
+| (both adapters) | the processor and node addresses must be https, or the adapter is not offered |
 | `WITNESS_PAY_SECRET` | token signing secret, at least 32 characters; without it nothing is offered |
 | `WITNESS_PAY_X402`, `_API`, `_KEY`, `_PAY_TO`, `_ASSET`, `_NETWORK`, `_AMOUNT` | the stablecoin adapter; any missing and it is not offered |
 | `WITNESS_PAY_L402`, `_NODE`, `_MACAROON`, `_SATS` | the Lightning adapter; any missing and it is not offered |

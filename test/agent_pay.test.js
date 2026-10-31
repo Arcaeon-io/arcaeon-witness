@@ -18,7 +18,9 @@ const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const store = require("../lib/_store.js");
 const meter = require("../lib/_meter.js");
 const agentPay = require("../lib/_agent_pay.js");
-const pinHandler = require("../api/pin.js");
+// Reloaded per test: its per instance rate limit (60 per key per hour) would
+// otherwise be spent by the earlier tests in this file.
+let pinHandler;
 
 const PIN_REPO = process.env.GITHUB_PIN_REPO;
 const USAGE_REPO = process.env.GITHUB_USAGE_REPO;
@@ -58,6 +60,8 @@ beforeEach(() => {
   processor = new MockProcessor();
   node = new MockNode();
   restore = installAll(gh, processor, node);
+  delete require.cache[require.resolve("../api/pin.js")];
+  pinHandler = require("../api/pin.js");
   store._putRetry.sleep = async () => {};
 });
 afterEach(() => {
@@ -372,4 +376,87 @@ test("SECRETS: the processor key, the macaroon and the token secret never reach 
   }
   assert.equal(processor.calls[0].headers.authorization, `Bearer ${SECRETS.WITNESS_PAY_X402_KEY}`);
   assert.equal(node.calls[0].headers["grpc-metadata-macaroon"], SECRETS.WITNESS_PAY_L402_MACAROON);
+});
+
+// --- the review's blocker and its three follow ups ---
+
+test("RELEASE ON EVERY EARLY RETURN: charged, then a heal adopts another writer's higher head and the pass ends 409; the payment is given back", async () => {
+  const first = await payX402(); // rows 5, seq 1
+  assert.equal(first.res._status, 201);
+  const slot = "pins/agent-a-mem/00000002.json";
+  const orig = gh.handleFetch.bind(gh);
+  let raced = false;
+  gh.handleFetch = async (url, opts) => {
+    if (!raced && opts && opts.method === "PUT" && String(url).endsWith(`/contents/${slot}`)) {
+      raced = true;
+      // Another writer lands a higher head in our slot a moment before us.
+      const ours = JSON.parse(Buffer.from(JSON.parse(opts.body).content, "base64").toString());
+      gh.seed(PIN_REPO, slot, { ...ours, rows: 10, chain: "cccccccc" });
+    }
+    return orig(url, opts);
+  };
+  const { quote, id, res } = await payX402(body({ rows: 6, chain: "bbbbbbbb" }));
+  assert.equal(raced, true);
+  assert.equal(res._status, 409, JSON.stringify(res._body));
+  const ref = Object.keys(Object.fromEntries(gh.repos.get(USAGE_REPO))).filter((p) => p.startsWith("payments/x402/"))
+    .map((p) => gh.read(USAGE_REPO, p)).find((r) => r.binding === agentPay.bindingOf({ key: "agentkeyA", ...body({ rows: 6, chain: "bbbbbbbb" }) }));
+  assert.equal(ref.state, "released", "money taken for no write must be given back");
+  assert.ok(quote && id);
+});
+
+test("PARTIAL WRITE: a heartbeat whose record landed keeps its payment; the retry cannot buy a second heartbeat", async () => {
+  await payX402(); // rows 5, seq 1
+  const renew = body({ intent: "renew" });
+  const q = await pin(renew);
+  const a = accept(q, "x402");
+  const id = processor.pay(a);
+  gh.forceFailure(PIN_REPO, "pins/agent-a-mem/latest.json", 50, 500);
+  const failed = await pin(renew, { headers: x402Header(a.token, id) });
+  assert.equal(failed._status, 502);
+  assert.ok(gh.has(PIN_REPO, "pins/agent-a-mem/00000002.json"), "the heartbeat record landed");
+  gh.forceFailure(PIN_REPO, "pins/agent-a-mem/latest.json", 0, 500);
+  const retry = await pin(renew, { headers: x402Header(a.token, id) });
+  assert.equal(retry._status, 409, JSON.stringify(retry._body));
+  assert.equal(retry._body.reason, "payment_already_used");
+  assert.equal(gh.has(PIN_REPO, "pins/agent-a-mem/00000003.json"), false, "no second heartbeat");
+});
+
+test("MISCONFIGURED KEY WITH A PROOF: still 401 no_cap_configured; the processor is not asked", async () => {
+  const q = await pin(body());
+  const a = accept(q, "x402");
+  const id = processor.pay(a);
+  process.env.WITNESS_PLANS = JSON.stringify({ [meter.keyHash("agentkeyA")]: { plan: "no-such-plan" } });
+  const r = await pin(body(), { headers: x402Header(a.token, id) });
+  assert.equal(r._status, 401);
+  assert.equal(r._body.reason, "no_cap_configured");
+  assert.equal(processor.calls.length, 0);
+  assert.equal(pubWrites(), 0);
+});
+
+test("RELEASED OUTLIVES ITS QUOTE: a payment released after a failed write is redeemable after the quote expires", async () => {
+  const q = await pin(body());
+  const a = accept(q, "x402");
+  const id = processor.pay(a);
+  gh.forceFailure(PIN_REPO, "pins/agent-a-mem/00000001.json", 50, 500);
+  assert.equal((await pin(body(), { headers: x402Header(a.token, id) }))._status, 502);
+  gh.forceFailure(PIN_REPO, "pins/agent-a-mem/00000001.json", 0, 500);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 20 * 60 * 1000;
+  try {
+    const late = await pin(body(), { headers: x402Header(a.token, id) });
+    assert.equal(late._status, 201, JSON.stringify(late._body));
+    // An unspent expired quote is still refused.
+    const q2 = accept(await pin(body({ rows: 6 })), "x402");
+    Date.now = () => realNow() + 40 * 60 * 1000;
+    const r = await pin(body({ rows: 6 }), { headers: x402Header(q2.token, processor.pay(q2)) });
+    assert.equal(r._body.reason, "quote_expired");
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("HTTPS ONLY: an adapter whose address is not https is not offered", async () => {
+  process.env.WITNESS_PAY_L402_NODE = "http://node.test.invalid";
+  process.env.WITNESS_PAY_X402_API = "http://processor.test.invalid";
+  assert.equal(agentPay.enabled(), false);
 });
