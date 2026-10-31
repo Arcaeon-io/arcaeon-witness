@@ -201,3 +201,53 @@ test("LATEST: a record read from the lagging mirror gets no receipt, and the ans
     global.fetch = orig;
   }
 });
+
+// --- job 13: GET /api/verify answers with the signed receipt ---
+
+async function verifyGet(query) {
+  const res = makeRes();
+  await verifyHandler(makeReq({ method: "GET", query, headers: { "x-forwarded-for": `10.40.0.${Math.floor(Math.random() * 250)}` } }), res);
+  return res;
+}
+
+test("VERIFY: a witnessed current head comes with the same receipt the pin was answered with", async () => {
+  on();
+  const p = await pin({ namespace: "demo-ver", rows: 6, chain: CHAIN });
+  const res = await verifyGet({ ns: "demo-ver", rows: "6", chain: CHAIN });
+  assert.equal(res._status, 200, JSON.stringify(res._body));
+  assert.equal(res._body.witnessed, true);
+  assert.deepEqual(res._body.receipt, p._body.receipt);
+  assert.deepEqual(receipts.verify(res._body.receipt, publicRaw()), { ok: true });
+});
+
+test("VERIFY: a superseded head found in history comes with its own record's receipt", async () => {
+  on();
+  const first = await pin({ namespace: "demo-hist", rows: 6, chain: CHAIN });
+  await pin({ namespace: "demo-hist", rows: 9, chain: "cd".repeat(32) });
+  const res = await verifyGet({ ns: "demo-hist", rows: "6", chain: CHAIN });
+  assert.equal(res._body.witnessed, true);
+  assert.equal(res._body.is_current_head, false);
+  assert.deepEqual(res._body.receipt, first._body.receipt);
+  assert.equal(res._body.receipt.witness_seq, 1);
+});
+
+test("VERIFY: a head that was not witnessed has no receipt; flag off, no field", async () => {
+  on();
+  await pin({ namespace: "demo-nope", rows: 6, chain: CHAIN });
+  const miss = await verifyGet({ ns: "demo-nope", rows: "6", chain: "ef".repeat(32) });
+  assert.notEqual(miss._body.witnessed, true);
+  assert.equal("receipt" in miss._body, false);
+  delete process.env.WITNESS_RECEIPTS;
+  const off = await verifyGet({ ns: "demo-nope", rows: "6", chain: CHAIN });
+  assert.equal(off._body.witnessed, true);
+  assert.equal("receipt" in off._body, false);
+});
+
+test("VERIFY: a short chain is witnessed, and says why it has no receipt", async () => {
+  on();
+  await pin({ namespace: "demo-shortv", rows: 2, chain: "abcdef12" });
+  const res = await verifyGet({ ns: "demo-shortv", rows: "2", chain: "abcdef12" });
+  assert.equal(res._body.witnessed, true);
+  assert.equal(res._body.receipt, null);
+  assert.equal(res._body.receipt_unavailable, "chain_not_64_hex");
+});

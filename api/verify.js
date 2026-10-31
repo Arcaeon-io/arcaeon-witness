@@ -44,6 +44,8 @@
 
 "use strict";
 
+const receipts = require("../lib/_receipt.js");
+
 const store = require("../lib/_store.js");
 const verdict = require("../lib/_verdict.js");
 const cors = require("../lib/_cors.js");
@@ -194,6 +196,10 @@ async function verifyItem(rawNs, rawRows, rawChain, rawDigest) {
     return verdict.success(recordVerdict, {
       witnessed: true,
       pin: record,
+      // The signed receipt for the record that matched (lib/_receipt.js),
+      // when receipts are on: every record here was read through the
+      // contents API, never the raw mirror. Off, no field at all.
+      ...receipts.forRecord(record),
       seq: record.seq,
       pinned_at: record.pinned_at,
       is_current_head: isCurrentHead,
