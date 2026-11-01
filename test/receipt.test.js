@@ -1,4 +1,4 @@
-// test/receipt.test.js — signed per pin receipts in the contract's shape
+// test/receipt.test.js: signed per pin receipts in the contract's shape
 // (lib/_receipt.js), owner job 10. The REFERENCE vectors below were made by
 // the reference witness's own code (arcaeon-witness-sandbox
 // witness/contract.py make_receipt and make_statement) with the throwaway seed
@@ -200,4 +200,50 @@ test("LATEST: a record read from the lagging mirror gets no receipt, and the ans
   } finally {
     global.fetch = orig;
   }
+});
+
+// ---- The review of PR 9 (OWNER.md queue item 38): the pointer is not the row ----
+
+test("POINTER: a latest.json rewritten by an insider gets no receipt on either read path", async () => {
+  on();
+  await pin({ namespace: "demo-p", rows: 4, chain: CHAIN });
+  const latest = gh.read("test-owner/test-pins", "pins/demo-p/latest.json");
+  // The insider changes the pointer's chain, keeps everything else.
+  gh.seed("test-owner/test-pins", "pins/demo-p/latest.json", { ...latest, chain: "cd".repeat(32) });
+  const res = makeRes();
+  await latestHandler(makeReq({ method: "GET", query: { ns: "demo-p", namespace: "demo-p" } }), res);
+  assert.equal(res._body.receipt, null);
+  assert.equal(res._body.receipt_unavailable, "pointer_not_backed_by_row");
+  // The idempotent re-pin of the forged head reads the same pointer.
+  const again = await pin({ namespace: "demo-p", rows: 4, chain: "cd".repeat(32) });
+  assert.equal(again._body.receipt, null);
+  assert.equal(again._body.receipt_unavailable, "pointer_not_backed_by_row");
+});
+
+test("POINTER: a pointer whose numbered row is missing, or that names a lower seq, gets no receipt", async () => {
+  on();
+  await pin({ namespace: "demo-q", rows: 2, chain: CHAIN });
+  await pin({ namespace: "demo-q", rows: 3, chain: "ef".repeat(32) });
+  const latest = gh.read("test-owner/test-pins", "pins/demo-q/latest.json");
+  for (const forged of [{ ...latest, seq: latest.seq + 5 }, { ...latest, seq: 1 }]) {
+    gh.seed("test-owner/test-pins", "pins/demo-q/latest.json", forged);
+    const out = await receipts.forPointer(forged, store.getFile);
+    assert.deepEqual(out, { receipt: null, receipt_unavailable: "pointer_not_backed_by_row" }, JSON.stringify(forged.seq));
+  }
+});
+
+test("POINTER: a row that cannot be read gives row_unreadable, and the flag off adds nothing", async () => {
+  on();
+  const rec = { namespace: "demo-u", rows: 1, chain: CHAIN, seq: 1, pinned_at: "2026-11-01T00:00:00Z" };
+  assert.deepEqual(await receipts.forPointer(rec, async () => { throw new Error("github GET -> 500"); }),
+    { receipt: null, receipt_unavailable: "row_unreadable" });
+  assert.deepEqual(await receipts.forPointer(rec, async () => ({ json: { ...rec } })).then((o) => !!o.receipt), true);
+  delete process.env.WITNESS_RECEIPTS;
+  assert.deepEqual(await receipts.forPointer(rec, async () => { throw new Error("never read"); }), {});
+});
+
+test("SAMEJSON: key order does not matter, any value does", () => {
+  assert.equal(receipts.sameJson({ a: 1, b: { c: null, d: [1, 2] } }, { b: { d: [1, 2], c: null }, a: 1 }), true);
+  assert.equal(receipts.sameJson({ a: 1 }, { a: 1, b: null }), false);
+  assert.equal(receipts.sameJson({ a: [1, 2] }, { a: [2, 1] }), false);
 });

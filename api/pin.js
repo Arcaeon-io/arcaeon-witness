@@ -614,7 +614,8 @@ module.exports = async (req, res) => {
               ok: true,
               note: "already witnessed (idempotent re-pin) — no renewal intent, deadline unchanged",
               pin: cur.json,
-              ...receipts.forRecord(cur.json),
+              // Read from the pointer: signed only when the numbered row holds it.
+              ...(await receipts.forPointer(cur.json, store.getFile)),
               hint: 'to refresh next_pin_due_by without new rows, POST /api/renew (or add "intent":"renew") — it is recorded as a publisher heartbeat, never as a content advance',
             });
           }

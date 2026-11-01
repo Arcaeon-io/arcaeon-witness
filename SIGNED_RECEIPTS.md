@@ -27,6 +27,7 @@ Where receipts appear:
 
 - `POST /api/pin`: a new head (201), a renewal (201, a new `witness_seq`) and the idempotent re-pin of the current head (200, the same receipt as before).
 - `GET /api/latest`: the latest record's receipt, but only when the record was read through the contents API. A record served from the raw CDN fallback, which can lag a write by minutes, gets no receipt.
+- A record read from the pointer, `latest.json` (on `/api/latest` and on the idempotent re-pin), is signed only when the numbered row it names, `pins/<ns>/<seq>.json`, is there and holds the same record. The pointer can be rewritten and is not in the checkpoint; the numbered rows are. A pointer that does not match its row gets `receipt: null` with `receipt_unavailable: "pointer_not_backed_by_row"`, and a row that cannot be read gets `"row_unreadable"`. A new pin and a renewal sign the record they just wrote.
 
 A pin the contract cannot carry gets no receipt, and the answer says why in `receipt_unavailable`: `chain_not_64_hex` (the contract's head chain is a SHA-256; this witness also takes shorter chains), `namespace_not_in_contract_form` (the contract's namespace starts with a letter or digit), `receipt_key_not_configured`, `read_from_lagging_mirror`. A receipt a contract reader would refuse is never made.
 
@@ -58,5 +59,5 @@ A drill, run by hand, not part of this repo's suite since it needs the seal's re
 ## Turning it on
 
 1. The owner makes a key by hand and sets `WITNESS_RECEIPT_KEY`, and `WITNESS_RECEIPT_STARTED_AT` to the time the key went into use.
-2. Set `WITNESS_RECEIPTS=on` on the Vercel project and where the checkpoint is published.
+2. Set `WITNESS_RECEIPTS=on` on the hosting project and where the checkpoint is published.
 3. Redeploy. Answers carry receipts; `/.well-known/arcaeon-witness-key` answers the key.

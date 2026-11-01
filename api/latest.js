@@ -138,7 +138,8 @@ module.exports = async (req, res) => {
     ...cadenceFields,
     // A receipt is signed only over a commit fresh read through the contents
     // API, never over the raw CDN fallback, which can lag a write by minutes.
-    ...(source === "github-contents-api" ? receipts.forRecord(pin)
+    // and only when the numbered row the pointer names holds the same record.
+    ...(source === "github-contents-api" ? await receipts.forPointer(pin, store.getFile)
       : receipts.enabled() ? { receipt: null, receipt_unavailable: "read_from_lagging_mirror" } : {}),
   }, "latest", HEAD);
 
