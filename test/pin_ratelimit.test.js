@@ -11,7 +11,7 @@ process.env.WITNESS_KEYS = "testkeyA:demo-,testkeyB:demo-";
 process.env.WITNESS_PLANS = "{}";
 delete process.env.WITNESS_CADENCE;
 
-const { test, beforeEach, afterEach } = require("node:test");
+const { test, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
 
@@ -21,7 +21,7 @@ const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const store = require("../lib/_store.js");
 const pinRate = require("../lib/_pin_ratelimit.js");
 
-const ENV_KEYS = ["WITNESS_USAGE_STORE", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "WITNESS_BATCH_SHADOW"];
+const ENV_KEYS = ["WITNESS_USAGE_STORE", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "WITNESS_BATCH_SHADOW", "WITNESS_USAGE_STORE_TIMEOUT_MS"];
 let gh, pg, restore, saved;
 const realPutSleep = store._putRetry.sleep;
 const HOUR = 3600_000;
@@ -153,4 +153,79 @@ test("HANDLER: under the limit the pin goes through, flag on and flag off", asyn
       body: { namespace: `demo-ok${mode}`, rows: 1, chain: "aaaaaaaa" } }), res);
     assert.equal(res._status, 201, mode + " " + JSON.stringify(res._body));
   }
+});
+
+// ---- the database call has a deadline (lib/_usage_store.js pgCall) ----
+
+// A database that never answers. honourAbort: rejects on the abort signal, as
+// a real fetch does; otherwise it ignores the signal entirely.
+function hangPg(honourAbort) {
+  pg.handleFetch = (_url, opts = {}) => new Promise((_resolve, reject) => {
+    pg.requests.push({ hung: true });
+    if (honourAbort && opts.signal) opts.signal.addEventListener("abort", () => reject(new Error("aborted")));
+  });
+}
+function quiet() {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.join(" "));
+  return { logs, done: () => { console.error = orig; } };
+}
+
+for (const honourAbort of [true, false]) {
+  test(`TIMEOUT: a database that never answers fails closed as rate_limit_store_unreachable (fetch ${honourAbort ? "honours" : "ignores"} the abort)`, async () => {
+    flagOn();
+    process.env.WITNESS_USAGE_STORE_TIMEOUT_MS = "30";
+    const r = freshInstance().rate;
+    hangPg(honourAbort);
+    const q = quiet();
+    let out;
+    const t = Date.now();
+    try { out = await r.check("testkeyA"); } finally { q.done(); }
+    assert.deepEqual(out, { error: true, reason: "rate_limit_store_unreachable" });
+    assert.ok(Date.now() - t < 1500, `ended by the deadline, took ${Date.now() - t} ms`);
+    assert.ok(q.logs.some((l) => l.includes("timed out after 30 ms")), JSON.stringify(q.logs));
+  });
+}
+
+test("TIMEOUT: the default deadline is 2 s, not longer and not shorter", async () => {
+  const usageStore = require("../lib/_usage_store.js");
+  assert.equal(usageStore.PG_TIMEOUT_MS, 2000);
+  flagOn();
+  const r = freshInstance().rate;
+  hangPg(true);
+  const q = quiet();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((res) => setImmediate(res)); };
+  try {
+    let out = null;
+    const p = r.check("testkeyA").then((o) => { out = o; });
+    await flush();
+    mock.timers.tick(1999);
+    await flush();
+    assert.equal(out, null, "still waiting at 1999 ms");
+    mock.timers.tick(1);
+    await p;
+    assert.deepEqual(out, { error: true, reason: "rate_limit_store_unreachable" });
+  } finally {
+    mock.timers.reset();
+    q.done();
+  }
+});
+
+test("TIMEOUT: through the handler a hung database is the named 503, and nothing is written", async () => {
+  flagOn();
+  process.env.WITNESS_USAGE_STORE_TIMEOUT_MS = "30";
+  const { pin } = freshInstance();
+  hangPg(true);
+  const before = gh.putLog.length;
+  const res = makeRes();
+  const q = quiet();
+  try {
+    await pin(makeReq({ method: "POST", headers: { authorization: "Bearer testkeyA" },
+      body: { namespace: "demo-hang", rows: 1, chain: "aaaaaaaa" } }), res);
+  } finally { q.done(); }
+  assert.equal(res._status, 503, JSON.stringify(res._body));
+  assert.equal(res._body.reason, "rate_limit_store_unreachable");
+  assert.equal(gh.putLog.length, before, "no pin written");
 });

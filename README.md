@@ -636,7 +636,12 @@ the log proves they have not changed since the genesis date, not before it.
   commits per pin); the per-key rate limit (60 per clock hour) is a
   per-instance counter that resets on cold starts unless
   `WITNESS_USAGE_STORE=postgres`, which makes it one count shared by every
-  instance (`lib/_pin_ratelimit.js`).
+  instance (`lib/_pin_ratelimit.js`). That path keeps about a day of rows in
+  `pin_rate_windows` (key sha256, window start, hit count): every pin's
+  `pin_rate_hit` call deletes rows whose window began over a day earlier, and
+  nothing else cleans up, so with no pins old rows stay until the next pin.
+  Every database call has a 2 s deadline (`WITNESS_USAGE_STORE_TIMEOUT_MS`);
+  past it the pin is refused 503 `rate_limit_store_unreachable`.
 - `latest` reads are commit-fresh via the contents API, but the raw-CDN
   fallback can lag minutes; the repo history is the source of truth either way.
 - Two commits per pin (`<seq>.json` + `latest.json`) are not atomic; a crash
