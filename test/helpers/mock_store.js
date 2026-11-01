@@ -199,7 +199,7 @@ class MockGitHubStore {
       const newSha = this._newSha();
       map.set(path, { content: decoded, sha: newSha });
       this.commitCounter += 1;
-      this.putLog.push({ repo, path, sha: newSha });
+      this.putLog.push({ repo, path, sha: newSha, message: body.message });
       return fakeResponse(200, {
         content: { sha: newSha, path },
         commit: { sha: `commit-${this.commitCounter}` },

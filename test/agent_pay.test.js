@@ -460,3 +460,278 @@ test("HTTPS ONLY: an adapter whose address is not https is not offered", async (
   process.env.WITNESS_PAY_X402_API = "http://processor.test.invalid";
   assert.equal(agentPay.enabled(), false);
 });
+
+// --- job 14: a paid pin gets the same signed receipt, and its record the payment reference ---
+
+const receiptsMod = require("../lib/_receipt.js");
+const RSEED = "22".repeat(32);
+// Turns signed receipts on for fn only, and puts both settings back as they
+// were, whatever fn does.
+async function withReceipts(fn) {
+  const prev = { WITNESS_RECEIPTS: process.env.WITNESS_RECEIPTS, WITNESS_RECEIPT_KEY: process.env.WITNESS_RECEIPT_KEY };
+  process.env.WITNESS_RECEIPTS = "on";
+  process.env.WITNESS_RECEIPT_KEY = RSEED;
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+}
+const CH64 = "ab".repeat(32);
+const REF_KEY = "test-payment-ref-key-0123456789abcdef0123";
+const sha256hex = (s) => require("crypto").createHash("sha256").update(s, "utf8").digest("hex");
+const hmachex = (k, s) => require("crypto").createHmac("sha256", k).update(s, "utf8").digest("hex");
+// The stored bytes of every file in the public pin repo, as written.
+function publicBytes() {
+  return [...gh._repoMap(PIN_REPO).values()].map((r) => r.content).join("\n");
+}
+
+test("PAID: a paid pin is answered with the same signed receipt as any pin", async () => {
+  await withReceipts(async () => {
+    const { res } = await payX402(body({ chain: CH64 }));
+    assert.equal(res._status, 201, JSON.stringify(res._body));
+    const pub = receiptsMod.keyFromEnv().publicRaw;
+    assert.deepEqual(receiptsMod.verify(res._body.receipt, pub), { ok: true });
+    assert.deepEqual(res._body.receipt.head, { chain: CH64, kind: "head", n: 5, v: 1 });
+    assert.deepEqual(res._body.receipt, receiptsMod.forRecord(res._body.pin).receipt, "the receipt is the record's, nothing more");
+  });
+  assert.equal(process.env.WITNESS_RECEIPTS, undefined, "receipts setting restored");
+  assert.equal(process.env.WITNESS_RECEIPT_KEY, undefined, "receipt key restored");
+});
+
+test("PAID: the public record carries a keyed ref, never the ledger's ref or anything outside the witness", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const { res, id } = await payX402();
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  const ledgerRef = res._headers["x-payment-ref"];
+  assert.equal(ledgerRef, sha256hex(`x402:${id}`), "the ledger ref is the processor-derived hash");
+  const record = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json");
+  assert.equal(record.payment.method, "x402");
+  assert.match(record.payment.ref, /^[0-9a-f]{64}$/);
+  assert.equal(record.payment.ref, agentPay.publicRef("x402", ledgerRef));
+  assert.equal(record.payment.ref, hmachex(REF_KEY, `witness-payment-ref:v1:x402:${ledgerRef}`));
+  // Lightning: the invoice's payment hash is what routing nodes see.
+  const q = await pin(body({ namespace: "agent-a-ln", rows: 2 }));
+  const l = accept(q, "l402");
+  const pre = node.pay(l.payment_hash);
+  const lr = await pin(body({ namespace: "agent-a-ln", rows: 2 }), { headers: { "x-l402": `${l.token}:${pre}` } });
+  assert.equal(lr._status, 201, JSON.stringify(lr._body));
+  const lrec = gh.read(PIN_REPO, "pins/agent-a-ln/latest.json");
+  assert.equal(lrec.payment.method, "l402");
+  assert.equal(lrec.payment.ref, agentPay.publicRef("l402", l.payment_hash));
+  assert.notEqual(lrec.payment.ref, record.payment.ref, "a different payment, a different ref");
+  // On the stored bytes of the whole public repo: nothing that exists outside the witness.
+  const bytes = publicBytes();
+  for (const [what, v] of [
+    ["the processor's payment id", id],
+    ["sha256 of the processor's id (the ledger ref)", ledgerRef],
+    ["plain sha256 of the processor's id", sha256hex(id)],
+    ["the invoice's payment hash", l.payment_hash],
+    ["the preimage", pre],
+    ["the key", "agentkeyA"],
+    ["the payee account", "acct_witness"],
+  ]) {
+    assert.ok(!bytes.includes(v), `public bytes must not carry ${what}`);
+  }
+  // The response body's record is the stored one, so it leaks no more.
+  assert.ok(!JSON.stringify(lr._body).includes(l.payment_hash));
+});
+
+test("PAID: the keyed ref cannot be computed without the key", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const { res, id } = await payX402();
+  const ledgerRef = res._headers["x-payment-ref"];
+  const ref = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
+  // Every unkeyed or wrongly keyed guess from what an outsider can hold misses.
+  const guesses = [
+    ledgerRef, sha256hex(ledgerRef), sha256hex(id), sha256hex(`x402:${ledgerRef}`),
+    sha256hex(`witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex("", `witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex(SECRETS.WITNESS_PAY_SECRET, `witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex(REF_KEY + "x", `witness-payment-ref:v1:x402:${ledgerRef}`),
+  ];
+  for (const g of guesses) assert.notEqual(ref, g);
+  // Another key gives another ref for the same payment.
+  assert.notEqual(agentPay.publicRef("x402", ledgerRef, { WITNESS_PAYMENT_REF_KEY: "another-key-0123456789abcdef0123456789" }), ref);
+});
+
+test("PAID: no ref key (unset or too short) means no ref at all, only a marker that a payment was made", async () => {
+  delete process.env.WITNESS_PAYMENT_REF_KEY;
+  const { res, id } = await payX402();
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment, { method: "x402" });
+  const bytes = publicBytes();
+  assert.ok(!bytes.includes(res._headers["x-payment-ref"]) && !bytes.includes(id));
+  process.env.WITNESS_PAYMENT_REF_KEY = "short";
+  const { res: r2 } = await payX402(body({ namespace: "agent-a-two" }));
+  assert.equal(r2._status, 201, JSON.stringify(r2._body));
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-two/latest.json").payment, { method: "x402" });
+  assert.equal(agentPay.publicRef("x402", "ab".repeat(32), {}), null);
+});
+
+test("PAID: a paid renewal's record carries its own payment; an unpaid pin carries none", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const first = await payX402();
+  const firstRef = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
+  const { res } = await payX402(body({ intent: "renew" }));
+  const renewed = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
+  assert.equal(renewed, agentPay.publicRef("x402", res._headers["x-payment-ref"]));
+  assert.notEqual(renewed, firstRef);
+  assert.ok(first.res._headers["x-payment-ref"] !== res._headers["x-payment-ref"]);
+  process.env.WITNESS_PLANS = "{}";
+  const free = await pin(body({ namespace: "agent-a-free" }));
+  assert.equal(free._status, 201);
+  assert.equal("payment" in gh.read(PIN_REPO, "pins/agent-a-free/latest.json"), false);
+});
+
+// ---- follow ups: a reused ref key, one warning per process, no ledger ref in logs ----
+
+function captureErrors() {
+  const lines = [];
+  const real = console.error;
+  console.error = (...a) => { lines.push(a.join(" ")); };
+  return { lines, done: () => { console.error = real; } };
+}
+
+test("REF KEY: a ref key equal to WITNESS_PAY_SECRET is refused; the record carries no ref and one line is logged", async () => {
+  agentPay._resetWarnings();
+  process.env.WITNESS_PAYMENT_REF_KEY = SECRETS.WITNESS_PAY_SECRET;
+  const cap = captureErrors();
+  let r1, r2;
+  try {
+    ({ res: r1 } = await payX402());
+    ({ res: r2 } = await payX402(body({ namespace: "agent-a-two" })));
+  } finally { cap.done(); }
+  assert.equal(r1._status, 201, JSON.stringify(r1._body));
+  assert.equal(r2._status, 201, JSON.stringify(r2._body));
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment, { method: "x402" });
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-two/latest.json").payment, { method: "x402" });
+  assert.equal(agentPay.publicRef("x402", "ab".repeat(32)), null);
+  const reused = cap.lines.filter((l) => l.includes("equals WITNESS_PAY_SECRET"));
+  assert.equal(reused.length, 1, `one warning per process, got: ${JSON.stringify(cap.lines)}`);
+  for (const l of cap.lines) assert.ok(!l.includes(SECRETS.WITNESS_PAY_SECRET), "the warning never prints the secret");
+});
+
+test("REF KEY: an unset ref key warns once per process, however many refs are dropped", async () => {
+  agentPay._resetWarnings();
+  delete process.env.WITNESS_PAYMENT_REF_KEY;
+  const cap = captureErrors();
+  try {
+    await payX402();
+    await payX402(body({ namespace: "agent-a-two" }));
+    agentPay.publicRef("x402", "cd".repeat(32));
+  } finally { cap.done(); }
+  const unset = cap.lines.filter((l) => l.includes("WITNESS_PAYMENT_REF_KEY unset"));
+  assert.equal(unset.length, 1, `one warning per process, got: ${JSON.stringify(cap.lines)}`);
+  // Never warns when there is no ref to drop.
+  agentPay._resetWarnings();
+  const cap2 = captureErrors();
+  try { assert.equal(agentPay.publicRef("x402", ""), null); } finally { cap2.done(); }
+  assert.equal(cap2.lines.length, 0);
+});
+
+for (const withKey of [true, false]) {
+  test(`LOGS: ledger commit messages and release logs never carry the ledger ref (ref key ${withKey ? "set" : "unset"})`, async () => {
+    agentPay._resetWarnings();
+    if (withKey) process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY; else delete process.env.WITNESS_PAYMENT_REF_KEY;
+    const q = await pin(body());
+    const a = accept(q, "x402");
+    const id = processor.pay(a);
+    gh.forceFailure(PIN_REPO, "pins/agent-a-mem/00000001.json", 50, 500);
+    const cap = captureErrors();
+    let failed;
+    try { failed = await pin(body(), { headers: x402Header(a.token, id) }); } finally { cap.done(); }
+    assert.equal(failed._status, 502, JSON.stringify(failed._body));
+    gh.forceFailure(PIN_REPO, "pins/agent-a-mem/00000001.json", 0, 500);
+    const retry = await pin(body(), { headers: x402Header(a.token, id) });
+    assert.equal(retry._status, 201, JSON.stringify(retry._body));
+    const ledgerRef = retry._headers["x-payment-ref"];
+    assert.match(ledgerRef, /^[0-9a-f]{64}$/);
+    const msgs = gh.putLog.filter((p) => p.repo === USAGE_REPO && p.path.startsWith("payments/")).map((p) => p.message);
+    assert.equal(msgs.length, 3, `claim, release, claim again: ${JSON.stringify(msgs)}`);
+    const released = cap.lines.filter((l) => l.startsWith("[agent-pay] released"));
+    assert.equal(released.length, 1, JSON.stringify(cap.lines));
+    const shown = withKey ? `pub:${agentPay.publicRef("x402", ledgerRef).slice(0, 12)}` : "ref-hidden";
+    for (const m of [...msgs, ...released]) {
+      assert.ok(!m.includes(ledgerRef.slice(0, 12)), `no ledger ref prefix in: ${m}`);
+      assert.ok(m.includes(shown), `${shown} in: ${m}`);
+    }
+  });
+}
+
+// ---- the ledger path in store error logs, and a ref key that overlaps the pay secret ----
+
+for (const withKey of [true, false]) {
+  test(`LOGS: the same proof sent twice at once, the losing create's 422 is logged without the ledger ref (ref key ${withKey ? "set" : "unset"})`, async () => {
+    agentPay._resetWarnings();
+    if (withKey) process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY; else delete process.env.WITNESS_PAYMENT_REF_KEY;
+    const q = await pin(body());
+    const a = accept(q, "x402");
+    const id = processor.pay(a);
+    const h = x402Header(a.token, id);
+    const cap = captureErrors();
+    let r1, r2;
+    try { [r1, r2] = await Promise.all([pin(body(), { headers: h }), pin(body(), { headers: h })]); } finally { cap.done(); }
+    const statuses = [r1._status, r2._status].sort();
+    assert.deepEqual(statuses, [201, 409], JSON.stringify([r1._body, r2._body]));
+    const loser = r1._status === 409 ? r1 : r2;
+    assert.equal(loser._body.reason, "payment_already_used");
+    const winner = r1._status === 201 ? r1 : r2;
+    const ledgerRef = winner._headers["x-payment-ref"];
+    assert.match(ledgerRef, /^[0-9a-f]{64}$/);
+    // The create race really happened: a 422 on the ledger path was logged.
+    const raced = cap.lines.filter((l) => l.startsWith("[pending] PUT payments/x402/") && l.includes("-> 422"));
+    assert.equal(raced.length, 1, JSON.stringify(cap.lines));
+    const shown = withKey ? `pub:${agentPay.publicRef("x402", ledgerRef).slice(0, 12)}` : "ref-hidden";
+    assert.ok(raced[0].includes(`payments/x402/${shown}`), raced[0]);
+    for (const l of cap.lines) {
+      assert.ok(!l.includes(ledgerRef.slice(0, 12)), `no ledger ref prefix in: ${l}`);
+      assert.ok(!l.includes(id), `no processor payment id in: ${l}`);
+    }
+  });
+}
+
+test("LOGS: a ledger read failure logs the redacted path, and an unlabelled payments/ path is withheld", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const pending = require("../lib/_pending.js");
+  const ref = "ef".repeat(32);
+  const path = agentPay.ledgerPath("x402", ref);
+  const realFetch = global.fetch;
+  const cap = captureErrors();
+  try {
+    global.fetch = async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => `boom ${path}` });
+    await assert.rejects(pending.readUsageDoc(path, { logAs: agentPay.ledgerLogPath("x402", ref) }));
+    await assert.rejects(pending.readUsageDoc(path));
+    await assert.rejects(pending.writeUsageDoc(path, {}, undefined, "m"));
+  } finally { global.fetch = realFetch; cap.done(); }
+  assert.equal(cap.lines.length, 3, JSON.stringify(cap.lines));
+  assert.ok(cap.lines[0].includes(`payments/x402/pub:${agentPay.publicRef("x402", ref).slice(0, 12)}`), cap.lines[0]);
+  assert.ok(cap.lines[1].includes("payments/<path withheld>"), cap.lines[1]);
+  for (const l of cap.lines) assert.ok(!l.includes(ref.slice(0, 12)), `no ledger ref in: ${l}`);
+});
+
+test("REF KEY: a ref key that is the pay secret padded, extended, or cut is refused like an equal one", () => {
+  const pay = SECRETS.WITNESS_PAY_SECRET;
+  for (const k of [` ${pay} `, `${pay}-more`, pay.slice(0, pay.length - 4), `${pay}\n`]) {
+    agentPay._resetWarnings();
+    const cap = captureErrors();
+    let got;
+    try { got = agentPay.publicRef("x402", "ab".repeat(32), { WITNESS_PAY_SECRET: pay, WITNESS_PAYMENT_REF_KEY: k }); } finally { cap.done(); }
+    assert.equal(got, null, `refused: ${JSON.stringify(k.length)}`);
+    assert.equal(cap.lines.filter((l) => l.includes("equals WITNESS_PAY_SECRET")).length, 1);
+  }
+  // A distinct key still works.
+  assert.match(agentPay.publicRef("x402", "ab".repeat(32), { WITNESS_PAY_SECRET: pay, WITNESS_PAYMENT_REF_KEY: REF_KEY }), /^[0-9a-f]{64}$/);
+});
+
+test("scrubDetail withholds a ledger stem that straddles the 300 character cut", () => {
+  const { scrubDetail } = require("../lib/_pending.js");
+  const stem = "ab".repeat(32);
+  const path = `payments/x402/${stem}.json`;
+  const detail = "x".repeat(280) + `error at ${path} end`;
+  const out = scrubDetail(detail, path, "payments/x402/pub:abababababab");
+  assert.ok(!out.includes(stem.slice(0, 20)), "no part of the stem may survive the cut");
+  assert.ok(out.length <= 300);
+});

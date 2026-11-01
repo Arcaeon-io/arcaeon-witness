@@ -38,6 +38,9 @@ const pending = require("../lib/_pending.js");
 // pin past its free tier and credits gets 402 with quotes, and a paid retry
 // is charged by its payment instead of the meter. Off by default.
 const agentPay = require("../lib/_agent_pay.js");
+// Signed per pin receipts in the contract's shape (lib/_receipt.js). Off
+// unless WITNESS_RECEIPTS is on and WITNESS_RECEIPT_KEY reads.
+const receipts = require("../lib/_receipt.js");
 
 // Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
 const RATE_LIMIT = 60; // pins per key per hour, per warm instance
@@ -259,6 +262,19 @@ async function chargeFor(key, payCtx) {
 async function refundOrRelease(key, chargeSource, namespace, seq, cause, payCtx) {
   if (chargeSource === "payment") return;
   return refundFailedWrite(key, chargeSource, namespace, seq, cause);
+}
+
+// A record a payment bought says so: {payment: {method, ref}}. ref is NOT
+// the ledger's reference (that is the Lightning payment hash, or a plain hash
+// of the processor's id, both computable outside the witness). It is an HMAC
+// of it under WITNESS_PAYMENT_REF_KEY (agentPay.publicRef), a value that
+// exists nowhere outside the witness. Without that key the record carries
+// {payment: {method}} and no ref at all. Never the payer: nothing here knows
+// or keeps who paid.
+function paidWith(chargeSource, payCtx) {
+  if (chargeSource !== "payment" || !payCtx || !payCtx.claimed) return {};
+  const ref = agentPay.publicRef(payCtx.claimed.adapter, payCtx.claimed.ref);
+  return { payment: ref ? { method: payCtx.claimed.adapter, ref } : { method: payCtx.claimed.adapter } };
 }
 
 function applyHeaders(res, headers) {
@@ -659,6 +675,7 @@ module.exports = async (req, res) => {
                 ok: true,
                 note: "already witnessed (idempotent re-pin) — no renewal intent, deadline unchanged",
                 pin: cur.json,
+                ...receipts.forRecord(cur.json),
                 hint: 'to refresh next_pin_due_by without new rows, POST /api/renew (or add "intent":"renew") — it is recorded as a publisher heartbeat, never as a content advance',
               });
             }
@@ -692,6 +709,7 @@ module.exports = async (req, res) => {
             });
 
             const renewal = {
+              ...paidWith(chargeSource, payCtx),
               namespace,
               rows,
               chain: chain.toLowerCase(),
@@ -755,6 +773,7 @@ module.exports = async (req, res) => {
                 auth_level: store.AUTH_LEVEL,
                 auth_note: store.AUTH_LEVEL_NOTE,
                 pin: renewal,
+                ...receipts.forRecord(renewal),
                 commit: put.commit && put.commit.sha,
                 public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
               });
@@ -817,6 +836,7 @@ module.exports = async (req, res) => {
           now: pinnedAt, seq, cadenceHours, dueBy, kind: "content_head_advance",
         });
         const pin = {
+          ...paidWith(chargeSource, payCtx),
           namespace,
           rows,
           chain: chain.toLowerCase(),
@@ -861,6 +881,7 @@ module.exports = async (req, res) => {
             auth_level: store.AUTH_LEVEL,
             auth_note: store.AUTH_LEVEL_NOTE,
             pin,
+            ...receipts.forRecord(pin),
             commit: put.commit && put.commit.sha,
             public_record: `https://github.com/${store.REPO}/commits/${store.BRANCH}/pins/${namespace}`,
           });
