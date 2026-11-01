@@ -637,6 +637,33 @@ the log proves they have not changed since the genesis date, not before it.
   per-instance counter that resets on cold starts unless
   `WITNESS_USAGE_STORE=postgres`, which makes it one count shared by every
   instance (`lib/_pin_ratelimit.js`).
+- The public reads (`/api/verify`, `/api/latest`, `/api/health`,
+  `/api/badge`, `/status`, the prefix check) are limited to 30 per IP per 10
+  minute clock slot (`lib/_ratelimit.js`). Each warm instance counts first on
+  its own and refuses a caller over that without touching the database. Only
+  with BOTH `WITNESS_USAGE_STORE=postgres` and `WITNESS_IP_RATE_SECRET` (a
+  server secret, at least 32 characters) set does a caller under the local
+  limit also add to one shared count in the account database; that call has a
+  250 ms deadline and on timeout or error the local count decides (never no
+  limit). An IPv6 caller is counted by its /64 (one subscriber usually holds a
+  whole /64); IPv4 by the full address; an IPv4 mapped IPv6 address as its
+  IPv4. The database calls themselves have a budget per instance: at most 8
+  in flight and 50 started per second (`WITNESS_IP_RATE_MAX_IN_FLIGHT`,
+  `WITNESS_IP_RATE_MAX_PER_SECOND`), and a circuit breaker that, after 5
+  failures or timeouts within 30 s, makes no shared call for 30 s and then
+  tries one probe (`WITNESS_IP_RATE_BREAKER_FAILURES`, `_WINDOW_MS`,
+  `_OPEN_MS`). Over the budget or with the breaker open, the local count
+  decides, the same as an outage. The outage line is logged once per 10 minute
+  window, not per request. **What is stored:** in `ip_rate_windows`, per IP per slot, an
+  HMAC-SHA256 of the IP keyed with `WITNESS_IP_RATE_SECRET` (not the IP, not a
+  plain hash), the slot start time and a hit count. Nothing else. **How
+  long:** `ip_rate_sweep()`, scheduled every 10 minutes by the migration when
+  pg_cron is installed, deletes rows whose slot began over an hour ago, so a
+  row lives about 80 minutes at most. **Without pg_cron nothing runs the
+  sweep:** the operator must run `select public.ip_rate_sweep();` by hand or
+  from an outside scheduler, or rows (HMACs and counts) are never deleted.
+  Without the secret nothing about IPs is written to the database; the IP
+  lives only in the instance's memory for the window.
 - `latest` reads are commit-fresh via the contents API, but the raw-CDN
   fallback can lag minutes; the repo history is the source of truth either way.
 - Two commits per pin (`<seq>.json` + `latest.json`) are not atomic; a crash

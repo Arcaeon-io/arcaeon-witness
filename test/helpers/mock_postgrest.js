@@ -40,6 +40,13 @@ class MockPostgrest {
     this._raceNext = 0;
     this.rateWindows = new Map(); // "hash|window_start" -> hits
     this.rpcLog = []; // [{fn, args}] every database function call, in order
+    this._hangIpRate = 0;
+  }
+
+  // The next n ip_rate_hit calls never answer (a slow database); an abort
+  // signal on the request rejects them, as a real fetch would.
+  hangIpRate(n = 1) {
+    this._hangIpRate = n;
   }
 
   // The next n requests answer `status` (a database outage), after letting
@@ -86,6 +93,12 @@ class MockPostgrest {
     if (u.pathname === "/rest/v1/rpc/ip_rate_hit" && method === "POST") {
       const args = JSON.parse(opts.body);
       this.rpcLog.push({ fn: "ip_rate_hit", args });
+      if (this._hangIpRate > 0) {
+        this._hangIpRate -= 1;
+        return new Promise((_resolve, reject) => {
+          if (opts.signal) opts.signal.addEventListener("abort", () => reject(new Error("aborted")));
+        });
+      }
       if (!Number.isInteger(args.p_cost) || args.p_cost < 1) return fakeResponse(400, { message: "p_cost must be at least 1" });
       const k = `ip|${args.p_ip_hash}|${args.p_window_start}`;
       const n = (this.rateWindows.get(k) || 0) + args.p_cost;

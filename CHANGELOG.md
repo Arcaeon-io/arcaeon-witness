@@ -1,8 +1,26 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-01 — second review on the shared per IP limit: a database budget (same branch, NOT deployed)
+
+- Circuit breaker in `lib/_ratelimit.js` `checkShared`: 5 failures or timeouts within 30 s open it; while open no `ip_rate_hit` call is made for 30 s, then one probe (success closes, failure reopens). Open means the local count decides, the same as the failure path, never unlimited. Env overrides `WITNESS_IP_RATE_BREAKER_FAILURES`, `WITNESS_IP_RATE_BREAKER_WINDOW_MS`, `WITNESS_IP_RATE_BREAKER_OPEN_MS`.
+- Per instance cap on shared calls: at most 8 in flight and 50 started per clock second (`WITNESS_IP_RATE_MAX_IN_FLIGHT`, `WITNESS_IP_RATE_MAX_PER_SECOND`). Over the cap the local count decides. A flood from many distinct IPs now costs at most 50 database calls per second per instance, not one per request.
+- `callerIp` groups IPv6 by /64 (first four hextets, with `::`, brackets, a port, a zone id, and IPv4 mapped addresses handled; IPv4 unchanged). Also applies to the stamp limiter in `lib/_stamp.js`, which uses the same `callerIp`.
+- The outage log line is rate limited to once per 10 minute window, not once per request.
+- Window change, stated plainly: the default per IP window on every public read is now the 10 minute clock slot (`checkShared` uses aligned slots), not 10 minutes from the IP's first call as before. Plain `check()` without `aligned` keeps the old from-first-call window, but no endpoint calls it directly any more.
+- README: without pg_cron the sweep must be run by hand (`select public.ip_rate_sweep();`).
+- `test/ratelimit_shared.test.js` +11 (flood of distinct IPv4s in one second and over ten, concurrent flood and the in flight cap, one IPv6 /64 flood, breaker opens / probe reopens / probe closes, one probe at a time, failures wider than the window, timeouts count, log once per window, env overrides, IPv6 grouping cases). Mutation pass: 6 breaks, 6 caught. Suite 699, 699 pass, 0 fail.
+
+## 2026-11-01 — review fixes for the shared per IP limit (same branch, NOT deployed)
+
+- Local first: `checkShared` runs the per instance count before anything else and refuses a caller over it with no database call. Only callers under the local limit add to the shared count, so a read flood costs at most 30 database calls per IP per instance per window and cannot crowd the database the pin limit fails closed on. The local count now uses the same 10 minute clock slots as the shared one.
+- `ip_rate_hit` no longer deletes old rows per request. New `ip_rate_sweep()` deletes rows whose slot began over an hour ago, scheduled every 10 minutes via pg_cron when installed.
+- The shared call has a 250 ms deadline (`AbortSignal` on the fetch; `lib/_usage_store.js` `rpc` takes `{signal}`). Timeout or error: the local count already taken decides, logged.
+- The IP is keyed with HMAC-SHA256 under `WITNESS_IP_RATE_SECRET` (32+ characters), not an unsalted sha256, which over IPv4 is reversible. Without the secret the limit stays per instance and nothing about IPs reaches the database. README states what is stored and for how long.
+- `test/ratelimit_shared.test.js` +4 (local first with zero DB calls, timeout falls back to local, HMAC and no raw or unsalted hash sent, no secret means no DB) and one rewritten. Suite 688, 688 pass, 0 fail.
+
 ## 2026-10-31 — the per IP limit on public reads, shared across instances (branch `shared-ip-ratelimit`, on top of `pin-rate-limit-shared`, NOT deployed)
 
-- `lib/_ratelimit.js` `checkShared`: with `WITNESS_USAGE_STORE=postgres`, one count per IP per 10 minute slot in `ip_rate_windows`, one atomic database call (`ip_rate_hit`, weighted for bulk verify). Only a hash of the IP is sent. Off, it is the old per instance check. Database unreachable: that call is limited per instance and logged, never unlimited.
+- `lib/_ratelimit.js` `checkShared`: with `WITNESS_USAGE_STORE=postgres`, one count per IP per 10 minute slot in `ip_rate_windows`, one atomic database call (`ip_rate_hit`, weighted for bulk verify). (Superseded by the 2026-11-01 entry above: local first, HMAC under a secret, scheduled cleanup.) Off, it is the old per instance check. Database unreachable: that call is limited per instance and logged, never unlimited.
 - Every caller moves to it: `/api/latest`, `/api/verify` (single and bulk), `/api/health`, `/api/badge`, `/status`, the prefix check. With #4 the per key pin limit was already shared; now every per instance counter has its shared form.
 - `test/ratelimit_shared.test.js` +6. Mutation pass: 6 breaks, 6 caught. Suite 684, 684 pass, 0 fail.
 
