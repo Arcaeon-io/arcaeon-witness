@@ -465,42 +465,121 @@ test("HTTPS ONLY: an adapter whose address is not https is not offered", async (
 
 const receiptsMod = require("../lib/_receipt.js");
 const RSEED = "22".repeat(32);
-function receiptsOn() {
+// Turns signed receipts on for fn only, and puts both settings back as they
+// were, whatever fn does.
+async function withReceipts(fn) {
+  const prev = { WITNESS_RECEIPTS: process.env.WITNESS_RECEIPTS, WITNESS_RECEIPT_KEY: process.env.WITNESS_RECEIPT_KEY };
   process.env.WITNESS_RECEIPTS = "on";
   process.env.WITNESS_RECEIPT_KEY = RSEED;
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
 }
 const CH64 = "ab".repeat(32);
+const REF_KEY = "test-payment-ref-key-0123456789abcdef0123";
+const sha256hex = (s) => require("crypto").createHash("sha256").update(s, "utf8").digest("hex");
+const hmachex = (k, s) => require("crypto").createHmac("sha256", k).update(s, "utf8").digest("hex");
+// The stored bytes of every file in the public pin repo, as written.
+function publicBytes() {
+  return [...gh._repoMap(PIN_REPO).values()].map((r) => r.content).join("\n");
+}
 
 test("PAID: a paid pin is answered with the same signed receipt as any pin", async () => {
-  receiptsOn();
-  const { res } = await payX402(body({ chain: CH64 }));
-  assert.equal(res._status, 201, JSON.stringify(res._body));
-  const pub = receiptsMod.keyFromEnv().publicRaw;
-  assert.deepEqual(receiptsMod.verify(res._body.receipt, pub), { ok: true });
-  assert.deepEqual(res._body.receipt.head, { chain: CH64, kind: "head", n: 5, v: 1 });
-  assert.deepEqual(res._body.receipt, receiptsMod.forRecord(res._body.pin).receipt, "the receipt is the record's, nothing more");
+  await withReceipts(async () => {
+    const { res } = await payX402(body({ chain: CH64 }));
+    assert.equal(res._status, 201, JSON.stringify(res._body));
+    const pub = receiptsMod.keyFromEnv().publicRaw;
+    assert.deepEqual(receiptsMod.verify(res._body.receipt, pub), { ok: true });
+    assert.deepEqual(res._body.receipt.head, { chain: CH64, kind: "head", n: 5, v: 1 });
+    assert.deepEqual(res._body.receipt, receiptsMod.forRecord(res._body.pin).receipt, "the receipt is the record's, nothing more");
+  });
+  assert.equal(process.env.WITNESS_RECEIPTS, undefined, "receipts setting restored");
+  assert.equal(process.env.WITNESS_RECEIPT_KEY, undefined, "receipt key restored");
 });
 
-test("PAID: the public record carries the payment reference and nothing about the payer", async () => {
+test("PAID: the public record carries a keyed ref, never the ledger's ref or anything outside the witness", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
   const { res, id } = await payX402();
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  const ledgerRef = res._headers["x-payment-ref"];
+  assert.equal(ledgerRef, sha256hex(`x402:${id}`), "the ledger ref is the processor-derived hash");
   const record = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json");
-  assert.deepEqual(record.payment, { method: "x402", ref: res._headers["x-payment-ref"] });
-  const text = JSON.stringify(record);
-  assert.ok(!text.includes(id), "not the processor's payment id");
-  assert.ok(!text.includes("acct_witness") && !text.includes("agentkeyA"), "no account, no key");
-  // Lightning: the invoice's payment hash.
+  assert.equal(record.payment.method, "x402");
+  assert.match(record.payment.ref, /^[0-9a-f]{64}$/);
+  assert.equal(record.payment.ref, agentPay.publicRef("x402", ledgerRef));
+  assert.equal(record.payment.ref, hmachex(REF_KEY, `witness-payment-ref:v1:x402:${ledgerRef}`));
+  // Lightning: the invoice's payment hash is what routing nodes see.
   const q = await pin(body({ namespace: "agent-a-ln", rows: 2 }));
   const l = accept(q, "l402");
   const pre = node.pay(l.payment_hash);
-  await pin(body({ namespace: "agent-a-ln", rows: 2 }), { headers: { "x-l402": `${l.token}:${pre}` } });
-  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-ln/latest.json").payment, { method: "l402", ref: l.payment_hash });
-  assert.ok(!JSON.stringify(gh.read(PIN_REPO, "pins/agent-a-ln/latest.json")).includes(pre), "never the preimage");
+  const lr = await pin(body({ namespace: "agent-a-ln", rows: 2 }), { headers: { "x-l402": `${l.token}:${pre}` } });
+  assert.equal(lr._status, 201, JSON.stringify(lr._body));
+  const lrec = gh.read(PIN_REPO, "pins/agent-a-ln/latest.json");
+  assert.equal(lrec.payment.method, "l402");
+  assert.equal(lrec.payment.ref, agentPay.publicRef("l402", l.payment_hash));
+  assert.notEqual(lrec.payment.ref, record.payment.ref, "a different payment, a different ref");
+  // On the stored bytes of the whole public repo: nothing that exists outside the witness.
+  const bytes = publicBytes();
+  for (const [what, v] of [
+    ["the processor's payment id", id],
+    ["sha256 of the processor's id (the ledger ref)", ledgerRef],
+    ["plain sha256 of the processor's id", sha256hex(id)],
+    ["the invoice's payment hash", l.payment_hash],
+    ["the preimage", pre],
+    ["the key", "agentkeyA"],
+    ["the payee account", "acct_witness"],
+  ]) {
+    assert.ok(!bytes.includes(v), `public bytes must not carry ${what}`);
+  }
+  // The response body's record is the stored one, so it leaks no more.
+  assert.ok(!JSON.stringify(lr._body).includes(l.payment_hash));
+});
+
+test("PAID: the keyed ref cannot be computed without the key", async () => {
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const { res, id } = await payX402();
+  const ledgerRef = res._headers["x-payment-ref"];
+  const ref = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
+  // Every unkeyed or wrongly keyed guess from what an outsider can hold misses.
+  const guesses = [
+    ledgerRef, sha256hex(ledgerRef), sha256hex(id), sha256hex(`x402:${ledgerRef}`),
+    sha256hex(`witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex("", `witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex(SECRETS.WITNESS_PAY_SECRET, `witness-payment-ref:v1:x402:${ledgerRef}`),
+    hmachex(REF_KEY + "x", `witness-payment-ref:v1:x402:${ledgerRef}`),
+  ];
+  for (const g of guesses) assert.notEqual(ref, g);
+  // Another key gives another ref for the same payment.
+  assert.notEqual(agentPay.publicRef("x402", ledgerRef, { WITNESS_PAYMENT_REF_KEY: "another-key-0123456789abcdef0123456789" }), ref);
+});
+
+test("PAID: no ref key (unset or too short) means no ref at all, only a marker that a payment was made", async () => {
+  delete process.env.WITNESS_PAYMENT_REF_KEY;
+  const { res, id } = await payX402();
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment, { method: "x402" });
+  const bytes = publicBytes();
+  assert.ok(!bytes.includes(res._headers["x-payment-ref"]) && !bytes.includes(id));
+  process.env.WITNESS_PAYMENT_REF_KEY = "short";
+  const { res: r2 } = await payX402(body({ namespace: "agent-a-two" }));
+  assert.equal(r2._status, 201, JSON.stringify(r2._body));
+  assert.deepEqual(gh.read(PIN_REPO, "pins/agent-a-two/latest.json").payment, { method: "x402" });
+  assert.equal(agentPay.publicRef("x402", "ab".repeat(32), {}), null);
 });
 
 test("PAID: a paid renewal's record carries its own payment; an unpaid pin carries none", async () => {
-  await payX402();
+  process.env.WITNESS_PAYMENT_REF_KEY = REF_KEY;
+  const first = await payX402();
+  const firstRef = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
   const { res } = await payX402(body({ intent: "renew" }));
-  assert.equal(gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref, res._headers["x-payment-ref"]);
+  const renewed = gh.read(PIN_REPO, "pins/agent-a-mem/latest.json").payment.ref;
+  assert.equal(renewed, agentPay.publicRef("x402", res._headers["x-payment-ref"]));
+  assert.notEqual(renewed, firstRef);
+  assert.ok(first.res._headers["x-payment-ref"] !== res._headers["x-payment-ref"]);
   process.env.WITNESS_PLANS = "{}";
   const free = await pin(body({ namespace: "agent-a-free" }));
   assert.equal(free._status, 201);

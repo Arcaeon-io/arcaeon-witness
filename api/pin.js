@@ -264,14 +264,17 @@ async function refundOrRelease(key, chargeSource, namespace, seq, cause, payCtx)
   return refundFailedWrite(key, chargeSource, namespace, seq, cause);
 }
 
-// A record a payment bought carries the payment's reference, so the public
-// record says how this pin was paid for: {payment: {method, ref}}. ref is
-// the ledger's reference, a hash for the stablecoin adapter (sha256 of the
-// processor's payment id) and the invoice's payment hash for Lightning.
-// Never the payer: nothing here knows or keeps who paid.
+// A record a payment bought says so: {payment: {method, ref}}. ref is NOT
+// the ledger's reference (that is the Lightning payment hash, or a plain hash
+// of the processor's id, both computable outside the witness). It is an HMAC
+// of it under WITNESS_PAYMENT_REF_KEY (agentPay.publicRef), a value that
+// exists nowhere outside the witness. Without that key the record carries
+// {payment: {method}} and no ref at all. Never the payer: nothing here knows
+// or keeps who paid.
 function paidWith(chargeSource, payCtx) {
   if (chargeSource !== "payment" || !payCtx || !payCtx.claimed) return {};
-  return { payment: { method: payCtx.claimed.adapter, ref: payCtx.claimed.ref } };
+  const ref = agentPay.publicRef(payCtx.claimed.adapter, payCtx.claimed.ref);
+  return { payment: ref ? { method: payCtx.claimed.adapter, ref } : { method: payCtx.claimed.adapter } };
 }
 
 function applyHeaders(res, headers) {
