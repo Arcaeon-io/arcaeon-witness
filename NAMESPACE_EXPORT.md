@@ -5,12 +5,12 @@
 ```
 node tools/export_namespace.js --clone <clone of the pins repo> --namespace acme-prod \
      --checkpoint checkpoints/2026-10-31.txt --out acme-prod.bundle.json
-node tools/verify_namespace_bundle.js acme-prod.bundle.json --key "<the log's verifier key>"
+node tools/verify_namespace_bundle.js acme-prod.bundle.json --key "<the witness's published verifier key, listed in docs/LOGTREE_KEY_RUNBOOK.md>"
 ```
 
 ## What the bundle holds
 
-For every numbered record `pins/<namespace>/<seq>.json` that the checkpoint covers: its committed bytes, the commit that introduced it, its place in the log, and an inclusion proof into the checkpoint. Then the envelope of every entry of the log up to the checkpoint's size (its path, its file's SHA-256 and the commit that introduced it). Then the checkpoint itself, as published, with its signatures; the paths of records written after that checkpoint (listed, not proven); and the paths of the namespace's conflict observations under the checkpoint, with any later ones listed apart.
+For every numbered record `pins/<namespace>/<seq>.json` that the checkpoint covers: its committed bytes, the commit that introduced it, its place in the log, and an inclusion proof into the checkpoint. Then the envelope of every entry of the log up to the checkpoint's size (its path, its file's SHA-256 and the commit that introduced it). Then the checkpoint itself, as published, with its signatures; the paths of records written after that checkpoint (listed, not proven); and the paths of the namespace's conflict observations under the checkpoint, with any later ones listed apart in `observations_not_yet_in_checkpoint` (listed, not proven: the check only makes sure each is a path of an observation of this namespace).
 
 Know what you hand over: because the envelopes name every entry of the log, the bundle lists every other namespace's name, how many records it has, the file names of its observations (which are timestamps), and the commit of each entry. No record bytes of any other namespace are in it, only those paths, digests and commits.
 
@@ -26,8 +26,8 @@ One word and its exit code, as `tools/follow.js` answers:
 
 | word | exit | means |
 |---|---|---|
-| VERIFIED | 0 | only with `--key`: the checkpoint is this witness's log (its origin) and carries a good signature by the key; the envelopes give its root; the bundle holds every record of this namespace that the log holds under that checkpoint, the last one too; each is in the log byte for byte; they run 1, 2, 3 with none missing; each names this namespace and its own seq; every observation listed is one in the log under the checkpoint; the head never went backward, and the same rows never carried another chain |
-| BROKEN | 1 | any of that fails, named: `log_envelopes`, `not_in_checkpoint`, `missing_record`, `observation_missing`, `observation_unknown`, `path`, `record_mismatch`, `went_backward`, `chain_changed`, `tree_size`, or a signature by the key that fails |
+| VERIFIED | 0 | only with `--key`: the checkpoint's origin names this witness's log and it carries a good signature by the key given. The origin is a name the checkpoint gives itself, so this is the witness's own checkpoint only if that key is one the witness publishes (listed in `docs/LOGTREE_KEY_RUNBOOK.md`, "current verifier" and section 5); the envelopes give its root; the bundle holds every record of this namespace that the log holds under that checkpoint, the last one too; each is in the log byte for byte; they run 1, 2, 3 with none missing; each names this namespace and its own seq; every observation listed is one in the log under the checkpoint; the head never went backward, and the same rows never carried another chain |
+| BROKEN | 1 | any of that fails, named: `log_envelopes`, `not_in_checkpoint`, `missing_record`, `observation_missing`, `observation_unknown`, `observation_later`, `path`, `record_mismatch`, `went_backward`, `chain_changed`, `tree_size`, or a signature by the key that fails |
 | COULD NOT LOOK | 2 | the file or the checkpoint cannot be read, the checkpoint is of another log (`unknown_origin`), the bundle carries no envelopes, the log holds no record of the namespace under the checkpoint, no key was given, or the checkpoint carries no signature by the key; and `unsigned`, below |
 
 Unsigned: `--allow-unsigned` without a key runs every other check, and a bundle that fails one is still BROKEN. One that passes them all is COULD NOT LOOK `unsigned`, exit 2, never VERIFIED. Without a signature nothing ties the checkpoint to the witness: anyone can cut the last records off, drop their envelopes, rebuild the root and write a new checkpoint for it, and every other check passes. `tools/follow.js` marks the same case UNSIGNED.

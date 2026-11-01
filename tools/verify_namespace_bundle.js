@@ -2,10 +2,14 @@
 // tools/verify_namespace_bundle.js — check a namespace bundle from
 // tools/export_namespace.js, offline (owner job 18).
 //
-//   node tools/verify_namespace_bundle.js <bundle.json> --key "<the log's verifier key>" [--allow-unsigned]
+//   node tools/verify_namespace_bundle.js <bundle.json> --key "<published key>" [--allow-unsigned]
+//
+// The witness's published verifier key is listed in docs/LOGTREE_KEY_RUNBOOK.md
+// ("current verifier", and section 5 for where else it is published).
 //
 // One word and its exit code, as tools/follow.js answers:
-//   VERIFIED        0  the bundle's log envelopes rebuild the signed checkpoint's root, so they are
+//   VERIFIED        0  the bundle's log envelopes rebuild the root of the checkpoint signed by the key
+//                      given (the witness's own only if that is its published key, above), so they are
 //                      every entry of the log up to its size; the bundle's records are exactly this
 //                      namespace's entries among them, none left out at the start, middle or end;
 //                      they run 1, 2, 3 ... with none missing, and the head never went backward
@@ -101,6 +105,15 @@ function verifyBundle(bundle, { key = null, allowUnsigned = false } = {}) {
   const logObs = new Set(envs.filter((e) => e.path.startsWith(obsPrefix)).map((e) => e.path));
   for (const o of listedObs) {
     if (!logObs.has(o)) return broken("observation_unknown", `${o} is listed in the bundle but is not an observation of ${ns} in the log under the checkpoint`);
+  }
+  // Observations after the checkpoint are only listed, not proven; each must
+  // still be the path of an observation of this namespace, nothing else.
+  const laterObs = bundle.observations_not_yet_in_checkpoint;
+  if (laterObs !== undefined) {
+    if (!Array.isArray(laterObs)) return broken("observation_later", "the bundle's later observations are not a list");
+    const obsShape = new RegExp(`^observations/${ns}/[A-Za-z0-9._-]{1,128}\\.json$`);
+    const odd = laterObs.find((o) => typeof o !== "string" || !obsShape.test(o));
+    if (odd !== undefined) return broken("observation_later", `${JSON.stringify(odd)} is listed as a later observation but is not a path under ${obsPrefix}`);
   }
   let expectSeq = 1;
   let last = null;

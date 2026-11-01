@@ -212,6 +212,36 @@ test("OBSERVATIONS: one listed that is not in the log, or is after the checkpoin
   assert.equal(checker.verifyBundle(notList, { key: KEY.verifier }).verdict, "BROKEN");
 });
 
+test("OBSERVATIONS LATER: listed, not proven, but each must be a path of an observation of this namespace", () => {
+  const b = bundle();
+  assert.deepEqual(b.observations_not_yet_in_checkpoint, []);
+  const ok = clone(b);
+  ok.observations_not_yet_in_checkpoint = ["observations/demo-a/2026-11-01T00-00-00-000Z.json"];
+  assert.equal(checker.verifyBundle(ok, { key: KEY.verifier }).verdict, "VERIFIED");
+  const odd = [
+    "observations/demo-b/2026-11-01T00-00-00-000Z.json",
+    "pins/demo-a/00000009.json",
+    "observations/demo-a/x\nVERIFIED by a court.json",
+    "observations/demo-a/../demo-b/x.json",
+    "observations/demo-a/2026-11-01T00-00-00-000Z.txt",
+    42,
+  ];
+  for (const o of odd) {
+    const bad = clone(b);
+    bad.observations_not_yet_in_checkpoint = [o];
+    const v = checker.verifyBundle(bad, { key: KEY.verifier });
+    assert.equal(v.verdict, "BROKEN", String(o));
+    assert.equal(v.reason, "observation_later", String(o));
+  }
+  const notList = clone(b);
+  notList.observations_not_yet_in_checkpoint = "observations/demo-a/2026-11-01T00-00-00-000Z.json";
+  assert.equal(checker.verifyBundle(notList, { key: KEY.verifier }).reason, "observation_later");
+  const doc = fs.readFileSync(path.join(__dirname, "..", "NAMESPACE_EXPORT.md"), "utf8");
+  assert.match(doc, /`observations_not_yet_in_checkpoint` \(listed, not proven/);
+  assert.match(doc, /origin names this witness's log/);
+  assert.ok(!/the checkpoint is this witness's log/.test(doc));
+});
+
 test("CLI: writes once, refuses to overwrite, and the checker's exit code is its verdict", () => {
   const repo = fixture();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ns-cli-"));
