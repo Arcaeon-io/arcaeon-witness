@@ -2,10 +2,14 @@
 // tools/verify_namespace_bundle.js — check a namespace bundle from
 // tools/export_namespace.js, offline (owner job 18).
 //
-//   node tools/verify_namespace_bundle.js <bundle.json> --key "<the log's verifier key>" [--allow-unsigned]
+//   node tools/verify_namespace_bundle.js <bundle.json> --key "<published key>" [--allow-unsigned]
+//
+// The witness's published verifier key is listed in docs/LOGTREE_KEY_RUNBOOK.md
+// ("current verifier", and section 5 for where else it is published).
 //
 // One word and its exit code, as tools/follow.js answers:
-//   VERIFIED        0  the bundle's log envelopes rebuild the signed checkpoint's root, so they are
+//   VERIFIED        0  the bundle's log envelopes rebuild the root of the checkpoint signed by the key
+//                      given (the witness's own only if that is its published key, above), so they are
 //                      every entry of the log up to its size; the bundle's records are exactly this
 //                      namespace's entries among them, none left out at the start, middle or end;
 //                      they run 1, 2, 3 ... with none missing, and the head never went backward
@@ -40,10 +44,16 @@
 // each record gives in its own pinned_at field is shown apart, as what the
 // witness says, not as something proven. It does not say that a court or anyone
 // else will accept it. Every line is built from what this check read and
-// proved; the only values taken from the records are their rows, chain and
-// pinned_at, and the exhibit is written only when each chain is 8 to 64 hex
-// characters (the shape lib/_store.js enforces) and each pinned_at an ISO time
-// as the witness writes it, so a bundle cannot carry words of its own into it.
+// proved; the values taken from the bundle are the namespace, the checkpoint's
+// origin, size and root (regex, equality and signature checked), each record's
+// rows, chain, pinned_at, commit and leaf_index, and the number of newer records listed.
+// The commit is 40 lowercase hex and the one the log's own envelope at that
+// place names; the leaf_index is the very place the log holds the record; each
+// newer record listed is a path pins/<ns>/<8 digits>.json. The exhibit is
+// written only when each chain is 8 to 64 hex characters (the shape
+// lib/_store.js enforces), each pinned_at an ISO time as the witness writes it,
+// and the bundle file's name (printed too) is 1 to 128 of A-Z a-z 0-9 . _ -,
+// so neither a bundle nor its file name can carry words of its own into it.
 // It is written only where nothing is yet; any other answer, a key that is
 // not one the witness publishes, or a field of the wrong shape writes no exhibit.
 //
@@ -60,6 +70,10 @@ const checkpoint = require("../lib/_checkpoint.js");
 // The shapes the witness writes (lib/_store.js CHAIN_RE; pinned_at is
 // Date.toISOString()). A value of another shape is never printed in an exhibit.
 const CHAIN_SHAPE = /^[0-9a-fA-F]{8,64}$/;
+const COMMIT_SHAPE = /^[0-9a-f]{40}$/;
+// The bundle file's name, printed in the exhibit: no newline, space or other
+// character that could add a line or words of its own.
+const BUNDLE_FILE_SHAPE = /^[A-Za-z0-9._-]{1,128}$/;
 const ISO_SHAPE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 function isIsoTime(s) {
   if (typeof s !== "string" || !ISO_SHAPE.test(s)) return false;
@@ -72,8 +86,17 @@ function exhibitFieldProblem(c) {
   for (const r of c.records) {
     if (!CHAIN_SHAPE.test(r.chain)) return { field: "chain", detail: `record ${r.seq}'s chain is not 8 to 64 hex characters, the shape the witness writes` };
     if (r.pinned_at !== null && !isIsoTime(r.pinned_at)) return { field: "pinned_at", detail: `record ${r.seq}'s pinned_at is not an ISO time as the witness writes it` };
+    if (!Number.isSafeInteger(r.rows) || r.rows < 0) return { field: "rows", detail: `record ${r.seq}'s rows is not a whole number` };
+    if (r.commit !== null && !COMMIT_SHAPE.test(r.commit)) return { field: "commit", detail: `record ${r.seq}'s commit is not 40 lowercase hex characters` };
+    if (!Number.isSafeInteger(r.leaf_index) || r.leaf_index < 0) return { field: "leaf_index", detail: `record ${r.seq}'s place in the log is not a whole number` };
   }
+  if (!Number.isSafeInteger(c.newer) || c.newer < 0) return { field: "newer", detail: "the count of newer records is not a whole number" };
   return null;
+}
+// Is the bundle file's name one that may be printed in an exhibit? null if so.
+function bundleFileProblem(name) {
+  if (typeof name === "string" && BUNDLE_FILE_SHAPE.test(name)) return null;
+  return { field: "bundle_file", detail: "the bundle file's name is not 1 to 128 of the characters A-Z a-z 0-9 . _ -, so it is not printed; rename the file and check again" };
 }
 
 // The witness log's verifier keys as the witness publishes them (public halves
@@ -161,6 +184,23 @@ function verifyBundle(bundle, { key = null, allowUnsigned = false, publishedKeys
   for (const o of listedObs) {
     if (!logObs.has(o)) return broken("observation_unknown", `${o} is listed in the bundle but is not an observation of ${ns} in the log under the checkpoint`);
   }
+  // Observations after the checkpoint are only listed, not proven; each must
+  // still be the path of an observation of this namespace, nothing else.
+  const laterObs = bundle.observations_not_yet_in_checkpoint;
+  if (laterObs !== undefined) {
+    if (!Array.isArray(laterObs)) return broken("observation_later", "the bundle's later observations are not a list");
+    const obsShape = new RegExp(`^observations/${ns}/[A-Za-z0-9._-]{1,128}\\.json$`);
+    const odd = laterObs.find((o) => typeof o !== "string" || !obsShape.test(o));
+    if (odd !== undefined) return broken("observation_later", `${JSON.stringify(odd)} is listed as a later observation but is not a path under ${obsPrefix}`);
+  }
+  // Records after the checkpoint are only listed, not proven, and only counted
+  // in the exhibit; each must still be the path of a record of this namespace.
+  const later = bundle.not_yet_in_checkpoint;
+  if (later !== undefined) {
+    if (!Array.isArray(later)) return broken("record_later", "the bundle's later records are not a list");
+    const oddRec = later.find((p) => typeof p !== "string" || !mine.test(p));
+    if (oddRec !== undefined) return broken("record_later", `${JSON.stringify(oddRec)} is listed as a later record but is not a path pins/${ns}/<8 digits>.json`);
+  }
   let expectSeq = 1;
   let last = null;
   const checked = [];
@@ -226,7 +266,7 @@ function verifyBundle(bundle, { key = null, allowUnsigned = false, publishedKeys
 // is the SHA-256 of the bundle file's bytes; now is the time of the check.
 function exhibitLines(result, { bundleFile, bundleSha, key, now }) {
   const c = result.checked;
-  const bad = exhibitFieldProblem(c);
+  const bad = exhibitFieldProblem(c) || bundleFileProblem(bundleFile);
   if (bad) throw new TypeError(`exhibit: field ${bad.field}: ${bad.detail}`);
   const out = [
     "EXHIBIT: the witnessed history of one namespace in the Arcaeon public pin log",
@@ -318,13 +358,14 @@ function main(argv = process.argv.slice(2), print = console.log, now = () => new
         "anyone can make a log and a key of their own, so an exhibit under it would show nothing about the witness");
       return 2;
     }
-    const bad = exhibitFieldProblem(r.checked);
+    const bundleFile = require("path").basename(file);
+    const bad = exhibitFieldProblem(r.checked) || bundleFileProblem(bundleFile);
     if (bad) {
       print(`no exhibit written: field ${bad.field}: ${bad.detail}`);
       return 2;
     }
     const sha = require("crypto").createHash("sha256").update(raw).digest("hex");
-    const text = exhibitLines(r, { bundleFile: require("path").basename(file), bundleSha: sha, key, now: now() }).join("\n");
+    const text = exhibitLines(r, { bundleFile, bundleSha: sha, key, now: now() }).join("\n");
     try {
       fs.writeFileSync(exhibit, text, { flag: "wx" });
     } catch (e) {
@@ -338,4 +379,4 @@ function main(argv = process.argv.slice(2), print = console.log, now = () => new
 
 if (require.main === module) process.exit(main());
 
-module.exports = { verifyBundle, exhibitLines, exhibitFieldProblem, isIsoTime, isPublishedKey, PUBLISHED_VERIFIER_KEYS, main };
+module.exports = { verifyBundle, exhibitLines, exhibitFieldProblem, bundleFileProblem, isIsoTime, isPublishedKey, PUBLISHED_VERIFIER_KEYS, main };

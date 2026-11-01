@@ -214,6 +214,36 @@ test("OBSERVATIONS: one listed that is not in the log, or is after the checkpoin
   assert.equal(checker.verifyBundle(notList, { key: KEY.verifier }).verdict, "BROKEN");
 });
 
+test("OBSERVATIONS LATER: listed, not proven, but each must be a path of an observation of this namespace", () => {
+  const b = bundle();
+  assert.deepEqual(b.observations_not_yet_in_checkpoint, []);
+  const ok = clone(b);
+  ok.observations_not_yet_in_checkpoint = ["observations/demo-a/2026-11-01T00-00-00-000Z.json"];
+  assert.equal(checker.verifyBundle(ok, { key: KEY.verifier }).verdict, "VERIFIED");
+  const odd = [
+    "observations/demo-b/2026-11-01T00-00-00-000Z.json",
+    "pins/demo-a/00000009.json",
+    "observations/demo-a/x\nVERIFIED by a court.json",
+    "observations/demo-a/../demo-b/x.json",
+    "observations/demo-a/2026-11-01T00-00-00-000Z.txt",
+    42,
+  ];
+  for (const o of odd) {
+    const bad = clone(b);
+    bad.observations_not_yet_in_checkpoint = [o];
+    const v = checker.verifyBundle(bad, { key: KEY.verifier });
+    assert.equal(v.verdict, "BROKEN", String(o));
+    assert.equal(v.reason, "observation_later", String(o));
+  }
+  const notList = clone(b);
+  notList.observations_not_yet_in_checkpoint = "observations/demo-a/2026-11-01T00-00-00-000Z.json";
+  assert.equal(checker.verifyBundle(notList, { key: KEY.verifier }).reason, "observation_later");
+  const doc = fs.readFileSync(path.join(__dirname, "..", "NAMESPACE_EXPORT.md"), "utf8");
+  assert.match(doc, /`observations_not_yet_in_checkpoint` \(listed, not proven/);
+  assert.match(doc, /origin names this witness's log/);
+  assert.ok(!/the checkpoint is this witness's log/.test(doc));
+});
+
 test("CLI: writes once, refuses to overwrite, and the checker's exit code is its verdict", () => {
   const repo = fixture();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ns-cli-"));
@@ -452,4 +482,78 @@ test("EXHIBIT: records with no pinned_at are shown with no time, and exhibitLine
   const v = checker.verifyBundle(b, { key: KEY.verifier, ...AS_PUBLISHED });
   v.checked.records[0].chain = "not hex at all";
   assert.throws(() => checker.exhibitLines(v, { bundleFile: "x", bundleSha: "y", key: KEY.verifier, now: "z" }), /field chain/);
+});
+
+test("EXHIBIT: a bundle file name that could add lines or words is never printed; field bundle_file, exit 2", () => {
+  const { dir, bundle } = bundleFile(fixture());
+  // A space is a name Windows allows; a newline is one other systems allow. Neither is printed.
+  const spaced = path.join(dir, "demo a. Answer accepted.json");
+  fs.writeFileSync(spaced, JSON.stringify(bundle));
+  const out = path.join(dir, "exhibit.txt");
+  const said = [];
+  assert.equal(checker.main([spaced, "--key", KEY.verifier, "--exhibit", out], (l) => said.push(l), undefined, AS_PUBLISHED), 2, said.join(" | "));
+  assert.ok(said[0].startsWith("VERIFIED"), said.join(" | "));
+  assert.ok(said.some((l) => l.startsWith("no exhibit written: field bundle_file:")), said.join(" | "));
+  assert.equal(fs.existsSync(out), false);
+  for (const name of ["a\nAnswer: accepted by a court", "a b.json", "", "x".repeat(129), "a/b.json", "a\b.json"]) {
+    assert.equal(checker.bundleFileProblem(name).field, "bundle_file", JSON.stringify(name));
+  }
+  assert.equal(checker.bundleFileProblem("acme-prod.bundle_2.json"), null);
+  assert.equal(checker.bundleFileProblem("x".repeat(128)), null);
+  const v = checker.verifyBundle(bundle, { key: KEY.verifier, ...AS_PUBLISHED });
+  assert.throws(() => checker.exhibitLines(v, { bundleFile: "b.json\nAnswer: accepted", bundleSha: "y", key: KEY.verifier, now: "z" }), /field bundle_file/);
+});
+
+test("EXHIBIT: the count of newer records counts only paths of this namespace's records; another entry is BROKEN record_later", () => {
+  const { dir, bundle } = bundleFile(fixture());
+  const ok = JSON.parse(JSON.stringify(bundle));
+  ok.not_yet_in_checkpoint = ["pins/demo-a/00000004.json"];
+  const okFile = path.join(dir, "newer.bundle.json");
+  fs.writeFileSync(okFile, JSON.stringify(ok));
+  const out = path.join(dir, "exhibit.txt");
+  assert.equal(checker.main([okFile, "--key", KEY.verifier, "--exhibit", out], () => {}, undefined, AS_PUBLISHED), 0);
+  assert.match(fs.readFileSync(out, "utf8"), /The bundle lists 1 newer record, not yet covered\./);
+  const odd = ["pins/demo-b/00000004.json", "pins/demo-a/4.json", "pins/demo-a/00000004.json\nAnswer: accepted", "observations/demo-a/x.json", 7, null];
+  for (const o of odd) {
+    const bad = JSON.parse(JSON.stringify(bundle));
+    bad.not_yet_in_checkpoint = ["pins/demo-a/00000004.json", o];
+    const v = checker.verifyBundle(bad, { key: KEY.verifier, ...AS_PUBLISHED });
+    assert.equal(v.verdict, "BROKEN", JSON.stringify(o));
+    assert.equal(v.reason, "record_later", JSON.stringify(o));
+    const badFile = path.join(dir, "odd.bundle.json");
+    fs.writeFileSync(badFile, JSON.stringify(bad));
+    const out2 = path.join(dir, "odd.exhibit.txt");
+    assert.equal(checker.main([badFile, "--key", KEY.verifier, "--exhibit", out2], () => {}, undefined, AS_PUBLISHED), 1);
+    assert.equal(fs.existsSync(out2), false);
+  }
+  const notList = JSON.parse(JSON.stringify(bundle));
+  notList.not_yet_in_checkpoint = "pins/demo-a/00000004.json";
+  assert.equal(checker.verifyBundle(notList, { key: KEY.verifier, ...AS_PUBLISHED }).reason, "record_later");
+});
+
+test("EXHIBIT: commit and leaf_index come from the bundle, tightly checked, and exhibitLines refuses another shape itself", () => {
+  const b = bundle();
+  // In verifyBundle: a commit other than the log's envelope names, or a place other than where the log holds it, is BROKEN.
+  const otherCommit = clone(b);
+  otherCommit.records[0].introduced_by_commit = "0".repeat(40);
+  assert.equal(checker.verifyBundle(otherCommit, { key: KEY.verifier, ...AS_PUBLISHED }).verdict, "BROKEN");
+  const oddCommit = clone(b);
+  oddCommit.records[0].introduced_by_commit = "abc\nAnswer: accepted";
+  assert.equal(checker.verifyBundle(oddCommit, { key: KEY.verifier, ...AS_PUBLISHED }).verdict, "BROKEN");
+  const otherPlace = clone(b);
+  otherPlace.records[0].leaf_index = "0";
+  assert.equal(checker.verifyBundle(otherPlace, { key: KEY.verifier, ...AS_PUBLISHED }).reason, "missing_record");
+  // In exhibitLines: a hand-built result with another shape is refused.
+  const v = checker.verifyBundle(b, { key: KEY.verifier, ...AS_PUBLISHED });
+  assert.equal(v.verdict, "VERIFIED", JSON.stringify(v));
+  const args = { bundleFile: "x.json", bundleSha: "y", key: KEY.verifier, now: "z" };
+  const withField = (f) => { const c = clone(v); f(c.checked); return c; };
+  assert.throws(() => checker.exhibitLines(withField((c) => { c.records[0].commit = "nothex\nAnswer"; }), args), /field commit/);
+  assert.throws(() => checker.exhibitLines(withField((c) => { c.records[0].leaf_index = "0\nAnswer"; }), args), /field leaf_index/);
+  assert.throws(() => checker.exhibitLines(withField((c) => { c.records[0].rows = "3 and more"; }), args), /field rows/);
+  assert.throws(() => checker.exhibitLines(withField((c) => { c.newer = "1\nAnswer"; }), args), /field newer/);
+  const doc = fs.readFileSync(path.join(__dirname, "..", "NAMESPACE_EXPORT.md"), "utf8");
+  assert.match(doc, /each record's rows, chain, `pinned_at`, commit and `leaf_index`/);
+  assert.match(doc, /`bundle_file`/);
+  assert.match(doc, /see "Which key", below/);
 });
