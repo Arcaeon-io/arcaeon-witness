@@ -134,6 +134,13 @@ pin is refused 503, `rate_limit_store_unreachable`.
 The number stays 60. Raising it is a pricing and abuse call for the owner,
 not a code one; the limit is one constant.
 
+**Not flag-only.** Two parts of the limiter change live behaviour on deploy
+even with `WITNESS_USAGE_STORE` unset: windows become fixed UTC clock hours
+(before: a rolling hour from the key's first pin on that instance, so a key
+can now make 60 at 10:59 and 60 more at 11:00), and the 429 body changes from
+`{error:"rate limit exceeded (naive Stage-0 limiter)"}` to the named body with
+`reason:"key_rate_limited"` and a `Retry-After` header. See CHANGELOG.md.
+
 ## Turning it on
 
 1. Apply `supabase/migrations/2026_10_31_usage_docs.sql` and

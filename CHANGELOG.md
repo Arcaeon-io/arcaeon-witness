@@ -7,6 +7,14 @@
 - The 429 now names itself: `reason:"key_rate_limited"`, `limit`, `window_seconds`, `shared_across_instances`, `retry_after_seconds`, and a `Retry-After` header. README documents it.
 - `test/pin_ratelimit.test.js` +8 (three instances share one count; per instance with the flag off; the hour boundary; keys apart; fail closed on six bad answers; the 429 body). Mutation pass on `lib/_pin_ratelimit.js`: 11 breaks, 11 caught. Suite 678, 678 pass, 0 fail.
 
+**Live behaviour changes with `WITNESS_USAGE_STORE` OFF (the default).** This branch is not flag-only. Deploying it changes what every caller of `POST /api/pin` sees today, even with the flag unset:
+
+1. **Window shape.** Before: a rolling hour per key per instance, starting at that key's first pin on that instance. After: fixed UTC clock hours (`10:00:00`-`10:59:59`). A key can now make 60 pins at 10:59 and 60 more at 11:00 (up to 120 in about a minute), where before it waited an hour from its first pin. A key limited at 10:30 is now released at 11:00, not at its own first-pin-plus-one-hour.
+2. **The 429 body.** Before: `{error:"rate limit exceeded (naive Stage-0 limiter)"}` and no header. After: `{error, reason:"key_rate_limited", limit, window_seconds, shared_across_instances, retry_after_seconds}` plus a `Retry-After` header. Clients matching on the old `error` string will stop matching.
+3. **Memory.** Old-window buckets are now deleted when a new window starts (before, the Map only grew until a cold start).
+
+Unchanged with the flag off: the number (60), per-instance counting, reset on cold start, and what counts (every request past auth and the prefix check). The `503 rate_limit_store_unreachable` answer only exists with the flag on. Anyone deploying this should treat points 1 and 2 as a public API change, not a refactor.
+
 ## 2026-10-31 — the meter and the pending batch can move off GitHub, behind a flag (branch `meter-off-github`, NOT deployed, flag off by default)
 
 `WITNESS_USAGE_STORE=postgres` moves the meter's monthly usage file, the open Merkle batch and the seal claim into one `usage_docs` table in the account database (`supabase/migrations/2026_10_31_usage_docs.sql`), through the new `lib/_usage_store.js`. Design and cutover: `WITNESS_METER_OFF_GITHUB.md`.
