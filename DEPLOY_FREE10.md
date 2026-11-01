@@ -41,19 +41,29 @@ migrations and flag come with it, and that is a separate deploy.
 
 ### Environment
 
-Nothing new is required for the free 10. Look at two settings before the
-deploy:
+Nothing new is required for the free 10 itself. Every change to a setting
+reaches only a deployment made after it, so make all of these before step 5
+below. Look at three settings:
 
-1. `WITNESS_PLANS`. A key listed there with its own `monthly_cap`, or with
-   plan `internal`, keeps what it has; every other key drops to 10. Decide
+1. `WITNESS_PLANS`, keyed by the SHA-256 of each key, not the key. A key
+   listed there with its own `monthly_cap`, or with plan `internal`, keeps
+   what it has; every other key drops to 10. Decide
    whether any key that relies on the old 100 should be listed with
    `"monthly_cap": 100` first.
 2. `WITNESS_STRIPE_PRICE_MAP`, only if the two new packs are put on sale
    Tuesday. Each new price id must map to `pins_200` or `pins_1000`, or the
-   checkout must carry `metadata.pack`. Without one of those, a buyer of a
-   new pack is not credited and lands on the support path, by design, since
-   the amount alone is never trusted for these two. Making the prices is the
-   owner's job in the payment dashboard; no code change is needed for it.
+   checkout must carry `metadata.pack`. This is a hard precondition, not a
+   nicety: the amount is never matched to the new packs, but it still is to
+   the old ones, so a $5 `pins_200` checkout with neither a map entry nor
+   `metadata.pack` is credited as the old `mini` pack, 1,000 pins, and a $20
+   `pins_1000` checkout matches no pack and lands on the support path.
+   Making the prices is the owner's job in the payment dashboard; no code
+   change is needed for it.
+3. `WITNESS_KEYS`, for the smoke only: add one entry
+   `<new random key>:veltest-smoke-20261103-` so the smoke has a key that
+   is new this month and can pin only under a test prefix. The owner makes this
+   key by hand and adds it; it is a secret like every key in that setting,
+   and no file in this repo holds it.
 
 Unchanged and must stay as they are: `GITHUB_PIN_TOKEN`,
 `GITHUB_USAGE_REPO`, `GITHUB_USAGE_BRANCH`, the payment keys,
@@ -85,18 +95,26 @@ November.
 
 ### Smoke
 
-Use a fresh test key whose prefix starts with `veltest-`, the reserved test
-prefix, so its pins are recognised as test data (they stay in the public
-record for good; nothing is deleted).
+Use the smoke key from setting 3: a key with no pins this month, whose
+prefix is under `veltest-`, the reserved test prefix. It is the namespace
+that must start with `veltest-`, so pin under
+`veltest-smoke-20261103-a`. Every smoke pin and the test namespace stay in
+the public record for good, recognised as test data; nothing is deleted.
 
 1. `GET /api/status` answers 200.
-2. The balance page (`/balance`, paste the test key) says
-   `0 of 10 used`.
-3. Pin 10 times under the test key: each answers success with
-   `X-Meter-Cap: 10` and `X-Meter-Used` rising by one each time.
-4. The 11th pin answers 429 with reason `over_cap` and `cap: 10`.
+2. The balance page (`/balance`, paste the smoke key) says `0 of 10 used`.
+   This holds only for a key with no pins this month, which is why the key
+   is new.
+3. Pin 10 times under `veltest-smoke-20261103-a` with the smoke key, with
+   `rows` 1, 2, 3 and so on to 10 and a new 64 character hex `chain` each
+   time. A pin that repeats the last rows and chain is a no op that is not
+   counted, and the same rows with another chain is refused as a conflict,
+   so the rows must rise. Each answers success with `X-Meter-Cap: 10` and
+   `X-Meter-Used` rising by one each time.
+4. The 11th pin, rows 11, answers 429 with reason `over_cap` and `cap: 10`.
 5. The balance page now says `10 of 10 used`, `0 remaining`.
-6. A key listed in `WITNESS_PLANS` as `internal` still pins (one pin).
+6. A key listed in `WITNESS_PLANS` (by its SHA-256) as `internal` still
+   pins: one pin under its own prefix, with rows above its last.
 7. Only if the new packs are on sale: one test mode purchase of `pins_200`
    credits 200 pins, and the success page says the free tier is 10 pins a
    month.
