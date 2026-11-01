@@ -1,6 +1,8 @@
 # One witness entry for many small stores
 
-Status: built behind a flag, off by default. `WITNESS_STORE_BATCH=on` turns it on.
+Status: built behind a flag, off by default. **Blocked on an owner pricing
+decision (see "Pricing: owner decision" below).** `WITNESS_STORE_BATCH=on`
+alone does not turn it on: it also needs `WITNESS_STORE_BATCH_PRICE` set.
 Code: `lib/_store_batch.js`, routed from `api/pin.js` as `?op=batch_stores`
 (`/api/pin-batch` rewrites there). Offline check: `tools/verify_store_proof.js`.
 Tests: `test/store_batch.test.js`.
@@ -114,17 +116,48 @@ Does not prove:
 * A stranger cannot batch into another namespace: the key's prefix must prefix
   the namespace, the same rule as a single pin (403 naming `namespace`).
 * Flooding: a batch passes the same per key rate limit and the same meter as
-  a single pin, and holds at most 1000 stores.
+  a single pin, and holds at most 1000 stores. The limit is
+  `lib/_pin_ratelimit.js` (PR 4): a batch is one hit on the key's one count,
+  shared with single pins (60 per key per UTC clock hour, shared across
+  instances with `WITNESS_USAGE_STORE=postgres`), with the same named 429,
+  `Retry-After`, and 503 `rate_limit_store_unreachable` when the count cannot
+  be read.
 
 ## Cost
 
-One public write per batch, whatever its size. Metering: a batch is charged as
-one pin, the same `meterAndCharge` and the same refund on a failed write as a
-single pin. That is the point of the feature, and it is also a pricing choice:
-the owner may want to charge per store or per bucket of stores later. The
-charge is one line in `lib/_store_batch.js` handle().
+One public write per batch, whatever its size. Metering as built: a batch is
+charged as one pin, the same `meterAndCharge` and the same refund on a failed
+write as a single pin.
+
+## Pricing: owner decision
+
+**Charge per store, per batch, or capped batches: owner decides before the
+flag goes on.** This is not decided in code and must not be decided by
+whoever flips the flag.
+
+The exposure as built: a batch of up to 1000 stores costs one pin. With
+`pins_200` at $5 that is up to 200 x 1000 = **200,000 store heads for $5**
+(the free tier and other packs scale the same way, 1000 heads per metered
+pin). The options:
+
+* per store: one batch of N stores costs N pins (fair to the meter, removes
+  most of the reason to batch for the caller);
+* per batch: one pin per batch, as built (cheapest public writes, the
+  200,000-for-$5 number above);
+* capped batches: one pin per bucket of K stores, or a lower `MAX_ENTRIES`.
+
+Guard: with `WITNESS_STORE_BATCH=on` and `WITNESS_STORE_BATCH_PRICE` unset or
+blank, every `?op=batch_stores` answers 503 `batch_price_not_set` (field
+`WITNESS_STORE_BATCH_PRICE`) before any rate count, charge or write. The only
+accepted value is `one_pin_per_batch`, the pricing that is built; any other
+value (`per_store`, `capped`, ...) answers 503 `batch_price_not_implemented`
+until someone builds it. Setting `one_pin_per_batch` is the owner's explicit
+acceptance of the number above. Tests: the two `PRICE GUARD` tests in
+`test/store_batch.test.js`.
 
 ## Turning it on
 
-Set `WITNESS_STORE_BATCH=on` and redeploy. With it off, `?op=batch_stores`
+After the owner has decided the pricing (above): set `WITNESS_STORE_BATCH=on`
+and `WITNESS_STORE_BATCH_PRICE` to the pricing chosen (today only
+`one_pin_per_batch` exists), and redeploy. With it off, `?op=batch_stores`
 answers 404 `not_enabled` and writes nothing; every other pin is unchanged.

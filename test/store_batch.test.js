@@ -25,6 +25,7 @@ const meter = require("../lib/_meter.js");
 const sb = require("../lib/_store_batch.js");
 const merkle = require("../lib/_merkle.js");
 const pinHandler = require("../api/pin.js");
+const pinRate = require("../lib/_pin_ratelimit.js");
 
 const PIN_REPO = process.env.GITHUB_PIN_REPO;
 const USAGE_REPO = process.env.GITHUB_USAGE_REPO;
@@ -33,12 +34,15 @@ const realPutSleep = store._putRetry.sleep;
 
 beforeEach(() => {
   process.env.WITNESS_STORE_BATCH = "on";
+  process.env.WITNESS_STORE_BATCH_PRICE = "one_pin_per_batch";
+  pinRate._buckets.clear();
   gh = new MockGitHubStore();
   restore = install(gh);
   store._putRetry.sleep = async () => {};
 });
 afterEach(() => {
   delete process.env.WITNESS_STORE_BATCH;
+  delete process.env.WITNESS_STORE_BATCH_PRICE;
   store._putRetry.sleep = realPutSleep;
   restore();
 });
@@ -164,7 +168,7 @@ test("ATTACK: the entry is create only; an existing entry is never replaced", as
   gh.seed(PIN_REPO, a.path, { kind: "something else" });
   const res = makeRes();
   await sb.handle(makeReq({ method: "POST", body: { namespace: "demo-same", entries } }), res, {
-    key: "testkeyA", prefix: "demo-", rateLimited: () => false,
+    key: "testkeyA", prefix: "demo-", rateCheck: async () => ({ limited: false }),
     meterAndCharge: async () => ({ ok: true, source: "free", headers: {} }),
     refundFailedWrite: async () => {}, applyHeaders: () => {}, now: () => fixed,
   });
@@ -219,7 +223,7 @@ test("STORE FAILURE: a failed public write answers 502 named, and a credit charg
   const refunds = [];
   const res = makeRes();
   await sb.handle(makeReq({ method: "POST", body: { namespace: "demo-fail", entries } }), res, {
-    key: "testkeyA", prefix: "demo-", rateLimited: () => false,
+    key: "testkeyA", prefix: "demo-", rateCheck: async () => ({ limited: false }),
     meterAndCharge: async () => ({ ok: true, source: "credit", headers: {} }),
     refundFailedWrite: async (...a) => refunds.push(a), applyHeaders: () => {}, now: () => fixed,
   });
@@ -265,4 +269,81 @@ test("METER: a key over its cap gets the meter's refusal and nothing is written"
   } finally {
     delete process.env.WITNESS_PLANS;
   }
+});
+
+// --- with PR 4's shared limiter present (lib/_pin_ratelimit.js) ---
+
+const usagePath = () => `usage/${meter.keyHash("testkeyA")}/${meter.utcMonth()}.json`;
+
+test("PR 4 LIMITER: ?op=batch_stores through api/pin.js works with the shared limiter and counts one hit", async () => {
+  const res = await post({ namespace: "demo-rl", entries: stores(5) });
+  assert.equal(res._status, 201, JSON.stringify(res._body));
+  assert.equal(res._body.proofs.length, 5);
+  assert.equal(pinRate._buckets.get("testkeyA").count, 1, "a batch is one hit on the key's count");
+});
+
+test("PR 4 LIMITER: single pins and batches share one count; the 61st hit is the named 429 with Retry-After, nothing written or charged", async () => {
+  for (let i = 0; i < pinRate.RATE_LIMIT - 1; i++) await pinRate.check("testkeyA");
+  const single = makeRes();
+  await pinHandler(makeReq({ method: "POST", headers: { authorization: "Bearer testkeyA" },
+    body: { namespace: "demo-rl2", rows: 3, chain: "aaaaaaaa" } }), single);
+  assert.equal(single._status, 201, JSON.stringify(single._body));
+  const pubBefore = gh.putLog.filter((p) => p.repo === PIN_REPO).length;
+  const usedBefore = gh.read(USAGE_REPO, usagePath()).used;
+  const res = await post({ namespace: "demo-rl2", entries: stores(3) });
+  assert.equal(res._status, 429, JSON.stringify(res._body));
+  assert.equal(res._body.reason, "key_rate_limited");
+  assert.equal(res._body.limit, 60);
+  assert.equal(res._body.window_seconds, 3600);
+  assert.equal(res._body.shared_across_instances, false);
+  assert.ok(Number(res._headers["retry-after"]) >= 1);
+  assert.equal(res._body.retry_after_seconds, Number(res._headers["retry-after"]));
+  assert.equal(gh.putLog.filter((p) => p.repo === PIN_REPO).length, pubBefore);
+  assert.equal(gh.read(USAGE_REPO, usagePath()).used, usedBefore);
+  assert.equal((await post({ namespace: "demo-rl2", entries: stores(1) }, "testkeyB"))._status, 403,
+    "another key is not limited by testkeyA's count (403 is its own namespace refusal)");
+});
+
+test("PR 4 LIMITER: an unreadable shared count refuses the batch 503 before any charge or write", async () => {
+  let charged = 0;
+  const res = makeRes();
+  await sb.handle(makeReq({ method: "POST", body: { namespace: "demo-rl3", entries: stores(2) } }), res, {
+    key: "testkeyA", prefix: "demo-",
+    rateCheck: async () => ({ error: true, reason: "rate_limit_store_unreachable" }),
+    meterAndCharge: async () => { charged++; return { ok: true, source: "free", headers: {} }; },
+    refundFailedWrite: async () => {}, applyHeaders: () => {},
+  });
+  assert.equal(res._status, 503);
+  assert.equal(res._body.reason, "rate_limit_store_unreachable");
+  assert.equal(res._body.retry_safe, true);
+  assert.equal(charged, 0);
+  assert.equal(gh.putLog.length, 0);
+});
+
+// --- pricing guard: the flag alone cannot switch batches on ---
+
+test("PRICE GUARD: flag on without WITNESS_STORE_BATCH_PRICE is a 503 batch_price_not_set; nothing written, charged or counted", async () => {
+  delete process.env.WITNESS_STORE_BATCH_PRICE;
+  for (const v of [undefined, "", "  "]) {
+    if (v !== undefined) process.env.WITNESS_STORE_BATCH_PRICE = v;
+    const res = await post({ namespace: "demo-price", entries: stores(2) });
+    assert.equal(res._status, 503, JSON.stringify(res._body));
+    assert.equal(res._body.reason, "batch_price_not_set");
+    assert.equal(res._body.field, "WITNESS_STORE_BATCH_PRICE");
+  }
+  assert.equal(gh.putLog.length, 0);
+  assert.equal(gh.read(USAGE_REPO, usagePath()), null);
+  assert.equal(pinRate._buckets.size, 0);
+});
+
+test("PRICE GUARD: a pricing that is not built (per_store, capped, anything else) is refused, never served at one pin per batch", async () => {
+  for (const v of ["per_store", "per_batch", "capped", "ONE_PIN_PER_BATCH", "1"]) {
+    process.env.WITNESS_STORE_BATCH_PRICE = v;
+    const res = await post({ namespace: "demo-price2", entries: stores(2) });
+    assert.equal(res._status, 503, v);
+    assert.equal(res._body.reason, "batch_price_not_implemented", v);
+  }
+  assert.equal(gh.putLog.length, 0);
+  assert.deepEqual(sb.PRICE_SETTINGS, ["one_pin_per_batch"]);
+  assert.equal(sb.priceProblem({ WITNESS_STORE_BATCH_PRICE: "one_pin_per_batch" }), null);
 });

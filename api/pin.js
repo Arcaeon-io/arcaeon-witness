@@ -38,9 +38,11 @@ const pending = require("../lib/_pending.js");
 // as ?op=batch_stores after the same key check. Off unless WITNESS_STORE_BATCH.
 const storeBatch = require("../lib/_store_batch.js");
 
-// Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
-const RATE_LIMIT = 60; // pins per key per hour, per warm instance
-const rateBuckets = new Map(); // key -> {windowStart, count}
+
+// Per key rate limit: lib/_pin_ratelimit.RATE_LIMIT (60) pins per key per
+// clock hour. Shared across warm instances when WITNESS_USAGE_STORE=postgres;
+// per instance otherwise. See that file's header.
+const pinRate = require("../lib/_pin_ratelimit.js");
 
 // Write the numbered, immutable seq record. Create-only on purpose: a record
 // in the public log is never overwritten.
@@ -112,17 +114,6 @@ function latestPointerRebuild(record) {
     if (freshSeq >= record.seq) return null; // abandon — never rewind the pointer
     return record;
   };
-}
-
-function rateLimited(key) {
-  const now = Date.now();
-  const b = rateBuckets.get(key);
-  if (!b || now - b.windowStart > 3600_000) {
-    rateBuckets.set(key, { windowStart: now, count: 1 });
-    return false;
-  }
-  b.count += 1;
-  return b.count > RATE_LIMIT;
 }
 
 // ---- metering + credit charge (2026-08-14 billing/race fix) ----
@@ -483,7 +474,7 @@ module.exports = async (req, res) => {
 
   if (String((req.query || {}).op || "") === "batch_stores") {
     return storeBatch.handle(req, res, {
-      key, prefix, rateLimited, meterAndCharge, refundFailedWrite, applyHeaders,
+      key, prefix, rateCheck: pinRate.check, meterAndCharge, refundFailedWrite, applyHeaders,
     });
   }
 
@@ -511,8 +502,24 @@ module.exports = async (req, res) => {
     });
   }
 
-  if (rateLimited(key)) {
-    return res.status(429).json({ error: "rate limit exceeded (naive Stage-0 limiter)" });
+  const rate = await pinRate.check(key);
+  if (rate.error) {
+    return res.status(503).json({
+      error: "rate limit store unreachable, pin not attempted",
+      reason: rate.reason,
+      retry_safe: true,
+    });
+  }
+  if (rate.limited) {
+    res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+    return res.status(429).json({
+      error: `rate limit exceeded: ${rate.limit} pins per key per clock hour`,
+      reason: "key_rate_limited",
+      limit: rate.limit,
+      window_seconds: pinRate.WINDOW_MS / 1000,
+      shared_across_instances: rate.shared,
+      retry_after_seconds: rate.retryAfterSeconds,
+    });
   }
 
   // Metering + credit are charged INSIDE the write paths below (via
