@@ -640,8 +640,16 @@ the log proves they have not changed since the genesis date, not before it.
   `pin_rate_windows` (key sha256, window start, hit count): every pin's
   `pin_rate_hit` call deletes rows whose window began over a day earlier, and
   nothing else cleans up, so with no pins old rows stay until the next pin.
-  Every database call has a 2 s deadline (`WITNESS_USAGE_STORE_TIMEOUT_MS`);
-  past it the pin is refused 503 `rate_limit_store_unreachable`.
+  Every database call has a 2 s deadline (`WITNESS_USAGE_STORE_TIMEOUT_MS`).
+  Past it on the rate limit call, the pin is refused 503
+  `rate_limit_store_unreachable`; past it on a meter call, the pin is refused
+  502 with a `metering store error`. Either way no pin is written. A write that
+  times out may still have landed: a client that resends after the 503 or 502
+  can be counted again, one extra hit against its hourly rate limit or one
+  extra free tier pin on its meter. That is a count, not money: credits are not
+  on this store, and nothing is debited for the resend itself. The one indirect
+  effect: an extra meter count brings the free cap one pin closer, so a key at
+  the edge of its cap can start paying credits one pin early.
 - `latest` reads are commit-fresh via the contents API, but the raw-CDN
   fallback can lag minutes; the repo history is the source of truth either way.
 - Two commits per pin (`<seq>.json` + `latest.json`) are not atomic; a crash
