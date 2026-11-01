@@ -1,4 +1,4 @@
-# Load test: writes per pin under 100 concurrent pinners
+# Load test: writes per pin under 100 and 500 concurrent pinners
 
 `node tools/loadtest.js [--pinners 100] [--pins 3] [--shadow] [--delay-ms 4] [--json]` runs the real `api/pin.js` against the test suite's fake of the GitHub contents API, with a small random delay on every store call so concurrent requests interleave. Each pinner has its own key and namespace and pins one after another, rows growing. Nothing reaches a network. The numbers say what the write path does under contention, not how fast GitHub is.
 
@@ -10,6 +10,15 @@
 | 100 pinners x 3, shadow on | 300 of 300 | 2 + 1.107 = 3.107 | 842 | 32 of 300 (268 dropped) | 140 / 171 ms |
 | 10 pinners x 3, shadow on | 30 of 30 | 2 + 1.7 = 3.7 | 41 | 21 of 30 (9 dropped) | 33 / 45 ms |
 | 100 pinners x 3, shadow on, no delay | 300 of 300 | 2 + 1.047 = 3.047 | 865 | 14 of 300 (286 dropped) | 107 / 114 ms |
+
+## At 500 pinners, Sun 2026-11-01 (OWNER.md queue item 40)
+
+| run | accepted | writes per pin (public + private) | lost CAS races | pending leaves kept | p50 / p95 |
+|---|---|---|---|---|---|
+| 500 pinners x 3, shadow off | 1500 of 1500 | 2 + 1 = 3 | 0 | (off) | 283 / 371 ms |
+| 500 pinners x 3, shadow on | 1500 of 1500 | 2 + 1.02 = 3.02 | 4444 | 30 of 1500 (1470 dropped) | 634 / 783 ms |
+
+Five times the pinners: every pin still lands, at exactly 3 writes, with no lost race on the public record. The latency grows about with the number of pinners, since the fake store's delays are spent one call at a time per pin and the event loop is shared; it is this code against a fake, not GitHub. The shadow batch is worse: 98 in 100 leaves dropped at 500, against about 9 in 10 at 100, and the lost races outnumber the pins three to one. So the finding above holds harder: one shared pending document cannot take concurrent pinners, and the fix is still to take the pending state off the contents API or give each pin its own leaf file.
 
 What it shows:
 

@@ -35,6 +35,21 @@ test("SHADOW ON: every pin still accepted; each one's leaf is either in the pend
   assert.equal(r.other_errors_logged, 0);
 });
 
+test("500 PINNERS, SHADOW OFF: every pin accepted at exactly 3 writes, no lost race (queue item 40)", async () => {
+  const r = await quiet(() => loadtest.run({ pinners: 500, pins: 1, delayMs: 1 }));
+  assert.deepEqual(r.answers, { 201: 500 });
+  assert.deepEqual(r.writes_per_accepted_pin, { public: 2, private: 1, total: 3 });
+  assert.equal(r.put_conflicts, 0);
+});
+
+test("500 PINNERS, SHADOW ON: every pin accepted and every leaf accounted for, kept or dropped", async () => {
+  const r = await quiet(() => loadtest.run({ pinners: 500, pins: 1, delayMs: 1, shadow: true }));
+  assert.deepEqual(r.answers, { 201: 500 });
+  assert.equal(r.writes_per_accepted_pin.public, 2);
+  assert.equal(r.pending_leaves + r.leaves_dropped, r.accepted);
+  assert.equal(r.other_errors_logged, 0);
+});
+
 test("CLI: bad numbers are refused, a run prints its summary", async () => {
   const out = [];
   assert.equal(await loadtest.main(["--pinners", "0"], (l) => out.push(l)), 2);
