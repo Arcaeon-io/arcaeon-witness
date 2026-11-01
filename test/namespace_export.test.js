@@ -15,6 +15,7 @@ const { spawnSync } = require("child_process");
 const cp = require("../lib/_checkpoint.js");
 const exporter = require("../tools/export_namespace.js");
 const checker = require("../tools/verify_namespace_bundle.js");
+const logtree = require("../lib/_logtree.js");
 
 const PUBLISH = path.join(__dirname, "..", "tools", "publish_checkpoint.js");
 const KEY = cp.generateKey("arcaeon.io/witness-pins/log");
@@ -132,12 +133,83 @@ test("BROKEN: a log that went backward or changed its chain at the same rows is 
   assert.equal(checker.verifyBundle(r.bundle, { key: KEY.verifier }).reason, "chain_changed");
 });
 
-test("SIGNATURE: no key line cannot be attributed; another key's line does not pass; --allow-unsigned checks the rest", () => {
+test("SIGNATURE: no key line cannot be attributed; another key's line does not pass; --allow-unsigned checks the rest but is never VERIFIED", () => {
   const b = bundle();
   const other = cp.generateKey("arcaeon.io/witness-pins/log");
   assert.equal(checker.verifyBundle(b, { key: other.verifier }).verdict, "COULD NOT LOOK");
   assert.equal(checker.verifyBundle(b, {}).reason, "no_key_given");
-  assert.equal(checker.verifyBundle(b, { allowUnsigned: true }).verdict, "VERIFIED");
+  const u = checker.verifyBundle(b, { allowUnsigned: true });
+  assert.equal(u.verdict, "COULD NOT LOOK", JSON.stringify(u));
+  assert.equal(u.reason, "unsigned");
+  assert.equal(u.code, 2);
+  // A bundle that fails a check is still BROKEN without a key.
+  const changed = clone(b);
+  changed.records[1].bytes_b64 = Buffer.from(rec("demo-a", 2, 6, "cc")).toString("base64");
+  assert.equal(checker.verifyBundle(changed, { allowUnsigned: true }).verdict, "BROKEN");
+});
+
+test("UNSIGNED: a tail cut with the root and checkpoint rebuilt passes every other check, and is still not VERIFIED", () => {
+  const b = bundle();
+  const forged = clone(b);
+  // The attacker drops the last record and its envelope, rebuilds the root and
+  // the proofs over what is left, and writes a fresh checkpoint for it.
+  const lastIdx = forged.records.pop().leaf_index;
+  forged.log_envelopes.splice(lastIdx, 1);
+  const tree = logtree.buildTree(forged.log_envelopes.map((e) => logtree.logLeafHash(e)));
+  const size = forged.log_envelopes.length;
+  for (const r of forged.records) {
+    r.leaf_index = forged.log_envelopes.findIndex((e) => e.path === r.path);
+    r.path_hashes = tree.inclusionProof(r.leaf_index, size).map((h) => h.toString("hex"));
+  }
+  forged.observations = forged.observations.filter((o) => forged.log_envelopes.some((e) => e.path === o));
+  forged.tree_size = size;
+  forged.checkpoint = cp.formatCheckpoint({ origin: logtree.LOG_ORIGIN, size, root: tree.rootAt(size) });
+  const u = checker.verifyBundle(forged, { allowUnsigned: true });
+  assert.notEqual(u.verdict, "VERIFIED");
+  assert.equal(u.reason, "unsigned", JSON.stringify(u));
+  assert.equal(u.code, 2);
+  // With the key, the forged checkpoint carries no signature by it.
+  assert.equal(checker.verifyBundle(forged, { key: KEY.verifier }).reason, "no_signature_for_key");
+  // The CLI answers the same: COULD NOT LOOK, exit 2.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ns-forged-"));
+  fs.writeFileSync(path.join(dir, "f.json"), JSON.stringify(forged));
+  const said = [];
+  assert.equal(checker.main([path.join(dir, "f.json"), "--allow-unsigned"], (l) => said.push(l)), 2);
+  assert.match(said.join(" | "), /^COULD NOT LOOK: unsigned/);
+});
+
+test("ORIGIN: a checkpoint of another log, even signed by the key, is COULD NOT LOOK unknown_origin", () => {
+  const b = bundle();
+  const p = cp.parseCheckpoint(b.checkpoint);
+  const otherText = cp.signCheckpoint(cp.formatCheckpoint({ origin: "example.invalid/another-log/v1", size: p.size, root: p.root }), KEY.signer);
+  const other = clone(b);
+  other.checkpoint = otherText;
+  const v = checker.verifyBundle(other, { key: KEY.verifier });
+  assert.equal(v.verdict, "COULD NOT LOOK", JSON.stringify(v));
+  assert.equal(v.reason, "unknown_origin");
+  assert.equal(checker.verifyBundle(other, { allowUnsigned: true }).reason, "unknown_origin");
+});
+
+test("OBSERVATIONS: one listed that is not in the log, or is after the checkpoint, is BROKEN", () => {
+  const b = bundle();
+  const madeUp = clone(b);
+  madeUp.observations.push("observations/demo-a/2026-10-31T09-09-09-000Z.json");
+  assert.equal(checker.verifyBundle(madeUp, { key: KEY.verifier }).reason, "observation_unknown");
+  // After the checkpoint: the exporter lists it apart, and listed as under the checkpoint it is refused.
+  const repo = fixture();
+  const text = publish(repo);
+  commit(repo, { "observations/demo-a/2026-11-01T00-00-00-000Z.json": '{"verdict":"head-conflict"}\n' }, "obs later");
+  const r = exporter.buildBundle({ clone: repo, namespace: "demo-a", checkpointText: text });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.bundle.observations, ["observations/demo-a/2026-10-31T00-00-00-000Z.json"]);
+  assert.deepEqual(r.bundle.observations_not_yet_in_checkpoint, ["observations/demo-a/2026-11-01T00-00-00-000Z.json"]);
+  assert.equal(checker.verifyBundle(r.bundle, { key: KEY.verifier }).verdict, "VERIFIED");
+  const late = clone(r.bundle);
+  late.observations.push("observations/demo-a/2026-11-01T00-00-00-000Z.json");
+  assert.equal(checker.verifyBundle(late, { key: KEY.verifier }).reason, "observation_unknown");
+  const notList = clone(b);
+  notList.observations = "observations/demo-a/2026-10-31T00-00-00-000Z.json";
+  assert.equal(checker.verifyBundle(notList, { key: KEY.verifier }).verdict, "BROKEN");
 });
 
 test("CLI: writes once, refuses to overwrite, and the checker's exit code is its verdict", () => {
@@ -162,4 +234,65 @@ test("BROKEN: a record whose content names another namespace or seq than its pat
   commit(repo, { "pins/demo-a/00000001.json": rec("demo-b", 1, 5, "aa") }, "1");
   const r = exporter.buildBundle({ clone: repo, namespace: "demo-a", checkpointText: publish(repo) });
   assert.equal(checker.verifyBundle(r.bundle, { key: KEY.verifier }).reason, "record_mismatch");
+});
+
+test("WHOLE: a bundle with its last records cut off, or with none, is not VERIFIED", () => {
+  const b = bundle();
+  const tail = clone(b);
+  tail.records.pop();
+  let v = checker.verifyBundle(tail, { key: KEY.verifier });
+  assert.equal(v.verdict, "BROKEN", JSON.stringify(v));
+  assert.equal(v.reason, "missing_record");
+  assert.match(v.detail, /00000003\.json/);
+  const tail2 = clone(b);
+  tail2.records.splice(1);
+  assert.equal(checker.verifyBundle(tail2, { key: KEY.verifier }).reason, "missing_record");
+  const empty = clone(b);
+  empty.records = [];
+  v = checker.verifyBundle(empty, { key: KEY.verifier });
+  assert.equal(v.verdict, "BROKEN", JSON.stringify(v));
+  assert.equal(v.reason, "missing_record");
+  // The same cuts without a key, against the original checkpoint: its root no
+  // longer matches the records, so BROKEN missing_record. (An attacker who also
+  // rebuilds the root and checkpoint is the UNSIGNED test below.)
+  assert.equal(checker.verifyBundle(tail, { allowUnsigned: true }).reason, "missing_record");
+  assert.notEqual(checker.verifyBundle(tail, { allowUnsigned: true }).verdict, "VERIFIED");
+  assert.notEqual(checker.verifyBundle(empty, { allowUnsigned: true }).verdict, "VERIFIED");
+});
+
+test("WHOLE: the envelopes cannot be trimmed or edited to hide a record", () => {
+  const b = bundle();
+  // Cut the last record and its envelope too: the envelopes no longer give the root.
+  const both = clone(b);
+  const lastIdx = both.records.pop().leaf_index;
+  both.log_envelopes.splice(lastIdx, 1);
+  assert.equal(checker.verifyBundle(both, { key: KEY.verifier }).reason, "log_envelopes");
+  // Rename the last record's envelope so it no longer reads as this namespace's.
+  const renamed = clone(b);
+  renamed.records.pop();
+  renamed.log_envelopes[lastIdx].path = "pins/demo-b/00000002.json";
+  assert.equal(checker.verifyBundle(renamed, { key: KEY.verifier }).reason, "log_envelopes");
+  // No envelopes at all: nothing shows the bundle is whole.
+  const none = clone(b);
+  delete none.log_envelopes;
+  assert.equal(checker.verifyBundle(none, { key: KEY.verifier }).verdict, "COULD NOT LOOK");
+  // A version 1 bundle (no envelopes) is not taken.
+  const v1 = clone(b);
+  v1.v = 1;
+  assert.equal(checker.verifyBundle(v1, { key: KEY.verifier }).verdict, "COULD NOT LOOK");
+  // An observation in the log but left off the list.
+  const obs = clone(b);
+  obs.observations = [];
+  assert.equal(checker.verifyBundle(obs, { key: KEY.verifier }).reason, "observation_missing");
+  // The envelopes hold no other namespace's bytes, only paths and digests.
+  assert.ok(!JSON.stringify(b.log_envelopes).includes(Buffer.from(rec("demo-b", 1, 9, "bb")).toString("base64")));
+});
+
+test("WHOLE: a namespace with no record under the checkpoint yet is refused at export", () => {
+  const repo = fixture();
+  const text = publish(repo);
+  commit(repo, { "pins/demo-c/00000001.json": rec("demo-c", 1, 1, "aa") }, "c1");
+  const r = exporter.buildBundle({ clone: repo, namespace: "demo-c", checkpointText: text });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "namespace");
 });

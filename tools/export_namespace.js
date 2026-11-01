@@ -8,11 +8,25 @@
 //
 // The bundle holds, for every numbered record of the namespace that the
 // checkpoint covers, its committed bytes, the commit that introduced it and an
-// inclusion proof into the checkpoint, plus the checkpoint itself:
+// inclusion proof into the checkpoint, plus the checkpoint itself, plus the
+// envelope of every entry of the log up to the checkpoint's size (path, file
+// SHA-256 and introducing commit; never another namespace's bytes):
 //
-//   {"kind": "arcaeon_namespace_bundle", "v": 1, "namespace", "checkpoint": "<the note, as published>",
+//   {"kind": "arcaeon_namespace_bundle", "v": 2, "namespace", "checkpoint": "<the note, as published>",
 //    "tree_size", "records": [{"path", "seq", "bytes_b64", "introduced_by_commit", "leaf_index", "path_hashes"}],
-//    "not_yet_in_checkpoint": [paths], "observations": [paths]}
+//    "log_envelopes": [envelope, ... tree_size of them],
+//    "not_yet_in_checkpoint": [paths], "observations": [paths under the checkpoint],
+//    "observations_not_yet_in_checkpoint": [paths]}
+//
+// The envelopes name every entry of the log, so the bundle shows every other
+// namespace's name, how many records it has, its observation file names
+// (which are timestamps) and the commits; it carries no other namespace's bytes.
+//
+// The envelopes are what lets the checker prove the records are ALL of the
+// namespace's records under the checkpoint: it rebuilds the signed root from
+// them, so none can be left out or added, and then reads off every path of
+// this namespace. Without them a bundle with its last records cut off would
+// look the same as a whole one.
 //
 // The log is built from the clone exactly as tools/publish_checkpoint.js
 // builds it (the same git walk, the same envelopes), and the export is
@@ -82,9 +96,15 @@ function buildBundle({ clone, namespace, checkpointText, branch = "main" }) {
       leaf_index: i, path_hashes: tree.inclusionProof(i, size).map((h) => h.toString("hex")) });
   });
   if (records.length === 0 && later.length === 0) return refuse("namespace", `the clone holds no record of ${namespace}`);
-  const observations = envelopes.filter((e) => e.path.startsWith(`observations/${namespace}/`)).map((e) => e.path);
-  return { ok: true, bundle: { kind: "arcaeon_namespace_bundle", v: 1, namespace, checkpoint: checkpointText, tree_size: size,
-    records, not_yet_in_checkpoint: later, observations } };
+  if (records.length === 0) return refuse("namespace", `no record of ${namespace} is under this checkpoint yet; export again after the next one`);
+  // Observations under the checkpoint are listed and checked against the log;
+  // later ones are listed apart, as the later records are, not proven.
+  const isObs = (e) => e.path.startsWith(`observations/${namespace}/`);
+  const observations = envelopes.slice(0, size).filter(isObs).map((e) => e.path);
+  const laterObs = envelopes.slice(size).filter(isObs).map((e) => e.path);
+  return { ok: true, bundle: { kind: "arcaeon_namespace_bundle", v: 2, namespace, checkpoint: checkpointText, tree_size: size,
+    records, log_envelopes: envelopes.slice(0, size).map((e) => e.envelope), not_yet_in_checkpoint: later, observations,
+    observations_not_yet_in_checkpoint: laterObs } };
 }
 
 function main(argv = process.argv.slice(2), print = console.log) {
