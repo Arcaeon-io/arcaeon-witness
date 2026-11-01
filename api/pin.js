@@ -36,7 +36,7 @@ const issuedKeys = require("../lib/_keys.js");
 const pending = require("../lib/_pending.js");
 
 // Per key rate limit: lib/_pin_ratelimit.RATE_LIMIT (60) pins per key per
-// clock hour. Shared across warm instances when WITNESS_USAGE_STORE=postgres;
+// clock hour, MEMBER_RATE_LIMIT (100) for a key listed in WITNESS_MEMBER_KEYS. Shared across warm instances when WITNESS_USAGE_STORE=postgres;
 // per instance otherwise. See that file's header.
 const pinRate = require("../lib/_pin_ratelimit.js");
 
@@ -506,6 +506,7 @@ module.exports = async (req, res) => {
       error: `rate limit exceeded: ${rate.limit} pins per key per clock hour`,
       reason: "key_rate_limited",
       limit: rate.limit,
+      member: rate.member,
       window_seconds: pinRate.WINDOW_MS / 1000,
       shared_across_instances: rate.shared,
       retry_after_seconds: rate.retryAfterSeconds,

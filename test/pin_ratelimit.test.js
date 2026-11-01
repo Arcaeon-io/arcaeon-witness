@@ -21,7 +21,8 @@ const { makeReq, makeRes } = require("./helpers/http_mocks.js");
 const store = require("../lib/_store.js");
 const pinRate = require("../lib/_pin_ratelimit.js");
 
-const ENV_KEYS = ["WITNESS_USAGE_STORE", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "WITNESS_BATCH_SHADOW"];
+const ENV_KEYS = ["WITNESS_USAGE_STORE", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "WITNESS_BATCH_SHADOW",
+  "WITNESS_MEMBER_KEYS"];
 let gh, pg, restore, saved;
 const realPutSleep = store._putRetry.sleep;
 const HOUR = 3600_000;
@@ -153,4 +154,83 @@ test("HANDLER: under the limit the pin goes through, flag on and flag off", asyn
       body: { namespace: `demo-ok${mode}`, rows: 1, chain: "aaaaaaaa" } }), res);
     assert.equal(res._status, 201, mode + " " + JSON.stringify(res._body));
   }
+});
+
+// ---- Member keys: up to 100 an hour (OWNER.md queue item 35) ----
+
+const sha = (k) => crypto.createHash("sha256").update(k).digest("hex");
+
+test("MEMBER NUMBER: 100 per member key per clock hour, 60 for every other key", () => {
+  assert.equal(pinRate.MEMBER_RATE_LIMIT, 100);
+  process.env.WITNESS_MEMBER_KEYS = sha("testkeyA");
+  assert.equal(pinRate.limitFor("testkeyA"), 100);
+  assert.equal(pinRate.limitFor("testkeyB"), 60);
+});
+
+test("MEMBER SHARED: a member's 100th pin is let in and the 101st refused on any instance; a non member stops at 60", async () => {
+  flagOn();
+  process.env.WITNESS_MEMBER_KEYS = ` ${sha("testkeyA")} , ${sha("someoneelse")}`;
+  const inst = [freshInstance().rate, freshInstance().rate];
+  for (let i = 0; i < 100; i++) {
+    const r = await inst[i % 2].check("testkeyA", { now: T0 + i * 1000 });
+    assert.equal(r.limited, false, `member pin ${i + 1}`);
+    assert.equal(r.limit, 100);
+    assert.equal(r.member, true);
+  }
+  for (const r of inst) assert.equal((await r.check("testkeyA", { now: T0 + 200_000 })).limited, true);
+  for (let i = 0; i < 60; i++) assert.equal((await inst[0].check("testkeyB", { now: T0 })).limited, false);
+  const b = await inst[1].check("testkeyB", { now: T0 });
+  assert.equal(b.limited, true);
+  assert.equal(b.limit, 60);
+  assert.equal(b.member, false);
+});
+
+test("MEMBER PER INSTANCE (flag off): the member limit holds on one instance too", async () => {
+  process.env.WITNESS_MEMBER_KEYS = sha("testkeyA");
+  const r = freshInstance().rate;
+  for (let i = 0; i < 100; i++) assert.equal((await r.check("testkeyA", { now: T0 })).limited, false, `pin ${i + 1}`);
+  assert.equal((await r.check("testkeyA", { now: T0 })).limited, true);
+});
+
+test("MEMBER LIST FAILS LOW: a list that cannot be read names no member, so nobody gets more than 60", () => {
+  for (const bad of [`${sha("testkeyA")},nothex`, sha("testkeyA").toUpperCase(), `${sha("testkeyA")},`, "testkeyA",
+    sha("testkeyA").slice(0, 63)]) {
+    process.env.WITNESS_MEMBER_KEYS = bad;
+    assert.equal(pinRate.limitFor("testkeyA"), 60, JSON.stringify(bad));
+    assert.equal(pinRate.memberHashes().size, 0);
+  }
+  delete process.env.WITNESS_MEMBER_KEYS;
+  assert.equal(pinRate.limitFor("testkeyA"), 60);
+  process.env.WITNESS_MEMBER_KEYS = "";
+  assert.equal(pinRate.limitFor("testkeyA"), 60);
+});
+
+test("MEMBER HANDLER: the 101st pin of a member is a 429 naming limit 100 and member true; the 61st is let in", async () => {
+  flagOn();
+  process.env.WITNESS_MEMBER_KEYS = sha("testkeyA");
+  const { pin } = freshInstance();
+  const start = new Date(pinRate.windowStart(Date.now())).toISOString();
+  pg.rateWindows.set(`${sha("testkeyA")}|${start}`, 60);
+  const ok = makeRes();
+  await pin(makeReq({ method: "POST", headers: { authorization: "Bearer testkeyA" },
+    body: { namespace: "demo-rl", rows: 1, chain: "aaaaaaaa" } }), ok);
+  assert.notEqual(ok._status, 429, "a member's 61st pin is under the member limit");
+  pg.rateWindows.set(`${sha("testkeyA")}|${start}`, 100);
+  const before = gh.putLog.length;
+  const res = makeRes();
+  await pin(makeReq({ method: "POST", headers: { authorization: "Bearer testkeyA" },
+    body: { namespace: "demo-rl", rows: 2, chain: "bbbbbbbb" } }), res);
+  assert.equal(res._status, 429);
+  assert.equal(res._body.reason, "key_rate_limited");
+  assert.equal(res._body.limit, 100);
+  assert.equal(res._body.member, true);
+  assert.equal(gh.putLog.length, before, "a refused pin writes nothing");
+});
+
+test("MEMBER: the key itself never reaches the database or the list; only its hash", async () => {
+  flagOn();
+  process.env.WITNESS_MEMBER_KEYS = sha("testkeyA");
+  const r = freshInstance().rate;
+  await r.check("testkeyA", { now: T0 });
+  assert.ok(pg.rpcLog.every((c) => !JSON.stringify(c).includes("testkeyA")));
 });
