@@ -187,11 +187,13 @@ async function meterAndCharge(key) {
             credit_balance: 0,
             plan: m.plan, free_tier_used: m.used, free_tier_cap: m.cap, month: m.month,
             packs: balance.publicPacks(),
+            ...balance.buyFor(key),
           },
         },
         headers,
       };
     }
+    const buyInfo = balance.buyFor(key);
     return {
       deny: {
         status: 429,
@@ -200,7 +202,8 @@ async function meterAndCharge(key) {
           reason: "over_cap",
           plan: m.plan, used: m.used, cap: m.cap, month: m.month,
           top_up_available: true, packs: balance.publicPacks(),
-          message: balance.overCapMessage(m.plan, m.cap),
+          ...buyInfo,
+          message: balance.overCapMessage(m.plan, m.cap, buyInfo),
         },
       },
       headers,

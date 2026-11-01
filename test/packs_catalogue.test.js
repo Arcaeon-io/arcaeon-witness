@@ -83,7 +83,12 @@ for (const [name, mod] of [["pin", pin], ["distill", distill]]) {
     assert.ok(!("mini" in b.packs));
     assert.match(b.message, /free allowance is now 10 pins a month/);
     assert.doesNotMatch(b.message, /it was 100/);
-    assert.doesNotMatch(b.message, /https?:/, "no buy link while PACK_BUY_URL is empty");
+    // WITNESS_PACK_LINKS unset: falls back to the pricing page, said plainly
+    assert.equal(b.buy, null);
+    assert.equal(b.buy_url, "https://arcaeon.io/pricing");
+    assert.match(b.message, /makes a NEW key/);
+    assert.ok(b.message.includes(`?client_reference_id=${balance.keyHash(key)}`));
+    assert.ok(!JSON.stringify(b).includes(key), "the raw key never appears in the body");
     assert.match(b.message, /buy a pin pack: 200 pins for \$5 or 1,000 pins for \$20/);
     assert.match(b.message, /never expire/);
     assert.doesNotMatch(b.message, /[–—]/, "no en/em dashes");
@@ -102,8 +107,66 @@ for (const [name, mod] of [["pin", pin], ["distill", distill]]) {
   });
 }
 
-test("overCapMessage: a buy URL, when set, is named; empty means no link", () => {
-  assert.equal(balance.PACK_BUY_URL, "");
-  assert.ok(balance.overCapMessage("free", 10, "https://example.test/buy").includes(" at https://example.test/buy. "));
-  assert.ok(!balance.overCapMessage("free", 10, "").includes(" at "));
+const LINKS = { pins_200: "https://buy.example.test/l_200", pins_1000: "https://buy.example.test/l_1000?locale=en" };
+
+test("buyFor: with WITNESS_PACK_LINKS, one top-up link per pack carrying the key's SHA-256, never the key", () => {
+  process.env.WITNESS_PACK_LINKS = JSON.stringify(LINKS);
+  try {
+    const key = "wk_live_secret_key_for_buy_links_123";
+    const hash = balance.keyHash(key);
+    const b = balance.buyFor(key);
+    assert.equal(b.buy.pins_200, `https://buy.example.test/l_200?client_reference_id=${hash}`);
+    assert.equal(b.buy.pins_1000, `https://buy.example.test/l_1000?locale=en&client_reference_id=${hash}`);
+    assert.equal(b.buy_url, undefined);
+    assert.match(b.buy_note, /adds that pack to this key/);
+    assert.ok(!JSON.stringify(b).includes(key));
+    assert.ok(balance.overCapMessage("free", 10, b).includes(b.buy_note));
+  } finally {
+    delete process.env.WITNESS_PACK_LINKS;
+  }
 });
+
+test("buyFor: bad or absent WITNESS_PACK_LINKS falls back to the pricing page with a plain new-key note", () => {
+  for (const v of [undefined, "not json", "[]", JSON.stringify({ pins_200: "http://plain.test/x", mini: "https://x.test/y", pins_1000: 5 })]) {
+    if (v === undefined) delete process.env.WITNESS_PACK_LINKS; else process.env.WITNESS_PACK_LINKS = v;
+    try {
+      const key = "fallback-key-raw";
+      const b = balance.buyFor(key);
+      assert.equal(b.buy, null, String(v));
+      assert.equal(b.buy_url, balance.PACK_BUY_URL);
+      assert.equal(balance.PACK_BUY_URL, "https://arcaeon.io/pricing");
+      assert.match(b.buy_note, /makes a NEW key/);
+      assert.ok(b.buy_note.includes(balance.keyHash(key)));
+      assert.ok(!JSON.stringify(b).includes(key));
+    } finally {
+      delete process.env.WITNESS_PACK_LINKS;
+    }
+  }
+});
+
+for (const [name, mod] of [["pin", pin], ["distill", distill]]) {
+  test(`${name}: 429 and 402 bodies carry per-pack top-up links for THIS key's hash, and never the raw key`, async () => {
+    process.env.WITNESS_PACK_LINKS = JSON.stringify(LINKS);
+    try {
+      const key = `buy-links-${name}-raw-key`;
+      const hash = balance.keyHash(key);
+      for (let i = 0; i < 10; i++) await mod.meterAndCharge(key);
+      const r = await mod.meterAndCharge(key);
+      assert.equal(r.deny.status, 429);
+      assert.equal(r.deny.body.buy.pins_200, `${LINKS.pins_200}?client_reference_id=${hash}`);
+      assert.ok(r.deny.body.message.includes("adds that pack to this key"));
+      assert.ok(!JSON.stringify(r.deny.body).includes(key));
+
+      const key2 = `buy-links-${name}-spent-key`;
+      await balance.creditPack(balance.keyHash(key2), "pins_200", `evt-buy-${name}`, "test");
+      await balance.debitCredits(key2, 200, "test spend");
+      for (let i = 0; i < 10; i++) await mod.meterAndCharge(key2);
+      const r2 = await mod.meterAndCharge(key2);
+      assert.equal(r2.deny.status, 402);
+      assert.equal(r2.deny.body.buy.pins_1000, `${LINKS.pins_1000}&client_reference_id=${balance.keyHash(key2)}`);
+      assert.ok(!JSON.stringify(r2.deny.body).includes(key2));
+    } finally {
+      delete process.env.WITNESS_PACK_LINKS;
+    }
+  });
+}

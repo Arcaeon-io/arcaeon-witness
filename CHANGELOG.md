@@ -2,14 +2,14 @@
 
 ## 2026-11-01: pin packs review fixes (pins_200 $5/200, pins_1000 $20/1,000; local only, NOT deployed; for the 2026-11-03 release)
 
-- `lib/_balance.js`: `PACKS` is the current catalogue only (`pins_200`, `pins_1000`); `by_id_only` dropped. Retired `mini`/`starter`/`standard`/`bulk` move to `LEGACY_PACKS` and credit only when named (metadata.pack, price map, admin body). New `lookupPack`, `publicPacks`, `overCapMessage` (with an empty `PACK_BUY_URL` placeholder: no link until the owner gives one), and `resolvePack`: a pack is credited ONLY when named (price map or metadata.pack). No amount-based matching at all. Price map and metadata disagreeing, or naming an unknown pack, is refused.
+- `lib/_balance.js`: `PACKS` is the current catalogue only (`pins_200`, `pins_1000`); `by_id_only` dropped. Retired `mini`/`starter`/`standard`/`bulk` move to `LEGACY_PACKS` and credit only when named (metadata.pack, price map, admin body). New `lookupPack`, `publicPacks`, `overCapMessage`, and `buyFor(key)`: 402/429 bodies carry `buy`, one top-up link per pack from `WITNESS_PACK_LINKS` (JSON pack id -> payment link URL) with `?client_reference_id=<sha256(key)>`, so the purchase credits THAT key (only the hash is ever in a URL). Unset: `buy: null`, `buy_url` = `PACK_BUY_URL` (https://arcaeon.io/pricing) and a plain note that buying there makes a new key and how to top up this key instead, and `resolvePack`: a pack is credited ONLY when named (price map or metadata.pack). No amount-based matching at all. Price map and metadata disagreeing, or naming an unknown pack, is refused.
 - `api/fulfill.js`: uses the shared `resolvePack` with the price map. An unnamed session (any amount) goes to the manual step (409 `unmapped_purchase`); a disagreement is 409 `pack_conflict`. A top-up reports the pins actually granted for the session (read from the grant's ledger record when the webhook got there first), never the pack size blindly. Missing currency is refused, as in the webhook.
 - `api/stripe-webhook.js`: same resolver as fulfill, metadata.pack only (no line items in a webhook payload). No metadata.pack: logged, skipped with 200, no credit. Amount and currency still checked; mismatches are logged. Response carries `pack` and `pack_source`.
 - `lib/_balance.js` `grantCredits`: an already-applied grant returns `granted_pins`/`granted_pack` from its ledger record (null if unreadable) and no longer writes a ledger record in its place.
 - 402/429 bodies (pin, distill, stamp) list current packs only, price and pins. The pin/distill 429 adds `message`: the free allowance is now 10 pins a month and how to get more (a pack).
 - `api/credit.js`: accepts current and legacy ids.
 - README / `lib/_meter.js`: "was 30" corrected to "was 100".
-- Tests: suite 674, 674 pass, 0 fail.
+- Tests: suite 677, 677 pass, 0 fail.
 
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
