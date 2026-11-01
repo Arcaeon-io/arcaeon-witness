@@ -81,7 +81,7 @@ With signed receipts on, a paid pin is answered with the same receipt as any pin
 
 The public record carries `payment: {method, ref}`, where `ref` is an HMAC-SHA256, under the server secret `WITNESS_PAYMENT_REF_KEY`, of the ledger's reference. It is never the ledger's reference itself: for Lightning that is the invoice's payment hash, which every routing node on the path sees, and for the stablecoin adapter an unkeyed SHA-256 of the processor's payment id, which anyone holding that id can recompute. Either, published, would link a pin to a payment. The HMAC exists nowhere outside the witness, differs per payment, and cannot be computed or confirmed without the key; the operator, who holds it, can still go from a ledger entry to its record. Without the key (unset, or under 32 characters) the record carries only `payment: {method}`, a marker that a payment was made, and no ref. The record never carries who paid, the processor's payment id, any hash of it, the payment hash, the preimage or the key.
 
-The `X-Payment-Ref` response header still carries the ledger's reference. It goes only to the payer, who already holds it, and is never stored in the public log.
+The `X-Payment-Ref` response header still carries the ledger's reference. It goes only to the payer, who already holds it, and is never stored in the public log. Ledger commit messages and log lines name a payment by the first 12 hex of its public ref (`pub:...`), or `ref-hidden` without a key, never by the ledger reference.
 
 ## The key still decides the namespace
 
@@ -137,7 +137,7 @@ invoices and cannot spend.
 | `WITNESS_AGENT_PAY` | on, to offer payment at all |
 | (both adapters) | the processor and node addresses must be https, or the adapter is not offered |
 | `WITNESS_PAY_SECRET` | token signing secret, at least 32 characters; without it nothing is offered |
-| `WITNESS_PAYMENT_REF_KEY` | key for the public record's payment ref, at least 32 characters, distinct from the token secret; without it a paid record carries no ref |
+| `WITNESS_PAYMENT_REF_KEY` | key for the public record's payment ref, at least 32 characters, distinct from the token secret (a key equal to `WITNESS_PAY_SECRET` after trimming, or a prefix of it, or one it is a prefix of, is refused); without a usable key a paid record carries no ref and one warning line is logged per process |
 | `WITNESS_PAY_X402`, `_API`, `_KEY`, `_PAY_TO`, `_ASSET`, `_NETWORK`, `_AMOUNT` | the stablecoin adapter; any missing and it is not offered |
 | `WITNESS_PAY_L402`, `_NODE`, `_MACAROON`, `_SATS` | the Lightning adapter; any missing and it is not offered |
 
