@@ -663,7 +663,18 @@ the log proves they have not changed since the genesis date, not before it.
   sweep:** the operator must run `select public.ip_rate_sweep();` by hand or
   from an outside scheduler, or rows (HMACs and counts) are never deleted.
   Without the secret nothing about IPs is written to the database; the IP
-  lives only in the instance's memory for the window.
+  lives only in the instance's memory for the window. The caller is the
+  leftmost `x-forwarded-for` value (an unparseable value, or one over 64
+  characters, falls back to the socket address), and each instance keeps at
+  most 10,000 IPs in memory (`WITNESS_IP_RATE_MAX_BUCKETS`, oldest evicted
+  first).
+- Two limits of the per IP count, named plainly. Trusting the leftmost
+  `x-forwarded-for` value is safe only on the current host (Vercel, whose edge
+  sets that header itself); behind any other proxy or host a caller can choose
+  it and get a fresh budget per request. And a broad flood from many IPs, each
+  under its own limit, that goes over the per second cap switches the shared
+  count off for the rest of that second on that instance: the local count
+  decides, so the real limit becomes 30 per IP per instance, not 30 per IP.
 - `latest` reads are commit-fresh via the contents API, but the raw-CDN
   fallback can lag minutes; the repo history is the source of truth either way.
 - Two commits per pin (`<seq>.json` + `latest.json`) are not atomic; a crash

@@ -10,7 +10,7 @@ process.env.GITHUB_PIN_BRANCH = "main";
 process.env.GITHUB_USAGE_REPO = "test-owner/test-usage";
 process.env.GITHUB_PIN_TOKEN = "test-token";
 
-const { test, beforeEach, afterEach } = require("node:test");
+const { test, beforeEach, afterEach, mock } = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("crypto");
 
@@ -406,9 +406,116 @@ test("IPV6: callerIp groups by /64 and handles ::, brackets, ports, zones and IP
   assert.equal(ip("::ffff:192.0.2.1"), "192.0.2.1", "IPv4 mapped is the IPv4 address");
   assert.equal(ip("::FFFF:c000:0201"), "192.0.2.1", "hex IPv4 mapped too");
   assert.equal(ip("2001:db8:1:2:3:4:1.2.3.4"), "2001:db8:1:2::/64", "embedded IPv4 tail");
-  assert.equal(ip("not-an-ip"), "not-an-ip", "unparseable is kept as is");
+  assert.equal(ip("not-an-ip"), "unknown", "unparseable falls back (no socket address here: unknown)");
   assert.equal(callerIp({ headers: {}, socket: { remoteAddress: "::ffff:127.0.0.1" } }), "127.0.0.1");
   assert.equal(callerIp({ headers: {}, socket: { remoteAddress: "2001:db8:5:6::9" } }), "2001:db8:5:6::/64");
   assert.equal(ip("2001:db8:0:1::a"), ip("2001:db8:0:1:ffff:ffff:ffff:fffe"), "same /64, same key");
   assert.notEqual(ip("2001:db8:0:1::a"), ip("2001:db8:0:2::a"), "different /64, different key");
+});
+
+// ---- follow ups: forwarded-for parsing, the bucket cap, the hard release ----
+
+test("CALLER IP: an unparseable or overlong forwarded-for value falls back to the socket address", () => {
+  const { callerIp, MAX_IP_LEN } = instance();
+  const sock = "192.0.2.77";
+  const ip = (v, remoteAddress = sock) => callerIp({ headers: { "x-forwarded-for": v }, socket: { remoteAddress } });
+  for (const bad of ["not-an-ip", "999.1.1.1", "1.2.3", "", "   ", ", 203.0.113.9", "2001:db8::zz", `203.0.113.9${" ".repeat(MAX_IP_LEN)}x`]) {
+    assert.equal(ip(bad), sock, `bad value ${JSON.stringify(bad.slice(0, 20))} uses the socket`);
+  }
+  // Overlong: a value over MAX_IP_LEN is refused even if its head looks like an address.
+  assert.equal(ip("1".repeat(MAX_IP_LEN + 1)), sock);
+  assert.equal(ip("a".repeat(100000) + ", 203.0.113.9"), sock, "a huge header is cut, not parsed");
+  // A good leftmost entry still wins, with or without an IPv4 port.
+  assert.equal(ip("203.0.113.9, 10.0.0.1"), "203.0.113.9");
+  assert.equal(ip("203.0.113.9:4431"), "203.0.113.9");
+  // Socket checked the same way: unusable there too means the one shared "unknown" bucket.
+  assert.equal(ip("not-an-ip", "garbage"), "unknown");
+  assert.equal(ip("not-an-ip", null), "unknown");
+  // Garbage values do not each get a fresh budget: they all land on the socket's bucket.
+  const r = instance();
+  for (let i = 0; i < r.LIMIT; i++) {
+    assert.equal(r.check({ headers: { "x-forwarded-for": `junk-${i}` }, socket: { remoteAddress: sock } }).limited, false);
+  }
+  assert.equal(r.check({ headers: { "x-forwarded-for": "junk-new" }, socket: { remoteAddress: sock } }).limited, true);
+});
+
+test("BUCKET CAP: the local Map never exceeds MAX_BUCKETS; the oldest bucket is evicted first", () => {
+  try {
+    process.env.WITNESS_IP_RATE_MAX_BUCKETS = "50";
+    const r = instance();
+    assert.equal(r.MAX_BUCKETS, 50);
+    const at = (i) => ({ headers: { "x-forwarded-for": `198.51.${i >> 8}.${i & 255}` } });
+    const t = T0;
+    // The first IP spends its whole budget.
+    for (let i = 0; i < r.LIMIT; i++) r.check(at(0), 1, { now: t });
+    assert.equal(r.check(at(0), 1, { now: t }).limited, true);
+    for (let i = 1; i < 500; i++) {
+      r.check(at(i), 1, { now: t + i });
+      assert.ok(r._sharedState().buckets <= 50, `size ${r._sharedState().buckets} at ${i}`);
+    }
+    assert.equal(r._sharedState().buckets, 50);
+    // IP 0 was the oldest, so it was evicted; the newest 50 remain.
+    assert.equal(r.check(at(0), 1, { now: t + 600 }).limited, false, "evicted: a fresh bucket");
+    assert.equal(r._sharedState().buckets, 50);
+    // A recent bucket survived: IP 499 still has its count (1 spent).
+    for (let i = 0; i < r.LIMIT - 1; i++) assert.equal(r.check(at(499), 1, { now: t + 601 }).limited, false);
+    assert.equal(r.check(at(499), 1, { now: t + 601 }).limited, true, "a recent bucket kept its count");
+  } finally {
+    delete process.env.WITNESS_IP_RATE_MAX_BUCKETS;
+    instance();
+  }
+});
+
+test("RELEASE: after the 2 s hard release a late real completion frees nothing (no double decrement)", async () => {
+  process.env.WITNESS_IP_RATE_MAX_IN_FLIGHT = "1";
+  flagOn();
+  const r = instance();
+  const q = quietErrors();
+  mock.timers.enable({ apis: ["setTimeout"] });
+  const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((res) => setImmediate(res)); };
+  try {
+    assert.equal(r.MAX_IN_FLIGHT, 1);
+    assert.equal(r.RELEASE_AFTER_MS, 2000);
+    pg.holdIpRate(2);
+    // A: its database call ignores the abort and stays out past the deadline.
+    const a = r.checkShared(req("10.30.0.1"), 1, { now: T0, timeoutMs: 20 });
+    await flush();
+    assert.equal(r._sharedState().inFlight, 1);
+    mock.timers.tick(20);
+    const outA = await a;
+    assert.deepEqual([outA.limited, outA.shared], [false, false], "deadline passed: the local count decides");
+    assert.equal(r._sharedState().inFlight, 1, "the slot is held while the real call is still out");
+    mock.timers.tick(r.RELEASE_AFTER_MS - 21);
+    await flush();
+    assert.equal(r._sharedState().inFlight, 1, "not yet released before 2 s");
+    mock.timers.tick(1);
+    await flush();
+    assert.equal(r._sharedState().inFlight, 0, "hard release at 2 s");
+    // B takes the only slot.
+    const b = r.checkShared(req("10.30.0.2"), 1, { now: T0 + 5000, timeoutMs: 20 });
+    await flush();
+    assert.equal(r._sharedState().inFlight, 1, "B holds the one slot");
+    assert.equal(ipHits(), 2);
+    // A's real call completes now, late. It was already released: nothing changes.
+    pg.finishHeld(1);
+    await flush();
+    assert.equal(r._sharedState().inFlight, 1, "A's late completion must not free B's slot");
+    const c = await r.checkShared(req("10.30.0.3"), 1, { now: T0 + 5001, timeoutMs: 20 });
+    assert.equal(c.shared, false, "the cap is still full");
+    assert.equal(ipHits(), 2, "so C makes no database call");
+    // B completes in time; the count comes back to zero, never below.
+    pg.finishHeld(1);
+    const outB = await b;
+    assert.equal(outB.shared, true);
+    await flush();
+    assert.equal(r._sharedState().inFlight, 0);
+    mock.timers.tick(10 * r.RELEASE_AFTER_MS);
+    await flush();
+    assert.equal(r._sharedState().inFlight, 0, "no stray release drives it negative");
+  } finally {
+    mock.timers.reset();
+    q.done();
+    delete process.env.WITNESS_IP_RATE_MAX_IN_FLIGHT;
+    instance();
+  }
 });

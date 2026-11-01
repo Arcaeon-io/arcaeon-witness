@@ -3,10 +3,12 @@
 -- checkShared). Used only when WITNESS_USAGE_STORE=postgres AND
 -- WITNESS_IP_RATE_SECRET are set; otherwise nothing is written here.
 --
--- What is stored, per row: ip_hash = HMAC-SHA256 of the IP under the server
--- secret WITNESS_IP_RATE_SECRET (the IP itself is never sent, and without the
--- secret the value cannot be recomputed from a guessed IP), the slot's start
--- time, and the hit count. Nothing else.
+-- What is stored, per row: ip_hash = HMAC-SHA256 of the caller's key under the
+-- server secret WITNESS_IP_RATE_SECRET, where the key is an IPv4 address or,
+-- for IPv6, its /64 prefix ("2001:db8:0:1::/64"; lib/_ratelimit.js callerIp),
+-- so one row counts a whole /64. The IP itself is never sent, and without the
+-- secret the value cannot be recomputed from a guessed IP or prefix. Also the
+-- slot's start time, and the hit count. Nothing else.
 --
 -- How long: ip_rate_sweep() deletes every row whose slot started more than one
 -- hour ago. It is scheduled every 10 minutes below (pg_cron), so a row lives

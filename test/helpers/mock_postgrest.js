@@ -41,6 +41,20 @@ class MockPostgrest {
     this.rateWindows = new Map(); // "hash|window_start" -> hits
     this.rpcLog = []; // [{fn, args}] every database function call, in order
     this._hangIpRate = 0;
+    this._holdIpRate = 0;
+    this.held = []; // resolvers of held ip_rate_hit calls, oldest first
+  }
+
+  // The next n ip_rate_hit calls ignore their abort signal and answer only
+  // when the test calls finishHeld(): a database that is slow and does not
+  // cancel, so the caller's deadline fires first and the real call completes
+  // late.
+  holdIpRate(n = 1) {
+    this._holdIpRate = n;
+  }
+  finishHeld(hits = 1) {
+    const r = this.held.shift();
+    if (r) r(fakeResponse(200, hits));
   }
 
   // The next n ip_rate_hit calls never answer (a slow database); an abort
@@ -93,6 +107,10 @@ class MockPostgrest {
     if (u.pathname === "/rest/v1/rpc/ip_rate_hit" && method === "POST") {
       const args = JSON.parse(opts.body);
       this.rpcLog.push({ fn: "ip_rate_hit", args });
+      if (this._holdIpRate > 0) {
+        this._holdIpRate -= 1;
+        return new Promise((resolve) => { this.held.push(resolve); });
+      }
       if (this._hangIpRate > 0) {
         this._hangIpRate -= 1;
         return new Promise((_resolve, reject) => {
