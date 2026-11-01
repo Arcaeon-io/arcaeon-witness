@@ -292,15 +292,16 @@ test("pack falls back to metadata.pack (webhook convention), then amount_total",
   assert.equal(r1._status, 200);
   assert.equal(r1._body.credits, 12000); // normalized " Standard " -> standard
 
-  // pure amount_total path (no price map hit, no metadata)
+  // pure amount_total path (no price map hit, no metadata): a RETIRED
+  // pack's price ($15, starter) is never matched by amount any more.
   const id2 = sid();
   stripe.seed(paidSession({
     id: id2, amount_total: 1500, metadata: {},
     line_items: { data: [{ price: { id: "price_unmapped" } }] },
   }));
   const r2 = await call({ query: { session_id: id2 }, headers: JSON_HDR });
-  assert.equal(r2._status, 200);
-  assert.equal(r2._body.credits, 3000); // $15.00 -> starter, derived from PACKS
+  assert.equal(r2._status, 409);
+  assert.equal(r2._body.reason, "unmapped_purchase");
 });
 
 test("paid but unmappable purchase -> 409 unmapped_purchase (manual fulfillment, support named)", async () => {
@@ -896,7 +897,7 @@ test("BREAK ARM: a hand-built green carrying a prefix cannot reach the page; onl
   });
 });
 
-test("owner's packs (Thu 2026-10-29): pins_200 and pins_1000 resolve by metadata or price map, never by amount", async () => {
+test("owner's packs (Thu 2026-10-29): pins_200 and pins_1000 resolve by metadata.pack", async () => {
   const id1 = sid();
   stripe.seed(paidSession({
     id: id1, metadata: { pack: "pins_200" }, amount_total: 500,
@@ -915,14 +916,194 @@ test("owner's packs (Thu 2026-10-29): pins_200 and pins_1000 resolve by metadata
   assert.equal(r2._status, 200);
   assert.equal(r2._body.credits, 1000);
 
-  // $20 with no map and no metadata: no legacy pack costs $20, and the new
-  // pack is by id only, so the buyer goes to manual fulfillment, not a guess.
-  const id3 = sid();
-  stripe.seed(paidSession({
-    id: id3, amount_total: 2000, metadata: {},
+});
+
+// ---------------------------------------------------------------------
+// 2026-11-01 review fixes: a pack is credited ONLY when named
+// ---------------------------------------------------------------------
+
+function bare(id, cents, over = {}) {
+  return paidSession({
+    id, amount_total: cents, metadata: {},
     line_items: { data: [{ price: { id: "price_unmapped" } }] },
-  }));
-  const r3 = await call({ query: { session_id: id3 }, headers: JSON_HDR });
-  assert.equal(r3._status, 409);
-  assert.equal(r3._body.reason, "unmapped_purchase");
+    ...over,
+  });
+}
+
+test("unnamed $5 and $20 sessions (no metadata, no price-map entry) go to the manual step, nothing minted or credited", async () => {
+  for (const cents of [500, 2000]) {
+    const id = sid();
+    stripe.seed(bare(id, cents));
+    const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+    assert.equal(res._status, 409, `${cents}: ${JSON.stringify(res._body)}`);
+    assert.equal(res._body.reason, "unmapped_purchase");
+    assert.equal(gh.read(USAGE, `fulfillments/${id}.json`), null);
+  }
+});
+
+test("price map and metadata.pack DISAGREEING -> 409 pack_conflict, manual step, nothing minted", async () => {
+  // price_mini_test maps to mini; metadata names something else
+  for (const meta of ["pins_200", "mystery"]) {
+    const id = sid();
+    stripe.seed(bare(id, 500, { metadata: { pack: meta }, line_items: { data: [{ price: { id: "price_mini_test" } }] } }));
+    const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+    assert.equal(res._status, 409);
+    assert.equal(res._body.reason, "pack_conflict");
+    assert.equal(res._body.support, "support@arcaeon.io");
+    assert.equal(gh.read(USAGE, `fulfillments/${id}.json`), null);
+  }
+  // agreeing is fine
+  const id = sid();
+  stripe.seed(bare(id, 500, { metadata: { pack: " Mini " }, line_items: { data: [{ price: { id: "price_mini_test" } }] } }));
+  const ok = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(ok._status, 200);
+  assert.equal(ok._body.credits, 1000);
+});
+
+test("legacy mini named by metadata.pack still gets what the old link sold (1,000 pins for $5)", async () => {
+  const id = sid();
+  stripe.seed(bare(id, 500, { metadata: { pack: "mini" } }));
+  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(res._status, 200);
+  assert.equal(res._body.pack, "mini");
+  assert.equal(res._body.credits, 1000);
+});
+
+test("price map resolves a NEW pack id (price id -> pins_1000) and a legacy one (price_mini_test -> mini)", async () => {
+  const saved = process.env.WITNESS_STRIPE_PRICE_MAP;
+  process.env.WITNESS_STRIPE_PRICE_MAP = JSON.stringify({ ...JSON.parse(saved), price_new_1000: "pins_1000" });
+  try {
+    const id1 = sid();
+    stripe.seed(bare(id1, 2000, { line_items: { data: [{ price: { id: "price_new_1000" } }] } }));
+    const r1 = await call({ query: { session_id: id1 }, headers: JSON_HDR });
+    assert.equal(r1._status, 200);
+    assert.equal(r1._body.pack, "pins_1000");
+    assert.equal(r1._body.credits, 1000);
+
+    const id2 = sid();
+    stripe.seed(bare(id2, 500, { line_items: { data: [{ price: { id: "price_mini_test" } }] } }));
+    const r2 = await call({ query: { session_id: id2 }, headers: JSON_HDR });
+    assert.equal(r2._status, 200);
+    assert.equal(r2._body.pack, "mini");
+    assert.equal(r2._body.credits, 1000);
+  } finally {
+    process.env.WITNESS_STRIPE_PRICE_MAP = saved;
+  }
+});
+
+test("unknown amount or unknown named pack -> 409 unmapped, nothing minted (a named unknown pack is not guessed from the amount)", async () => {
+  for (const s of [bare(sid(), 1000), bare(sid(), 500, { metadata: { pack: "pins_500" } }), bare(sid(), 15000)]) {
+    stripe.seed(s);
+    const res = await call({ query: { session_id: s.id }, headers: JSON_HDR });
+    assert.equal(res._status, 409, JSON.stringify(s));
+    assert.equal(res._body.reason, "unmapped_purchase");
+    assert.equal(gh.read(USAGE, `fulfillments/${s.id}.json`), null);
+  }
+});
+
+test("underpay -> 409 amount_mismatch, nothing minted ($4.99 named pins_200; $5 named pins_1000)", async () => {
+  for (const s of [bare(sid(), 499, { metadata: { pack: "pins_200" } }), bare(sid(), 500, { metadata: { pack: "pins_1000" } })]) {
+    stripe.seed(s);
+    const res = await call({ query: { session_id: s.id }, headers: JSON_HDR });
+    assert.equal(res._status, 409);
+    assert.equal(res._body.reason, "amount_mismatch");
+    assert.equal(gh.read(USAGE, `fulfillments/${s.id}.json`), null);
+  }
+});
+
+test("missing currency is refused (as the webhook refuses it), nothing minted", async () => {
+  const id = sid();
+  stripe.seed(bare(id, 500, { metadata: { pack: "pins_200" }, currency: null }));
+  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(res._status, 409);
+  assert.equal(res._body.reason, "amount_mismatch");
+  assert.equal(gh.read(USAGE, `fulfillments/${id}.json`), null);
+});
+
+// ---------------------------------------------------------------------
+// one top-up session through BOTH paths (webhook and fulfill) credits once,
+// at the right size, and the page shows what was actually granted
+// ---------------------------------------------------------------------
+
+const { stripeSigHeader } = require("./helpers/stripe_sign.js");
+const { makeRawReq } = require("./helpers/http_mocks.js");
+const webhook = require("../api/stripe-webhook.js");
+
+async function deliver(session, evtId) {
+  const saved = process.env.WITNESS_STRIPE_WEBHOOK_SECRET;
+  process.env.WITNESS_STRIPE_WEBHOOK_SECRET = "whsec_fulfill_cross_test";
+  try {
+    const obj = { ...session };
+    delete obj.line_items; // a webhook payload carries no line_items
+    const event = { id: evtId, type: "checkout.session.completed", livemode: false, data: { object: obj } };
+    const rawBody = Buffer.from(JSON.stringify(event), "utf8");
+    const req = makeRawReq({ headers: { "stripe-signature": stripeSigHeader(process.env.WITNESS_STRIPE_WEBHOOK_SECRET, rawBody) }, rawBody });
+    const res = makeRes();
+    await webhook(req, res);
+    return res;
+  } finally {
+    if (saved === undefined) delete process.env.WITNESS_STRIPE_WEBHOOK_SECRET; else process.env.WITNESS_STRIPE_WEBHOOK_SECRET = saved;
+  }
+}
+
+for (const [pack, cents, pins] of [["pins_200", 500, 200], ["mini", 500, 1000]]) {
+  test(`cross-path ${pack}: webhook first, then fulfill: one credit of ${pins}, the page shows ${pins}`, async () => {
+    const hash = balance.keyHash("cross-wf-" + pack);
+    const id = sid();
+    const s = bare(id, cents, { metadata: { pack }, client_reference_id: hash });
+    stripe.seed(s);
+    const w = await deliver(s, "evt_cross_wf_" + pack);
+    assert.equal(w._body.credited, true, JSON.stringify(w._body));
+    const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+    assert.equal(res._status, 200);
+    assert.equal(res._body.mode, "topup");
+    assert.equal(res._body.already_credited, true);
+    assert.equal(res._body.credits, pins);
+    assert.equal(res._body.pack, pack);
+    assert.equal((await balance.readBalance(hash)).balance, pins);
+    const html = await call({ query: { session_id: id } });
+    assert.ok(String(html._body).includes(`<b>${pins} pins</b>`), "the page shows what was actually granted");
+  });
+
+  test(`cross-path ${pack}: fulfill first, then webhook: one credit of ${pins}`, async () => {
+    const hash = balance.keyHash("cross-fw-" + pack);
+    const id = sid();
+    const s = bare(id, cents, { metadata: { pack }, client_reference_id: hash });
+    stripe.seed(s);
+    const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+    assert.equal(res._body.credits, pins);
+    assert.equal(res._body.already_credited, false);
+    const w = await deliver(s, "evt_cross_fw_" + pack);
+    assert.equal(w._body.already_credited, true, JSON.stringify(w._body));
+    assert.equal((await balance.readBalance(hash)).balance, pins);
+  });
+}
+
+test("cross-path, price map only (old link, no metadata): webhook skips, fulfill credits the legacy size once", async () => {
+  const hash = balance.keyHash("cross-pmap-only");
+  const id = sid();
+  const s = bare(id, 500, { client_reference_id: hash, line_items: { data: [{ price: { id: "price_mini_test" } }] } });
+  stripe.seed(s);
+  const w = await deliver(s, "evt_cross_pmap");
+  assert.notEqual(w._body.credited, true);
+  assert.equal((await balance.readBalance(hash)).balance, 0, "the webhook credits nothing without metadata.pack");
+  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(res._body.credits, 1000);
+  assert.equal(res._body.pack, "mini");
+  assert.equal((await balance.readBalance(hash)).balance, 1000);
+});
+
+test("already credited: the page reports the pins the ledger says were granted, not this pack's size", async () => {
+  const hash = balance.keyHash("granted-size-from-ledger");
+  const id = sid();
+  // A prior grant of 1,000 for this session is on record (as if another path credited it).
+  gh.seed(USAGE, `balance/${hash}.json`, { key_hash: hash, balance: 1000, seq: 1, applied_events: [id] });
+  gh.seed(USAGE, `ledger/${hash}/grant-${id}.json`, { event_id: id, key_hash: hash, pack: "mini", pins: 1000, applied: true });
+  stripe.seed(bare(id, 500, { metadata: { pack: "pins_200" }, client_reference_id: hash }));
+  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(res._status, 200);
+  assert.equal(res._body.already_credited, true);
+  assert.equal(res._body.credits, 1000);
+  assert.equal(res._body.pack, "mini");
+  assert.equal((await balance.readBalance(hash)).balance, 1000, "nothing credited twice");
 });

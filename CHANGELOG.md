@@ -1,5 +1,16 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-01: pin packs review fixes (pins_200 $5/200, pins_1000 $20/1,000; local only, NOT deployed; for the 2026-11-03 release)
+
+- `lib/_balance.js`: `PACKS` is the current catalogue only (`pins_200`, `pins_1000`); `by_id_only` dropped. Retired `mini`/`starter`/`standard`/`bulk` move to `LEGACY_PACKS` and credit only when named (metadata.pack, price map, admin body). New `lookupPack`, `publicPacks`, `overCapMessage` (with an empty `PACK_BUY_URL` placeholder: no link until the owner gives one), and `resolvePack`: a pack is credited ONLY when named (price map or metadata.pack). No amount-based matching at all. Price map and metadata disagreeing, or naming an unknown pack, is refused.
+- `api/fulfill.js`: uses the shared `resolvePack` with the price map. An unnamed session (any amount) goes to the manual step (409 `unmapped_purchase`); a disagreement is 409 `pack_conflict`. A top-up reports the pins actually granted for the session (read from the grant's ledger record when the webhook got there first), never the pack size blindly. Missing currency is refused, as in the webhook.
+- `api/stripe-webhook.js`: same resolver as fulfill, metadata.pack only (no line items in a webhook payload). No metadata.pack: logged, skipped with 200, no credit. Amount and currency still checked; mismatches are logged. Response carries `pack` and `pack_source`.
+- `lib/_balance.js` `grantCredits`: an already-applied grant returns `granted_pins`/`granted_pack` from its ledger record (null if unreadable) and no longer writes a ledger record in its place.
+- 402/429 bodies (pin, distill, stamp) list current packs only, price and pins. The pin/distill 429 adds `message`: the free allowance is now 10 pins a month and how to get more (a pack).
+- `api/credit.js`: accepts current and legacy ids.
+- README / `lib/_meter.js`: "was 30" corrected to "was 100".
+- Tests: suite 674, 674 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.

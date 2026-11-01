@@ -23,10 +23,11 @@
 //     double-credit one purchase between them (api/_balance.js applied_events
 //     is the shared atomic gate).
 //
-// Pack resolution order (see resolvePack): Stripe Price ids from the
-// session's line items via WITNESS_STRIPE_PRICE_MAP env JSON, then
-// session.metadata.pack (the existing webhook convention), then an
-// amount_total fallback derived from the ratified PACKS table.
+// Pack resolution order (lib/_balance.js resolvePack, shared with the
+// webhook): Stripe Price ids from the session's line items via
+// WITNESS_STRIPE_PRICE_MAP env JSON, and session.metadata.pack. A pack is
+// credited ONLY when named; if the two disagree, nothing is credited. The
+// amount paid never picks a pack.
 //
 // Existing-buyer top-ups: a session carrying client_reference_id =
 // sha256(existing key) — the webhook's convention — is credited to THAT key
@@ -136,54 +137,10 @@ function deny(req, res, status, jsonBody, humanTitle, humanDetail) {
 }
 
 // ---- pack resolution ----
-function loadPriceMap() {
-  // WITNESS_STRIPE_PRICE_MAP: JSON object, Stripe Price id -> pack id,
-  // e.g. {"price_1AbCdE...":"mini"}. Optional; the fallbacks below cover an
-  // unset map, but the map is the preferred, tamper-proof mapping (a Price id
-  // comes from Stripe's own line items, not from link metadata anyone typed).
-  const raw = process.env.WITNESS_STRIPE_PRICE_MAP || "{}";
-  try {
-    const p = JSON.parse(raw);
-    return p && typeof p === "object" && !Array.isArray(p) ? p : {};
-  } catch {
-    return {};
-  }
-}
-
-function resolvePack(session) {
-  // 1) Price ids off the session's line items (session retrieved with
-  //    expand[]=line_items), mapped via WITNESS_STRIPE_PRICE_MAP.
-  const priceMap = loadPriceMap();
-  const items =
-    session && session.line_items && Array.isArray(session.line_items.data)
-      ? session.line_items.data
-      : [];
-  for (const it of items) {
-    const pid = it && it.price && it.price.id;
-    const mapped = pid && priceMap[pid] ? String(priceMap[pid]).trim().toLowerCase() : null;
-    if (mapped && balance.PACKS[mapped]) return { pack: mapped, source: "price_map" };
-  }
-  // 2) session.metadata.pack — the existing api/stripe-webhook.js convention,
-  //    normalized the same way (H3 discipline: trim + lowercase).
-  const meta =
-    session && session.metadata && session.metadata.pack
-      ? String(session.metadata.pack).trim().toLowerCase()
-      : "";
-  if (meta && balance.PACKS[meta]) return { pack: meta, source: "metadata" };
-  // 3) FALLBACK: exact amount_total -> pack, derived from the ratified PACKS
-  //    table (never hand-maintained numbers). USD only, exact match only —
-  //    least preferred (two packs at one price would be ambiguous), kept so an
-  //    honest-but-unmapped Payment Link still fulfills instead of stranding a
-  //    paid buyer behind a support email.
-  const currency = session && session.currency ? String(session.currency).toLowerCase() : null;
-  const cents = Number(session && session.amount_total);
-  if (currency === "usd" && Number.isFinite(cents)) {
-    for (const [id, p] of Object.entries(balance.PACKS)) {
-      if (!p.by_id_only && p.price_usd * 100 === cents) return { pack: id, source: "amount_total" };
-    }
-  }
-  return null;
-}
+// One resolver, shared with api/stripe-webhook.js: lib/_balance.js
+// resolvePack. Credited only when NAMED (price map or metadata.pack); a
+// disagreement between the two is refused.
+const resolvePack = (session) => balance.resolvePack(session, { priceMap: true });
 
 // ---- email backup copy — STUB, named honestly ----
 // The witness app has NO outbound-mail mechanism: zero dependencies by design
@@ -274,7 +231,9 @@ function topupHtml(sessionId, pack, credits, balanceAfter) {
   return pageShell(
     "Credits applied",
     `<h1>Payment verified — credits applied to your existing key</h1>
-<p><b>${esc(String(credits))} pins</b> (${esc(pack)} pack) credited. Current credit balance: <b>${esc(String(balanceAfter))}</b>.</p>
+<p>${credits === null
+    ? "This purchase was already credited to your key."
+    : `<b>${esc(String(credits))} pins</b>${pack ? ` (${esc(pack)} pack)` : ""} credited.`} Current credit balance: <b>${esc(String(balanceAfter))}</b>.</p>
 <p class="muted">This purchase referenced an existing key (client_reference_id), so no new key was minted — check <code>GET /api/balance</code> with that key. Revisiting this page is safe: the credit is idempotent per checkout session.</p>`
   );
 }
@@ -465,10 +424,20 @@ module.exports = async (req, res) => {
 
   // Map the purchase to a pack.
   const resolved = resolvePack(session);
-  if (!resolved) {
+  if (resolved.pack === null && resolved.reason === "pack_conflict") {
     console.error(
-      `[fulfill] PAID session could not be mapped to a pack: ${sid.slice(0, 24)}… ` +
-        `amount_total=${session.amount_total} ${session.currency} metadata.pack=${session.metadata && session.metadata.pack}`
+      `[fulfill] PAID session names DISAGREEING packs, NOT fulfilled: ${sid.slice(0, 24)}… ` +
+        `${resolved.detail} amount_total=${session.amount_total} ${session.currency}`
+    );
+    return deny(req, res, 409,
+      { error: "the price and the link name different credit packs; not fulfilled automatically", reason: "pack_conflict", support: SUPPORT_EMAIL },
+      "We got your payment: one manual step",
+      "Your payment is verified, but this purchase names two different credit packs, so it was not fulfilled automatically. Email support with your receipt and it will be fulfilled by hand.");
+  }
+  if (resolved.pack === null) {
+    console.error(
+      `[fulfill] PAID session could not be mapped to a pack (${resolved.reason}): ${sid.slice(0, 24)}… ` +
+        `${resolved.detail} amount_total=${session.amount_total} ${session.currency}`
     );
     return deny(req, res, 409,
       { error: "paid session could not be mapped to a credit pack — not fulfilled automatically", reason: "unmapped_purchase", support: SUPPORT_EMAIL },
@@ -476,14 +445,16 @@ module.exports = async (req, res) => {
       "Your payment is verified, but this purchase could not be matched to a credit pack automatically. Email support with your receipt and it will be fulfilled by hand (and the mapping fixed).");
   }
   const pack = resolved.pack;
-  const packDef = balance.PACKS[pack];
+  const packDef = balance.lookupPack(pack);
 
   // Cross-check the money against the pack (the webhook's H1 discipline): a
   // pack claim must never outrank what was actually paid.
   const paidCents = Number.isFinite(Number(session.amount_total)) ? Number(session.amount_total) : null;
   const currency = session.currency ? String(session.currency).toLowerCase() : null;
   const expectedCents = packDef.price_usd * 100;
-  if (paidCents === null || paidCents < expectedCents || (currency && currency !== "usd")) {
+  // `currency !== "usd"`, not `(currency && ...)`: a MISSING currency is
+  // refused, exactly as the webhook refuses it. USD must be stated.
+  if (paidCents === null || paidCents < expectedCents || currency !== "usd") {
     console.error(
       `[fulfill] payment/pack mismatch: pack=${pack} expected ${expectedCents} usd, ` +
         `paid ${paidCents} ${currency} (${sid.slice(0, 24)}…) — NOT fulfilled`
@@ -513,19 +484,24 @@ module.exports = async (req, res) => {
             `pack=${pack} session=${sid.slice(0, 24)}… detail=${result.ledger_write_failed}`
         );
       }
+      // Report what was ACTUALLY granted for this session, which may have
+      // been the webhook's grant (already_credited), never packDef.pins
+      // blindly. null = the grant happened but its size could not be read.
+      const grantedPins = result.granted_pins === undefined ? null : result.granted_pins;
+      const grantedPack = result.granted_pack || (result.already_credited ? null : pack);
       return respond(req, res, 200,
         {
           ok: true,
           mode: "topup",
-          pack,
-          credits: packDef.pins,
+          pack: grantedPack,
+          credits: grantedPins,
           credit_balance: result.balance_after,
           already_credited: !!result.already_credited,
           note: "session referenced an existing key (client_reference_id) — credited, no new key minted",
           docs_url: DOCS_URL,
           ...(result.ledger_write_failed ? { ledger_write_failed: true } : {}),
         },
-        () => topupHtml(sid, pack, packDef.pins, result.balance_after));
+        () => topupHtml(sid, grantedPack, grantedPins, result.balance_after));
     }
 
     // --- mint-or-retrieve (idempotent per session) ---

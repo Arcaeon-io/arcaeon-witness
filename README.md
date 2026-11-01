@@ -51,7 +51,7 @@ silently:
 - On grant, `X-Meter-Cap` / `X-Meter-Used` are set on the success response
   too, so callers can see how much headroom is left.
 
-Default plan is **free: 10 pins/month** (owner, Fri 2026-10-30; was 30, was 100 before). Per-key overrides (including
+Default plan is **free: 10 pins/month** (owner, Fri 2026-10-30; was 100). Per-key overrides (including
 explicit unlimited) live in the `WITNESS_PLANS` env var — JSON keyed by
 `sha256(key)`, e.g. `{"<sha256 of a key>": {"plan": "internal"}}` (defers
 to the built-in `internal` plan, which is unlimited but still counted) or
@@ -150,7 +150,12 @@ webhook endpoint pointed at this path, subscribed to both event types above
 set its signing secret as `WITNESS_STRIPE_WEBHOOK_SECRET` in Vercel env;
 (2) each pack's Stripe Payment Link / Checkout Session needs
 `client_reference_id` set to the buyer's `sha256(witness key)` and
-`metadata.pack` set to `mini`/`starter`/`standard`/`bulk`. Until both are
+`metadata.pack` set to `pins_200`/`pins_1000` (the retired
+`mini`/`starter`/`standard`/`bulk` still credit when an old link names them).
+The pack is resolved by the same function `/api/fulfill` uses
+(`lib/_balance.js` `resolvePack`), by `metadata.pack` only: a webhook payload
+has no line items, so a session with no `metadata.pack` is logged and skipped
+here and `/api/fulfill` handles it. Until both are
 done, this endpoint fails closed with `501` on every call — the crediting
 logic itself is already built and tested via `/api/credit`.
 
@@ -158,9 +163,17 @@ logic itself is already built and tested via `/api/credit`.
 `{credit_balance, credit_ever_purchased, free_tier:{plan, used, cap, month}}`.
 Never consumes a pin (reads via `meter.peek()`, not `meter.check()`).
 
-Pack sizes (LIVE and buyable as of 2026-08-16; credits applied by hand within ~a day. Corrected 2026-08-19: this line still said "not yet offered" while the Stripe links were returning 200 and would take a customer's money): Mini $5/1,000 pins · Starter
-$15/3,000 pins · Standard $50/12,000 pins · Bulk $150/40,000 pins
-(`api/_balance.js` `PACKS`).
+Pack sizes (owner's prices, from the 2026-11-03 release): `pins_200` $5/200 pins,
+`pins_1000` $20/1,000 pins (`lib/_balance.js` `PACKS`). Packs never expire and are
+used only after the month's free pins. The retired 2026-08 packs (mini $5/1,000,
+starter $15/3,000, standard $50/12,000, bulk $150/40,000) are in `LEGACY_PACKS`:
+not sold or advertised, and credited only when a session names them (`metadata.pack`
+or a price id in `WITNESS_STRIPE_PRICE_MAP`). Every pack, new or old, is credited
+only when it is named. The amount paid never picks a pack: an unnamed session is
+not credited and goes to the manual step, and so is one whose price map entry and
+`metadata.pack` disagree. The amount and currency are still checked against the
+named pack (paid at least the price, in USD).
+402/429 bodies list only the current packs (price and pins).
 
 ### GET /api/latest?ns=&lt;namespace&gt; (no auth)
 

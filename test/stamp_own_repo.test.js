@@ -336,7 +336,8 @@ test("PAID: an insufficient balance is 402 with an honest body, and nothing is s
   assert.equal(res._body.credit_balance, 0.1);
   assert.equal(res._body.price_credits_per_stamp, stamp.STAMP_PRICE_CREDITS);
   assert.equal(res._body.ever_purchased, true, "a spent-out buyer is not the same as a stranger");
-  assert.ok(res._body.packs && res._body.packs.mini, "say how to top up");
+  assert.ok(res._body.packs && res._body.packs.pins_200, "say how to top up");
+  assert.deepEqual(Object.keys(res._body.packs).sort(), ["pins_1000", "pins_200"], "current packs only, no retired pack advertised");
 
   // MUST-FAIL ARM: refused before the write, so no stamp and no budget spend.
   assert.equal(gh.has(STAMPS_REPO, pathOf(s)), false);

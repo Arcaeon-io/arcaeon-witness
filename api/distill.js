@@ -105,7 +105,7 @@ async function meterAndCharge(key) {
             reason: "credit_exhausted",
             credit_balance: 0,
             plan: m.plan, free_tier_used: m.used, free_tier_cap: m.cap, month: m.month,
-            packs: balance.PACKS,
+            packs: balance.publicPacks(),
           },
         },
         headers,
@@ -118,7 +118,8 @@ async function meterAndCharge(key) {
           error: "monthly distill cap reached",
           reason: "over_cap",
           plan: m.plan, used: m.used, cap: m.cap, month: m.month,
-          top_up_available: true, packs: balance.PACKS,
+          top_up_available: true, packs: balance.publicPacks(),
+          message: balance.overCapMessage(m.plan, m.cap),
           note: "the free tier is shared across all metered witness endpoints (pin, distill) per key",
         },
       },
@@ -238,3 +239,6 @@ module.exports = async (req, res) => {
     note: "this endpoint runs a JS port of arcaeon_distill for the hosted try-before-pip demo — not the pip package itself; pip install arcaeon-distill for the canonical implementation",
   });
 };
+
+// Test hook (2026-11-01): the 402/429 body contract is asserted directly.
+module.exports.meterAndCharge = meterAndCharge;

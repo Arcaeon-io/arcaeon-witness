@@ -110,10 +110,10 @@ test("CONTRACT: a valid, signed, paid, live event credits the declared pack", as
   const res = await post(event);
   assert.equal(res._status, 200);
   assert.equal(res._body.credited, true);
-  assert.equal(res._body.balance_after, balance.PACKS.mini.pins);
+  assert.equal(res._body.balance_after, balance.LEGACY_PACKS.mini.pins);
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.mini.pins);
+  assert.equal(bal.balance, balance.LEGACY_PACKS.mini.pins);
 });
 
 // ---------------------------------------------------------------------
@@ -187,10 +187,10 @@ test("REGRESSION (money bug, end-to-end via webhook): a duplicate Stripe deliver
   assert.equal(retry._status, 200);
   assert.equal(retry._body.credited, false);
   assert.equal(retry._body.already_credited, true);
-  assert.equal(retry._body.balance_after, balance.PACKS.starter.pins);
+  assert.equal(retry._body.balance_after, balance.LEGACY_PACKS.starter.pins);
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.starter.pins, "two deliveries of one event must credit the pack exactly once");
+  assert.equal(bal.balance, balance.LEGACY_PACKS.starter.pins, "two deliveries of one event must credit the pack exactly once");
 });
 
 // ---------------------------------------------------------------------------
@@ -230,7 +230,7 @@ test("H1: correct amount for the pack still credits (happy path unbroken)", asyn
   assert.equal(res._status, 200);
   assert.equal(res._body.credited, true);
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.mini.pins);
+  assert.equal(bal.balance, balance.LEGACY_PACKS.mini.pins);
 });
 
 test("H3 REGRESSION: uppercase hash + ' Mini ' pack normalize and credit, not silent no-op", async () => {
@@ -240,7 +240,7 @@ test("H3 REGRESSION: uppercase hash + ' Mini ' pack normalize and credit, not si
   assert.equal(res._status, 200);
   assert.equal(res._body.credited, true, "normalized caps/spacing must credit, not skip");
   const bal = await balance.readBalance(canonical);
-  assert.equal(bal.balance, balance.PACKS.mini.pins);
+  assert.equal(bal.balance, balance.LEGACY_PACKS.mini.pins);
 });
 
 // ---------------------------------------------------------------------------
@@ -277,10 +277,10 @@ test("H2 REGRESSION: the ACH/Klarna sequence — unpaid `completed` then a real 
   const res2 = await post(asyncSucceeded);
   assert.equal(res2._status, 200);
   assert.equal(res2._body.credited, true, "a cleared async payment must actually credit the pack");
-  assert.equal(res2._body.balance_after, balance.PACKS.starter.pins);
+  assert.equal(res2._body.balance_after, balance.LEGACY_PACKS.starter.pins);
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.starter.pins, "the buyer's cleared ACH payment must be credited exactly once");
+  assert.equal(bal.balance, balance.LEGACY_PACKS.starter.pins, "the buyer's cleared ACH payment must be credited exactly once");
 });
 
 test("H2 REGRESSION: checkout.session.async_payment_failed is logged and skipped, never credited", async () => {
@@ -318,7 +318,7 @@ test("H2 REGRESSION: two different event ids reporting paid for the SAME session
   const res1 = await post(completedPaid);
   assert.equal(res1._status, 200);
   assert.equal(res1._body.credited, true);
-  assert.equal(res1._body.balance_after, balance.PACKS.standard.pins);
+  assert.equal(res1._body.balance_after, balance.LEGACY_PACKS.standard.pins);
 
   // A SEPARATE event id, async_payment_succeeded, also paid, for the SAME
   // session — the exact shape Stripe's own docs warn a fulfillment handler
@@ -331,10 +331,10 @@ test("H2 REGRESSION: two different event ids reporting paid for the SAME session
   assert.equal(res2._status, 200);
   assert.equal(res2._body.credited, false, "a second event id for the same session must not grant a second time");
   assert.equal(res2._body.already_credited, true);
-  assert.equal(res2._body.balance_after, balance.PACKS.standard.pins);
+  assert.equal(res2._body.balance_after, balance.LEGACY_PACKS.standard.pins);
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.standard.pins, "one real purchase, reported by two event ids, must credit exactly once");
+  assert.equal(bal.balance, balance.LEGACY_PACKS.standard.pins, "one real purchase, reported by two event ids, must credit exactly once");
 });
 
 // ---------------------------------------------------------------------------
@@ -369,5 +369,74 @@ test("SITE #26: a non-USD currency still refuses, and upper-case USD still credi
   const usdHash = balance.keyHash("site26-USD");
   const usd = await post(checkoutEvent({ id: "evt-USD", hash: usdHash, pack: "mini", amountTotal: 500, currency: "USD" }));
   assert.equal(usd._body.credited, true);
-  assert.equal((await balance.readBalance(usdHash)).balance, balance.PACKS.mini.pins);
+  assert.equal((await balance.readBalance(usdHash)).balance, balance.LEGACY_PACKS.mini.pins);
+});
+
+// ---------------------------------------------------------------------------
+// 2026-11-01 review fix: the webhook resolves the pack with the SAME function
+// as /api/fulfill (lib/_balance.js resolvePack), still checking the money.
+// ---------------------------------------------------------------------------
+
+test("webhook: both NEW packs credit by metadata.pack (pins_200 -> 200, pins_1000 -> 1,000)", async () => {
+  for (const [pack, cents, pins] of [["pins_200", 500, 200], ["pins_1000", 2000, 1000]]) {
+    const hash = balance.keyHash("wh-new-meta-" + pack);
+    const res = await post(checkoutEvent({ id: "evt-new-meta-" + pack, sessionId: "cs_live_meta_" + pack, hash, pack, amountTotal: cents }));
+    assert.equal(res._status, 200);
+    assert.equal(res._body.credited, true, JSON.stringify(res._body));
+    assert.equal(res._body.pack, pack);
+    assert.equal((await balance.readBalance(hash)).balance, pins);
+  }
+});
+
+test("webhook: no metadata.pack -> logged and skipped (200, no credit), even for exactly $5 or $20", async () => {
+  for (const cents of [500, 2000]) {
+    const hash = balance.keyHash("wh-no-meta-" + cents);
+    const res = await post(checkoutEvent({ id: "evt-no-meta-" + cents, sessionId: "cs_live_nometa_" + cents, hash, pack: undefined, amountTotal: cents }));
+    assert.equal(res._status, 200);
+    assert.notEqual(res._body.credited, true, JSON.stringify(res._body));
+    assert.match(res._body.skipped || "", /pack missing or unknown/);
+    assert.equal((await balance.readBalance(hash)).balance, 0);
+  }
+});
+
+test("webhook: never uses the price map, even if a payload carried line_items (metadata.pack only)", async () => {
+  const saved = process.env.WITNESS_STRIPE_PRICE_MAP;
+  process.env.WITNESS_STRIPE_PRICE_MAP = JSON.stringify({ price_wh_1000: "pins_1000" });
+  try {
+    const hash = balance.keyHash("wh-price-map");
+    const ev = checkoutEvent({ id: "evt-pmap", sessionId: "cs_live_pmap", hash, pack: undefined, amountTotal: 2000 });
+    ev.data.object.line_items = { data: [{ price: { id: "price_wh_1000" } }] };
+    const res = await post(ev);
+    assert.notEqual(res._body.credited, true, JSON.stringify(res._body));
+    assert.equal((await balance.readBalance(hash)).balance, 0);
+  } finally {
+    if (saved === undefined) delete process.env.WITNESS_STRIPE_PRICE_MAP; else process.env.WITNESS_STRIPE_PRICE_MAP = saved;
+  }
+});
+
+test("webhook: unmappable amount, retired pack price with no name, and a named unknown pack all credit nothing", async () => {
+  const cases = [
+    { pack: undefined, amountTotal: 1000 },     // no current pack costs $10
+    { pack: undefined, amountTotal: 1500 },     // starter's price, but starter is not named
+    { pack: "pins_500", amountTotal: 500 },     // named unknown
+  ];
+  for (const [i, c] of cases.entries()) {
+    const hash = balance.keyHash("wh-unmapped-" + i);
+    const res = await post(checkoutEvent({ id: "evt-unmapped-" + i, sessionId: "cs_live_unm_" + i, hash, ...c }));
+    assert.equal(res._status, 200);
+    assert.notEqual(res._body.credited, true, JSON.stringify(res._body));
+    assert.match(res._body.skipped || "", /pack missing or unknown/);
+    assert.equal((await balance.readBalance(hash)).balance, 0);
+  }
+});
+
+test("webhook: underpay of a new pack credits nothing ($4.99 for pins_200; $5 named pins_1000)", async () => {
+  for (const [i, c] of [{ pack: "pins_200", amountTotal: 499 }, { pack: "pins_1000", amountTotal: 500 }].entries()) {
+    const hash = balance.keyHash("wh-underpay-new-" + i);
+    const res = await post(checkoutEvent({ id: "evt-underpay-new-" + i, sessionId: "cs_live_up_" + i, hash, ...c }));
+    assert.equal(res._status, 200);
+    assert.notEqual(res._body.credited, true);
+    assert.match(res._body.skipped || "", /does not match/);
+    assert.equal((await balance.readBalance(hash)).balance, 0);
+  }
 });
