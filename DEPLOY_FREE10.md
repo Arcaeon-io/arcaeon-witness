@@ -13,7 +13,7 @@ with no review comments. `main` (`8242bfa`) still says `free: 100`.
 
 **Passing.** On that branch, `npm test`: 647 tests, 647 pass, 0 fail
 (Node 22.23.4, run Sat night). After the review fixes (Sun 2026-11-01,
-local commits on top of `abe8fb2`, not pushed): 674 tests, 674 pass,
+local commits on top of `abe8fb2`, not pushed): 677 tests, 677 pass,
 0 fail. The repo has no CI workflow, so the PR shows
 no checks; this local run is the only test result. The branch merges into
 `main` with no conflict (checked with a trial merge, nothing written).
@@ -45,7 +45,8 @@ The review fixes on top (Sun 2026-11-01) change the pack logic:
   when the webhook granted them first.
 - The out of pins answers (402 and 429) list only the new packs, and the
   429 says plainly that the free allowance is now 10 pins a month and that
-  a pack gets more.
+  a pack gets more. Both carry a ready top up link per pack for that key
+  (see `WITNESS_PACK_LINKS` below).
 
 Not part of this: the branch `account-on-pr2` also sets free 10, for
 accounts as well as bare keys, but has no pull request and is not needed
@@ -124,6 +125,15 @@ The settings the payment side reads (names from the code):
    `/api/fulfill` uses it; a webhook delivery does not carry the price ids,
    so the webhook goes by `metadata.pack` only. If a price map entry and
    `metadata.pack` disagree, nothing is credited.
+5. `WITNESS_PACK_LINKS`: the two new payment link URLs, as JSON:
+   `{"pins_200":"<link url>","pins_1000":"<link url>"}`. These are public
+   links, not secrets. When a key runs out of pins, the 402 and 429
+   answers carry one top up link per pack, made from these with
+   `?client_reference_id=<SHA-256 of that key>` added, so buying from it
+   adds the pack to that same key. Only the hash goes in the link, never
+   the key. If this is not set, the answers point at
+   `https://arcaeon.io/pricing` instead and say plainly that buying there
+   makes a new key, and how to add pins to the old key.
 
 The webhook endpoint, at
 `https://arcaeon-witness.vercel.app/api/stripe-webhook`, must be subscribed
@@ -177,7 +187,7 @@ November.
 
 1. The owner reviews and merges PR 2 into `main`.
 2. On the merged `main`: `npm test`, which must end with 0 fail.
-3. Check the settings above (the two for the free 10, and the four payment
+3. Check the settings above (the two for the free 10, and the five payment
    settings and the webhook endpoint) in the production environment, and
    that each new link carries `metadata.pack`, quantity 1, no promotion
    codes and no added tax.
