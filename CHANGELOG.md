@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-01: member keys: up to 100 pins an hour (branch `member-rate-100`, on top of `pin-rate-limit-shared`, NOT deployed)
+
+- `lib/_pin_ratelimit.js`: a key whose sha256 is in `WITNESS_MEMBER_KEYS` gets `MEMBER_RATE_LIMIT` (100) pins per clock hour; every other key keeps 60. Same windows, same shared count, same fail closed store. The 429 body carries `member`.
+- A member list that cannot be read (any entry not 64 lower case hex) names no member, so a mistake lowers limits, never raises them.
+- This changes the hourly limit only. The monthly cap, the meter and the credit balance are untouched.
+
 ## 2026-10-31 — the pin rate limit: 60 per key per clock hour, documented, and shared across instances behind the same flag (branch `pin-rate-limit-shared`, on top of `meter-off-github`, NOT deployed)
 
 - `lib/_pin_ratelimit.js` replaces the Map in `api/pin.js`. The number stays 60. Windows are now clock hours in UTC, in both modes, so every instance agrees on the window (before: an hour from the key's first pin on that instance).

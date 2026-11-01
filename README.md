@@ -46,8 +46,10 @@ silently:
 - `429` (over cap) — headers `X-Meter-Cap` / `X-Meter-Used` and a JSON body
   `{error, reason:"over_cap", plan, used, cap, month}`.
 - `429` with `reason:"key_rate_limited"` past **60 pins per key per clock hour
-  (UTC)**, separate from the monthly cap: body `{limit, window_seconds,
-  shared_across_instances, retry_after_seconds}` and a `Retry-After` header. A
+  (UTC)**, or **100** for a member key (one whose sha256 is listed in
+  `WITNESS_MEMBER_KEYS`, comma separated lower case hex; a list that cannot be
+  read names no member), separate from the monthly cap: body `{limit, member,
+  window_seconds, shared_across_instances, retry_after_seconds}` and a `Retry-After` header. A
   limited call is not metered. With `WITNESS_USAGE_STORE=postgres` the count is
   one shared count in the account database; otherwise each warm instance counts
   on its own. If the shared count cannot be read the pin is refused `503`
