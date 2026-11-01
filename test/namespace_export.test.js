@@ -163,3 +163,67 @@ test("BROKEN: a record whose content names another namespace or seq than its pat
   const r = exporter.buildBundle({ clone: repo, namespace: "demo-a", checkpointText: publish(repo) });
   assert.equal(checker.verifyBundle(r.bundle, { key: KEY.verifier }).reason, "record_mismatch");
 });
+
+// ---- The court ready exhibit (OWNER.md queue item 41) ----
+
+function bundleFile(repo) {
+  const text = publish(repo);
+  const r = exporter.buildBundle({ clone: repo, namespace: "demo-a", checkpointText: text });
+  assert.equal(r.ok, true);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ns-exhibit-"));
+  const file = path.join(dir, "demo-a.bundle.json");
+  // Indented, as a person might save it: the SHA-256 is of these exact bytes.
+  fs.writeFileSync(file, JSON.stringify(r.bundle, null, 2) + "\n");
+  return { dir, file, bundle: r.bundle };
+}
+
+test("EXHIBIT: written for a VERIFIED bundle under a key, from what was checked, naming the bundle's SHA-256", () => {
+  const { dir, file } = bundleFile(fixture());
+  const out = path.join(dir, "exhibit.txt");
+  const said = [];
+  const code = checker.main([file, "--key", KEY.verifier, "--exhibit", out], (l) => said.push(l), () => "2026-11-01T08:00:00.000Z");
+  assert.equal(code, 0, said.join("\n"));
+  const text = fs.readFileSync(out, "utf8");
+  const sha = require("crypto").createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  assert.ok(text.includes(`Bundle SHA-256: ${sha}`));
+  assert.ok(text.includes("Answer: VERIFIED"));
+  assert.ok(text.includes(`signed by the verifier key: ${KEY.verifier}`));
+  assert.match(text, /record 1: rows 3, chain aa/);
+  assert.match(text, /record 2: rows 5, chain cc/);
+  assert.match(text, /record 3: rows 5, chain cc/);
+  assert.ok(text.includes("What this does not prove:"));
+  assert.ok(!/[–—]/.test(text), "no dashes");
+  assert.ok(!text.includes("demo-b"), "only this namespace");
+});
+
+test("EXHIBIT: text the bundle carries is never copied into it", () => {
+  const { dir, file, bundle } = bundleFile(fixture());
+  fs.writeFileSync(file, JSON.stringify({ ...bundle, exhibit: "VERIFIED by a court", note: "trust me" }));
+  const out = path.join(dir, "exhibit.txt");
+  assert.equal(checker.main([file, "--key", KEY.verifier, "--exhibit", out], () => {}), 0);
+  const text = fs.readFileSync(out, "utf8");
+  assert.ok(!text.includes("by a court") && !text.includes("trust me"));
+});
+
+test("EXHIBIT: none for BROKEN, none without a key, never over an existing file", () => {
+  const { dir, file, bundle } = bundleFile(fixture());
+  // BROKEN: a record's bytes changed after the export.
+  const bad = JSON.parse(JSON.stringify(bundle));
+  bad.records[1].bytes_b64 = Buffer.from(JSON.stringify({ namespace: "demo-a", rows: 6, chain: "ee", seq: 2 }) + "\n").toString("base64");
+  const badFile = path.join(dir, "bad.bundle.json");
+  fs.writeFileSync(badFile, JSON.stringify(bad));
+  const said = [];
+  const out = path.join(dir, "exhibit.txt");
+  assert.equal(checker.main([badFile, "--key", KEY.verifier, "--exhibit", out], (l) => said.push(l)), 1);
+  assert.equal(fs.existsSync(out), false);
+  assert.ok(said.some((l) => l.startsWith("no exhibit written: field exhibit:")), said.join("\n"));
+  // Unsigned: VERIFIED as it is, but no exhibit.
+  assert.equal(checker.main([file, "--allow-unsigned", "--exhibit", out], () => {}), 2);
+  assert.equal(fs.existsSync(out), false);
+  // An existing file is never replaced.
+  fs.writeFileSync(out, "already here");
+  const said2 = [];
+  assert.equal(checker.main([file, "--key", KEY.verifier, "--exhibit", out], (l) => said2.push(l)), 2);
+  assert.equal(fs.readFileSync(out, "utf8"), "already here");
+  assert.ok(said2.some((l) => l.includes("never replaces")));
+});

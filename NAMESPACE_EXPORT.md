@@ -27,3 +27,20 @@ One word and its exit code, as `tools/follow.js` answers:
 ## What it does not say
 
 That the log is the one everybody else sees: compare checkpoints with others, or run `tools/monitor.js`. Anything about records written after the checkpoint, which the bundle only lists until the next checkpoint covers them. Signed receipts are not in the bundle; `/api/verify` answers with each record's receipt when receipts are on.
+
+## A court ready exhibit
+
+```
+node tools/verify_namespace_bundle.js acme-prod.bundle.json --key "<the log's verifier key>" --exhibit acme-prod.exhibit.txt
+```
+
+With `--exhibit`, and only when the answer is VERIFIED under a key given with `--key`, the check also writes a plain text exhibit beside the bundle. It holds:
+
+- the namespace, the bundle file's name and SHA-256, and the time of the check;
+- the signed checkpoint: origin, size, root and the verifier key;
+- every record checked, with its rows, chain, the witness's time and its place in the log;
+- what the check proves, what it does not, and how to check it again.
+
+Every line is built from what the check itself read and proved; nothing is copied from text inside the bundle, so a bundle cannot carry words of its own into the exhibit. The file is written only where nothing is yet. BROKEN, COULD NOT LOOK, or a check run with `--allow-unsigned` writes no exhibit, and says so naming `exhibit`.
+
+Hand over the bundle and the exhibit together: the SHA-256 in the exhibit names the bundle exactly, and anyone can run the same check on it and get the same answer.
