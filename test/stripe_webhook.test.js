@@ -54,10 +54,12 @@ function checkoutEvent({
   };
 }
 
-async function post(event, { badSignature = false, noSignature = false, wrongSecret = false } = {}) {
+async function post(event, { badSignature = false, noSignature = false, wrongSecret = false, sigHeader } = {}) {
   const rawBody = Buffer.from(JSON.stringify(event), "utf8");
   const headers = {};
-  if (!noSignature) {
+  if (sigHeader) {
+    headers["stripe-signature"] = sigHeader(rawBody);
+  } else if (!noSignature) {
     const secretToSign = wrongSecret ? "whsec_wrong_secret" : SECRET;
     headers["stripe-signature"] = stripeSigHeader(secretToSign, badSignature ? Buffer.from("tampered") : rawBody);
   }
@@ -66,6 +68,57 @@ async function post(event, { badSignature = false, noSignature = false, wrongSec
   await webhook(req, res);
   return res;
 }
+
+// ---------------------------------------------------------------------
+// Red hunt 2026-11-02, L1: several v1 values (a signing secret rotation)
+// ---------------------------------------------------------------------
+
+// NOTE: this first case passes on the OLD parser too (it kept the LAST v1,
+// and the live one is last here). It is kept as the plain rotation shape
+// Stripe documents; the case after it, live v1 FIRST, is the one that fails
+// without the fix (review, round 2).
+test("RED HUNT L1: a header carrying two v1 values, the OLD secret's first and the live secret's second, verifies (secret rotation)", async () => {
+  const hash = "c".repeat(64);
+  const res = await post(checkoutEvent({ id: "evt-rot-1", sessionId: "cs_live_rot1", hash, pack: "pins_200", amountTotal: 500 }), {
+    sigHeader: (rawBody) => {
+      const old = stripeSigHeader("whsec_previous_secret", rawBody);
+      const live = stripeSigHeader(SECRET, rawBody);
+      // old header is `t=<ts>,v1=<old>`; append the live v1 as Stripe does.
+      return `${old},${live.split(",")[1]}`;
+    },
+  });
+  assert.equal(res._status, 200);
+  assert.equal(res._body.credited, true);
+});
+
+test("RED HUNT L1: the live v1 FIRST and a stale one second also verifies, and two wrong v1 values still refuse", async () => {
+  const hash = "d".repeat(64);
+  const ok = await post(checkoutEvent({ id: "evt-rot-2", sessionId: "cs_live_rot2", hash, pack: "pins_200", amountTotal: 500 }), {
+    sigHeader: (rawBody) => {
+      const live = stripeSigHeader(SECRET, rawBody);
+      const old = stripeSigHeader("whsec_previous_secret", rawBody);
+      return `${live},${old.split(",")[1]}`;
+    },
+  });
+  assert.equal(ok._status, 200);
+  assert.equal(ok._body.credited, true);
+
+  const bad = await post(checkoutEvent({ id: "evt-rot-3", sessionId: "cs_live_rot3", hash, pack: "pins_200", amountTotal: 500 }), {
+    sigHeader: (rawBody) => {
+      const a = stripeSigHeader("whsec_wrong_a", rawBody);
+      const b = stripeSigHeader("whsec_wrong_b", rawBody);
+      return `${a},${b.split(",")[1]}`;
+    },
+  });
+  assert.equal(bad._status, 400);
+  assert.match(bad._body.error, /signature mismatch/);
+
+  const junk = await post(checkoutEvent({ id: "evt-rot-4", sessionId: "cs_live_rot4", hash, pack: "pins_200", amountTotal: 500 }), {
+    sigHeader: () => `t=${Math.floor(Date.now() / 1000)},v1=zz,v1=not-hex`,
+  });
+  assert.equal(junk._status, 400);
+  assert.match(junk._body.error, /malformed v1/);
+});
 
 // ---------------------------------------------------------------------
 // CONTRACT: webhook signature required (unit-level, via the real dispatch path)

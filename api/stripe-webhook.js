@@ -76,15 +76,22 @@ const TOLERANCE_SECONDS = 300; // guards against replaying an old, valid signatu
 
 function verifyStripeSignature(rawBody, sigHeader, secret) {
   if (!sigHeader) return { ok: false, reason: "missing stripe-signature header" };
+  // Every v1 is kept (red hunt 2026-11-02). Stripe sends SEVERAL v1 values
+  // while a signing secret is being rotated (one per live secret), and the
+  // old map here kept only the last one, so during a rotation every genuine
+  // delivery would have failed as a mismatch. Any v1 that verifies accepts.
   const parts = {};
+  const v1s = [];
   for (const kv of sigHeader.split(",")) {
     const i = kv.indexOf("=");
     if (i < 1) continue;
-    parts[kv.slice(0, i)] = kv.slice(i + 1);
+    const k = kv.slice(0, i).trim();
+    const v = kv.slice(i + 1).trim();
+    if (k === "v1") v1s.push(v);
+    else parts[k] = v;
   }
   const t = parts.t;
-  const v1 = parts.v1;
-  if (!t || !v1) return { ok: false, reason: "malformed stripe-signature header" };
+  if (!t || v1s.length === 0) return { ok: false, reason: "malformed stripe-signature header" };
 
   // Sign over the RAW BYTES. The previous form was `` `${t}.${rawBody}` ``,
   // which stringifies the Buffer through its default utf-8 decoding before
@@ -102,14 +109,17 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   // stops at the first invalid pair — so the length check below is what
   // actually rejects a junk v1, not the try/catch. Reject non-hex explicitly
   // rather than relying on a truncation happening to produce a length mismatch.
-  if (!/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0) {
-    return { ok: false, reason: "malformed v1 signature" };
-  }
   const expectedBuf = Buffer.from(expected, "hex");
-  const gotBuf = Buffer.from(v1, "hex");
-  if (expectedBuf.length !== gotBuf.length || !crypto.timingSafeEqual(expectedBuf, gotBuf)) {
-    return { ok: false, reason: "signature mismatch" };
+  let wellFormed = 0;
+  let matched = false;
+  for (const v1 of v1s) {
+    if (!/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0) continue;
+    wellFormed += 1;
+    const gotBuf = Buffer.from(v1, "hex");
+    if (expectedBuf.length === gotBuf.length && crypto.timingSafeEqual(expectedBuf, gotBuf)) matched = true;
   }
+  if (wellFormed === 0) return { ok: false, reason: "malformed v1 signature" };
+  if (!matched) return { ok: false, reason: "signature mismatch" };
   const age = Math.abs(Date.now() / 1000 - Number(t));
   if (!Number.isFinite(age) || age > TOLERANCE_SECONDS) {
     return { ok: false, reason: "timestamp outside tolerance" };

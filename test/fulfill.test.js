@@ -71,6 +71,10 @@ let gh, stripe, restoreFetch;
 beforeEach(() => {
   gh = new MockGitHubStore();
   stripe = new MockStripe();
+  // Every case in this file calls the handler from the same unnamed address;
+  // the per IP fulfill limiter (red hunt 2026-11-02) would otherwise trip
+  // part way through the file. Its own cases below use real addresses.
+  require("../lib/_ratelimit.js")._resetForTests();
   const original = global.fetch;
   global.fetch = (url, opts) => {
     if (String(url).startsWith("https://api.stripe.com/")) return stripe.handle(url, opts);
@@ -1106,4 +1110,58 @@ test("already credited: the page reports the pins the ledger says were granted, 
   assert.equal(res._body.credits, 1000);
   assert.equal(res._body.pack, "mini");
   assert.equal((await balance.readBalance(hash)).balance, 1000, "nothing credited twice");
+});
+
+// ---------------------------------------------------------------------
+// Red hunt 2026-11-02, M1: the fulfillment path is rate limited per IP,
+// in its own bucket, before anything leaves the process.
+// ---------------------------------------------------------------------
+
+const ratelimit = require("../lib/_ratelimit.js");
+
+test("RED HUNT M1: the (LIMIT+1)th fulfillment request from one address is 429 and makes NO Stripe call", async () => {
+  const ip = "203.0.113.41";
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "starter" }));
+  for (let i = 0; i < ratelimit.LIMIT; i++) {
+    const res = await call({ query: { session_id: id }, headers: { ...JSON_HDR, "x-forwarded-for": ip } });
+    assert.equal(res._status, 200, `request ${i + 1} is served`);
+  }
+  const stripeCalls = stripe.calls.length;
+  const res = await call({ query: { session_id: id }, headers: { ...JSON_HDR, "x-forwarded-for": ip } });
+  assert.equal(res._status, 429);
+  assert.equal(res._body.reason, "rate_limited");
+  assert.ok(Number.isInteger(res._body.retry_after_seconds) && res._body.retry_after_seconds > 0);
+  assert.ok(res._headers["retry-after"], "Retry-After header set");
+  assert.equal(stripe.calls.length, stripeCalls, "a limited request never reaches Stripe");
+
+  // The human page gets the same refusal as a page, not JSON.
+  const html = await call({ query: { session_id: id }, headers: { accept: "text/html", "x-forwarded-for": ip } });
+  assert.equal(html._status, 429);
+  assert.ok(String(html._body).includes("Too many requests"));
+  assert.equal(stripe.calls.length, stripeCalls);
+});
+
+test("RED HUNT M1: a malformed session_id is refused 400 BEFORE the limiter, so garbage never spends the buyer's budget", async () => {
+  const ip = "203.0.113.42";
+  for (let i = 0; i < ratelimit.LIMIT * 3; i++) {
+    const res = await call({ query: { session_id: "not-a-session" }, headers: { ...JSON_HDR, "x-forwarded-for": ip } });
+    assert.equal(res._status, 400);
+  }
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "starter" }));
+  const res = await call({ query: { session_id: id }, headers: { ...JSON_HDR, "x-forwarded-for": ip } });
+  assert.equal(res._status, 200, "the real request is still under budget");
+});
+
+test("RED HUNT M1: the fulfill bucket is separate from the public read bucket (a buyer's live prefix checks cannot starve the mint)", async () => {
+  const ip = "203.0.113.43";
+  const req = { headers: { "x-forwarded-for": ip } };
+  for (let i = 0; i <= ratelimit.LIMIT; i++) ratelimit.check(req);
+  assert.equal(ratelimit.check(req).limited, true, "the default read bucket is spent");
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "starter" }));
+  const res = await call({ query: { session_id: id }, headers: { ...JSON_HDR, "x-forwarded-for": ip } });
+  assert.equal(res._status, 200);
+  assert.match(res._body.key, /^wk_[0-9a-f]{48}$/);
 });

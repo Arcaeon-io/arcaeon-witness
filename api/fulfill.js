@@ -106,6 +106,8 @@ const { SUPPORT_EMAIL, esc, wantsJson, pageShell, copyBox, copyBlock } = require
 // cap and cannot grow a 13th entry.
 const prefixCheck = require("../lib/_prefix_check.js");
 const prefixUi = require("../lib/_prefix_ui.js");
+// Per IP limit on the fulfillment path (red hunt 2026-11-02, see the handler).
+const ratelimit = require("../lib/_ratelimit.js");
 
 const DOCS_URL = process.env.WITNESS_DOCS_URL || "https://arcaeon.io/ai";
 const BASE_URL = process.env.WITNESS_BASE_URL || "https://arcaeon-witness.vercel.app";
@@ -344,6 +346,26 @@ module.exports = async (req, res) => {
       { error: "missing or malformed session_id", reason: "bad_session_id" },
       "Missing checkout session",
       "This page needs a valid session_id from a Stripe Checkout — follow the link from your receipt email or the post-checkout redirect.");
+  }
+
+  // Per IP limit (red hunt 2026-11-02). Until this, nothing stood between a
+  // well formed session id and the Stripe call below: every hit was one
+  // authenticated Stripe API request (Stripe's live read limit is 100 a
+  // second for the whole account, and past it real buyers landing from
+  // checkout got 502 stripe_error), and every revisit of a real receipt also
+  // cost about five GitHub calls from the token every paid write uses. Its
+  // OWN bucket (scope "fulfill"): the picker form's live prefix checks spend
+  // the default read bucket, and a buyer who typed a lot must still be able
+  // to mint. Placed after the shape check (garbage stays free to refuse) and
+  // before anything that leaves this process. Same per instance limitation
+  // as every limiter in this repo.
+  const rl = ratelimit.check(req, 1, { scope: "fulfill" });
+  if (rl.limited) {
+    res.setHeader("retry-after", String(rl.retryAfterSeconds));
+    return deny(req, res, 429,
+      { error: "too many fulfillment requests from this address; slow down", reason: "rate_limited", retry_after_seconds: rl.retryAfterSeconds },
+      "Too many requests",
+      "This address has asked for fulfillment too many times in a short span. Wait a few minutes and reload this exact URL; nothing is lost.");
   }
 
   const sk = stripeSecretKey();
