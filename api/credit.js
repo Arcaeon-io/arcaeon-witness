@@ -50,9 +50,10 @@ module.exports = async (req, res) => {
   }
 
   const body = typeof req.body === "object" && req.body ? req.body : null;
-  if (!body || typeof body.pack !== "string" || !balance.PACKS[body.pack]) {
+  if (!body || typeof body.pack !== "string" || !balance.lookupPack(body.pack)) {
     return res.status(400).json({
-      error: "body.pack must be one of: " + Object.keys(balance.PACKS).join(", "),
+      error: "body.pack must be one of: " + Object.keys(balance.PACKS).join(", ") +
+        " (retired, old links only: " + Object.keys(balance.LEGACY_PACKS).join(", ") + ")",
     });
   }
   if (typeof body.event_id !== "string" || !body.event_id.trim()) {
@@ -86,7 +87,7 @@ module.exports = async (req, res) => {
       ok: true,
       key_hash: hash,
       pack: body.pack,
-      pins_added: balance.PACKS[body.pack].pins,
+      pins_added: balance.lookupPack(body.pack).pins,
       already_credited: !!result.already_credited,
       balance_after: result.balance_after,
       ...(result.ledger_write_failed ? { ledger_write_failed: true } : {}),

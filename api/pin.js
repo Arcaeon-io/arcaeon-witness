@@ -186,12 +186,14 @@ async function meterAndCharge(key) {
             reason: "credit_exhausted",
             credit_balance: 0,
             plan: m.plan, free_tier_used: m.used, free_tier_cap: m.cap, month: m.month,
-            packs: balance.PACKS,
+            packs: balance.publicPacks(),
+            ...balance.buyFor(key),
           },
         },
         headers,
       };
     }
+    const buyInfo = balance.buyFor(key);
     return {
       deny: {
         status: 429,
@@ -199,7 +201,9 @@ async function meterAndCharge(key) {
           error: "monthly pin cap reached",
           reason: "over_cap",
           plan: m.plan, used: m.used, cap: m.cap, month: m.month,
-          top_up_available: true, packs: balance.PACKS,
+          top_up_available: true, packs: balance.publicPacks(),
+          ...buyInfo,
+          message: balance.overCapMessage(m.plan, m.cap, buyInfo),
         },
       },
       headers,
@@ -860,3 +864,6 @@ module.exports = async (req, res) => {
     return res.status(502).json({ error: `pin store error: ${err.message}` });
   }
 };
+
+// Test hook (2026-11-01): the 402/429 body contract is asserted directly.
+module.exports.meterAndCharge = meterAndCharge;

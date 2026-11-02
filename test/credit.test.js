@@ -103,7 +103,7 @@ test("the same event_id credits ONCE, however many times it is retried", async (
   assert.equal(first._body.ok, true);
   assert.equal(first._body.already_credited, false);
   const afterFirst = (await balance.readBalance(hash)).balance;
-  assert.equal(afterFirst, balance.PACKS.mini.pins);
+  assert.equal(afterFirst, balance.LEGACY_PACKS.mini.pins);
 
   for (let i = 0; i < 3; i++) {
     const again = await call({ body });
@@ -123,7 +123,7 @@ test("GREEN CONTROL: two DIFFERENT event_ids credit twice", async () => {
   await call({ body: { pack: "mini", event_id: "evt-1", key } });
   await call({ body: { pack: "mini", event_id: "evt-2", key } });
   const bal = (await balance.readBalance(hash)).balance;
-  assert.equal(bal, balance.PACKS.mini.pins * 2);
+  assert.equal(bal, balance.LEGACY_PACKS.mini.pins * 2);
 });
 
 test("a missing event_id is refused, so a retry can never be ambiguous", async () => {
@@ -166,7 +166,7 @@ test("crediting by key_hash and by raw key reach the same account", async () => 
   await call({ body: { pack: "mini", event_id: "by-raw", key } });
   await call({ body: { pack: "mini", event_id: "by-hash", key_hash: hash } });
   const bal = (await balance.readBalance(hash)).balance;
-  assert.equal(bal, balance.PACKS.mini.pins * 2,
+  assert.equal(bal, balance.LEGACY_PACKS.mini.pins * 2,
     "raw key and its hash must not resolve to different accounts");
 });
 
@@ -187,5 +187,5 @@ test("REGRESSION (2026-09-05): a ledger-write failure on a successful grant is s
     "a ledger-write failure on an otherwise-successful grant must be surfaced, not swallowed");
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.mini.pins, "the balance itself is correct regardless of the ledger write");
+  assert.equal(bal.balance, balance.LEGACY_PACKS.mini.pins, "the balance itself is correct regardless of the ledger write");
 });
