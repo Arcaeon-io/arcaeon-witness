@@ -329,9 +329,20 @@ test("PAID: an insufficient balance is 402 with an honest body, and nothing is s
   seedBalance(0.1); // less than one stamp
   process.env.STAMP_FREE_PER_DAY = "0";
   const s = sha("5h");
-  const res = await post({ sha256: s }, { key: KEY });
+  const hadLinks = Object.prototype.hasOwnProperty.call(process.env, "WITNESS_PACK_LINKS");
+  const prevLinks = process.env.WITNESS_PACK_LINKS;
+  const link200 = "https://buy.stripe.com/test_stamp_200";
+  process.env.WITNESS_PACK_LINKS = JSON.stringify({ pins_200: link200 });
+  let res;
+  try {
+    res = await post({ sha256: s }, { key: KEY });
+  } finally {
+    if (hadLinks) process.env.WITNESS_PACK_LINKS = prevLinks; else delete process.env.WITNESS_PACK_LINKS;
+  }
 
   assert.equal(res._status, 402);
+  assert.equal(res._body.buy && res._body.buy.pins_200, `${link200}?client_reference_id=${balance.keyHash(KEY)}`,
+    "the stamp 402 carries the top-up link for THIS key's hash");
   assert.equal(res._body.reason, "insufficient_credit");
   assert.equal(res._body.credit_balance, 0.1);
   assert.equal(res._body.price_credits_per_stamp, stamp.STAMP_PRICE_CREDITS);

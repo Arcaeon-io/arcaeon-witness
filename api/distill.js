@@ -101,7 +101,7 @@ async function meterAndCharge(key) {
         deny: {
           status: 402,
           body: {
-            error: "credit balance exhausted — top up to continue",
+            error: "credit balance exhausted; top up to continue",
             reason: "credit_exhausted",
             credit_balance: 0,
             plan: m.plan, free_tier_used: m.used, free_tier_cap: m.cap, month: m.month,

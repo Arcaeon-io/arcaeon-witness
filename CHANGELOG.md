@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-02: buy link review follow-ups (local only, NOT deployed; for the 2026-11-03 release)
+
+- `lib/_balance.js` `buyFor`: the fallback note (WITNESS_PACK_LINKS unset) now says to add `client_reference_id=<hash>` as a URL parameter, instead of "?" phrasing that implied appending a fresh query string.
+- `lib/_balance.js` `loadPackLinks`: only `https://buy.stripe.com` links are kept (no other host, no http, no userinfo, no explicit port). Anything else is dropped, and with no valid links the body fails closed to the pricing page fallback. New export `PACK_LINK_HOST`.
+- 402 error strings (pin, distill, stamp): em dash replaced with a semicolon.
+- Tests: WITNESS_PACK_LINKS is restored to its previous value after each test instead of deleted; new host allowlist test; the stamp 402 test asserts the body carries the buy link for the key's hash. Suite 679, 679 pass, 0 fail.
+
 ## 2026-11-01: pin packs review fixes (pins_200 $5/200, pins_1000 $20/1,000; local only, NOT deployed; for the 2026-11-03 release)
 
 - `lib/_balance.js`: `PACKS` is the current catalogue only (`pins_200`, `pins_1000`); `by_id_only` dropped. Retired `mini`/`starter`/`standard`/`bulk` move to `LEGACY_PACKS` and credit only when named (metadata.pack, price map, admin body). New `lookupPack`, `publicPacks`, `overCapMessage`, and `buyFor(key)`: 402/429 bodies carry `buy`, one top-up link per pack from `WITNESS_PACK_LINKS` (JSON pack id -> payment link URL) with `?client_reference_id=<sha256(key)>`, so the purchase credits THAT key (only the hash is ever in a URL). Unset: `buy: null`, `buy_url` = `PACK_BUY_URL` (https://arcaeon.io/pricing) and a plain note that buying there makes a new key and how to top up this key instead, and `resolvePack`: a pack is credited ONLY when named (price map or metadata.pack). No amount-based matching at all. Price map and metadata disagreeing, or naming an unknown pack, is refused.
