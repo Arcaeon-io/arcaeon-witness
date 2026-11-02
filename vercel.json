@@ -21,6 +21,10 @@
       "destination": "/api/fulfill?op=prefix-available"
     },
     {
+      "source": "/api/pin-batch",
+      "destination": "/api/pin?op=batch_stores"
+    },
+    {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
     }

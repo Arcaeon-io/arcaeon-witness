@@ -1,5 +1,41 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — one witness entry for many small stores, behind a flag (branch `store-batch`, rebased onto `pin-rate-limit-shared`, NOT deployed, off by default)
+
+`POST /api/pin-batch` (`api/pin.js?op=batch_stores`, `lib/_store_batch.js`) takes up to 1000 `(store_id, head)` pairs, builds a Merkle tree with `lib/_merkle.js`, writes one create only file `store_batches/<ns>/<root>.json` holding only the root, the count, the namespace and the time, and answers with an inclusion proof per store. `tools/verify_store_proof.js` checks one offline. Design: `BATCH_PINS_FOR_STORES.md`.
+
+- One public write per batch, charged as one pin through the same meter and the same failed write refund.
+- **Pricing, owner decision, NOT made: charge per store, per batch, or capped batches: owner decides before the flag goes on.** As built a 1000-store batch is one pin, so `pins_200` at $5 buys up to 200,000 store heads. Guard: `WITNESS_STORE_BATCH=on` alone serves nothing; without `WITNESS_STORE_BATCH_PRICE` every batch is 503 `batch_price_not_set`, and any value other than the one built (`one_pin_per_batch`) is 503 `batch_price_not_implemented`. See `BATCH_PINS_FOR_STORES.md`, "Pricing: owner decision".
+- Rebased onto `pin-rate-limit-shared` (PR 4). PR 4 deletes `rateLimited()` from `api/pin.js`; this branch called it on a different line, so a plain merge was clean and every `?op=batch_stores` died `ReferenceError` 500. Batches now use `lib/_pin_ratelimit.check` (one hit on the key's one count, shared with single pins; the same named 429 with `Retry-After`; 503 `rate_limit_store_unreachable`), the default inside `handle()` so a caller cannot forget it.
+- Store ids and heads are never public. Any field other than the two is refused by name.
+- `test/store_batch.test.js` +17 (250 stores, one write, 250 proofs verify; privacy; meter; the tool; leaf, entry and size attacks; another namespace; create only; ten named refusals; flag off). Mutation pass on `lib/_store_batch.js`: 14 breaks, 14 caught after two tests were added for misses. Suite 663, 663 pass, 0 fail before the rebase. After the rebase: +3 limiter tests (a batch through `api/pin.js` with PR 4's limiter; batches and single pins share one count, the 61st is the named 429; unreadable count 503) and +2 price guard tests; on the unfixed rebase 20 of this file's 22 tests failed with the ReferenceError. Suite with PR 4 under it: 700, 700 pass, 0 fail.
+
+## 2026-10-31 — the pin rate limit: 60 per key per clock hour, documented, and shared across instances behind the same flag (branch `pin-rate-limit-shared`, on top of `meter-off-github`, NOT deployed)
+
+- `lib/_pin_ratelimit.js` replaces the Map in `api/pin.js`. The number stays 60. Windows are now clock hours in UTC, in both modes, so every instance agrees on the window (before: an hour from the key's first pin on that instance).
+- `WITNESS_USAGE_STORE=postgres`: one count per key per hour in `pin_rate_windows` (`supabase/migrations/2026_10_31_pin_rate.sql`), one atomic database call per pin. Only the key's sha256 is sent. Unreadable count: 503 `rate_limit_store_unreachable`, never admitted.
+- The 429 now names itself: `reason:"key_rate_limited"`, `limit`, `window_seconds`, `shared_across_instances`, `retry_after_seconds`, and a `Retry-After` header. README documents it.
+- `test/pin_ratelimit.test.js` +8 (three instances share one count; per instance with the flag off; the hour boundary; keys apart; fail closed on six bad answers; the 429 body). Mutation pass on `lib/_pin_ratelimit.js`: 11 breaks, 11 caught. Suite 678, 678 pass, 0 fail.
+
+**Live behaviour changes with `WITNESS_USAGE_STORE` OFF (the default).** This branch is not flag-only. Deploying it changes what every caller of `POST /api/pin` sees today, even with the flag unset:
+
+1. **Window shape.** Before: a rolling hour per key per instance, starting at that key's first pin on that instance. After: fixed UTC clock hours (`10:00:00`-`10:59:59`). A key can now make 60 pins at 10:59 and 60 more at 11:00 (up to 120 in about a minute), where before it waited an hour from its first pin. A key limited at 10:30 is now released at 11:00, not at its own first-pin-plus-one-hour.
+2. **The 429 body.** Before: `{error:"rate limit exceeded (naive Stage-0 limiter)"}` and no header. After: `{error, reason:"key_rate_limited", limit, window_seconds, shared_across_instances, retry_after_seconds}` plus a `Retry-After` header. Clients matching on the old `error` string will stop matching.
+3. **Memory.** Old-window buckets are now deleted when a new window starts (before, the Map only grew until a cold start).
+
+Unchanged with the flag off: the number (60), per-instance counting, reset on cold start, and what counts (every request past auth and the prefix check). The `503 rate_limit_store_unreachable` answer only exists with the flag on. Anyone deploying this should treat points 1 and 2 as a public API change, not a refactor.
+
+## 2026-10-31 — the meter and the pending batch can move off GitHub, behind a flag (branch `meter-off-github`, NOT deployed, flag off by default)
+
+`WITNESS_USAGE_STORE=postgres` moves the meter's monthly usage file, the open Merkle batch and the seal claim into one `usage_docs` table in the account database (`supabase/migrations/2026_10_31_usage_docs.sql`), through the new `lib/_usage_store.js`. Design and cutover: `WITNESS_METER_OFF_GITHUB.md`.
+
+- Writes per pin, counted on the store fakes: before, 2 public + 2 private GitHub writes; after, 2 public GitHub writes + 2 database writes, 0 private GitHub writes.
+- Same contract as the GitHub files: absent is `null`, unreadable throws, create if absent and update if unchanged both flag the lost race as `err.conflict`. The version counter is the compare and swap.
+- Cutover adopts this month's GitHub count and any open batch on the first read (GitHub read only), so turning the flag on never resets a free tier.
+- Fails closed: database down, missing config or an unknown flag value refuse the pin 502 before any public write.
+- Not moved: credits (`lib/_balance.js`, billing) and issued keys (`lib/_keys.js`).
+- `test/usage_store_postgres.test.js` +23. Mutation pass on `lib/_usage_store.js`: 12 breaks, 11 caught, 1 equivalent. Suite 669, 669 pass, 0 fail.
+
 ## 2026-09-22 — fulfill: legacy manual-reconcile record renders again; a red record is refused, not "reload" (branch `release-candidate-2026-09-23b`, local only, NOT deployed)
 
 Found by a read-only scan of the live usage repo: one real customer's fulfillment record (written 2026-08-18 by a manual reconcile: `mode: manual_reconcile`, `prefix_source: env_key_manual`, `namespace_prefix: null`, key present) is refused by this tree's fulfillment judge as `key_or_prefix_unreadable`. Production re-shows it with a null prefix (`nullmain`); this tree threw the red into the catch-all and answered 502 `store_error`, `retry_safe: true`, "reload this exact URL", on every reload. Fixed in code; no data was written.
