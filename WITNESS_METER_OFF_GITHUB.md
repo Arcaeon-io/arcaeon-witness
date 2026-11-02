@@ -66,6 +66,7 @@ pin (the first pin also binds the deadline owner, one public write, either way):
 | public GitHub writes | 2 | 2 |
 | private GitHub writes | 2 (1 with the shadow run off) | 0 |
 | database writes | 0 | 2 (1 with the shadow run off) |
+| database function calls (rate limit) | 0 | 1 |
 
 A pin now costs only its public writes on GitHub. The public record is the
 same with the flag on or off; a test compares the two byte for byte, clock
@@ -99,7 +100,7 @@ mix of old and new instances writing both stores.
 
 | case | result |
 |---|---|
-| flag on, database down | meter refuses, pin answers 502, nothing public written |
+| flag on, database down | the rate limit refuses (503) or the meter does (502); nothing public written |
 | flag on, `SUPABASE_URL` or the key missing | same 502, never a silent fallback to GitHub |
 | `WITNESS_USAGE_STORE` set to anything but github or postgres | same 502 |
 | a row we cannot version, or a meter count we cannot read | refused, row left as it was |
@@ -119,9 +120,31 @@ never reaches a 502 body.
 * `lib/_keys.js`, issued keys. Not per pin.
 * The public pins repo. Nothing about it changed.
 
+## The per key rate limit rides on the same switch
+
+`api/pin.js` limits each key to 60 pins per clock hour (`lib/_pin_ratelimit.js`).
+With the flag off that is a Map per warm instance, so N instances admit up to
+N x 60. With the flag on it is one count per key per hour in the
+`pin_rate_windows` table (`supabase/migrations/2026_10_31_pin_rate.sql`),
+incremented by one database function call that Postgres runs atomically, so
+the 61st pin is refused on whichever instance it lands. That is one more
+database call per pin, still no GitHub write. If the count cannot be read the
+pin is refused 503, `rate_limit_store_unreachable`.
+
+The number stays 60. Raising it is a pricing and abuse call for the owner,
+not a code one; the limit is one constant.
+
+**Not flag-only.** Two parts of the limiter change live behaviour on deploy
+even with `WITNESS_USAGE_STORE` unset: windows become fixed UTC clock hours
+(before: a rolling hour from the key's first pin on that instance, so a key
+can now make 60 at 10:59 and 60 more at 11:00), and the 429 body changes from
+`{error:"rate limit exceeded (naive Stage-0 limiter)"}` to the named body with
+`reason:"key_rate_limited"` and a `Retry-After` header. See CHANGELOG.md.
+
 ## Turning it on
 
-1. Apply `supabase/migrations/2026_10_31_usage_docs.sql` to the account database.
+1. Apply `supabase/migrations/2026_10_31_usage_docs.sql` and
+   `supabase/migrations/2026_10_31_pin_rate.sql` to the account database.
 2. Set `WITNESS_USAGE_STORE=postgres` on the Vercel project and on the sealer's
    environment (`tools/seal_batch.js`, `tools/reconcile_batches.js`), with
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.

@@ -45,6 +45,13 @@ silently:
 
 - `429` (over cap) — headers `X-Meter-Cap` / `X-Meter-Used` and a JSON body
   `{error, reason:"over_cap", plan, used, cap, month}`.
+- `429` with `reason:"key_rate_limited"` past **60 pins per key per clock hour
+  (UTC)**, separate from the monthly cap: body `{limit, window_seconds,
+  shared_across_instances, retry_after_seconds}` and a `Retry-After` header. A
+  limited call is not metered. With `WITNESS_USAGE_STORE=postgres` the count is
+  one shared count in the account database; otherwise each warm instance counts
+  on its own. If the shared count cannot be read the pin is refused `503`
+  `reason:"rate_limit_store_unreachable"`, never admitted.
 - `401` with `reason:"no_cap_configured"` if a key somehow resolves to no
   cap at all — metering **fails CLOSED**; a misconfigured key is denied,
   never silently treated as unlimited.
@@ -626,8 +633,23 @@ the log proves they have not changed since the genesis date, not before it.
 
 - Single region, single operator, no SLA.
 - GitHub API rate limits bound pin throughput (~5000 authed requests/hour, 2
-  commits per pin); the per-key rate limiter is a naive per-instance counter
-  that resets on cold starts.
+  commits per pin); the per-key rate limit (60 per clock hour) is a
+  per-instance counter that resets on cold starts unless
+  `WITNESS_USAGE_STORE=postgres`, which makes it one count shared by every
+  instance (`lib/_pin_ratelimit.js`). That path keeps about a day of rows in
+  `pin_rate_windows` (key sha256, window start, hit count): every pin's
+  `pin_rate_hit` call deletes rows whose window began over a day earlier, and
+  nothing else cleans up, so with no pins old rows stay until the next pin.
+  Every database call has a 2 s deadline (`WITNESS_USAGE_STORE_TIMEOUT_MS`).
+  Past it on the rate limit call, the pin is refused 503
+  `rate_limit_store_unreachable`; past it on a meter call, the pin is refused
+  502 with a `metering store error`. Either way no pin is written. A write that
+  times out may still have landed: a client that resends after the 503 or 502
+  can be counted again, one extra hit against its hourly rate limit or one
+  extra free tier pin on its meter. That is a count, not money: credits are not
+  on this store, and nothing is debited for the resend itself. The one indirect
+  effect: an extra meter count brings the free cap one pin closer, so a key at
+  the edge of its cap can start paying credits one pin early.
 - `latest` reads are commit-fresh via the contents API, but the raw-CDN
   fallback can lag minutes; the repo history is the source of truth either way.
 - Two commits per pin (`<seq>.json` + `latest.json`) are not atomic; a crash
@@ -692,7 +714,9 @@ api/fulfill.js       GET/POST /api/fulfill — Stripe checkout success_url landi
 api/distill.js           GET /api/distill — (see the file's own header for current scope)
 lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not routed); also holds computeCadenceFields, the cadence-grading function api/latest.js and api/verify.js share
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
-lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
+lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo, or the account database with WITNESS_USAGE_STORE=postgres (not routed)
+lib/_usage_store.js  the account database store for the meter, the pending batch and the seal claim (WITNESS_METER_OFF_GITHUB.md; not routed)
+lib/_pin_ratelimit.js  the per-key pin rate limit, 60 per clock hour (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
 lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,
 lib/_welcome_email.js  supporting modules, not independently routed (this line

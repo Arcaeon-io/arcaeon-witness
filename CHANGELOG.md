@@ -1,5 +1,24 @@
 # Changelog — arcaeon-witness
 
+## 2026-10-31 — the pin rate limit: 60 per key per clock hour, documented, and shared across instances behind the same flag (branch `pin-rate-limit-shared`, on top of `meter-off-github`, NOT deployed)
+
+- `lib/_pin_ratelimit.js` replaces the Map in `api/pin.js`. The number stays 60. Windows are now clock hours in UTC, in both modes, so every instance agrees on the window (before: an hour from the key's first pin on that instance).
+- `WITNESS_USAGE_STORE=postgres`: one count per key per hour in `pin_rate_windows` (`supabase/migrations/2026_10_31_pin_rate.sql`), one atomic database call per pin. Only the key's sha256 is sent. Unreadable count: 503 `rate_limit_store_unreachable`, never admitted.
+- The 429 now names itself: `reason:"key_rate_limited"`, `limit`, `window_seconds`, `shared_across_instances`, `retry_after_seconds`, and a `Retry-After` header. README documents it.
+- **Retention, stated plainly.** On the Postgres path `pin_rate_windows` keeps about a day of rows: every pin's `pin_rate_hit` call also deletes every row whose window started more than a day before that pin's window (all keys, not only the caller's). There is no scheduled sweep; cleanup happens only when somebody pins, so with no pins old rows stay until the next one. What a row holds: the key's sha256, the window start, the hit count.
+- **Deadline on every database call.** `lib/_usage_store.js` `pgCall` aborts its fetch after 2 s (`PG_TIMEOUT_MS`, override `WITNESS_USAGE_STORE_TIMEOUT_MS`) and fails as an unreachable store, so a hung database refuses the pin with the named 503 `rate_limit_store_unreachable` instead of holding the request open. A write whose deadline passes may still have landed, the same ambiguity as a dropped connection. Tests: `test/pin_ratelimit.test.js` +4 (fetch honouring and ignoring the abort, the 2 s default under mock timers, the handler's 503 with nothing written).
+- **README correction.** The deadline sentence said a pin past the 2 s deadline is refused 503 `rate_limit_store_unreachable`. That holds for the rate limit call only; a meter call past its deadline is a 502 `metering store error` (`api/pin.js` `meterAndCharge`). The README now says both, and says plainly that a timed out write may still have landed, so a client that resends can be counted again (a rate limit hit or a free tier meter count, not money: credits stay on the GitHub store; an extra meter count can only bring the free cap one pin closer).
+- `lib/_ratelimit.js` header no longer points at the deleted `api/pin.js` `rateLimited()`; it points at `lib/_pin_ratelimit.js` `check()`.
+- `test/pin_ratelimit.test.js` +8 (three instances share one count; per instance with the flag off; the hour boundary; keys apart; fail closed on six bad answers; the 429 body). Mutation pass on `lib/_pin_ratelimit.js`: 11 breaks, 11 caught. Suite 678, 678 pass, 0 fail.
+
+**Live behaviour changes with `WITNESS_USAGE_STORE` OFF (the default).** This branch is not flag-only. Deploying it changes what every caller of `POST /api/pin` sees today, even with the flag unset:
+
+1. **Window shape.** Before: a rolling hour per key per instance, starting at that key's first pin on that instance. After: fixed UTC clock hours (`10:00:00`-`10:59:59`). A key can now make 60 pins at 10:59 and 60 more at 11:00 (up to 120 in about a minute), where before it waited an hour from its first pin. A key limited at 10:30 is now released at 11:00, not at its own first-pin-plus-one-hour.
+2. **The 429 body.** Before: `{error:"rate limit exceeded (naive Stage-0 limiter)"}` and no header. After: `{error, reason:"key_rate_limited", limit, window_seconds, shared_across_instances, retry_after_seconds}` plus a `Retry-After` header. Clients matching on the old `error` string will stop matching.
+3. **Memory.** Old-window buckets are now deleted when a new window starts (before, the Map only grew until a cold start).
+
+Unchanged with the flag off: the number (60), per-instance counting, reset on cold start, and what counts (every request past auth and the prefix check). The `503 rate_limit_store_unreachable` answer only exists with the flag on. Anyone deploying this should treat points 1 and 2 as a public API change, not a refactor.
+
 ## 2026-10-31 — the meter and the pending batch can move off GitHub, behind a flag (branch `meter-off-github`, NOT deployed, flag off by default)
 
 `WITNESS_USAGE_STORE=postgres` moves the meter's monthly usage file, the open Merkle batch and the seal claim into one `usage_docs` table in the account database (`supabase/migrations/2026_10_31_usage_docs.sql`), through the new `lib/_usage_store.js`. Design and cutover: `WITNESS_METER_OFF_GITHUB.md`.
