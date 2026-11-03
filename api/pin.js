@@ -182,16 +182,18 @@ async function meterAndCharge(key) {
         deny: {
           status: 402,
           body: {
-            error: "credit balance exhausted — top up to continue",
+            error: "credit balance exhausted; top up to continue",
             reason: "credit_exhausted",
             credit_balance: 0,
             plan: m.plan, free_tier_used: m.used, free_tier_cap: m.cap, month: m.month,
-            packs: balance.PACKS,
+            packs: balance.publicPacks(),
+            ...balance.buyFor(key),
           },
         },
         headers,
       };
     }
+    const buyInfo = balance.buyFor(key);
     return {
       deny: {
         status: 429,
@@ -199,7 +201,9 @@ async function meterAndCharge(key) {
           error: "monthly pin cap reached",
           reason: "over_cap",
           plan: m.plan, used: m.used, cap: m.cap, month: m.month,
-          top_up_available: true, packs: balance.PACKS,
+          top_up_available: true, packs: balance.publicPacks(),
+          ...buyInfo,
+          message: balance.overCapMessage(m.plan, m.cap, buyInfo),
         },
       },
       headers,
@@ -463,16 +467,26 @@ module.exports = async (req, res) => {
   // hand-issued key), then the dynamic issued-key store (self-serve keys
   // minted by api/fulfill.js). Only a miss pays the extra store read. A store
   // FAILURE is 502, never 401 — "we couldn't check" must not read as "your
-  // key is invalid" to a paying customer.
+  // key is invalid" to a paying customer. Unknown keys are counted per
+  // address and refused 429 past a limit BEFORE the store read (red hunt
+  // 2026-11-02, see _keys.lookupIssuedPrefix): this lookup used to be
+  // reachable without any key, ahead of rateLimited() below, one GitHub call
+  // per guess from the token every paid write depends on.
   const auth = req.headers.authorization || "";
   const key = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   let prefix = key ? store.keyPrefixFor(key) : null;
   if (prefix === null && key) {
+    let looked;
     try {
-      prefix = await issuedKeys.issuedKeyPrefix(key);
+      looked = await issuedKeys.lookupIssuedPrefix(req, key);
     } catch (err) {
       return res.status(502).json({ error: `key store error: ${err.message}` });
     }
+    if (looked.limited) {
+      res.setHeader("retry-after", String(looked.retryAfterSeconds));
+      return res.status(429).json(issuedKeys.missLimitedBody(looked));
+    }
+    prefix = looked.prefix;
   }
   if (prefix === null) {
     return res.status(401).json({ error: "invalid or missing bearer key" });
@@ -860,3 +874,6 @@ module.exports = async (req, res) => {
     return res.status(502).json({ error: `pin store error: ${err.message}` });
   }
 };
+
+// Test hook (2026-11-01): the 402/429 body contract is asserted directly.
+module.exports.meterAndCharge = meterAndCharge;

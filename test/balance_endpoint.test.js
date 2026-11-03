@@ -70,7 +70,7 @@ test("CONTRACT (JSON): GET with valid Bearer returns the exact pre-page response
       plan: "free",
       month: meter.utcMonth(),
       used: 0,
-      cap: 100,
+      cap: meter.PLAN_CAPS.free,
     },
   });
 });
@@ -145,8 +145,8 @@ test("browser POST with a valid key renders the balance: credits, free tier, pre
   assert.equal(res._headers["content-type"], "text/html; charset=utf-8");
   const html = String(res._body);
   assert.ok(html.includes("3000"), "prepaid credits shown");
-  assert.ok(html.includes("of 100 used"), "free tier cap shown");
-  assert.ok(html.includes("100 remaining"), "free tier remaining computed");
+  assert.ok(html.includes(`of ${meter.PLAN_CAPS.free} used`), "free tier cap shown");
+  assert.ok(html.includes(`${meter.PLAN_CAPS.free} remaining`), "free tier remaining computed");
   assert.ok(html.includes("acme-"), "namespace prefix shown");
   assert.ok(html.includes(KEY_HASH.slice(0, 12)), "key id shown");
   assert.ok(html.includes('data-copy-target="curl"'), "curl one-liner in a copy-box");

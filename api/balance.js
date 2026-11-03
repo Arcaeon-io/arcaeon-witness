@@ -111,15 +111,21 @@ ${copyBox("curl", `curl -s ${baseUrl()}/api/balance -H "Authorization: Bearer <Y
 
 // Shared auth resolution (the same two tiers the JSON path has always used):
 // WITNESS_KEYS env first, then the dynamic issued-key store. Returns
-// {prefix} | {prefix:null} | {storeError}.
-async function resolvePrefix(key) {
+// {prefix} | {prefix:null} | {prefix:null, limited} | {storeError}.
+// Unknown keys are miss limited per address before the store read (red hunt
+// 2026-11-02, _keys.lookupIssuedPrefix): same fence as api/pin.js, same
+// reason, this endpoint was the other unauthenticated road to that read.
+async function resolvePrefix(req, key) {
   let prefix = key ? store.keyPrefixFor(key) : null;
   if (prefix === null && key) {
+    let looked;
     try {
-      prefix = await issuedKeys.issuedKeyPrefix(key);
+      looked = await issuedKeys.lookupIssuedPrefix(req, key);
     } catch (err) {
       return { prefix: null, storeError: err };
     }
+    if (looked.limited) return { prefix: null, storeError: null, limited: looked };
+    prefix = looked.prefix;
   }
   return { prefix, storeError: null };
 }
@@ -143,9 +149,13 @@ module.exports = async (req, res) => {
       if (req.method === "GET") return sendHtml(res, 200, formHtml(null));
       return sendHtml(res, 400, formHtml("Paste your witness key first — the field came through empty."));
     }
-    const { prefix, storeError } = await resolvePrefix(key);
+    const { prefix, storeError, limited } = await resolvePrefix(req, key);
     if (storeError) {
-      return sendHtml(res, 502, formHtml("The key store is unreachable right now — nothing is wrong with your key. Retry in a minute."));
+      return sendHtml(res, 502, formHtml("The key store is unreachable right now; nothing is wrong with your key. Retry in a minute."));
+    }
+    if (limited) {
+      res.setHeader("retry-after", String(limited.retryAfterSeconds));
+      return sendHtml(res, 429, formHtml(issuedKeys.missLimitedBody(limited).error + "."));
     }
     if (prefix === null) {
       return sendHtml(res, 401, formHtml("That key isn't recognized. Check for missing or extra characters and try again."));
@@ -171,13 +181,13 @@ module.exports = async (req, res) => {
   // dynamic issued-key store (self-serve keys from api/fulfill.js).
   const auth = req.headers.authorization || "";
   const key = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  let prefix = key ? store.keyPrefixFor(key) : null;
-  if (prefix === null && key) {
-    try {
-      prefix = await issuedKeys.issuedKeyPrefix(key);
-    } catch (err) {
-      return res.status(502).json({ error: `key store error: ${err.message}` });
-    }
+  const { prefix, storeError, limited } = await resolvePrefix(req, key);
+  if (storeError) {
+    return res.status(502).json({ error: `key store error: ${storeError.message}` });
+  }
+  if (limited) {
+    res.setHeader("retry-after", String(limited.retryAfterSeconds));
+    return res.status(429).json(issuedKeys.missLimitedBody(limited));
   }
   if (prefix === null) {
     return res.status(401).json({ error: "invalid or missing bearer key" });

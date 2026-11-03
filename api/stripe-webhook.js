@@ -25,7 +25,13 @@
 // asynchronous ones) and `checkout.session.async_payment_succeeded` (the
 // delayed-clear signal for ACH/Klarna/etc.) with `session.client_reference_id`
 // = sha256(witness key) of the buyer's key, and `session.metadata.pack` = one
-// of mini|starter|standard|bulk (api/_balance.js PACKS). Setting those two
+// of pins_200|pins_1000 (lib/_balance.js PACKS; the retired
+// mini|starter|standard|bulk still credit when named, see LEGACY_PACKS). The
+// pack is resolved by lib/_balance.js resolvePack, the SAME function
+// api/fulfill.js uses, but by metadata.pack ONLY: a webhook payload carries
+// no line_items, so there is no price id to map. With no metadata.pack the
+// event is logged and skipped (200, no credit) and /api/fulfill handles the
+// session. The amount paid never picks a pack. Setting those two
 // fields on each pack's Stripe Payment Link / Checkout Session is ALSO a
 // human step and is intentionally not done here — this build's scope is the
 // mechanism only, not touching live Stripe config or offers.json (see
@@ -70,15 +76,22 @@ const TOLERANCE_SECONDS = 300; // guards against replaying an old, valid signatu
 
 function verifyStripeSignature(rawBody, sigHeader, secret) {
   if (!sigHeader) return { ok: false, reason: "missing stripe-signature header" };
+  // Every v1 is kept (red hunt 2026-11-02). Stripe sends SEVERAL v1 values
+  // while a signing secret is being rotated (one per live secret), and the
+  // old map here kept only the last one, so during a rotation every genuine
+  // delivery would have failed as a mismatch. Any v1 that verifies accepts.
   const parts = {};
+  const v1s = [];
   for (const kv of sigHeader.split(",")) {
     const i = kv.indexOf("=");
     if (i < 1) continue;
-    parts[kv.slice(0, i)] = kv.slice(i + 1);
+    const k = kv.slice(0, i).trim();
+    const v = kv.slice(i + 1).trim();
+    if (k === "v1") v1s.push(v);
+    else parts[k] = v;
   }
   const t = parts.t;
-  const v1 = parts.v1;
-  if (!t || !v1) return { ok: false, reason: "malformed stripe-signature header" };
+  if (!t || v1s.length === 0) return { ok: false, reason: "malformed stripe-signature header" };
 
   // Sign over the RAW BYTES. The previous form was `` `${t}.${rawBody}` ``,
   // which stringifies the Buffer through its default utf-8 decoding before
@@ -96,14 +109,17 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   // stops at the first invalid pair — so the length check below is what
   // actually rejects a junk v1, not the try/catch. Reject non-hex explicitly
   // rather than relying on a truncation happening to produce a length mismatch.
-  if (!/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0) {
-    return { ok: false, reason: "malformed v1 signature" };
-  }
   const expectedBuf = Buffer.from(expected, "hex");
-  const gotBuf = Buffer.from(v1, "hex");
-  if (expectedBuf.length !== gotBuf.length || !crypto.timingSafeEqual(expectedBuf, gotBuf)) {
-    return { ok: false, reason: "signature mismatch" };
+  let wellFormed = 0;
+  let matched = false;
+  for (const v1 of v1s) {
+    if (!/^[0-9a-fA-F]+$/.test(v1) || v1.length % 2 !== 0) continue;
+    wellFormed += 1;
+    const gotBuf = Buffer.from(v1, "hex");
+    if (expectedBuf.length === gotBuf.length && crypto.timingSafeEqual(expectedBuf, gotBuf)) matched = true;
   }
+  if (wellFormed === 0) return { ok: false, reason: "malformed v1 signature" };
+  if (!matched) return { ok: false, reason: "signature mismatch" };
   const age = Math.abs(Date.now() / 1000 - Number(t));
   if (!Number.isFinite(age) || age > TOLERANCE_SECONDS) {
     return { ok: false, reason: "timestamp outside tolerance" };
@@ -222,7 +238,7 @@ module.exports = async (req, res) => {
   // "Mini"/" mini"/uppercase-hash checkouts — paid, delivered, zero granted,
   // no retry. Normalize so a benign metadata/tooling variance still credits.
   const hash = (session && session.client_reference_id || "").trim().toLowerCase();
-  const pack = ((session && session.metadata && session.metadata.pack) || "").trim().toLowerCase();
+  const namedPack = ((session && session.metadata && session.metadata.pack) || "").trim().toLowerCase();
 
   if (!hash || !/^[0-9a-f]{64}$/.test(hash)) {
     return res.status(200).json({
@@ -231,10 +247,23 @@ module.exports = async (req, res) => {
       event_id: event.id,
     });
   }
-  if (!pack || !balance.PACKS[pack]) {
+  // Pack resolution: the same resolver as api/fulfill.js (lib/_balance.js
+  // resolvePack), metadata.pack only (no line_items here). Anything not
+  // named, or unknown, is logged and skipped; /api/fulfill (which has the
+  // price ids) handles a session the webhook cannot name.
+  const resolved = balance.resolvePack(session, { priceMap: false });
+  const pack = resolved.pack;
+  if (!pack) {
+    console.error(
+      `[webhook] paid session not mapped to a pack, NOT credited: evt=${event.id} ` +
+        `session=${session && session.id} reason=${resolved.reason} metadata.pack=${namedPack || "(none)"} ` +
+        `amount_total=${session && session.amount_total} ${(session && session.currency) || "?"}`
+    );
     return res.status(200).json({
       ok: true,
-      skipped: `session.metadata.pack missing or unknown (${pack})`,
+      skipped: namedPack
+        ? `session.metadata.pack missing or unknown (${namedPack}); not credited`
+        : `session.metadata.pack missing or unknown; not credited here (the /api/fulfill page handles it)`,
       event_id: event.id,
     });
   }
@@ -247,7 +276,7 @@ module.exports = async (req, res) => {
   // real signed $5 event with pack=bulk credited 40,000 pins ($200 of value)
   // and returned 200. Cross-check the paid amount against the pack's ratified
   // price before crediting. Currency pinned to USD (all packs are USD).
-  const expectedCents = balance.PACKS[pack].price_usd * 100;
+  const expectedCents = balance.lookupPack(pack).price_usd * 100;
   const paidCents = session && Number.isFinite(Number(session.amount_total)) ? Number(session.amount_total) : null;
   const currency = session && session.currency ? String(session.currency).toLowerCase() : null;
   // `currency !== "usd"`, NOT `(currency && currency !== "usd")`: the old
@@ -256,6 +285,10 @@ module.exports = async (req, res) => {
   // session of unknown currency was credited as if it were dollars. USD must
   // be stated, not assumed (VERDICT_SURVEY.md site #26).
   if (paidCents === null || paidCents < expectedCents || currency !== "usd") {
+    console.error(
+      `[webhook] payment does not match pack, NOT credited: evt=${event.id} session=${session && session.id} ` +
+        `pack=${pack} paid ${paidCents} ${currency || "?"} expected ${expectedCents} usd`
+    );
     return res.status(200).json({
       ok: true,
       skipped: `payment does not match pack '${pack}': paid ${paidCents} ${currency || "?"}, expected ${expectedCents} usd — NOT credited`,
@@ -300,6 +333,8 @@ module.exports = async (req, res) => {
     }
     return res.status(200).json({
       ok: true,
+      pack,
+      pack_source: resolved.source,
       credited: !result.already_credited,
       already_credited: !!result.already_credited,
       balance_after: result.balance_after,

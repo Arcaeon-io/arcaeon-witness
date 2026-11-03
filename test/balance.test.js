@@ -48,7 +48,7 @@ test("CONTRACT: mini pack is 1000 pins (the CEO-ruled entry SKU, kills the $15 w
   const result = await balance.creditPack(hash, "mini", "evt-mini-1", "test");
   assert.equal(result.ok, true);
   assert.equal(result.pins, 1000);
-  assert.equal(balance.PACKS.mini.price_usd, 5);
+  assert.equal(balance.LEGACY_PACKS.mini.price_usd, 5);
 });
 
 test("CONTRACT: creditPack refuses an unknown pack id and grants nothing", async () => {
@@ -197,12 +197,12 @@ test("REGRESSION (double-grant): duplicate delivery of the same event_id grants 
   assert.equal(r1.already_credited, false);
   assert.equal(r2.already_credited, true);
   assert.equal(r3.already_credited, true);
-  assert.equal(r1.balance_after, balance.PACKS.starter.pins);
-  assert.equal(r2.balance_after, balance.PACKS.starter.pins);
-  assert.equal(r3.balance_after, balance.PACKS.starter.pins);
+  assert.equal(r1.balance_after, balance.LEGACY_PACKS.starter.pins);
+  assert.equal(r2.balance_after, balance.LEGACY_PACKS.starter.pins);
+  assert.equal(r3.balance_after, balance.LEGACY_PACKS.starter.pins);
 
   const bal = await balance.readBalance(hash);
-  assert.equal(bal.balance, balance.PACKS.starter.pins, "three deliveries of one event must credit the pack exactly once");
+  assert.equal(bal.balance, balance.LEGACY_PACKS.starter.pins, "three deliveries of one event must credit the pack exactly once");
 });
 
 test("REGRESSION (double-grant): the CAS retry survives a forced write conflict without double- or zero-crediting", async () => {

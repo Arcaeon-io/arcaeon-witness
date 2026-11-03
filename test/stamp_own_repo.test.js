@@ -329,14 +329,26 @@ test("PAID: an insufficient balance is 402 with an honest body, and nothing is s
   seedBalance(0.1); // less than one stamp
   process.env.STAMP_FREE_PER_DAY = "0";
   const s = sha("5h");
-  const res = await post({ sha256: s }, { key: KEY });
+  const hadLinks = Object.prototype.hasOwnProperty.call(process.env, "WITNESS_PACK_LINKS");
+  const prevLinks = process.env.WITNESS_PACK_LINKS;
+  const link200 = "https://buy.stripe.com/test_stamp_200";
+  process.env.WITNESS_PACK_LINKS = JSON.stringify({ pins_200: link200 });
+  let res;
+  try {
+    res = await post({ sha256: s }, { key: KEY });
+  } finally {
+    if (hadLinks) process.env.WITNESS_PACK_LINKS = prevLinks; else delete process.env.WITNESS_PACK_LINKS;
+  }
 
   assert.equal(res._status, 402);
+  assert.equal(res._body.buy && res._body.buy.pins_200, `${link200}?client_reference_id=${balance.keyHash(KEY)}`,
+    "the stamp 402 carries the top-up link for THIS key's hash");
   assert.equal(res._body.reason, "insufficient_credit");
   assert.equal(res._body.credit_balance, 0.1);
   assert.equal(res._body.price_credits_per_stamp, stamp.STAMP_PRICE_CREDITS);
   assert.equal(res._body.ever_purchased, true, "a spent-out buyer is not the same as a stranger");
-  assert.ok(res._body.packs && res._body.packs.mini, "say how to top up");
+  assert.ok(res._body.packs && res._body.packs.pins_200, "say how to top up");
+  assert.deepEqual(Object.keys(res._body.packs).sort(), ["pins_1000", "pins_200"], "current packs only, no retired pack advertised");
 
   // MUST-FAIL ARM: refused before the write, so no stamp and no budget spend.
   assert.equal(gh.has(STAMPS_REPO, pathOf(s)), false);
