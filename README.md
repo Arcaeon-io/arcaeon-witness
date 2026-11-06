@@ -163,10 +163,13 @@ logic itself is already built and tested via `/api/credit`.
 After the webhook has applied a paid checkout's credit to the key, and only
 then, it can send the same checkout to the account service's
 `POST /accounts/v1/checkout`, which finds or makes the buyer's account by
-email and attaches the pack's pins as credits. The body is
-`{"checkout", "completed_at", "customer", "email", "grant": {"credits"}, "kind": "checkout", "v": 1}`
-(the session id, the event's time, the customer id, the email from the
-session's customer details, the pack's pins), signed with
+email and shows the purchase on it as a record only grant: the credits stay
+on the key and are spent here, never on the account, so no purchase is ever
+spent twice. The body is
+`{"checkout", "completed_at", ["customer",] "email", "grant": {"recorded": {"credits", "pack"}}, "kind": "checkout", "v": 1}`
+(the session id, the event's time, the customer id when the session has
+one, the email from the session's customer details, the pins granted and
+the pack id), signed with
 `Checkout-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<seconds>." and the body>`
 under the shared secret. Settings: `WITNESS_ACCOUNTS_FORWARD` is `off` (the
 default, sends nothing), `dry-run` (builds and signs, logs one line, sends
@@ -175,10 +178,15 @@ nothing) or `on`; any other value counts as off and is logged.
 `WITNESS_ACCOUNTS_CHECKOUT_SECRET` is the shared secret, at least 32 bytes,
 set as an encrypted value. The forward never changes the webhook's answer or
 the key's credit: a refusal, a failure or no answer within 3 seconds is one log
-line. A checkout with no email or no customer id is not forwarded, with one
-line. No log line holds the email, the secret, the signature or the body. The
-account service is idempotent by checkout id, so a provider retry that forwards
-a checkout again is safe. A missed forward is caught up by a one time script
+line. A checkout with no email, or a pack id outside
+`^[a-z0-9][a-z0-9_-]{0,63}$`, is not forwarded, with one line. A checkout
+with no customer id is sent without the customer field: the account service
+gives it no stand in id, keeps it on its unmatched list for the owner, and
+answers 202 `UNMATCHED`, which is logged as kept unmatched for the owner. A
+409 naming `checkout` (the service applied that checkout already as the
+other kind) is logged as a line to look into. No log line holds the email,
+the secret, the signature or the body. The account service is idempotent by
+checkout id, so a provider retry that forwards a checkout again is safe. A missed forward is caught up by a one time script
 that sends the paid checkouts again through the same builder; the webhook keeps
 no retry record.
 
