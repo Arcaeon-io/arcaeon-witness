@@ -340,7 +340,11 @@ module.exports = async (req, res) => {
     await accountsForward.forwardCheckout({
       session,
       pack,
-      pins: balance.lookupPack(pack).pins,
+      // The pins actually granted for this session: on a retry, read from
+      // the grant's ledger record (null when unreadable, and then nothing is
+      // forwarded), so a session first credited by another path forwards
+      // what it really got.
+      pins: result.granted_pins,
       eventCreated: Number.isInteger(event.created) ? event.created : undefined,
     });
     return res.status(200).json({

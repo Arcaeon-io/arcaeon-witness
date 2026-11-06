@@ -11,7 +11,7 @@ const path = require("node:path");
 const WORST_CASE_MS = 21000;
 const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "vercel.json"), "utf8"));
 
-for (const fn of ["api/pin.js", "api/verify.js"]) {
+for (const fn of ["api/pin.js", "api/verify.js", "api/stripe-webhook.js"]) {
   test(`MAX DURATION: ${fn} may run longer than the retry loop's worst case`, () => {
     const max = cfg.functions && cfg.functions[fn] && cfg.functions[fn].maxDuration;
     assert.ok(Number.isFinite(max), `${fn} has no maxDuration; the platform default would cut a retrying write short`);

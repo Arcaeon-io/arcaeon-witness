@@ -92,7 +92,7 @@ function makeAccountService({ behaviour = "ok" } = {}) {
   svc.handle = async (url, opts) => {
     const raw = Buffer.from(opts.body);
     const header = opts.headers["checkout-signature"];
-    svc.calls.push({ url, method: opts.method, raw, header, headers: opts.headers });
+    svc.calls.push({ url, method: opts.method, raw, header, headers: opts.headers, opts });
     if (behaviour === "throw") throw new Error("connect ECONNREFUSED");
     if (behaviour === "slow") {
       await new Promise((resolve, reject) => {
@@ -109,6 +109,14 @@ function makeAccountService({ behaviour = "ok" } = {}) {
       return new Response(JSON.stringify({ status: "REFUSED", field: "customer", reason: "x" }), { status: 409 });
     }
     if (behaviour === "error") return new Response("upstream gone", { status: 502 });
+    if (behaviour === "redirect") {
+      // A real fetch follows a 307 unless redirect is "manual"; this fake
+      // does the same, so a followed redirect shows up as a second call.
+      if (!String(url).startsWith("https://elsewhere.test.invalid") && opts.redirect !== "manual") {
+        return svc.handle("https://elsewhere.test.invalid/take", opts);
+      }
+      return new Response("", { status: 307, headers: { location: "https://elsewhere.test.invalid/take" } });
+    }
     const checked = accountServiceCheck(raw, header, ACCOUNTS_SECRET, Math.floor(Date.now() / 1000));
     if (checked.field) {
       return new Response(JSON.stringify({ status: "REFUSED", field: checked.field, reason: "refused" }), { status: 401 });
@@ -265,9 +273,21 @@ for (const bad of ["ON", "On", "yes", "true", "1", "dryrun", " on", "on "]) {
     assert.equal(svc.calls.length, 0);
     assert.equal(lines.length, 1);
     assert.match(lines[0], /counted as off, nothing sent/);
+    assert.ok(!lines[0].includes(`"${bad}"`), "no part of the value is printed");
     assertNoSecretsIn(lines[0]);
   });
 }
+
+test("FORWARD bad setting: the secret pasted into WITNESS_ACCOUNTS_FORWARD is never printed, not even a part", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = ACCOUNTS_SECRET;
+  await post(paidEvent({ hash: "a4".repeat(32) }));
+  assert.equal(svc.calls.length, 0);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0], "[accounts-forward] WITNESS_ACCOUNTS_FORWARD is not off, dry-run or on; counted as off, nothing sent");
+  for (const part of ["checkout-secret", ACCOUNTS_SECRET.slice(-12), ACCOUNTS_SECRET.slice(9, 30)]) {
+    assert.ok(!lines[0].includes(part));
+  }
+});
 
 // ---------------------------------------------------------------------
 // On
@@ -341,7 +361,7 @@ test("FORWARD on: the email falls back to customer_email when customer_details h
 // The account service failing never changes the answer or the credit
 // ---------------------------------------------------------------------
 
-for (const behaviour of ["refuse", "error", "throw", "slow"]) {
+for (const behaviour of ["refuse", "error", "throw", "slow", "redirect"]) {
   test(`FORWARD on, account service ${behaviour}: the webhook's answer and the credit are unchanged, one line`, async () => {
     process.env.WITNESS_ACCOUNTS_FORWARD = "on";
     forward.TIMEOUT_MS = 50;
@@ -354,11 +374,16 @@ for (const behaviour of ["refuse", "error", "throw", "slow"]) {
     assert.equal((await balance.readBalance(hash)).balance, 200);
     assert.equal(svc.calls.length, 1);
     assert.equal(lines.length, 1);
-    assert.match(lines[0], behaviour === "refuse" || behaviour === "error" ? /forward refused, status/ : /forward failed/);
+    assert.match(lines[0], ["refuse", "error", "redirect"].includes(behaviour) ? /forward refused, status/ : /forward failed/);
     assert.match(lines[0], new RegExp(`session=cs_live_fail_${behaviour}`));
     assert.match(lines[0], /one time script/);
     if (behaviour === "refuse") assert.match(lines[0], /status 409 field=customer/);
     if (behaviour === "slow") assert.match(lines[0], /no answer within 50 ms/);
+    if (behaviour === "redirect") {
+      assert.match(lines[0], /status 307/);
+      assert.equal(svc.calls[0].opts.redirect, "manual", "redirects are never followed");
+      assert.ok(svc.calls.every((c) => String(c.url).startsWith(ACCOUNTS_BASE)), "the signed body never goes to another origin");
+    }
     assertNoSecretsIn(lines[0]);
   });
 }
@@ -475,6 +500,75 @@ test("FORWARD on, a provider retry: the same checkout id is forwarded again, the
 });
 
 // ---------------------------------------------------------------------
+// Review follow ups: what a retry forwards, a bad provider signature, the
+// email shape, the base address
+// ---------------------------------------------------------------------
+
+test("FORWARD on, a retry after another path credited the session: the pins actually granted are forwarded", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const hash = "e1".repeat(32);
+  // the session was credited first under a legacy pack of 1000 pins (as an
+  // old link or the fulfill page could), then the webhook arrives naming pins_200
+  await balance.creditPack(hash, "mini", "cs_live_granted_1", "fulfill");
+  const event = paidEvent({ hash, sessionId: "cs_live_granted_1" });
+  const res = await post(event);
+  assert.equal(res._body.already_credited, true);
+  assert.equal(svc.calls.length, 1);
+  assert.deepEqual(JSON.parse(svc.calls[0].raw.toString("utf8")).grant, { credits: 1000 },
+    "the grant on record, not the pack the retry names");
+});
+
+test("FORWARD on, a retry whose grant record cannot be read: nothing forwarded, one line", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const hash = "e2".repeat(32);
+  const event = paidEvent({ hash, sessionId: "cs_live_granted_2" });
+  await post(event);
+  assert.equal(svc.calls.length, 1);
+  gh._repoMap(process.env.GITHUB_USAGE_REPO).delete(`ledger/${hash}/grant-cs_live_granted_2.json`);
+  lines.length = 0;
+  const again = await post(event);
+  assert.deepEqual(again._body, expectedAnswer(event, { credited: false }));
+  assert.equal(svc.calls.length, 1, "an unknown grant size is never guessed");
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /not forwarded, the pins granted for this checkout are not known/);
+});
+
+test("FORWARD on, a bad provider signature: 400 as today and nothing forwarded", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const event = paidEvent({ hash: "e3".repeat(32), sessionId: "cs_live_badsig" });
+  const rawBody = Buffer.from(JSON.stringify(event), "utf8");
+  const req = makeRawReq({ headers: { "stripe-signature": stripeSigHeader("whsec_wrong", rawBody) }, rawBody });
+  const res = makeRes();
+  await webhook(req, res);
+  assert.equal(res._status, 400);
+  assert.equal(svc.calls.length, 0);
+  assert.equal(lines.length, 0);
+});
+
+for (const [name, email] of [
+  ["white space", "buyer person@example.org"],
+  ["a trailing space", "buyer@example.org "],
+  ["no at sign", "buyer.example.org"],
+  ["two at signs", "a@b@example.org"],
+  ["no dot in the domain", "buyer@localhost"],
+  ["a domain ending in a dot", "buyer@example.org."],
+  ["a letter outside plain ASCII", "b\u00fcyer@example.org"],
+  ["more than 254 characters", `${"b".repeat(250)}@example.org`],
+]) {
+  test(`FORWARD on, an email with ${name}: nothing sent, one line, the email not logged`, async () => {
+    process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+    const hash = crypto.createHash("sha256").update(`email-${name}`).digest("hex");
+    const event = paidEvent({ hash, email });
+    const res = await post(event);
+    assert.deepEqual(res._body, expectedAnswer(event));
+    assert.equal(svc.calls.length, 0);
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /not forwarded, the checkout carries no usable email/);
+    assertNoSecretsIn(lines[0]);
+  });
+}
+
+// ---------------------------------------------------------------------
 // The shared test vector (the Python side checks the same bytes)
 // ---------------------------------------------------------------------
 
@@ -507,6 +601,9 @@ test("FORWARD readMode: only off, dry-run and on are read; unset is off with no 
 test("FORWARD checkoutUrl: the path is added once, a trailing slash or a base path is kept tidy", () => {
   assert.equal(forward.checkoutUrl("https://a.example/").url, "https://a.example/accounts/v1/checkout");
   assert.equal(forward.checkoutUrl("https://a.example/base/").url, "https://a.example/base/accounts/v1/checkout");
+  assert.equal(forward.checkoutUrl("https://a.example/accounts/v1/checkout").url, "https://a.example/accounts/v1/checkout");
+  assert.equal(forward.checkoutUrl("https://a.example/accounts/v1/checkout/").url, "https://a.example/accounts/v1/checkout");
+  assert.equal(forward.checkoutUrl("https://a.example/base/accounts/v1/checkout").url, "https://a.example/base/accounts/v1/checkout");
   assert.equal(forward.checkoutUrl("https://a.example?x=1").url, null);
   assert.equal(forward.checkoutUrl("not an address").url, null);
 });
