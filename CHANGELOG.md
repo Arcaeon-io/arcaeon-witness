@@ -1,5 +1,14 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-06: the payment webhook forwards each paid checkout to the account service (local only, NOT deployed)
+
+- `lib/_accounts_forward.js` (new; api/ is at its function cap, so no new route): builds the account service's checkout answer `{"checkout", "completed_at", "customer", "email", "grant": {"credits"}, "kind": "checkout", "v": 1}` from a paid session (the session id, the event's created time, the customer id, the email from `customer_details` then `customer_email`, the pack's pins), signs it with `Checkout-Signature: t=<seconds>,v1=<hex>`, the HMAC-SHA256 under `WITNESS_ACCOUNTS_CHECKOUT_SECRET` of the seconds, a dot and the body as sent (the account service's `verify_checkout`), and POSTs it to `<WITNESS_ACCOUNTS_URL>/accounts/v1/checkout` with a 3 second limit.
+- `api/stripe-webhook.js`: after `creditPack` has applied the credit (first, and unchanged), and on a provider retry too, calls the forward. Its outcome is only logged; the webhook's answer to the payment provider and the key's credit are the same whatever it did. A credit store error still answers 500 and forwards nothing.
+- Settings: `WITNESS_ACCOUNTS_FORWARD` = `off` (default, sends nothing) | `dry-run` (builds and signs, one log line, sends nothing) | `on`; any other value counts as off with one line. `WITNESS_ACCOUNTS_URL` (https only, no user name, query or fragment). `WITNESS_ACCOUNTS_CHECKOUT_SECRET` (encrypted, at least 32 bytes). Not set anywhere yet: a human step.
+- Not forwarded, one line each: no email, no customer id (the account service requires one), a missing URL or secret. No line holds the email, the secret, the signature or the body.
+- A missed forward is caught up by a one time script that resends paid checkouts through the same builder; the account service is idempotent by checkout id. No retry record and no new store.
+- Tests: `test/accounts_forward.test.js` (new, 32), with the account service's signature and body rule written from its Python code, and one shared test vector the Python side checks too.
+
 ## 2026-11-02: security red hunt fixes (local only, NOT deployed; for the 2026-11-03 release)
 
 Adversarial read of the money and key paths at PR 2 head `5a1ce94f`. Four fixes, each closing a named attack; the full findings list (including what was checked and found clean, and what is noted but not fixed: refunds and disputes are not handled, the old payment links must be deactivated at deploy) is in the operator's private notes for 2026-11-02.
