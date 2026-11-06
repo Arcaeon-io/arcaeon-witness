@@ -50,6 +50,7 @@
 
 const crypto = require("crypto");
 const balance = require("../lib/_balance.js");
+const accountsForward = require("../lib/_accounts_forward.js");
 
 // NOTE: the `config` export is attached at the BOTTOM of this file, after the
 // handler is assigned to module.exports. It used to be set here, on line 40 —
@@ -331,6 +332,22 @@ module.exports = async (req, res) => {
           `pack=${pack} session=${session && session.id} detail=${result.ledger_write_failed}`
       );
     }
+    // The account service forward (lib/_accounts_forward.js): only after the
+    // credit above has been applied, and on a provider retry too (the
+    // account service is idempotent by checkout id). It never throws, its
+    // outcome is only logged, and the answer below is the same whatever it
+    // did. Off unless WITNESS_ACCOUNTS_FORWARD says dry-run or on.
+    await accountsForward.forwardCheckout({
+      session,
+      // The pack and the pins actually granted for this session: on a
+      // retry, both read from the grant's ledger record (null when
+      // unreadable, and then nothing is forwarded, one line naming the
+      // session; nothing here sends it again), so a session first credited
+      // by another path is recorded as what it really got.
+      pack: result.granted_pack,
+      pins: result.granted_pins,
+      eventCreated: Number.isInteger(event.created) ? event.created : undefined,
+    });
     return res.status(200).json({
       ok: true,
       pack,
