@@ -415,7 +415,7 @@ for (const behaviour of ["refuse", "error", "throw", "slow", "redirect"]) {
     assert.equal(lines.length, 1);
     assert.match(lines[0], ["refuse", "error", "redirect"].includes(behaviour) ? /forward refused, status/ : /forward failed/);
     assert.match(lines[0], new RegExp(`session=cs_live_fail_${behaviour}`));
-    assert.match(lines[0], /one time script/);
+    assert.match(lines[0], /not retried/);
     if (behaviour === "refuse") assert.match(lines[0], /status 409 field=customer/);
     if (behaviour === "slow") assert.match(lines[0], /no answer within 50 ms/);
     if (behaviour === "redirect") {
@@ -481,7 +481,7 @@ test("FORWARD on, a checkout with no customer id: sent without customer, the 202
   assert.equal(svc.checkouts.size, 0, "attached to no account");
   assert.equal(lines.length, 1);
   assert.match(lines[0], /^\[accounts-forward\] on: kept unmatched for the owner, the checkout names no customer id: session=cs_live_nocus pack=pins_200 credits=200 status=202$/);
-  assert.ok(!/refused|failed|one time script/.test(lines[0]), "not a refusal and not a miss");
+  assert.ok(!/refused|failed|not retried/.test(lines[0]), "not a refusal and not a miss");
   assertNoSecretsIn(lines[0]);
 
   // a provider retry: unmatched again, still one line, still kept once
@@ -508,7 +508,7 @@ test("FORWARD on, the service says applied already as the other kind (409 checko
   assert.equal(svc.recorded.length, 0, "never both recorded and spendable");
   assert.equal(lines.length, 1);
   assert.match(lines[0], /^\[accounts-forward\] on: applied already as the other kind \(recorded or spendable\), look into it: session=cs_live_kind_1 pack=pins_200 status 409 field=checkout$/);
-  assert.ok(!/forwarded:|refused|one time script/.test(lines[0]));
+  assert.ok(!/forwarded:|refused|not retried/.test(lines[0]));
   assertNoSecretsIn(lines[0]);
   const out = await forward.forwardCheckout({ session: event.data.object, pack: "pins_200", pins: 200 }, process.env);
   assert.deepEqual(out, { outcome: "other-kind", status: 409, field: "checkout" });
@@ -728,7 +728,8 @@ for (const [name, email] of [
 }
 
 // ---------------------------------------------------------------------
-// The shared test vector (the Python side checks the same bytes)
+// The shared test vector (the account service checks the same bytes in its
+// open pull request 73, not yet on its main)
 // ---------------------------------------------------------------------
 
 const VECTOR_SECRET = "arcaeon-shared-test-vector-secret-0001";
@@ -788,4 +789,165 @@ test("FORWARD checkoutUrl: the path is added once, a trailing slash or a base pa
   assert.equal(forward.checkoutUrl("https://a.example/base/accounts/v1/checkout").url, "https://a.example/base/accounts/v1/checkout");
   assert.equal(forward.checkoutUrl("https://a.example?x=1").url, null);
   assert.equal(forward.checkoutUrl("not an address").url, null);
+});
+
+// ---------------------------------------------------------------------
+// /api/fulfill forwards too (review blocker, 2026-11-06): the webhook skips
+// a session with no client_reference_id or no metadata.pack, which is every
+// first purchase through a plain payment link, and /api/fulfill grants it.
+// ---------------------------------------------------------------------
+
+process.env.WITNESS_STRIPE_SECRET_KEY = "sk_test_forward_mock_only"; // test only literal, not a credential
+process.env.WITNESS_STRIPE_PRICE_MAP = JSON.stringify({ price_plain_link_200: "pins_200" });
+const fulfill = require("../api/fulfill.js");
+const { makeReq } = require("./helpers/http_mocks.js");
+
+// A plain payment link's paid session: no client_reference_id, no
+// metadata.pack, the pack named only by its price id.
+function plainLinkSession({ id, hash = null, email = EMAIL, customer = "cus_Plain001",
+  created = Math.floor(Date.now() / 1000) - 60 } = {}) {
+  return {
+    id,
+    object: "checkout.session",
+    livemode: true,
+    status: "complete",
+    payment_status: "paid",
+    amount_total: 500,
+    currency: "usd",
+    client_reference_id: hash,
+    customer,
+    customer_details: email === null ? { email: null } : { email },
+    metadata: {},
+    created,
+    line_items: { data: [{ price: { id: "price_plain_link_200" } }] },
+  };
+}
+
+// Serve the session from a fake payment provider in front of the store and
+// the account service fakes the harness already installed.
+function useStripe(session) {
+  require("../lib/_ratelimit.js")._resetForTests();
+  const inner = global.fetch;
+  global.fetch = (url, opts) => {
+    const u = String(url);
+    if (u.startsWith("https://api.stripe.com/v1/checkout/sessions/")) {
+      return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+    }
+    return inner(url, opts);
+  };
+}
+
+async function visit(sessionId) {
+  const req = makeReq({ method: "GET", headers: { accept: "application/json" }, query: { session_id: sessionId } });
+  const res = makeRes();
+  await fulfill(req, res);
+  return res;
+}
+
+test("FULFILL a first purchase through a plain payment link: the webhook skips it, /api/fulfill forwards it once granted", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const id = "cs_live_plainlinkFirst0001";
+  const session = plainLinkSession({ id });
+  useStripe(session);
+  // the webhook's delivery for the same session: skipped, nothing forwarded
+  const event = { id: "evt-plain-1", type: "checkout.session.completed", livemode: true,
+    created: session.created, data: { object: session } };
+  const hook = await post(event);
+  assert.equal(hook._status, 200);
+  assert.ok(hook._body.skipped, "the webhook cannot credit a session with no client_reference_id");
+  assert.equal(svc.calls.length, 0);
+
+  const res = await visit(id);
+  assert.equal(res._status, 200);
+  assert.equal(res._body.mode, "new_key");
+  assert.equal(res._body.credits, 200);
+  assert.equal(res._body.credit_balance, 200);
+  assert.equal(svc.calls.length, 1, "one signed forward after the grant");
+  const body = JSON.parse(svc.calls[0].raw.toString("utf8"));
+  assert.equal(body.checkout, id);
+  assert.deepEqual(body.grant, { recorded: { credits: 200, pack: "pins_200" } });
+  assert.equal(body.customer, "cus_Plain001");
+  assert.equal(svc.recorded.length, 1);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], new RegExp(`on: forwarded: session=${id} pack=pins_200 credits=200 status=200`));
+  assertNoSecretsIn(lines[0]);
+});
+
+test("FULFILL off: the page's answer is byte for byte the same with the forward on, failing, or off", async () => {
+  const answers = [];
+  for (const [mode, behaviour] of [["off", "ok"], ["on", "ok"], ["on", "throw"], ["dry-run", "ok"]]) {
+    gh = new MockGitHubStore();
+    restoreStore();
+    restoreStore = install(gh);
+    useService(makeAccountService({ behaviour }));
+    if (mode === "off") delete process.env.WITNESS_ACCOUNTS_FORWARD;
+    else process.env.WITNESS_ACCOUNTS_FORWARD = mode;
+    lines.length = 0;
+    const id = "cs_live_plainlinkSame0001";
+    useStripe(plainLinkSession({ id }));
+    const res = await visit(id);
+    assert.equal(res._status, 200);
+    const b = { ...res._body };
+    assert.ok(typeof b.key === "string" && b.key);
+    delete b.key; // a new key each round, the rest must match
+    delete b.namespace;
+    delete b.namespace_example;
+    delete b.pool_id;
+    answers.push(b);
+    if (mode === "off") assert.equal(lines.length, 0, "off logs nothing");
+    else assert.equal(lines.length, 1, `${mode}/${behaviour}: one line`);
+    if (behaviour === "throw") assert.match(lines[0], /forward failed, the request failed, not retried: session=cs_live_plainlinkSame0001/);
+  }
+  for (const a of answers.slice(1)) assert.deepEqual(a, answers[0]);
+});
+
+test("FULFILL a top up (client_reference_id) the webhook also forwards: both forward, the account service keeps it once", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const hash = "f7".repeat(32);
+  const id = "cs_live_topupBoth0001";
+  const session = plainLinkSession({ id, hash });
+  session.metadata = { pack: "pins_200" };
+  useStripe(session);
+  const hook = await post({ id: "evt-both-1", type: "checkout.session.completed", livemode: true,
+    created: session.created, data: { object: session } });
+  assert.equal(hook._body.credited, true);
+  const page = await visit(id);
+  assert.equal(page._status, 200);
+  assert.equal(page._body.mode, "topup");
+  assert.equal(page._body.already_credited, true);
+  assert.equal(page._body.credits, 200);
+  assert.equal((await balance.readBalance(hash)).balance, 200, "credited once");
+  assert.equal(svc.calls.length, 2, "the webhook and the page both forward");
+  const ids = svc.calls.map((c) => JSON.parse(c.raw.toString("utf8")).checkout);
+  assert.deepEqual(ids, [id, id]);
+  assert.equal(svc.recorded.length, 1, "the account service keeps the checkout once");
+  assert.equal(svc.checkouts.size, 1);
+  assert.equal(lines.length, 2);
+  for (const l of lines) assert.match(l, new RegExp(`on: forwarded: session=${id} pack=pins_200 credits=200 status=200`));
+});
+
+test("FULFILL a revisit of the new key page forwards again, the account service keeps it once", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const id = "cs_live_plainlinkRevisit0001";
+  useStripe(plainLinkSession({ id }));
+  const first = await visit(id);
+  const second = await visit(id);
+  assert.equal(first._body.key, second._body.key);
+  assert.equal(second._body.already_fulfilled, true);
+  assert.equal(second._body.credit_balance, 200, "credited once");
+  assert.equal(svc.calls.length, 2);
+  assert.equal(svc.recorded.length, 1);
+});
+
+test("FULFILL a checkout that cannot be forwarded: the key is still made and credited, one line naming the session", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const id = "cs_live_plainlinkNoEmail0001";
+  useStripe(plainLinkSession({ id, email: null }));
+  const res = await visit(id);
+  assert.equal(res._status, 200);
+  assert.equal(res._body.mode, "new_key");
+  assert.equal(res._body.credit_balance, 200);
+  assert.equal(svc.calls.length, 0);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], new RegExp(`on: not forwarded, the checkout carries no email: session=${id}`));
 });

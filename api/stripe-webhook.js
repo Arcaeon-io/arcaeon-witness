@@ -341,9 +341,9 @@ module.exports = async (req, res) => {
       session,
       // The pack and the pins actually granted for this session: on a
       // retry, both read from the grant's ledger record (null when
-      // unreadable, and then nothing is forwarded, one line; the one time
-      // script catches it up), so a session first credited by another path
-      // is recorded as what it really got.
+      // unreadable, and then nothing is forwarded, one line naming the
+      // session; nothing here sends it again), so a session first credited
+      // by another path is recorded as what it really got.
       pack: result.granted_pack,
       pins: result.granted_pins,
       eventCreated: Number.isInteger(event.created) ? event.created : undefined,

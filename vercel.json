@@ -34,6 +34,9 @@
     },
     "api/stripe-webhook.js": {
       "maxDuration": 30
+    },
+    "api/fulfill.js": {
+      "maxDuration": 30
     }
   }
 }

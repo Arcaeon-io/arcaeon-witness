@@ -160,8 +160,8 @@ done, this endpoint fails closed with `501` on every call — the crediting
 logic itself is already built and tested via `/api/credit`.
 
 **Forward to the account service** (`lib/_accounts_forward.js`, not deployed).
-After the webhook has applied a paid checkout's credit to the key, and only
-then, it can send the same checkout to the account service's
+After the webhook or `/api/fulfill` has applied a paid checkout's credit to
+the key, and only then, either can send the same checkout to the account service's
 `POST /accounts/v1/checkout`, which finds or makes the buyer's account by
 email and shows the purchase on it as a record only grant: the credits stay
 on the key and are spent here, never on the account, so no purchase is ever
@@ -186,9 +186,20 @@ answers 202 `UNMATCHED`, which is logged as kept unmatched for the owner. A
 409 naming `checkout` (the service applied that checkout already as the
 other kind) is logged as a line to look into. No log line holds the email,
 the secret, the signature or the body. The account service is idempotent by
-checkout id, so a provider retry that forwards a checkout again is safe. A missed forward is caught up by a one time script
-that sends the paid checkouts again through the same builder; the webhook keeps
-no retry record.
+checkout id, so a provider retry that forwards a checkout again is safe, and
+so is the webhook and `/api/fulfill` both forwarding one checkout. Both call
+the forward because the webhook skips a session with no `client_reference_id`
+or no `metadata.pack`, which is every first purchase through a plain payment
+link, and `/api/fulfill` grants those; it forwards after each grant, the new
+key and the top up, under the same setting, and its answer does not change.
+A missed forward is not retried and not recorded: no script in this
+repository sends missed checkouts again, and its one log line, naming the
+checkout id, is the only record for as long as the host keeps its logs. The
+buyer's next visit to `/api/fulfill` for that checkout forwards it again. The
+one time move of purchases made before the forward was on lives in the
+account service's repository as `scripts/backfill_accounts.py` (its open
+pull request 73), which reads a copy of the usage store and the provider's
+export and writes through the account store directly, not through this code.
 
 **GET /api/balance** (Bearer `<your witness key>`) — read-only self-check:
 `{credit_balance, credit_ever_purchased, free_tier:{plan, used, cap, month}}`.
@@ -738,7 +749,7 @@ lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not ro
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
-lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js)
+lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js and api/fulfill.js)
 lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,
 lib/_welcome_email.js  supporting modules, not independently routed (this line
                         added 2026-08-24 -- a prior version of this table omitted
