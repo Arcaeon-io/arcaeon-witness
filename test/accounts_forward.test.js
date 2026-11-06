@@ -652,8 +652,29 @@ test("FORWARD on, a retry after another path credited the session: the pins actu
   const res = await post(event);
   assert.equal(res._body.already_credited, true);
   assert.equal(svc.calls.length, 1);
-  assert.equal(JSON.parse(svc.calls[0].raw.toString("utf8")).grant.recorded.credits, 1000,
-    "the grant on record, not the pack the retry names");
+  assert.deepEqual(JSON.parse(svc.calls[0].raw.toString("utf8")).grant, { recorded: { credits: 1000, pack: "mini" } },
+    "the grant on record, pack and pins both, not the pack the retry names");
+  assert.match(lines[0], /on: forwarded: session=cs_live_granted_1 pack=mini credits=1000 status=200/);
+});
+
+test("FORWARD on, a retry whose grant record holds no pack: nothing forwarded, the pack line", async () => {
+  process.env.WITNESS_ACCOUNTS_FORWARD = "on";
+  const hash = "e4".repeat(32);
+  const event = paidEvent({ hash, sessionId: "cs_live_granted_3" });
+  await post(event);
+  assert.equal(svc.calls.length, 1);
+  const repo = gh._repoMap(process.env.GITHUB_USAGE_REPO);
+  const path = `ledger/${hash}/grant-cs_live_granted_3.json`;
+  const entry = repo.get(path);
+  const rec = JSON.parse(entry.content);
+  delete rec.pack;
+  repo.set(path, { ...entry, content: JSON.stringify(rec) });
+  lines.length = 0;
+  const again = await post(event);
+  assert.deepEqual(again._body, expectedAnswer(event, { credited: false }));
+  assert.equal(svc.calls.length, 1, "an unknown pack is never guessed from the retry");
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0], "[accounts-forward] on: not forwarded, the pack is not a pack id the account service takes: session=cs_live_granted_3");
 });
 
 test("FORWARD on, a retry whose grant record cannot be read: nothing forwarded, one line", async () => {
