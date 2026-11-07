@@ -108,6 +108,12 @@ const prefixCheck = require("../lib/_prefix_check.js");
 const prefixUi = require("../lib/_prefix_ui.js");
 // Per IP limit on the fulfillment path (red hunt 2026-11-02, see the handler).
 const ratelimit = require("../lib/_ratelimit.js");
+// The account service forward, the same one api/stripe-webhook.js calls
+// (lib/_accounts_forward.js). Called here too because the webhook skips a
+// session with no client_reference_id or no metadata.pack, which is every
+// first purchase through a plain payment link: this page is the only place
+// such a checkout is granted, so it must also be the place it is forwarded.
+const accountsForward = require("../lib/_accounts_forward.js");
 
 const DOCS_URL = process.env.WITNESS_DOCS_URL || "https://arcaeon.io/ai";
 const BASE_URL = process.env.WITNESS_BASE_URL || "https://arcaeon-witness.vercel.app";
@@ -136,6 +142,27 @@ function respond(req, res, status, jsonBody, htmlBuilder) {
 
 function deny(req, res, status, jsonBody, humanTitle, humanDetail) {
   return respond(req, res, status, jsonBody, () => errorHtml(humanTitle, humanDetail));
+}
+
+// ---- account service forward ----
+// After a grant (a new key or a top up), send the checkout to the account
+// service with the pack and the pins from the grant's ledger record, exactly
+// as the webhook does. Under the same WITNESS_ACCOUNTS_FORWARD setting: off
+// sends nothing and logs nothing; dry-run and on log one line for every
+// outcome, a checkout that cannot be forwarded included, naming the session.
+// forwardCheckout never throws and its result is ignored, so this page's
+// answer and the key's credit are the same whatever it did. The webhook and
+// this page may both forward one checkout; the account service applies a
+// checkout id once, so the second is harmless. The session carries no time
+// of payment, so its creation time stands in; whichever forward lands first
+// sets the time the account service keeps.
+async function forwardGrant(session, grant) {
+  await accountsForward.forwardCheckout({
+    session,
+    pack: grant.granted_pack,
+    pins: grant.granted_pins,
+    eventCreated: Number.isInteger(session.created) ? session.created : undefined,
+  });
 }
 
 // ---- pack resolution ----
@@ -511,6 +538,7 @@ module.exports = async (req, res) => {
       // blindly. null = the grant happened but its size could not be read.
       const grantedPins = result.granted_pins === undefined ? null : result.granted_pins;
       const grantedPack = result.granted_pack || (result.already_credited ? null : pack);
+      await forwardGrant(session, result);
       return respond(req, res, 200,
         {
           ok: true,
@@ -691,6 +719,8 @@ module.exports = async (req, res) => {
           `pack=${record.pack} session=${sid.slice(0, 24)}… detail=${grant.ledger_write_failed}`
       );
     }
+
+    await forwardGrant(session, grant);
 
     // Consent capture (one line on the page; stored on the fulfillment
     // record; default stays false unless explicitly asked). Best-effort — a
