@@ -1,0 +1,35 @@
+{
+  "note": "Outside witnesses on the witness-network.org staging list log-list-10qps-4klogs.1 (operators from https://witness-network.org/witness-tables/), read 2026-11-07. url is the submission prefix; add-checkpoint is sent to <url>/add-checkpoint. vkey is the Ed25519 cosignature key (type 0x04) the operator's page publishes. The GDB Security witness is left out: its host's robots.txt disallows this reader, so its key was not read. These witnesses only cosign logs on that list; until this log (origin arcaeon.io/witness-pins/log/v1) has its own list entry, each answers 404 and the job logs not_listed.",
+  "witnesses": [
+    {
+      "name": "krabbel.ct.ipng.ch",
+      "url": "https://krabbel.ct.ipng.ch",
+      "vkey": "krabbel.ct.ipng.ch+4b10dbd8+BO4sLOtnhktlqMCejDx9C5LDd+/xZxbmBb6BP9ZD2Def",
+      "source": "https://ipng.ch/s/ct/#witness (key file https://ipng.ch/assets/ct/krabbel-ed25519.pub.vkey)"
+    },
+    {
+      "name": "witness.stagemole.eu",
+      "url": "https://witness.stagemole.eu",
+      "vkey": "witness.stagemole.eu+67f7aea0+BEqSG3yu9YrmcM3BHvQYTxwFj3uSWakQepafafpUqklv",
+      "source": "https://witness.stagemole.eu/about"
+    },
+    {
+      "name": "witness.navigli.sunlight.geomys.org",
+      "url": "https://witness.navigli.sunlight.geomys.org",
+      "vkey": "witness.navigli.sunlight.geomys.org+a3e00fe2+BNy/co4C1Hn1p+INwJrfUlgz7W55dSZReusH/GhUhJ/G",
+      "source": "https://navigli.sunlight.geomys.org/ and https://witness.navigli.sunlight.geomys.org/witness.v0.json"
+    },
+    {
+      "name": "markovianprotocol.com/witness",
+      "url": "https://witness.markovianprotocol.com",
+      "vkey": "markovianprotocol.com/witness+41b8827f+BJKLl8rBYM0oUxSaWh9rjTldTprEpYj/SWVIGgacA9XC",
+      "source": "https://witness.markovianprotocol.com/about"
+    },
+    {
+      "name": "staging.witness.transparency.goog/ring-any-bells",
+      "url": "https://staging.witness.transparency.goog/ring-any-bells",
+      "vkey": "staging.witness.transparency.goog/ring-any-bells+2e1a8dc9+BG5JTpLc3FJtwzgh1Uv+Qelz9qeOH2bfWjS1s0s+y4rL",
+      "source": "https://transparency.dev/witnesses/"
+    }
+  ]
+}
