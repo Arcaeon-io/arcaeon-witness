@@ -22,6 +22,8 @@
 const store = require("../lib/_store.js");
 const verdict = require("../lib/_verdict.js");
 const ratelimit = require("../lib/_ratelimit.js");
+// The join's reads (W-J1), rewritten here as ?op=contract-*.
+const contractRead = require("../lib/_contract_read.js");
 
 const HISTORY_BASE = `https://github.com/${store.REPO}/commits/${store.BRANCH}`;
 
@@ -46,6 +48,10 @@ module.exports = async (req, res) => {
       note: `naive per-instance, per-IP limiter (Stage-0): ~${rl.limit} calls per IP per ${Math.round(rl.windowSeconds / 60)} minutes`,
       retry_after_seconds: rl.retryAfterSeconds,
     });
+  }
+
+  if (req.query && contractRead.isOp(req.query.op)) {
+    return contractRead.handle(req, res);
   }
 
   const ns = (req.query && req.query.ns) || "";

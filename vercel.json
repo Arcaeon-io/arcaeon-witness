@@ -23,6 +23,26 @@
     {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
+    },
+    {
+      "source": "/witness/v1/pins",
+      "destination": "/api/pin?op=contract"
+    },
+    {
+      "source": "/witness/v1/key",
+      "destination": "/api/latest?op=contract-key"
+    },
+    {
+      "source": "/witness/v1/statement",
+      "destination": "/api/latest?op=contract-statement"
+    },
+    {
+      "source": "/witness/v1/pins/:ns/receipt",
+      "destination": "/api/latest?op=contract-receipt&ns=:ns"
+    },
+    {
+      "source": "/witness/v1/pins/:ns",
+      "destination": "/api/latest?op=contract-rows&ns=:ns"
     }
   ],
   "functions": {
