@@ -72,13 +72,14 @@ function stubStore(store, { namespaces = [], pins = {} } = {}) {
   const headName = `${today}-head.txt`;
   store.repoReachable = async () => true;
   store.listDir = async (dir) => {
+    if (dir === "log/checkpoints") return [{ type: "file", name: `${new Date().toISOString().slice(0, 10)}.txt` }, { type: "file", name: `${new Date().toISOString().slice(0, 10)}.cosignatures` }]; // a healthy witness log
     if (dir === "anchors") {
       return [{ type: "file", name: headName },
               { type: "file", name: `${headName}.ots` }];
     }
     return namespaces.map((n) => ({ type: "dir", name: n }));
   };
-  store.getRawFile = async () => ({ text: `deadbeef ${new Date().toISOString()}` });
+  store.getRawFile = async (p) => (String(p).endsWith(".cosignatures") ? { text: "\u2014 outside.example/cosigner AAAA\n" } : { text: `deadbeef ${new Date().toISOString()}` });
   store.getFile = async (path) => {
     const m = path.match(/^pins\/([^/]+)\/latest\.json$/);
     if (m && pins[m[1]]) return { json: pins[m[1]] };

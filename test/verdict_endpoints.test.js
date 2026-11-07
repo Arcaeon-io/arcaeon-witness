@@ -180,10 +180,12 @@ function stubStore({ namespaces, pins, getTree }) {
   const headName = `${new Date().toISOString().slice(0, 10)}-head.txt`;
   realStore.repoReachable = async () => true;
   realStore.listDir = async (dir) =>
-    dir === "anchors"
+    dir === "log/checkpoints"
+      ? [{ type: "file", name: `${new Date().toISOString().slice(0, 10)}.txt` }, { type: "file", name: `${new Date().toISOString().slice(0, 10)}.cosignatures` }] // a healthy witness log
+      : dir === "anchors"
       ? [{ type: "file", name: headName }, { type: "file", name: `${headName}.ots` }]
       : namespaces.map((n) => ({ type: "dir", name: n }));
-  realStore.getRawFile = async () => ({ text: `deadbeef ${new Date().toISOString()}` });
+  realStore.getRawFile = async (p) => (String(p).endsWith(".cosignatures") ? { text: "\u2014 outside.example/cosigner AAAA\n" } : { text: `deadbeef ${new Date().toISOString()}` });
   realStore.getFile = async (path) => {
     const m = path.match(/^pins\/([^/]+)\/latest\.json$/);
     return m && pins[m[1]] ? { json: pins[m[1]] } : null;

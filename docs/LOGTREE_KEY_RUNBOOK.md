@@ -69,6 +69,17 @@ Choosing `encrypted` and not `sensitive` is deliberate and has a cost: an `encry
 
 It passes the value to `node tools/publish_checkpoint.js` through the child's environment only (`--key-env WITNESS_LOG_SIGNER_KEY`). With `--write` it refuses to publish unsigned. The file and the Vercel value must be the same key; the job checks every signature it makes against the verifier in `bridge/arcaeon/logtree_verifier_key.txt` before committing anything, so a mismatched local key fails closed rather than publishing a checkpoint no one can verify.
 
+### Every UTC day, even when nothing was added (2026-11-07)
+
+2026-11-05 has no checkpoint. The machine was up that day (the 10:15 UTC anchor and the tips commits every six hours landed), but at the 09:45 UTC run the log held the same 109 records as on 11/04, because the 11/04 anchor was never stamped and no pin had landed since. 2026-09-24 and 2026-10-23 have no checkpoint for the same reason: on a quiet day the only new record is the previous day's anchor, which lands at 10:15 UTC, after the 09:45 UTC run, so a missing anchor leaves the next run with nothing new. The job wrote nothing on those days and said nothing. That rule is in `bridge/arcaeon/logtree_checkpoint.py` on the operator's machine, not in this repository.
+
+From now on:
+
+1. The job publishes a checkpoint every UTC day, also when the size is unchanged. A checkpoint at the same size is true ("nothing was added"), its proof from the day before is empty, and `publish_checkpoint.js` reports `size_unchanged: true`. The skip in `logtree_checkpoint.py` must go; that is a change on the operator's machine, which this repository cannot make.
+2. `publish_checkpoint.js` names every missed day from the clone's own `log/checkpoints/` (a `MISSED DAY` line on stderr, `missed_days` in the summary) and writes `gaps/<date>.json` for days no earlier gap record named. The job publishes it as `log/gaps/<date>.json` beside the checkpoint, in the same run.
+3. A missed day is never filled in. The tool refuses a `--date` on or before the newest published checkpoint, or before the UTC day of the tree commit.
+4. `/api/status.json` carries `witness_log`, which goes red (and the board degraded) when a finished UTC day has neither a checkpoint nor a gap record naming it (`missing_days`), or when no checkpoint has had an outside cosignature for over 36 hours (`outside_cosignature`). See `lib/_witness_log_health.js`.
+
 ## 4. Rotation
 
 A key is never replaced in place. Rotation is a new key with a new, dated name:
