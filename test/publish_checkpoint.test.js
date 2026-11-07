@@ -246,3 +246,85 @@ test("--help restates what the log does not prove, and the sizing of --size is b
   fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(out, { recursive: true, force: true });
 });
+
+// ---------------------------------------------------------------- missed days
+// 2026-11-05 had no checkpoint and nothing said so. A clone that already
+// publishes checkpoints under log/checkpoints/ must get every missing UTC day
+// named (stderr, summary, gaps/<date>.json), and a --date that would fill the
+// gap late must be refused.
+const utcDay = (offsetDays) => new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10);
+
+function withPublished(days, extra = {}) {
+  const f = fixture();
+  const files = { "log/checkpoints/genesis.txt": "genesis\n", "log/checkpoints/KEYS.md": "keys\n", ...extra };
+  for (const d of days) files[`log/checkpoints/${d}.txt`] = `checkpoint ${d}\n`;
+  commitFiles(f.repo, files, "published log");
+  return f;
+}
+
+test("missed days: named on stderr, in the summary and in gaps/<date>.json; never backdated", () => {
+  const T = utcDay(0);
+  const { repo } = withPublished([utcDay(-4), utcDay(-3), utcDay(-1)]);
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "logout-"));
+
+  for (const late of [utcDay(-2), utcDay(-1)]) {
+    const r = run(["--clone", repo, "--out", out, "--date", late, "--write"]);
+    assert.equal(r.status, 2, `--date ${late} must be refused`);
+    assert.match(r.stderr, /never written for a day already past, that would be backdating/);
+  }
+  assert.deepEqual(fs.readdirSync(out), [], "a refused backdate writes nothing");
+
+  const r = run(["--clone", repo, "--out", out, "--date", T, "--write", "--json"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, new RegExp(`MISSED DAY: ${utcDay(-2)} has no published checkpoint`));
+  const s = JSON.parse(r.stdout);
+  assert.deepEqual(s.missed_days, [utcDay(-2)]);
+  assert.deepEqual(s.missed_days_newly_noticed, [utcDay(-2)]);
+  const gap = JSON.parse(fs.readFileSync(path.join(out, "gaps", `${T}.json`), "utf8"));
+  assert.deepEqual(gap.missed_days, [utcDay(-2)]);
+  assert.equal(gap.noticed_on, T);
+  assert.match(gap.statement, /never backdated/);
+  assert.ok(!fs.existsSync(path.join(out, "checkpoints", `${utcDay(-2)}.txt`)));
+
+  // Same size the next day: still a checkpoint, and the summary says so.
+  const out2 = fs.mkdtempSync(path.join(os.tmpdir(), "logout-"));
+  const again = run(["--clone", repo, "--out", out2, "--date", utcDay(1), "--prev", path.join(out, "checkpoints", `${T}.txt`), "--json"]);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(JSON.parse(again.stdout).size_unchanged, true);
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.rmSync(out2, { recursive: true, force: true });
+});
+
+test("missed days: a day an earlier gap record named is not recorded twice; a date before the tree commit's day is refused", () => {
+  const T = utcDay(0);
+  const declared = JSON.stringify({ format: "arcaeon-witness-log-gap/v1", missed_days: [utcDay(-2)] });
+  const { repo } = withPublished([utcDay(-4), utcDay(-3), utcDay(-1)], { [`log/gaps/${utcDay(-1)}.json`]: declared });
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "logout-"));
+  const r = run(["--clone", repo, "--out", out, "--date", T, "--write", "--json"]);
+  assert.equal(r.status, 0, r.stderr);
+  const s = JSON.parse(r.stdout);
+  assert.deepEqual(s.missed_days, [utcDay(-2)], "still listed");
+  assert.deepEqual(s.missed_days_newly_noticed, []);
+  assert.ok(!fs.existsSync(path.join(out, "gaps")), "no second gap record");
+  assert.doesNotMatch(r.stderr, /MISSED DAY/);
+  fs.rmSync(repo, { recursive: true, force: true });
+
+  const old = withPublished([utcDay(-9), utcDay(-8)]);
+  const before = run(["--clone", old.repo, "--out", out, "--date", utcDay(-3)]);
+  assert.equal(before.status, 2);
+  assert.match(before.stderr, /before the UTC day of the tree commit/);
+  fs.rmSync(old.repo, { recursive: true, force: true });
+  fs.rmSync(out, { recursive: true, force: true });
+});
+
+test("missedDays: the live record's three gaps, across month ends, UTC days only", () => {
+  const { missedDays } = require("../tools/publish_checkpoint.js");
+  const days = ["2026-09-23", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30"];
+  for (let d = 1; d <= 31; d++) if (d !== 23) days.push(`2026-10-${String(d).padStart(2, "0")}`);
+  days.push("2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-06");
+  assert.deepEqual(missedDays(days, "2026-11-07"), ["2026-09-24", "2026-10-23", "2026-11-05"]);
+  assert.deepEqual(missedDays(days, "2026-11-06"), ["2026-09-24", "2026-10-23", "2026-11-05"]);
+  assert.deepEqual(missedDays([], "2026-11-07"), []);
+  assert.deepEqual(missedDays(["2026-11-07"], "2026-11-07"), []);
+});

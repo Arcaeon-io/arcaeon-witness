@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-07: a missed checkpoint day is named, never backdated; witness log alert (local only, NOT deployed)
+
+- What happened on 2026-11-05: no checkpoint because the log held the same 109 records at the 09:45 UTC run as on 11/04 (the 11/04 anchor was never stamped, no pin landed), and the daily job on the operator's machine writes nothing when the size is unchanged. Same cause for 2026-09-24 and 2026-10-23. Detail and evidence in `docs/LOGTREE_KEY_RUNBOOK.md` section 3.
+- `tools/publish_checkpoint.js`: reads the clone's published `log/checkpoints/` and `log/gaps/`; names every missed UTC day (stderr, `missed_days`, `missed_days_newly_noticed`) and with `--write` writes `gaps/<date>.json` for days not named before; reports `size_unchanged`; refuses (exit 2) a `--date` on or before the newest published checkpoint or before the tree commit's UTC day.
+- `lib/_witness_log_health.js` (new), read by `lib/_status_data.js`: `witness_log` in `/api/status.json`, `current`, `red` or `cannot_determine`, every red naming its field (`missing_days`, `outside_cosignature`). Red folds into `degraded`, cannot_determine into `indeterminate`. Cosignatures are read from `log/checkpoints/<day>.cosignatures` (expected name; item (2) not pushed yet), presence and shape only, not verified. The status page shows one line when it is not current.
+- Tests: `test/publish_checkpoint.test.js` +3, `test/witness_log_health.test.js` (new, 6); the status stubs in three suites now carry a healthy log. Six break arms, all caught. Suite 711, 711 pass, 0 fail.
+
 ## 2026-11-02: security red hunt fixes (local only, NOT deployed; for the 2026-11-03 release)
 
 Adversarial read of the money and key paths at PR 2 head `5a1ce94f`. Four fixes, each closing a named attack; the full findings list (including what was checked and found clean, and what is noted but not fixed: refunds and disputes are not handled, the old payment links must be deactivated at deploy) is in the operator's private notes for 2026-11-02.

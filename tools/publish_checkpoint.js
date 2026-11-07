@@ -31,6 +31,22 @@
 //   --json             machine-readable summary only
 //   --help             this text, including what the log does NOT prove
 //
+// A DAY IS NEVER SKIPPED IN SILENCE, AND NEVER FILLED IN LATE (2026-11-07).
+// The job must run every UTC day and publish even when the size has not
+// changed: a checkpoint at the same size is a valid statement ("nothing was
+// added"), and its proof from the day before is simply empty. The summary
+// says size_unchanged when that is the case. When the clone already holds
+// published checkpoints under log/checkpoints/, this tool also:
+//   * lists every UTC day from the first published checkpoint to the day
+//     before --date that has no checkpoint file (missed_days), prints one
+//     MISSED DAY line per day on stderr, and with --write writes
+//     gaps/<date>.json naming the days not already named by an earlier
+//     log/gaps/ record. Publish it as log/gaps/<date>.json beside the
+//     checkpoint. It says the days were missed; it never stands in for them.
+//   * refuses (exit 2) a --date on or before the newest published
+//     checkpoint, or before the UTC day of the tree commit. A late
+//     checkpoint for a missed day is backdating, and it is not written.
+//
 // EXIT CODES
 //   0  built (dry run or written)
 //   1  usage error
@@ -39,7 +55,8 @@
 //      a record whose bytes at the tree commit differ from its introducing commit,
 //      a previous checkpoint the clone's history does not reproduce,
 //      an output file that already exists (checkpoints are create-only),
-//      --out inside --clone.
+//      --out inside --clone,
+//      a --date that would backdate (see above).
 //
 // THE ORDER RULE (lib/_logtree.js header, restated): leaves are ordered by
 // the commit that introduced each path, oldest first along the branch's
@@ -167,6 +184,62 @@ function blobBytes(clone, refs) {
   return res;
 }
 
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Every UTC day from `from` to `to`, both included, as YYYY-MM-DD.
+function utcDaysBetween(from, to) {
+  const out = [];
+  let t = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(t) || !Number.isFinite(end)) return out;
+  for (; t <= end; t += 86400000) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+function dayBefore(day) {
+  return new Date(Date.parse(`${day}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+}
+
+// What the clone already publishes at the tree commit: the dated checkpoint
+// days under log/checkpoints/ and the days earlier gap records named. Read
+// only, from git objects. A gap record that does not parse names no day, so
+// its days are reported again rather than taken as declared.
+function publishedLog(clone, commit) {
+  const list = (dir) =>
+    git(clone, ["ls-tree", "--name-only", commit, `${dir}/`]).split("\n").map((s) => s.replace(/\r$/, "")).filter(Boolean);
+  const days = [];
+  for (const p of list("log/checkpoints")) {
+    const m = /^log\/checkpoints\/(\d{4}-\d{2}-\d{2})\.txt$/.exec(p);
+    if (m) days.push(m[1]);
+  }
+  days.sort();
+  const gapFiles = list("log/gaps").filter((p) => /^log\/gaps\/\d{4}-\d{2}-\d{2}\.json$/.test(p));
+  const declared = new Set();
+  if (gapFiles.length) {
+    const bytes = blobBytes(clone, gapFiles.map((p) => `${commit}:${p}`));
+    for (const p of gapFiles) {
+      try {
+        const doc = JSON.parse(bytes.get(`${commit}:${p}`).toString("utf8"));
+        for (const d of Array.isArray(doc.missed_days) ? doc.missed_days : []) if (typeof d === "string" && DAY_RE.test(d)) declared.add(d);
+      } catch {
+        /* unreadable record: declares nothing */
+      }
+    }
+  }
+  return { days, declared };
+}
+
+// The days with no checkpoint, from the first published one to the day
+// before `date`. Pure, for the tests.
+function missedDays(publishedDays, date) {
+  if (!publishedDays.length) return [];
+  const have = new Set(publishedDays);
+  const first = publishedDays[0];
+  const last = dayBefore(date);
+  if (last < first) return [];
+  return utcDaysBetween(first, last).filter((d) => !have.has(d));
+}
+
 function main() {
   let a;
   try {
@@ -188,7 +261,7 @@ function main() {
     return 1;
   }
   const date = a.date || new Date().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!DAY_RE.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) {
     process.stderr.write("usage: --date must be YYYY-MM-DD\n");
     return 1;
   }
@@ -217,6 +290,31 @@ function main() {
     process.stderr.write(`COULD NOT LOOK: ${e.message}\n`);
     return 2;
   }
+
+  // --- what is already published: missed days, and no backdating ---
+  let published;
+  let commitDay;
+  try {
+    published = publishedLog(cloneAbs, commit);
+    const ct = Number(git(cloneAbs, ["log", "-1", "--format=%ct", commit]).trim());
+    commitDay = new Date(ct * 1000).toISOString().slice(0, 10);
+  } catch (e) {
+    process.stderr.write(`COULD NOT LOOK: ${e.message}\n`);
+    return 2;
+  }
+  if (published.days.length) {
+    const newest = published.days[published.days.length - 1];
+    if (date <= newest) {
+      process.stderr.write(`REFUSED: --date ${date} is on or before the newest published checkpoint (${newest}); a checkpoint is never written for a day already past, that would be backdating\n`);
+      return 2;
+    }
+    if (date < commitDay) {
+      process.stderr.write(`REFUSED: --date ${date} is before the UTC day of the tree commit (${commitDay}); a checkpoint is never backdated\n`);
+      return 2;
+    }
+  }
+  const missed = missedDays(published.days, date);
+  const newlyMissed = missed.filter((d) => !published.declared.has(d));
 
   // --- enumerate ---
   const present = git(cloneAbs, ["ls-tree", "-r", "--name-only", commit]).split("\n").map((s) => s.replace(/\r$/, "")).filter(Boolean);
@@ -357,6 +455,19 @@ function main() {
     [`leaves/${date}.jsonl`]: leafLines.map((l) => l + "\n").join(""),
   };
   if (proofDoc) files[`proofs/${date}-consistency.json`] = JSON.stringify(proofDoc, null, 1) + "\n";
+  let gapDoc = null;
+  if (newlyMissed.length) {
+    gapDoc = {
+      format: "arcaeon-witness-log-gap/v1",
+      origin: logtree.LOG_ORIGIN,
+      noticed_on: date,
+      missed_days: newlyMissed,
+      tree_commit: commit,
+      statement:
+        `No checkpoint was published for ${newlyMissed.length === 1 ? "this UTC day" : "these UTC days"}. None will be: a late checkpoint is never backdated. The checkpoint dated ${date} is cumulative, so it covers every record the missed ${newlyMissed.length === 1 ? "day" : "days"} would have covered, but nothing shows the state of the log on ${newlyMissed.length === 1 ? "that day" : "those days"}.`,
+    };
+    files[`gaps/${date}.json`] = JSON.stringify(gapDoc, null, 1) + "\n";
+  }
 
   // create-only
   for (const rel of Object.keys(files)) {
@@ -381,6 +492,10 @@ function main() {
     signed_by: signedBy,
     previous: prevInfo,
     proof_path_length: proofDoc ? proofDoc.path.length : null,
+    size_unchanged: prevInfo ? prevInfo.size === size : null,
+    published_checkpoint_days: published.days.length,
+    missed_days: missed,
+    missed_days_newly_noticed: newlyMissed,
     leaves_written: leafLines.length,
     skipped_by_design: skipped,
     eligible_paths_added_in_history_but_absent_at_commit: absentInHistory,
@@ -390,6 +505,10 @@ function main() {
         ? `Leaves 0 to ${size - 1} were logged on ${date} from records already in the repository. The log proves they have not changed SINCE that date. For their earlier history, rely on the git commit that introduced each file and on the daily anchors.`
         : null,
   };
+
+  for (const d of newlyMissed) {
+    process.stderr.write(`MISSED DAY: ${d} has no published checkpoint; ${a.write ? "recorded" : "would be recorded"} in gaps/${date}.json, never backdated\n`);
+  }
 
   if (a.write) {
     for (const [rel, content] of Object.entries(files)) {
@@ -414,4 +533,4 @@ function main() {
 }
 
 if (require.main === module) process.exit(main());
-module.exports = { introducingCommits, blobBytes, main };
+module.exports = { introducingCommits, blobBytes, missedDays, utcDaysBetween, main };

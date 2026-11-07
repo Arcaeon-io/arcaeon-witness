@@ -89,7 +89,7 @@ module.exports = async (req, res) => {
     anchor, anchorErr,
     overdueCount, currentCount, heartbeatCount, ungradeableCount, missedEverCount,
     retiredCount, retiredNamespaces,
-    degraded, indeterminate, overallOk,
+    degraded, indeterminate, overallOk, witnessLog,
     namespaces,
   } = await gatherStatusData();
 
@@ -312,6 +312,7 @@ ots verify anchors/${esc(anchor.date)}-head.txt.ots</pre>
       ${retiredCount ? `<div class="stat"><span class="n">${retiredCount}</span><span class="l">retired (excluded from verdict)</span></div>` : ""}
     </div>
     ${healthErr ? `<p class="muted">health check error: ${esc(healthErr)}</p>` : ""}
+    ${witnessLog && witnessLog.status !== "current" ? `<p class="muted"><strong>Witness log: ${witnessLog.status === "red" ? "red" : "cannot determine"}.</strong> ${witnessLog.red.length ? witnessLog.red.map((r) => `<code>${esc(r.field)}</code>: ${esc(r.reason)}.`).join(" ") : esc(witnessLog.error || "no dated checkpoint could be read")} See <code>witness_log</code> in <a href="/api/status.json">/api/status.json</a>.</p>` : ""}
     ${ungradeableCount ? `<p class="muted"><strong>${ungradeableCount} namespace${ungradeableCount === 1 ? " is" : "s are"} not gradeable</strong> &mdash; ${ungradeableCount === 1 ? "its latest record predates" : "their latest records predate"} the cadence field, so no deadline was ever declared and none is being invented now. That is <em>cannot determine</em>, not <em>pass</em>: the API returns <code>cadence_gradeable:false</code> and any consumer gating on cadence must apply its own not-determined policy. ${ungradeableCount === 1 ? "It becomes" : "They become"} gradeable again on the next pin or renewal &mdash; forward only, never retroactively.</p>` : ""}
     ${retiredCount ? `<p class="muted"><strong>${retiredCount} namespace${retiredCount === 1 ? " is" : "s are"} retired</strong> (<code>${esc(retiredNamespaces.join(", "))}</code>) &mdash; excluded from the overdue/current/gradeable counts above and from the overall OK/DEGRADED verdict, but still listed in the table below with their real status and a <span class="badge badge-grey">retired</span> tag. Nothing is deleted or hidden; set via <code>WITNESS_RETIRED_NS</code>, reversible by removing the name.</p>` : ""}
     ${missedEverCount ? `<p class="muted"><strong>${missedEverCount} namespace${missedEverCount === 1 ? " has" : "s have"} missed a deadline at some point.</strong> A renewal refreshes the deadline; it never erases the miss. The missed window stays in the record permanently and is shown below even for namespaces that are healthy again.</p>` : ""}
