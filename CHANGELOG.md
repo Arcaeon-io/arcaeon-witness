@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-07: outside witness cosignatures for the daily checkpoint (local only, NOT deployed, nothing sent to any witness)
+
+- `lib/_cosign.js` (new) and `tools/publish_checkpoint.js --cosign-config <file> [--cosign-send]`: after the day's checkpoint is written, each witness in the config file is sent an add-checkpoint request (the public witness protocol: `old <size>`, the consistency proof from that size, a blank line, the signed checkpoint), starting from the previous checkpoint's size and rebuilding the proof from the witness's own size on a 409. Each answer's line under that witness's configured Ed25519 cosignature key (type 0x04) is checked over the checkpoint text; a good one is kept in `checkpoints/<date>.cosignatures` under `--out`, one line per witness key, add only, and the checkpoint file is never opened for writing. A refusal (400, 403, 422, a line that does not verify), an unlisted log (404), or an unreachable witness is logged with a field and never changes the exit code. Without `--cosign-send` the step is a dry run that sends nothing; `--cosign-send` needs `--write`; an unsigned checkpoint is offered to no one.
+- `config/outside_witnesses.json` (new): the five staging list witnesses whose pages could be read, with their published keys and the page each came from.
+- What this does NOT do yet: this log (origin `arcaeon.io/witness-pins/log/v1`, key `arcaeon.io/witness-log/2026-09-22+09765dec`) is not on the witness network list, so every witness will answer 404 until it has its own list entry, which is the owner's to request. The list entry `arcaeon.io/witness/v1+7d23e5e3` is the Python sandbox witness's log, a different log with a different key.
+- Tests: `test/cosign.test.js` (new, 9) against a fake witness that checks the log signature and proof. Suite 711, 711 pass, 0 fail.
+
 ## 2026-11-02: security red hunt fixes (local only, NOT deployed; for the 2026-11-03 release)
 
 Adversarial read of the money and key paths at PR 2 head `5a1ce94f`. Four fixes, each closing a named attack; the full findings list (including what was checked and found clean, and what is noted but not fixed: refunds and disputes are not handled, the old payment links must be deactivated at deploy) is in the operator's private notes for 2026-11-02.

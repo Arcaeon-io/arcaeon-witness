@@ -28,6 +28,13 @@
 //   --key-env <NAME>   NAME of an environment variable holding a signer key
 //                      ("PRIVATE+KEY+<name>+<hash>+<base64>", lib/_checkpoint.js); unsigned if absent
 //   --write            actually write the files (default: dry run)
+//   --cosign-config <file>  outside witnesses to ask for a cosignature
+//                      (config/outside_witnesses.json shape: name, url, vkey);
+//                      the checkpoint must be signed (--key-env). Runs AFTER the
+//                      checkpoint is written and is never fatal to it.
+//   --cosign-send      really POST add-checkpoint to each witness (needs --write);
+//                      without it the cosign step is a dry run that prints the
+//                      requests it would send and sends nothing
 //   --json             machine-readable summary only
 //   --help             this text, including what the log does NOT prove
 //
@@ -40,6 +47,10 @@
 //      a previous checkpoint the clone's history does not reproduce,
 //      an output file that already exists (checkpoints are create-only),
 //      --out inside --clone.
+//   A witness that refuses, does not list this log, or cannot be reached
+//   does NOT change the exit code: it is logged (stderr, and "cosign" in
+//   --json) and the checkpoint stands. Verified cosignature lines go to
+//   checkpoints/<date>.cosignatures under --out, one per witness key, add only.
 //
 // THE ORDER RULE (lib/_logtree.js header, restated): leaves are ordered by
 // the commit that introduced each path, oldest first along the branch's
@@ -73,6 +84,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const logtree = require("../lib/_logtree.js");
 const checkpoint = require("../lib/_checkpoint.js");
+const cosign = require("../lib/_cosign.js");
 
 function helpText() {
   const src = fs.readFileSync(__filename, "utf8").split("\n");
@@ -102,6 +114,8 @@ function parseArgs(argv) {
     else if (t === "--prev") a.prev = next();
     else if (t === "--key-env") a.keyEnv = next();
     else if (t === "--write") a.write = true;
+    else if (t === "--cosign-config") a.cosignConfig = next();
+    else if (t === "--cosign-send") a.cosignSend = true;
     else if (t === "--json") a.json = true;
     else throw new Error(`unknown argument ${t}`);
   }
@@ -167,7 +181,7 @@ function blobBytes(clone, refs) {
   return res;
 }
 
-function main() {
+async function main() {
   let a;
   try {
     a = parseArgs(process.argv.slice(2));
@@ -191,6 +205,31 @@ function main() {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     process.stderr.write("usage: --date must be YYYY-MM-DD\n");
     return 1;
+  }
+
+  if (a.cosignSend && !a.write) {
+    process.stderr.write("usage: --cosign-send needs --write (a dry run sends nothing)\n");
+    return 1;
+  }
+  if (a.cosignSend && !a.cosignConfig) {
+    process.stderr.write("usage: --cosign-send needs --cosign-config\n");
+    return 1;
+  }
+  let witnesses = null;
+  if (a.cosignConfig) {
+    let cfgText;
+    try {
+      cfgText = fs.readFileSync(a.cosignConfig, "utf8");
+    } catch (e) {
+      process.stderr.write(`usage: --cosign-config ${a.cosignConfig}: ${e.message}\n`);
+      return 1;
+    }
+    const cfg = cosign.loadWitnessConfig(cfgText);
+    if (!cfg.ok) {
+      process.stderr.write(`usage: --cosign-config refused: field ${cfg.field}: ${cfg.reason}\n`);
+      return 1;
+    }
+    witnesses = cfg.witnesses;
   }
 
   const cloneAbs = path.resolve(a.clone);
@@ -399,6 +438,38 @@ function main() {
     }
   }
 
+  // --- outside witnesses: after the checkpoint is on disk, never fatal ---
+  if (witnesses) {
+    const send = Boolean(a.cosignSend);
+    const outFile = path.join(outAbs, "checkpoints", `${date}.cosignatures`);
+    let c;
+    try {
+      c = await cosign.cosignCheckpoint({
+        signedNote: text,
+        witnesses,
+        prevSize: prevInfo ? prevInfo.size : 0,
+        proofFrom: (old) => (old === 0 ? [] : tree.consistencyProof(old, size)),
+        send,
+        outFile,
+      });
+    } catch (e) {
+      c = { ok: false, field: "cosign", reason: e.message, results: [], added: [] };
+    }
+    summary.cosign = {
+      mode: send ? "sent" : "dry-run",
+      file: send ? outFile : null,
+      ok: c.ok,
+      field: c.field,
+      reason: c.reason,
+      added: c.added ? c.added.length : 0,
+      results: c.results.map(({ line, ...r }) => r),
+    };
+    if (!c.ok) process.stderr.write(`COSIGN: not done: field ${c.field}: ${c.reason}\n`);
+    for (const r of c.results) {
+      if (r.result !== "cosigned" && r.result !== "would_send") process.stderr.write(`COSIGN: ${r.witness} ${r.result}: field ${r.field}: ${r.reason}\n`);
+    }
+  }
+
   if (a.json) {
     process.stdout.write(JSON.stringify(summary) + "\n");
   } else {
@@ -409,9 +480,13 @@ function main() {
     process.stdout.write(`skipped by design: latest.json=${skipped.latest_json} .ots=${skipped.ots} other=${skipped.other}; eligible paths in history but absent at commit: ${absentInHistory}\n`);
     for (const f of summary.files) process.stdout.write(`${a.write ? "wrote" : "would write"} ${f}\n`);
     if (summary.genesis_note) process.stdout.write(`${summary.genesis_note}\n`);
+    if (summary.cosign) {
+      for (const r of summary.cosign.results) process.stdout.write(`cosign ${summary.cosign.mode} ${r.witness} ${r.result}${r.result === "would_send" ? ` old=${r.old} ${r.body_bytes} bytes to ${r.url}` : ""}\n`);
+      if (summary.cosign.added) process.stdout.write(`kept ${summary.cosign.added} cosignature line(s) in ${summary.cosign.file}\n`);
+    }
   }
   return 0;
 }
 
-if (require.main === module) process.exit(main());
+if (require.main === module) main().then((code) => process.exit(code));
 module.exports = { introducingCommits, blobBytes, main };
