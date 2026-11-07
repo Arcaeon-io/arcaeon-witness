@@ -83,6 +83,39 @@ this is an acceptable gap, not a hidden one. The real fix, when it's
 warranted, is a Stage-2 KV (Vercel KV / Upstash) with an atomic `INCR` and
 no CAS loop at all.
 
+### POST /witness/v1/pins (the join: a desktop pin paid from the same pack)
+
+The desktop app sends a contract pin, the signed head object of the
+contract the sandbox repositories share, instead of the plain body above.
+This route takes it the way the reference witness does and pays for it
+from the same balance a plain pin uses.
+
+- Body: the pin's canonical bytes, exactly. Header `Public-Key`: the
+  pinner's public key, 64 lower case hex. Header `Authorization: Bearer
+  <key>`: the pack's key. The key pays; it is never part of anything signed.
+- Paid by the same charge as `POST /api/pin`: the key's free pins for the
+  month first, then its bought credits. One pack, one balance, spent once,
+  whether the pin comes from the desktop, the pip client or the MCP server.
+  The account service is never read or written here: the purchases it keeps
+  as records are never spent.
+- `201`: exactly a contract receipt, signed by the contract key. `200`: the
+  same pin again; the receipt of the row already held, nothing spent.
+- Every refusal is `{"field", "reason", "status": "REFUSED"}` naming the
+  field at fault, for example `402` naming `plan` when the pack is empty,
+  `401` naming `bearer`, `403` naming `namespace` outside the key's prefix,
+  `422` naming `key_id`, `sig`, `head.n`, `head.chain` or `root`.
+- Rows are kept in the public pin store under `contract/<namespace>/rows/`,
+  one file per row, created once and never written again, beside the plain
+  pins and apart from them.
+- Reads: `GET /witness/v1/key`, `GET /witness/v1/statement`,
+  `GET /witness/v1/pins/<namespace>/receipt` and the signed rows answer
+  `GET /witness/v1/pins/<namespace>` (optional `?limit=1` to `1000`).
+- Settings: `WITNESS_CONTRACT_SEED` (encrypted), `WITNESS_CONTRACT_KEY_ID`
+  and `WITNESS_CONTRACT_STATEMENT`, made once offline by
+  `node tools/contract_keygen.js --out <file>`. With any of them unset or
+  wrong, every contract route answers `503` naming `key` (or `statement`)
+  and the plain routes go on unchanged.
+
 ### Credit balance — the decrementing balance behind prepaid packs (mechanism only, not yet sold)
 
 Built 2026-08-14 per `COUNCIL_PRICING_REVIEW_2026-08-14.md` §4 decision #5 (the hard

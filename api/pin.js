@@ -34,6 +34,9 @@ const issuedKeys = require("../lib/_keys.js");
 // they are. Additionally build batches and commit roots. Nothing reads the
 // roots." Off unless WITNESS_BATCH_SHADOW is on; see lib/_pending.js.
 const pending = require("../lib/_pending.js");
+// The join (W-J1): the desktop's contract pin, rewritten here from
+// POST /witness/v1/pins as ?op=contract. See lib/_contract_pin.js.
+const contractPin = require("../lib/_contract_pin.js");
 
 // Naive per-key rate limit (Stage-0): per-instance, resets on cold start.
 const RATE_LIMIT = 60; // pins per key per hour, per warm instance
@@ -457,6 +460,12 @@ async function healIfWedged(namespace, cur, latestPath) {
 }
 
 module.exports = async (req, res) => {
+  // The contract pin is handed off first, before anything reads req.body,
+  // so its raw bytes are still unread. It is paid by this file's own
+  // meterAndCharge: one balance for both paths.
+  if (req.query && req.query.op === "contract") {
+    return contractPin.handle(req, res, { meterAndCharge, refundFailedWrite, rateLimited });
+  }
   if (req.method !== "POST") {
     res.setHeader("allow", "POST");
     return res.status(405).json({ error: "POST only" });

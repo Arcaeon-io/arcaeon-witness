@@ -1,5 +1,14 @@
 # Changelog — arcaeon-witness
 
+## Unreleased: the join, first slice (W-J1): a desktop pin paid from the same pack (local only, NOT deployed)
+
+- `POST /witness/v1/pins` (a rewrite onto `/api/pin?op=contract`; api/ stays at twelve functions): takes the desktop's contract pin as its canonical bytes with `Public-Key`, checks it in the reference witness's order and answers 201 with exactly a contract receipt signed by the new contract key, or 200 with the same receipt for the same pin again.
+- One balance: the pin is paid by `api/pin.js` `meterAndCharge`, the plain path's own charge, so the bearer key's free pins and bought credits are one pool for both paths. Charged only after every refusing check, right before the row is written; a replay is charged nothing; a credit for a write that failed or lost a race to the same pin is given back. The account service is never called, so its record only grants are never spent.
+- Reads: `GET /witness/v1/key`, `/witness/v1/statement`, `/witness/v1/pins/<ns>/receipt` and the signed rows answer `/witness/v1/pins/<ns>`, rewrites onto `/api/latest?op=contract-*`.
+- New: `lib/_contract.js` (canonical bytes, Ed25519 with the runtime's crypto module, the pin reader, rows, receipts and the rows answer), `lib/_contract_key.js`, `lib/_contract_store.js`, `lib/_contract_pin.js`, `lib/_contract_read.js`, `tools/contract_keygen.js`. `test/vectors/contract_vectors.json` is the seal repository's file byte for byte; `test/vectors/join_reference.json` was made by the reference witness.
+- Not in this slice: pins with no bearer key, the rollback floor, the checkpoint wait and promise, inclusion of contract rows in the log tree, key rotation and revocation, the hold model for parallel pins, the full conformance vectors.
+- Tests: `test/contract_core.test.js`, `test/contract_join.test.js`, `test/contract_read.test.js`, `test/contract_keygen.test.js`.
+
 ## 2026-11-06: the payment webhook and /api/fulfill forward each paid checkout they grant to the account service (local only, NOT deployed)
 
 - `lib/_accounts_forward.js` (new; api/ is at its function cap, so no new route): builds the account service's checkout answer `{"checkout", "completed_at", ["customer",] "email", "grant": {"recorded": {"credits", "pack"}}, "kind": "checkout", "v": 1}` from a paid session (the session id, the event's created time, the customer id when there is one, the email from `customer_details` then `customer_email`, the pins granted and the pack id), signs it with `Checkout-Signature: t=<seconds>,v1=<hex>`, the HMAC-SHA256 under `WITNESS_ACCOUNTS_CHECKOUT_SECRET` of the seconds, a dot and the body as sent (the account service's `verify_checkout`), and POSTs it to `<WITNESS_ACCOUNTS_URL>/accounts/v1/checkout` with a 3 second limit.
