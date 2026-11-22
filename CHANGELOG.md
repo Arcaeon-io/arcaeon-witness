@@ -1,5 +1,11 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-22 (fifth): proof checkers right past 2^31 leaves, after reading Sigstore's verifier (local only, NOT deployed)
+
+- `docs/OUTSIDE_SIGSTORE_VERIFY_2026-11-22.md` (new): `@sigstore/verify` 4.1.3 (`dist/tlog/checkpoint.js`, `dist/tlog/merkle.js`), read and not run, beside our checkpoint reader and proof checkers. They do better: proof arithmetic in BigInt. We do better: strict signature lines, the origin checked, exact key matching, two named reasons in place of one boolean. The C2SP pages could not be read (host refused in this session).
+- The change: every proof walk used JavaScript's bitwise operators, which cut values to 32 bits, while the checkpoint reader accepts sizes of up to 15 digits. On `main`: valid proofs past 2^31 - 1 leaves were refused; an old size of 2^32 made `tools/follow.js` (and `lib/_logtree.js`) loop forever; and `lib/_merkle.js` `verifyInclusion` accepted an empty path claiming a leaf was the root of a 2^31 + 1 tree (`ok: true`, `tree_size_bound: false`; checked against `main`'s file). Now `lib/_logtree.js` `verifyInclusion` and `verifyConsistency`, `tools/follow.js` `verifyConsistency` and `lib/_merkle.js` `verifyInclusion` use plain division, and require every size and index to be a safe integer (larger is `malformed_proof`). No published result changes: published trees are far below 2^31.
+- Tests: `test/proof_large_trees.test.js` (new, 27: hand-written RFC 9162 proofs at 2^31, 2^32, 2^40 and 2^52; wrong roots, short paths and the forged empty path refused; sizes past 2^53 - 1 refused) and `test/proof_no_hang.test.js` (new, 3: each checker in a child process with a 5 second limit; all three time out on `main`). Suite 832, 832 pass, 0 fail.
+
 ## 2026-11-22 (fourth): a second outside clock, DigiCert's free RFC 3161 server (tool and tests; not scheduled; local only, NOT deployed)
 
 - `lib/_rfc3161.js` (new, Node's own modules only): builds a sha256 RFC 3161 time stamp request with a random 8-byte nonce, asking for the authority's certificate; reads a response (status, policy, hashed message, serial, the authority's time, nonce) and fails closed naming where on anything it cannot read; compares an answer with what was asked (granted, sha256 of this file, this request's nonce). It does not check signatures: stock `openssl ts -verify` does that.
