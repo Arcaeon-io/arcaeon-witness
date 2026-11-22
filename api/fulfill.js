@@ -69,8 +69,9 @@
 //     reached by a vercel.json rewrite onto `/api/fulfill?op=prefix-available`
 //     and dispatched to lib/_prefix_check.js at the very top of the handler,
 //     before the session_id gate. It is unauthenticated, takes no session,
-//     and MINTS NOTHING — it reads the prefix list and answers yes/no plus
-//     three verified-free alternatives. Same rewrite trick vercel.json already
+//     and MINTS NOTHING — it reads the prefix list and answers taken or free,
+//     nothing more (no alternatives since 2026-11-22), limited per address in
+//     its own bucket. Same rewrite trick vercel.json already
 //     uses for /api/status.json; api/ is at the 12-function cap.
 //   - The picker form checks availability LIVE while the buyer types
 //     (debounced, lib/_prefix_ui.js) and previews the namespace + first-pin
@@ -232,8 +233,8 @@ ${consentLine}`
 // The form POSTs back to this same endpoint; mint happens on the POST.
 //
 // Rev-2b: the field now answers while they type. #prefix-status carries the
-// free/taken/couldn't-check verdict, #prefix-alts the three free alternatives
-// on a taken pick, and #ns-preview / #curl-preview show what they will
+// free/taken/couldn't-check verdict (no alternatives on a taken pick since
+// 2026-11-22: they were built from other customers' prefixes), and #ns-preview / #curl-preview show what they will
 // actually run — all driven by prefixUi.pickerScript(). The submit button is
 // deliberately never disabled by the check: the POST re-validates server-side
 // (authoritatively), and a client check that is itself unsure must not be
@@ -250,7 +251,6 @@ ${errorBlock}
   <label for="prefix">Namespace prefix</label>
   <input type="text" id="prefix" name="prefix" value="${esc(prefill)}" spellcheck="false" autocomplete="off" autocapitalize="none" maxlength="48">
   <span id="prefix-status" class="pstat idle"></span>
-  <div id="prefix-alts"></div>
   <p class="muted">Lowercase letters, digits, and dashes; must end in a dash. You'll pin <code id="ns-preview">${esc(prefill)}main</code> and anything else starting with it. It cannot be changed after minting.</p>
   <label class="muted" style="font-weight:400"><input type="checkbox" name="consent" value="yes"> Email me occasional product updates (off by default — nothing is sent unless you tick this)</label>
   <button type="submit" class="mint">Mint my witness key</button>

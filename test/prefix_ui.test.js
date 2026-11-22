@@ -91,6 +91,12 @@ test("all three states are rendered distinctly, and 'could not check' is never p
     "a failed check must not report availability");
 });
 
+test("PRIVACY: the picker script never reads or renders suggestions from the availability check", () => {
+  assert.ok(!SCRIPT.includes("suggestions"), "the script reads no suggestions field");
+  assert.ok(!SCRIPT.includes("prefix-alts"), "the script renders no alternatives");
+  assert.ok(!SCRIPT.includes("Free instead"), "no alternatives label");
+});
+
 test("BOUNDARY: the picker script never mints — no writes, no POST, no key issuance", () => {
   assert.ok(!/method\s*:\s*["']POST["']/i.test(SCRIPT), "the script issues no POST");
   // Exactly one network call, and it is the read-only availability route.
@@ -263,9 +269,12 @@ test("PICKER PAGE: renders the live-check hooks, the script, and a command previ
   assert.equal(res._status, 200);
   const html = String(res._body);
 
-  for (const id of ["prefix", "prefix-status", "prefix-alts", "ns-preview", "curl-preview"]) {
+  for (const id of ["prefix", "prefix-status", "ns-preview", "curl-preview"]) {
     assert.ok(html.includes(`id="${id}"`), `picker is missing #${id}`);
   }
+  // The availability check answers taken or free only; the page has no
+  // place to show alternatives built from other customers' prefixes.
+  assert.ok(!html.includes('id="prefix-alts"'), "no alternatives area on the picker");
   assert.ok(html.includes("DEBOUNCE_MS"), "the picker page must carry the debounced check script");
   assert.ok(html.includes('data-copy-target="pip"'), "copy button for the install command");
   assert.ok(html.includes('data-copy-target="curl-preview"'), "copy button for the pin command");
