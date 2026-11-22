@@ -5,7 +5,8 @@
 // time T" in DigiCert's signature, checkable by anyone with openssl.
 //
 //   node tools/tsa_stamp.js --file anchors/2026-11-22-head.txt --out stamps/ \
-//        [--ca-file /etc/ssl/certs/ca-certificates.crt] [--untrusted chain.pem] [--json]
+//        [--ca-file /etc/ssl/certs/ca-certificates.crt] [--untrusted chain.pem] \
+//        [--expect-signer "O = DigiCert"] [--json]
 //
 // It writes <file>.tsq (the request) and <file>.tsr (the authority's answer)
 // into --out, and nothing anywhere else. Check a kept answer later with
@@ -19,6 +20,16 @@
 // No paid time stamp service is used. --tsa-url accepts that host, or a local
 // test server on 127.0.0.1 / localhost (the tests run one with stock
 // `openssl ts -reply`); anything else is refused before anything is sent.
+//
+// WHO SIGNED. openssl's chain check against the system roots says that SOME
+// trusted authority signed the token: the TLS root bundle holds about 140
+// roots. So the tool also finds the certificate the token's signature names
+// (issuer and serial number, matched byte for byte, in the token or the
+// --untrusted file), reports its subject, issuer and sha256 fingerprint, and
+// requires its subject to contain --expect-signer. For DigiCert's server that
+// defaults to "O = DigiCert"; a local test server must say whom it expects.
+// (Found 2026-11-22 reading rfc3161ng, which checks a token against the
+// certificate the token itself carries: docs/OUTSIDE_RFC3161NG_2026-11-22.md.)
 //
 // VERDICTS (exit code): VERIFIED (0) the answer is for this file and this
 // request, and `openssl ts -verify` says "Verification: OK" against --ca-file;
@@ -43,19 +54,21 @@ const DIGICERT_URL = "http://timestamp.digicert.com";
 const FREE_HOSTS = new Set(["timestamp.digicert.com"]);
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const DEFAULT_CA_FILE = "/etc/ssl/certs/ca-certificates.crt";
+const DEFAULT_SIGNER = { "timestamp.digicert.com": "O = DigiCert" };
 const TIMEOUT_MS = 15_000;
 
 function usage(msg) {
   if (msg) process.stderr.write(`tsa_stamp: ${msg}\n`);
   process.stderr.write(
-    "usage: node tools/tsa_stamp.js --file <path> --out <dir> [--tsa-url <url>] [--ca-file <pem>] [--untrusted <pem>] [--json]\n" +
+    "usage: node tools/tsa_stamp.js --file <path> --out <dir> [--tsa-url <url>] [--ca-file <pem>] [--untrusted <pem>] [--expect-signer <text>] [--json]\n" +
+      "  --expect-signer: text the signing certificate's subject must contain (default for DigiCert: \"O = DigiCert\")\n" +
       `  the only time stamp service used is DigiCert's free server, ${DIGICERT_URL} (free list; no paid service)\n`
   );
   process.exit(1);
 }
 
 function parseArgs(argv) {
-  const a = { file: null, out: null, tsaUrl: DIGICERT_URL, caFile: null, untrusted: null, json: false };
+  const a = { file: null, out: null, tsaUrl: DIGICERT_URL, caFile: null, untrusted: null, expectSigner: null, json: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => {
@@ -67,6 +80,7 @@ function parseArgs(argv) {
     else if (k === "--tsa-url") a.tsaUrl = next();
     else if (k === "--ca-file") a.caFile = next();
     else if (k === "--untrusted") a.untrusted = next();
+    else if (k === "--expect-signer") a.expectSigner = next();
     else if (k === "--json") a.json = true;
     else if (k === "--help" || k === "-h") usage();
     else usage(`unknown argument ${k}`);
@@ -101,12 +115,22 @@ function post(u, body) {
   });
 }
 
+// Every certificate in a PEM file, as DER.
+function pemCertificates(text) {
+  const out = [];
+  for (const m of text.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g)) {
+    out.push(Buffer.from(m[1].replace(/\s+/g, ""), "base64"));
+  }
+  return out;
+}
+
 function finish(args, summary) {
   if (args.json) process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
   else {
     const lines = [`tsa_stamp: ${summary.verdict} — ${summary.file}`];
     if (summary.gen_time) lines.push(`  authority time ${summary.gen_time}, sha256 ${summary.sha256}`);
     if (summary.openssl_verify) lines.push(`  openssl: ${summary.openssl_verify}`);
+    if (summary.signer) lines.push(`  signed by: ${summary.signer.subject} (issuer ${summary.signer.issuer}; sha256 ${summary.signer.sha256})`);
     for (const p of summary.problems) lines.push(`  - ${p}`);
     if (summary.tsr) lines.push(`  kept: ${summary.tsr}`);
     process.stdout.write(lines.join("\n") + "\n");
@@ -119,6 +143,8 @@ async function main() {
   if (!args.file) usage("--file is required");
   if (!args.out) usage("--out is required");
   const u = checkTsaUrl(args.tsaUrl);
+  const expectSigner = args.expectSigner || DEFAULT_SIGNER[u.hostname] || null;
+  if (!expectSigner) usage(`--expect-signer is required for ${u.hostname} (whose certificate should have signed?)`);
   const file = path.resolve(args.file);
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) usage(`--file ${args.file} is not a file`);
   const caFile = args.caFile ? path.resolve(args.caFile) : DEFAULT_CA_FILE;
@@ -137,6 +163,8 @@ async function main() {
     serial: null,
     policy: null,
     openssl_verify: null,
+    expect_signer: expectSigner,
+    signer: null,
     tsq: null,
     tsr: null,
     problems: [],
@@ -190,8 +218,33 @@ async function main() {
   const said = `${v.stdout || ""}${v.stderr || ""}`;
   const line = said.split(/\r?\n/).find((l) => /^Verification: /.test(l));
   summary.openssl_verify = line || said.trim().split(/\r?\n/).slice(-1)[0] || `openssl exited ${v.status}`;
-  if (v.status === 0 && line === "Verification: OK") summary.verdict = "VERIFIED";
-  else summary.problems.push("openssl ts -verify did not accept the token against the CA file");
+  if (!(v.status === 0 && line === "Verification: OK")) {
+    summary.problems.push("openssl ts -verify did not accept the token against the CA file");
+    return finish(args, summary);
+  }
+
+  // Who signed: the certificate the signature names, not any trusted one.
+  const candidates = [...resp.certificates];
+  if (args.untrusted) candidates.push(...pemCertificates(fs.readFileSync(path.resolve(args.untrusted), "utf8")));
+  const found = rfc.findSignerCertificate(resp, candidates);
+  if (!found.cert) {
+    summary.problems.push(found.problem);
+    return finish(args, summary);
+  }
+  const x = spawnSync("openssl", ["x509", "-inform", "DER", "-noout", "-subject", "-issuer", "-fingerprint", "-sha256"], { input: found.cert, encoding: "utf8" });
+  const field = (re) => { const m = (x.stdout || "").match(re); return m ? m[1].trim() : null; };
+  summary.signer = {
+    subject: field(/^subject=(.*)$/m),
+    issuer: field(/^issuer=(.*)$/m),
+    sha256: field(/^sha256 Fingerprint=(.*)$/m),
+  };
+  if (!summary.signer.subject) {
+    summary.problems.push("the signing certificate could not be read by openssl x509");
+  } else if (!summary.signer.subject.includes(expectSigner)) {
+    summary.problems.push(`signed by "${summary.signer.subject}", not by a certificate whose subject contains "${expectSigner}"`);
+  } else {
+    summary.verdict = "VERIFIED";
+  }
   return finish(args, summary);
 }
 

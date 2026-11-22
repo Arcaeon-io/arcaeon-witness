@@ -206,7 +206,7 @@ test("TOOL: stamps a file, keeps the request and the token, and stock `openssl t
   try {
     const f = tmpFile("0123456789abcdef0123456789abcdef01234567 2026-11-22T20:00:00Z\n");
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
-    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--untrusted", tsa.tsaCert]);
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--untrusted", tsa.tsaCert, "--expect-signer", "CN = arcaeon test tsa"]);
     assert.equal(r.status, 0, r.stderr || r.stdout);
     assert.equal(r.summary.verdict, "VERIFIED");
     assert.equal(r.summary.openssl_verify, "Verification: OK");
@@ -229,7 +229,7 @@ test("TOOL: a token from an authority the CA file does not trust is BROKEN, by o
   try {
     const f = tmpFile("head\n");
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
-    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", stranger.caFile, "--untrusted", tsa.tsaCert]);
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", stranger.caFile, "--untrusted", tsa.tsaCert, "--expect-signer", "CN = arcaeon test tsa"]);
     assert.equal(r.status, 2, r.stderr || r.stdout);
     assert.equal(r.summary.verdict, "BROKEN");
     assert.doesNotMatch(String(r.summary.openssl_verify), /Verification: OK/);
@@ -244,7 +244,7 @@ test("TOOL: an answer that is not a time stamp response is BROKEN and names why"
   try {
     const f = tmpFile("head\n");
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
-    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile]);
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--expect-signer", "CN = arcaeon test tsa"]);
     assert.equal(r.status, 2, r.stderr || r.stdout);
     assert.equal(r.summary.verdict, "BROKEN");
     assert.match(r.summary.problems.join("\n"), /not a time stamp response/);
@@ -256,7 +256,7 @@ test("TOOL: an answer that is not a time stamp response is BROKEN and names why"
 test("TOOL: an authority that cannot be reached is COULD NOT LOOK, never VERIFIED", { skip }, async () => {
   const f = tmpFile("head\n");
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
-  const r = await runTool(["--file", f, "--out", out, "--tsa-url", "http://127.0.0.1:9/"]);
+  const r = await runTool(["--file", f, "--out", out, "--tsa-url", "http://127.0.0.1:9/", "--expect-signer", "CN = arcaeon test tsa"]);
   assert.equal(r.status, 3, r.stderr || r.stdout);
   assert.equal(r.summary.verdict, "COULD NOT LOOK");
 });
@@ -272,4 +272,73 @@ test("TOOL: only DigiCert's free server (or a local test server) is used; any ot
   const help = await runTool(["--help"]);
   assert.match(help.stderr, /timestamp\.digicert\.com/);
   assert.deepEqual(fs.readdirSync(out), [], "nothing is written for a refused service");
+});
+
+// ---- who signed (2026-11-22, after reading rfc3161ng; docs/OUTSIDE_RFC3161NG_2026-11-22.md) ----
+// openssl's chain check against the system roots says "some trusted authority
+// signed this", not "DigiCert signed this": the TLS root bundle holds about 140
+// roots. The tool now names the signing certificate and requires it to be the
+// one expected (DigiCert by default).
+
+test("SIGNER: the summary names the certificate that signed, and a match is VERIFIED", { skip }, async () => {
+  const tsa = makeAuthority();
+  const { server, url } = await serveAuthority(tsa);
+  try {
+    const f = tmpFile("head\n");
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--untrusted", tsa.tsaCert, "--expect-signer", "CN = arcaeon test tsa"]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.match(r.summary.signer.subject, /CN = arcaeon test tsa/);
+    assert.match(r.summary.signer.issuer, /CN = arcaeon test root/);
+    assert.match(r.summary.signer.sha256, /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/);
+  } finally {
+    server.close();
+  }
+});
+
+test("SIGNER: a token that chains to a trusted root but was signed by someone else is BROKEN, naming who", { skip }, async () => {
+  const tsa = makeAuthority();
+  const { server, url } = await serveAuthority(tsa);
+  try {
+    const f = tmpFile("head\n");
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--untrusted", tsa.tsaCert, "--expect-signer", "O = DigiCert"]);
+    assert.equal(r.status, 2, r.stderr || r.stdout);
+    assert.equal(r.summary.verdict, "BROKEN");
+    assert.equal(r.summary.openssl_verify, "Verification: OK", "openssl alone would have said yes");
+    assert.match(r.summary.problems.join("\n"), /signed by .*arcaeon test tsa.*not .*O = DigiCert/);
+  } finally {
+    server.close();
+  }
+});
+
+test("SIGNER: DigiCert's own server is expected to be signed by DigiCert unless told otherwise; a local server must say whom it expects", async () => {
+  const help = await runTool(["--help"]);
+  assert.match(help.stderr, /--expect-signer/);
+  const f = tmpFile("head\n");
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
+  const r = await runTool(["--file", f, "--out", out, "--tsa-url", "http://127.0.0.1:9/"]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /--expect-signer/);
+});
+
+test("SIGNER: a decoy certificate named DigiCert in --untrusted is not taken as the signer (issuer and serial must match the signature)", { skip }, async () => {
+  const tsa = makeAuthority();
+  const decoyDir = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-decoy-"));
+  const decoy = path.join(decoyDir, "decoy.pem");
+  const mk = ossl(["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-keyout", path.join(decoyDir, "k.pem"), "-out", decoy, "-days", "2", "-subj", "/O=DigiCert, Inc./CN=decoy"]);
+  assert.equal(mk.status, 0, mk.stderr);
+  // The --untrusted file carries the real signer AND the decoy.
+  const both = path.join(decoyDir, "both.pem");
+  fs.writeFileSync(both, fs.readFileSync(decoy, "utf8") + fs.readFileSync(tsa.tsaCert, "utf8"));
+  const { server, url } = await serveAuthority(tsa);
+  try {
+    const f = tmpFile("head\n");
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "tsa-out-"));
+    const r = await runTool(["--file", f, "--out", out, "--tsa-url", url, "--ca-file", tsa.caFile, "--untrusted", both, "--expect-signer", "O = DigiCert"]);
+    assert.equal(r.status, 2, r.stderr || r.stdout);
+    assert.match(r.summary.signer.subject, /arcaeon test tsa/, "the signer is the certificate the signature names");
+  } finally {
+    server.close();
+  }
 });

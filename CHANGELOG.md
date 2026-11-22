@@ -1,5 +1,12 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-22 (eighth): the time stamp tool names who signed, after reading rfc3161ng (local only, NOT deployed)
+
+- `docs/OUTSIDE_RFC3161NG_2026-11-22.md` (new): `rfc3161ng` 2.1.3 (`api.py`, read and not run) beside `lib/_rfc3161.js` and `tools/tsa_stamp.js`. They do better: a request can name a policy, and a digest can be passed in. We do better: sha256 only (theirs defaults to sha1, and drops the requested hash when given data), every answer checked against its request's imprint and nonce (theirs returns the token unchecked unless a certificate is configured), and the chain checked by openssl (theirs checks the signature against the certificate the token itself carries).
+- The change: `openssl ts -verify` against the system roots proves some trusted authority signed, not DigiCert. `lib/_rfc3161.js` now reads the signer's issuer and serial number and the token's certificates (`findSignerCertificate`, `certificateIssuerSerial`, byte-for-byte match). `tools/tsa_stamp.js` reports the signing certificate's subject, issuer and sha256 fingerprint and requires the subject to contain `--expect-signer` (default `O = DigiCert` for DigiCert's server; required for a local test server). A token signed by another certificate is BROKEN, naming who signed.
+- README: the outside clock paragraph says so.
+- Tests: `test/rfc3161.test.js` +4 (the signer named; signed by someone else is BROKEN although openssl said OK; a decoy certificate named DigiCert in `--untrusted` is not taken as the signer; a local server without `--expect-signer` refused), and the existing tool tests now name the signer they expect. Suite 847, 847 pass, 0 fail.
+
 ## 2026-11-22 (seventh): documentation matched to the code (local only, NOT deployed)
 
 - README: three paths pointed at `api/` for files that live in `lib/` (`lib/_meter.js`, `lib/_balance.js`, `lib/_status_data.js`). The Layout block named none of 16 `lib/` modules or any `tools/` script; it now names every file in `api/`, `lib/` and `tools/` with one line each, taken from each file's own header.

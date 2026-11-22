@@ -657,6 +657,12 @@ openssl ts -verify -data anchors/<date>-head.txt -in stamps/<date>-head.txt.tsr 
   -CAfile /etc/ssl/certs/ca-certificates.crt
 ```
 
+openssl's chain check alone says that some trusted root's authority signed;
+the tool also names the certificate the signature points to (issuer and serial
+number, matched byte for byte) and requires its subject to contain
+`--expect-signer`, `O = DigiCert` by default, so a token signed by anyone else
+is BROKEN even when openssl accepts it.
+
 It answers VERIFIED, BROKEN, or COULD NOT LOOK. Not done yet, said plainly:
 nothing runs it on a schedule. The daily Bitcoin anchor runs on the
 operator's machine, and moving either clock to hourly also needs the
