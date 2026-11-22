@@ -85,7 +85,7 @@ all of the above                         ->  under the global daily cap
 
 **Money never moves for a stamp that did not land.** The balance is *checked* before the write (a read, so an insufficient balance refuses before anything is written) and *debited* after the write is confirmed. A failed write, a lost create race, a refused daily cap and a repeat stamp all charge nothing, and each of those sentences has a test with a must-fail arm.
 
-**The price is not ratified.** `STAMP_PRICE_CREDITS = 0.25` is a placeholder with an argument attached, not a decision. Pricing authority for this lane is the owner's partner's, and the number goes to him with its math (which is written out in full in `lib/_stamp.js` above the constant, and in the changelog entry).
+**The price is not ratified.** `STAMP_PRICE_CREDITS = 0.25` is a placeholder with an argument attached, not a decision. Pricing authority for this lane is the owner's partner's, and the number goes to the owner's partner with its math (which is written out in full in `lib/_stamp.js` above the constant, and in the changelog entry).
 
 ---
 

@@ -62,7 +62,7 @@ This is a hand-written Node port of
 [arcaeon-meter](https://github.com/Arcaeon-io/arcaeon-meter)'s behavior
 contract (same denial reasons, same header names, same fail-closed
 default) — arcaeon-meter itself is Python + SQLite and can't run inside a
-Vercel Node function, so `api/_meter.js` reimplements just the semantics
+Vercel Node function, so `lib/_meter.js` reimplements just the semantics
 natively. Usage counts live as one JSON file per key-hash per month in a
 **second, PRIVATE** GitHub repo,
 [`dan8433-user/arcaeon-witness-usage`](https://github.com/dan8433-user/arcaeon-witness-usage)
@@ -112,7 +112,7 @@ its source of truth gets named here, and not before.
   funded by the credit balance.
 
 Storage: same private `arcaeon-witness-usage` repo the meter already uses
-(`api/_balance.js`), same GitHub-contents-API CAS pattern, plus an
+(`lib/_balance.js`), same GitHub-contents-API CAS pattern, plus an
 append-only ledger (`ledger/<key_hash>/...`) for every grant and decrement —
 a balance you can't audit contradicts this repo's own honesty contract.
 Top-up idempotency (**corrected 2026-08-16** — this paragraph described a
@@ -494,7 +494,7 @@ read `is_current_head` before reading `cadence_status` on a hit.
 ### GET /api/status.json (no auth)
 
 Machine-readable twin of `GET /status` — same underlying data (both call
-`api/_status_data.js`'s `gatherStatusData()`, so they can't drift apart),
+`lib/_status_data.js`'s `gatherStatusData()`, so they can't drift apart),
 rendered as a stable JSON schema instead of an HTML table.
 
 ```bash
@@ -806,12 +806,45 @@ lib/_status_data.js shared data-gathering pass behind /status, /api/status.json,
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
 lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js and api/fulfill.js)
-lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,
-lib/_welcome_email.js  supporting modules, not independently routed (this line
-                        added 2026-08-24 -- a prior version of this table omitted
-                        all six; regenerate this block from `ls api/ lib/` rather
-                        than hand-maintaining it, since that is exactly how it
-                        drifted the first time)
+lib/_cors.js          GET-only CORS for the public read endpoints
+lib/_keys.js          dynamically issued keys, Stripe fulfillment records, prefix validation and suggestions
+lib/_page.js          shared page template: brand shell, copy boxes, HTML escaping, JSON-vs-HTML negotiation
+lib/_ratelimit.js     per-address fixed-window limiter for public reads (scoped buckets: fulfill, prefix-check)
+lib/_status_json.js   GET /api/status.json, the machine-readable twin of /status
+lib/_welcome_email.js the welcome email template (rendered; no mail transport is wired)
+lib/_prefix_check.js  GET /api/prefix-available (a rewrite onto api/fulfill.js): taken or free, nothing more
+lib/_prefix_ui.js     the prefix picker's commands and browser script
+lib/_verdict.js       the verdict is a required argument: readers that fail closed on unreadable records
+lib/_merkle.js        batch Merkle trees and inclusion proofs (MERKLE_BATCHING_DESIGN.md)
+lib/_batch.js         accumulate accepted pins into one tree, commit one root, mint per-pin proofs
+lib/_pending.js       the pending batch between accept and seal (behind WITNESS_BATCH_SHADOW)
+lib/_sealer.js        the caller that seals a batch
+lib/_claim.js         the single-sealer claim
+lib/_logtree.js       the witness log: one cumulative RFC 9162 tree over every create-only record
+lib/_checkpoint.js    the witness log's checkpoint as a signed note (Ed25519)
+lib/_check_record.js  the signed check record: who checked, when, what, with which tool, what they found
+lib/_audit_state.js   a record's audit state derived from its check records
+lib/_audit_status.js  the /status page's audit-state column
+lib/_stamp.js         "stamp a file": api/verify.js dispatches ?op=stamp here
+lib/_stamp_store.js   the stamps log's own record repository and token
+lib/_test_ns.js       test namespaces and the supersede record (nothing is deleted)
+lib/_distill_core.js  byte-faithful port of arcaeon_distill's core, behind api/distill.js
+lib/_rfc3161.js       RFC 3161 time stamp request builder and response reader (tools/tsa_stamp.js)
+
+tools/follow.js             the stranger's checker: is an earlier checkpoint a prefix of a later one
+tools/check_and_sign.js     a stranger's signed check record per namespace, from verifier two's checks
+tools/publish_checkpoint.js build the witness log from a local clone and write a checkpoint (dry run by default)
+tools/logtree_keygen.js     mint the witness log's checkpoint signing key
+tools/seal_batch.js         the operator command that seals the open Merkle batch
+tools/reconcile_batches.js  check every batch root against its leaves
+tools/stamp_genesis.js      the witnessed birth of the stamps log
+tools/supersede_namespace.js supersede a test namespace (the replacement for deleting it)
+tools/ceiling_probe.js      measure GitHub's secondary rate limit for contents-API writes
+tools/restore_proof.js      restore a backup on a scratch copy and prove the next pin lands at N+1
+tools/tsa_stamp.js          stamp a file at DigiCert's free RFC 3161 server, checked with stock openssl
+
+(Every file in api/, lib/ and tools/ must appear in this block; test/readme_layout.test.js
+fails otherwise. It drifted twice when kept by hand.)
 ```
 
 This table was wrong in both directions at once: it named a file that has
