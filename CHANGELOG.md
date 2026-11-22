@@ -1,5 +1,13 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-22 (ninth): hardening sweep, second part: money and account-forward guards (local only, NOT deployed)
+
+- Every early `if (...) return/throw` in `lib/_balance.js` (10), `lib/_meter.js` (1) and `lib/_accounts_forward.js` (17) was disabled in turn and the whole suite run. 25 were caught. Three survived and now have tests:
+  - `lib/_balance.js` `loadPackLinks`: a `WITNESS_PACK_LINKS` that is valid JSON but not an object (`null`, an array, a number, a string). Without the guard, `null` throws inside `buyFor`, which every out-of-pins answer (402 and 429) calls, so each would become a 500.
+  - `lib/_balance.js` `warnDropped`: a dropped pack link is logged once per pack id per instance, not on every out-of-pins answer.
+  - `lib/_accounts_forward.js` `checkoutUrl`: an unset or empty `WITNESS_ACCOUNTS_URL` says it is not set (without the guard it was reported as "not an address").
+- Tests: `test/hardening_money.test.js` (new, 3), each checked to fail with its guard disabled. Suite 850, 850 pass, 0 fail.
+
 ## 2026-11-22 (eighth): the time stamp tool names who signed, after reading rfc3161ng (local only, NOT deployed)
 
 - `docs/OUTSIDE_RFC3161NG_2026-11-22.md` (new): `rfc3161ng` 2.1.3 (`api.py`, read and not run) beside `lib/_rfc3161.js` and `tools/tsa_stamp.js`. They do better: a request can name a policy, and a digest can be passed in. We do better: sha256 only (theirs defaults to sha1, and drops the requested hash when given data), every answer checked against its request's imprint and nonce (theirs returns the token unchecked unless a certificate is configured), and the chain checked by openssl (theirs checks the signature against the certificate the token itself carries).
