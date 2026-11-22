@@ -641,6 +641,30 @@ true, complete, or honestly produced; only that they were not fabricated after
 the fact. Each day's anchor covers all history through the previous day's
 anchor commits, forming a chain.
 
+### A second outside clock: DigiCert's free RFC 3161 server (tool ready, not scheduled)
+
+`tools/tsa_stamp.js` stamps one file (an anchor text) at DigiCert's free time
+stamp server, `http://timestamp.digicert.com`, and keeps the request (`.tsq`)
+and DigiCert's signed answer (`.tsr`) in a directory you name. It checks that
+the answer is for this file's sha256 and for this request's nonce, then has
+stock openssl check the signature and the certificate chain. No paid time
+stamp service is used: the tool refuses any other server.
+
+```bash
+node tools/tsa_stamp.js --file anchors/<date>-head.txt --out stamps/
+# check a kept answer later, with openssl alone:
+openssl ts -verify -data anchors/<date>-head.txt -in stamps/<date>-head.txt.tsr \
+  -CAfile /etc/ssl/certs/ca-certificates.crt
+```
+
+It answers VERIFIED, BROKEN, or COULD NOT LOOK. Not done yet, said plainly:
+nothing runs it on a schedule. The daily Bitcoin anchor runs on the
+operator's machine, and moving either clock to hourly also needs the
+witness log's anchor rule (`lib/_logtree.js`, daily `anchors/<date>-head.txt`
+names only) to be changed by the owner. No live DigiCert answer has been
+made from the build machine yet; the tests use a local test authority made
+with stock `openssl ts`.
+
 ## Witness log
 
 One cumulative Merkle tree (RFC 9162 hashing) over every create-only record
