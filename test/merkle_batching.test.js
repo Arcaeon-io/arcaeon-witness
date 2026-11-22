@@ -272,6 +272,8 @@ test("CONTRACT: an inclusion proof from a sealed batch verifies against that bat
   assert.equal(out.sealed, true);
   assert.equal(out.tree_size, 4);
   assert.equal(out.root, `${merkle.MERKLE_RECIPE}:${FROZEN_ROOT_4}`);
+  // One proof per leaf: without this count the loop below passes on zero proofs.
+  assert.equal(out.proofs.length, 4);
   for (const proof of out.proofs) {
     assert.equal(merkle.verifyInclusion(proof).ok, true, proof.reason);
   }

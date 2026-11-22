@@ -1,5 +1,17 @@
 # Changelog — arcaeon-witness
 
+## 2026-11-22 (sixth): hardening sweep, public handlers and untested guards (local only, NOT deployed)
+
+- Probe of every public handler (`api/verify`, `latest`, `badge`, `status`, `balance`, `health`, `pin`, `renew`, `fulfill`, `credit`, `distill`) with GET, POST and HEAD, query values as arrays (what a repeated `?ns=a&ns=b` gives a handler), objects, numbers, null, empty, `%`, NUL, `__proto__` and 5,000-character strings, and bodies of null, an object, an array and a string: no handler threw, and none answered an unexpected 5xx. Nothing to fix there.
+- Break arms on the guards: each was deleted or loosened in turn and the whole suite run. Nine survived (832 of 832 still passed); eight now have a test that holds the guard's own reason:
+  - `lib/_checkpoint.js`: the CR rule (the CRLF case was refused by the origin regex, not by the CR rule: it passed for the wrong reason); the 15-digit size ceiling (9007199254740993 would read as ...992); a signature line with this key's hash under another name is not this key's signature.
+  - `lib/_store.js`: an empty prefix in `WITNESS_KEYS` binds the key to nothing; rows above the 1e12 bound are refused 400 with nothing written.
+  - `lib/_rfc3161.js`: a response cut short is refused as truncated; bytes after the response are refused.
+  - `tools/restore_proof.js`: a record naming another namespace is named.
+  - Left untested, named: `tools/restore_proof.js`'s check that the new pin landed at N+1. No backup can reach it (a chain that would make the handler land elsewhere is already refused before the pin), so it guards against a future handler change only.
+- `test/merkle_batching.test.js`: the sealed-batch proof loop now checks there are 4 proofs; it passed on zero.
+- Tests: `test/hardening_guards.test.js` (new, 7), `test/restore_proof.test.js` +1, `test/merkle_batching.test.js` one assertion. Each new test was checked to fail with its guard removed. Suite 840, 840 pass, 0 fail.
+
 ## 2026-11-22 (fifth): proof checkers right past 2^31 leaves, after reading Sigstore's verifier (local only, NOT deployed)
 
 - `docs/OUTSIDE_SIGSTORE_VERIFY_2026-11-22.md` (new): `@sigstore/verify` 4.1.3 (`dist/tlog/checkpoint.js`, `dist/tlog/merkle.js`), read and not run, beside our checkpoint reader and proof checkers. They do better: proof arithmetic in BigInt. We do better: strict signature lines, the origin checked, exact key matching, two named reasons in place of one boolean. The C2SP pages could not be read (host refused in this session).

@@ -263,6 +263,18 @@ test("BROKEN: a record whose seq field disagrees with its file name is named", a
   assert.match(r.summary.namespaces[0].problems.join("\n"), /00000003\.json.*seq 9/);
 });
 
+test("BROKEN: a record that names another namespace is named", async () => {
+  const backup = await makeBackup({ "demo-restore": THREE });
+  const p = path.join(backup, "pins", "demo-restore", "00000002.json");
+  const rec = JSON.parse(fs.readFileSync(p, "utf8"));
+  rec.namespace = "demo-elsewhere";
+  fs.writeFileSync(p, JSON.stringify(rec, null, 2) + "\n");
+  const r = run(["--backup", backup]);
+  assert.equal(r.status, 2);
+  assert.match(r.summary.namespaces[0].problems.join("\n"), /00000002\.json says namespace "demo-elsewhere"/);
+  assert.equal(r.summary.namespaces[0].new_pin, null);
+});
+
 test("BROKEN: a record that is not JSON is named, not skipped", async () => {
   const backup = await makeBackup({ "demo-restore": THREE });
   fs.writeFileSync(path.join(backup, "pins", "demo-restore", "00000002.json"), "{not json");
