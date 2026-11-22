@@ -3,8 +3,8 @@
 ## 2026-11-22 (seventh): documentation matched to the code (local only, NOT deployed)
 
 - README: three paths pointed at `api/` for files that live in `lib/` (`lib/_meter.js`, `lib/_balance.js`, `lib/_status_data.js`). The Layout block named none of 16 `lib/` modules or any `tools/` script; it now names every file in `api/`, `lib/` and `tools/` with one line each, taken from each file's own header.
-- Pronouns: product documents refer to people by name or role (the user, the agent, the owner, the owner's partner), never he or she. Seven places did: `docs/LOGTREE_KEY_RUNBOOK.md`, `STAGE1_SIGNATURE_DESIGN.md`, `STAMPS_OWN_REPO.md` and four in this changelog. Reworded with the same meaning.
-- Tests: `test/readme_layout.test.js` (new, 3): every repo path the README names in backticks exists (a line saying a file never existed is the one exception); the Layout block names every file in `api/`, `lib/` and `tools/`; no `.md` file at the root or in `docs/` uses he, she, him, his, her or hers. All three failed before the fixes. Suite 843, 843 pass, 0 fail.
+- Pronouns: product documents refer to people by name or role (the user, the agent, the owner, the owner's partner), never a gendered pronoun. Seven places did: `docs/LOGTREE_KEY_RUNBOOK.md`, `STAGE1_SIGNATURE_DESIGN.md`, `STAMPS_OWN_REPO.md` and four in this changelog. Reworded with the same meaning.
+- Tests: `test/readme_layout.test.js` (new, 3): every repo path the README names in backticks exists (a line saying a file never existed is the one exception); the Layout block names every file in `api/`, `lib/` and `tools/`; no `.md` file at the root or in `docs/` uses a gendered pronoun for a person (the word list is in the test). All three failed before the fixes. Suite 843, 843 pass, 0 fail.
 
 ## 2026-11-22 (sixth): hardening sweep, public handlers and untested guards (local only, NOT deployed)
 
