@@ -677,6 +677,38 @@ people's), anything about a record accepted but not yet checkpointed, or that
 anything recorded is true. Leaves logged at genesis were already in the repo:
 the log proves they have not changed since the genesis date, not before it.
 
+## Restore proof (a backup carries on where it left off)
+
+`tools/restore_proof.js` restores a backup of the pins repo (a clone, or an
+unpacked archive of one) onto a scratch copy and checks three things there:
+
+1. the chain in the backup is whole: for every namespace, records 1..N are
+   all present, each is JSON and names its own seq and namespace, rows never go
+   backward, and `latest.json` names record N;
+2. the next pin, made through the real `api/pin.js` handler with a throwaway
+   key, lands at seq N+1 and moves `latest.json` to N+1;
+3. the whole chain 1..N+1 reads back: the tool reads every record and asks
+   `api/verify.js` (the handler behind `GET /api/verify`) about each one.
+
+```bash
+git clone https://github.com/dan8433-user/arcaeon-witness-pins backup
+node tools/restore_proof.js --backup backup [--namespace <ns>] [--out scratch] [--json]
+```
+
+It answers PROVEN (exit 0) or FAILED (exit 2) with each finding named, and it
+can be run again on the same backup with the same answer. It never writes
+into the backup, never reaches the network (every fetch is answered by the
+scratch copy, anything else is refused and counted), and never reads a real
+key or token: it clears every `GITHUB_*` and `WITNESS_*` setting from its own
+environment first. `--out` writes the restored copy plus the new pin's files
+into a directory outside the backup, for an outside checker to read.
+
+What it does not prove: that the backup matches the live repo (compare a
+checkpoint with `tools/follow.js` for that), or that any pin is true.
+`api/verify.js` scans at most 50 records back from the head, so older records
+are read and checked by the tool itself and listed as beyond verify's bound,
+not counted as checked by it.
+
 ## Stage-0 limits
 
 - Single region, single operator, no SLA.
