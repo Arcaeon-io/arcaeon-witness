@@ -270,10 +270,13 @@ test("PICKER PAGE: renders the live-check hooks, the script, and a command previ
   assert.ok(html.includes('data-copy-target="pip"'), "copy button for the install command");
   assert.ok(html.includes('data-copy-target="curl-preview"'), "copy button for the pin command");
 
-  // The prefix is suggested from the buyer's email local part (jane.doe@ ->
-  // jane-doe-), and the preview must already be built around it.
-  assert.ok(html.includes('value="jane-doe-"'), "prefill from the Stripe customer email");
-  assert.equal(block(html, "curl-preview"), prefixUi.pinCurlCommand(BASE, "jane-doe-"));
+  // The suggested prefix is random (never built from jane.doe@acme.com:
+  // namespaces are public), and the preview must already be built around it.
+  const prefill = html.match(/id="prefix" name="prefix" value="([^"]*)"/)[1];
+  for (const part of ["jane", "doe", "acme"]) {
+    assert.ok(!prefill.includes(part), `prefill ${prefill} carries "${part}" from the buyer's email`);
+  }
+  assert.equal(block(html, "curl-preview"), prefixUi.pinCurlCommand(BASE, prefill));
   assert.equal(box(html, "pip"), prefixUi.PIP_COMMAND);
 
   assert.deepEqual(gh.putLog, [], "BOUNDARY: rendering the picker mints nothing");
