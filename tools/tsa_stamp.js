@@ -28,8 +28,8 @@
 // --untrusted file), reports its subject, issuer and sha256 fingerprint, and
 // requires its subject to contain --expect-signer. For DigiCert's server that
 // defaults to "O = DigiCert"; a local test server must say whom it expects.
-// (Found 2026-11-22 reading rfc3161ng, which checks a token against the
-// certificate the token itself carries: docs/OUTSIDE_RFC3161NG_2026-11-22.md.)
+// (Found 2026-11-22 reading another time stamp client, which checks a token
+// against the certificate the token itself carries.)
 //
 // VERDICTS (exit code): VERIFIED (0) the answer is for this file and this
 // request, and `openssl ts -verify` says "Verification: OK" against --ca-file;

@@ -274,7 +274,7 @@ test("TOOL: only DigiCert's free server (or a local test server) is used; any ot
   assert.deepEqual(fs.readdirSync(out), [], "nothing is written for a refused service");
 });
 
-// ---- who signed (2026-11-22, after reading rfc3161ng; docs/OUTSIDE_RFC3161NG_2026-11-22.md) ----
+// ---- who signed (2026-11-22, after reading another time stamp client) ----
 // openssl's chain check against the system roots says "some trusted authority
 // signed this", not "DigiCert signed this": the TLS root bundle holds about 140
 // roots. The tool now names the signing certificate and requires it to be the

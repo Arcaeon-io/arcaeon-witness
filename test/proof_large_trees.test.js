@@ -1,9 +1,9 @@
 // test/proof_large_trees.test.js — the proof checkers must be right for every
 // tree size their own parsers accept, not only below 2^31.
 //
-// Found reading Sigstore's verifier (@sigstore/verify 4.1.3, dist/tlog/merkle.js;
-// docs/OUTSIDE_SIGSTORE_VERIFY_2026-11-22.md): it walks inclusion proofs in
-// BigInt. Ours walked them with JavaScript's bitwise operators (`>>=`, `&`),
+// Found reading another log verifier (notes kept outside this repo):
+// it walks inclusion proofs in
+// arbitrary precision. Ours walked them with JavaScript's bitwise operators (`>>=`, `&`),
 // which cut every value to a 32-bit signed integer. parseCheckpoint accepts a
 // size of up to 15 digits, so above 2^31 - 1 leaves the walk silently went
 // wrong: valid proofs were refused, and in lib/_merkle.js a forged proof could
