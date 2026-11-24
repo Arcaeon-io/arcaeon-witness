@@ -137,10 +137,12 @@ test("valid paid session mints a key once — JSON shape {key, credits, namespac
   // the spec's agent-facing shape:
   assert.match(b.key, /^wk_[0-9a-f]{48}$/);
   assert.equal(b.credits, 3000); // starter, via price map (source of truth: PACKS)
-  // rev-2: the JSON no-form path auto-suggests the prefix from the buyer's
-  // email local part (buyer@example.com -> "buyer-"); response carries it.
-  assert.equal(b.namespace, "buyer-");
-  assert.equal(b.prefix_source, "suggested");
+  // The JSON no-form path (an agent that sent no ?prefix=) gets the random
+  // wk-… mint, derived from nothing. Namespaces are public, so it must never
+  // carry any part of the buyer's email (buyer@example.com) or name.
+  assert.match(b.namespace, /^wk-[0-9a-f]{12}-$/);
+  assert.ok(!b.namespace.includes("buyer"), "no part of the email in a public namespace");
+  assert.equal(b.prefix_source, "random");
   assert.ok(typeof b.docs_url === "string" && b.docs_url.startsWith("http"));
   // org/pool schema baked in:
   assert.match(b.pool_id, /^pool_[0-9a-f]{16}$/);
@@ -451,7 +453,10 @@ test("rev-2: first-visit HTML GET renders the prefix-picker form — session ver
   const html = String(res._body);
   assert.ok(html.includes('<form method="post"'));
   assert.ok(html.includes('name="prefix"'));
-  assert.ok(html.includes('value="buyer-"')); // pre-suggested from buyer@example.com
+  // The suggested prefix is random, never built from buyer@example.com.
+  const prefill = prefillOf(html);
+  assert.ok(!prefill.includes("buyer"), `prefill ${prefill} carries part of the email`);
+  assert.equal(keys.validatePrefix(prefill).ok, true, `prefill ${prefill} must be usable as-is`);
   assert.ok(html.includes(`value="${id}"`)); // hidden session_id for the POST back
   assert.ok(html.includes(">Arcaeon</div>")); // wordmark on the ceremony page too
   assert.ok(!html.includes("wk_")); // no key anywhere — nothing was minted
@@ -616,34 +621,176 @@ test("rev-2: JSON with ?prefix= mints under the chosen prefix and the key really
   assert.equal(pres._status, 201);
 });
 
-test("rev-2: JSON without ?prefix= keeps working (POST too) — auto-suggested prefix, no form roundtrip", async () => {
+test("rev-2: JSON without ?prefix= keeps working (POST too) — random wk- prefix, no form roundtrip", async () => {
   const id = sid();
   stripe.seed(paidSession({ id, _pack: "mini" }));
   const res = await call({ method: "POST", body: { session_id: id }, headers: JSON_HDR });
-  assert.equal(res._status, 200);
-  assert.equal(res._body.namespace, "buyer-");
-  assert.equal(res._body.prefix_source, "suggested");
-});
-
-test("rev-2: auto-suggest FALLS BACK to the random wk- mint when the suggestion is taken (never fails)", async () => {
-  const id = sid();
-  stripe.seed(paidSession({ id, _pack: "mini" }));
-  seedIssuedPrefix("buyer-"); // someone already owns the email-derived suggestion
-  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
   assert.equal(res._status, 200);
   assert.match(res._body.namespace, /^wk-[0-9a-f]{12}-$/);
   assert.equal(res._body.prefix_source, "random");
 });
 
-test("rev-2: suggestion is sanitized from a messy email local part", async () => {
+// ---- buyer privacy: a namespace prefix never comes from the email or name ----
+// Namespaces are public (the pin repo, the status page), so a prefix built
+// from "jane.doe@acme.com" would publish part of the buyer's email.
+
+function prefillOf(html) {
+  const m = String(html).match(/<input type="text" id="prefix" name="prefix" value="([^"]*)"/);
+  assert.ok(m, "picker has a prefix field");
+  return m[1];
+}
+
+const PROBE = { email: "Jane.Doe+Probe@acme-mail.example", name: "Jane Doe" };
+const PROBE_PARTS = ["jane", "doe", "probe", "acme"];
+
+function assertNoBuyerParts(prefix, what) {
+  for (const part of PROBE_PARTS) {
+    assert.ok(!prefix.includes(part), `${what} ${prefix} carries "${part}" from the buyer's email or name`);
+  }
+}
+
+test("PRIVACY: keys.suggestPrefix ignores the email and name — a short random, valid prefix", () => {
+  const seen = new Set();
+  for (let i = 0; i < 20; i++) {
+    const p = keys.suggestPrefix(PROBE.email, PROBE.name);
+    assert.equal(typeof p, "string");
+    assertNoBuyerParts(p, "suggestion");
+    assert.equal(keys.validatePrefix(p).ok, true, `suggestion ${p} must pass validatePrefix`);
+    assert.ok(p.length <= 16, `suggestion ${p} should be short`);
+    seen.add(p);
+  }
+  assert.ok(seen.size > 1, "suggestions are random, not a fixed value");
+});
+
+test("PRIVACY: the picker never pre-fills from the email (customer_details.email or customer_email) or the name", async () => {
+  const shapes = [
+    { customer_details: { email: PROBE.email, name: PROBE.name } },
+    { customer_details: { email: null, name: PROBE.name } },
+    { customer_details: null, customer_email: PROBE.email },
+  ];
+  for (const over of shapes) {
+    const id = sid();
+    stripe.seed(paidSession({ id, _pack: "mini", ...over }));
+    const res = await call({ query: { session_id: id } });
+    assert.equal(res._status, 200);
+    const html = String(res._body);
+    const prefill = prefillOf(html);
+    assertNoBuyerParts(prefill, "prefill");
+    for (const part of PROBE_PARTS) {
+      assert.ok(!html.toLowerCase().includes(`${part}-`), `picker page carries "${part}-"`);
+    }
+  }
+});
+
+test("PRIVACY: the agent JSON path (no ?prefix=) never binds an email- or name-derived prefix", async () => {
+  const shapes = [
+    { customer_details: { email: PROBE.email, name: PROBE.name } },
+    { customer_details: { email: null, name: PROBE.name } },
+    { customer_details: null, customer_email: PROBE.email },
+  ];
+  for (const over of shapes) {
+    const id = sid();
+    stripe.seed(paidSession({ id, _pack: "mini", ...over }));
+    const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+    assert.equal(res._status, 200);
+    assertNoBuyerParts(res._body.namespace, "namespace");
+    assert.match(res._body.namespace, /^wk-[0-9a-f]{12}-$/);
+    assert.equal(res._body.prefix_source, "random");
+  }
+});
+
+test("PRIVACY: the suggested prefill mints as-is when the user submits it unchanged", async () => {
   const id = sid();
-  stripe.seed(paidSession({
-    id, _pack: "mini",
-    customer_details: { email: "Weird.Local+Tag@example.com" },
-  }));
-  const res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  stripe.seed(paidSession({ id, _pack: "mini", customer_details: { email: PROBE.email, name: PROBE.name } }));
+  const prefill = prefillOf((await call({ query: { session_id: id } }))._body);
+  const res = await call({ method: "POST", body: { session_id: id, prefix: prefill }, headers: JSON_HDR });
+  assert.equal(res._status, 200, JSON.stringify(res._body));
+  assert.equal(res._body.namespace, prefill);
+  assert.equal(res._body.prefix_source, "custom", "a submitted prefill is the user's own choice");
+});
+
+test("PRIVACY: the user's own typed prefix is still honoured exactly", async () => {
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "mini", customer_details: { email: PROBE.email, name: PROBE.name } }));
+  const res = await call({ method: "POST", body: { session_id: id, prefix: "jane-doe-" }, headers: JSON_HDR });
   assert.equal(res._status, 200);
-  assert.equal(res._body.namespace, "weird-local-tag-");
+  assert.equal(res._body.namespace, "jane-doe-", "a prefix the user typed is theirs to choose");
+  assert.equal(res._body.prefix_source, "custom");
+});
+
+test("PRIVACY: an existing record's namespace (incl. an old email-derived 'suggested' one) is served unchanged", async () => {
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "mini" }));
+  const first = await call({ method: "POST", body: { session_id: id, prefix: "buyer-" }, headers: JSON_HDR });
+  assert.equal(first._status, 200);
+  const path = `fulfillments/${id}.json`;
+  const rec = gh.read(USAGE, path);
+  rec.prefix_source = "suggested"; // the shape the old email-derived path wrote
+  gh.seed(USAGE, path, rec);
+  const again = await call({ query: { session_id: id }, headers: JSON_HDR });
+  assert.equal(again._status, 200);
+  assert.equal(again._body.namespace, "buyer-");
+  assert.equal(again._body.prefix_source, "suggested");
+  assert.equal(again._body.key, first._body.key);
+});
+
+// ---- buyer privacy: no log line names the buyer's email ----
+
+function captureLogs() {
+  const lines = [];
+  const saved = {};
+  for (const k of ["log", "error", "warn", "info", "debug"]) {
+    saved[k] = console[k];
+    console[k] = (...args) => { lines.push(args.map(String).join(" ")); };
+  }
+  return { lines, restore() { for (const k of Object.keys(saved)) console[k] = saved[k]; } };
+}
+
+const LOG_EMAIL = "privacy.probe@mailhost.example";
+
+function assertNoEmailInLogs(lines) {
+  for (const line of lines) {
+    for (const part of [LOG_EMAIL, "privacy.probe", "privacy-probe", "mailhost"]) {
+      assert.ok(!line.includes(part), `log line names the buyer's email: ${line}`);
+    }
+  }
+}
+
+test("PRIVACY: the welcome-email stub logs that a welcome was skipped, never to whom (JSON and HTML first mints)", async () => {
+  for (const headers of [JSON_HDR, {}]) {
+    const id = sid();
+    stripe.seed(paidSession({ id, _pack: "mini", customer_details: { email: LOG_EMAIL, name: "Privacy Probe" } }));
+    const cap = captureLogs();
+    let res;
+    try {
+      res = await call({ method: "POST", body: { session_id: id, prefix: "logprobe-" + sidCounter + "-" }, headers });
+    } finally {
+      cap.restore();
+    }
+    assert.equal(res._status, 200);
+    assert.ok(cap.lines.some((l) => /welcome/i.test(l) && /skipped/i.test(l)),
+      `a log line says the welcome was skipped; got ${JSON.stringify(cap.lines)}`);
+    assertNoEmailInLogs(cap.lines);
+  }
+});
+
+test("PRIVACY: a welcome render failure is logged without the email, even when the error text carries it", async () => {
+  const welcome = require("../lib/_welcome_email.js");
+  const savedRender = welcome.renderWelcomeEmailHtml;
+  welcome.renderWelcomeEmailHtml = (record) => { throw new Error(`template broke on ${record.email}`); };
+  const id = sid();
+  stripe.seed(paidSession({ id, _pack: "mini", customer_details: { email: LOG_EMAIL } }));
+  const cap = captureLogs();
+  let res;
+  try {
+    res = await call({ query: { session_id: id }, headers: JSON_HDR });
+  } finally {
+    cap.restore();
+    welcome.renderWelcomeEmailHtml = savedRender;
+  }
+  assert.equal(res._status, 200, "a template hiccup never eats the key page");
+  assert.ok(cap.lines.some((l) => /welcome/i.test(l)), "the failure is still logged");
+  assertNoEmailInLogs(cap.lines);
 });
 
 test("rev-2: env WITNESS_KEYS prefixes count as taken for the overlap check", async () => {

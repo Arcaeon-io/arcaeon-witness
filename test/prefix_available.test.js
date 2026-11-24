@@ -90,7 +90,7 @@ test("CONTRACT: a free prefix answers available:true with the namespace it will 
   assert.equal(res._body.available, true);
   assert.equal(res._body.prefix, "gamma-");
   assert.equal(res._body.example, "gamma-main");
-  assert.deepEqual(res._body.suggestions, []);
+  assert.ok(!("suggestions" in res._body), "the answer is free or taken, nothing more");
 });
 
 test("an empty key store (nobody has bought yet) answers available:true, not an error", async () => {
@@ -213,56 +213,34 @@ for (const ok of ["acme-velouria-mirror-", "myarcaeon-x-"]) {
 }
 
 // ---------------------------------------------------------------------
-// Suggestions
+// PRIVACY: the answer is taken or free, never names derived from existing
+// prefixes. Alternatives built from a taken stem ("acme-" -> "acmehq-",
+// "acme2-") told an unauthenticated caller what other customers' prefixes
+// look like and which of their neighbours are free.
 // ---------------------------------------------------------------------
 
-test("a taken prefix returns three alternatives, and every one of them really is free", async () => {
+test("PRIVACY: a taken prefix answers only taken — no suggestions, no field derived from existing prefixes", async () => {
   seedIssuedKey("acme-", "b1");
+  seedIssuedKey("acmehq-", "b2");
   const res = await ask("acme-");
-  const alts = res._body.suggestions;
-  assert.equal(alts.length, 3, "three alternatives, per the picker design");
-
-  for (const alt of alts) {
-    assert.equal(keys.validatePrefix(alt).ok, true, `${alt} must be format-valid`);
-    // Re-ask the endpoint itself: a suggestion the endpoint would then call
-    // taken is worse than no suggestion at all.
-    const back = await ask(alt);
-    assert.equal(back._status, 200);
-    assert.equal(back._body.available, true, `suggested ${alt} must actually be available`);
-  }
-});
-
-test("alternatives DIVERGE from the taken stem instead of extending it (an extension would collide right back)", async () => {
-  seedIssuedKey("acme-", "b2");
-  const res = await ask("acme-");
-  for (const alt of res._body.suggestions) {
-    assert.ok(
-      !alt.startsWith("acme-"),
-      `${alt} extends the taken prefix — two-way overlap would reject it on submit`
-    );
-  }
-});
-
-test("alternatives never overlap EACH OTHER", async () => {
-  seedIssuedKey("acme-", "b3");
-  const alts = (await ask("acme-"))._body.suggestions;
-  for (let i = 0; i < alts.length; i++) {
-    const others = alts.filter((_, j) => j !== i);
-    assert.equal(keys.prefixConflicts(alts[i], others), false,
-      `${alts[i]} overlaps another suggestion in the same list`);
-  }
-});
-
-test("alternatives stay under the 48-char ceiling even from a maximum-length stem", async () => {
-  const long = `${"a".repeat(46)}b-`; // 48 chars, the ceiling exactly
-  assert.equal(keys.validatePrefix(long).ok, true);
-  seedIssuedKey(long, "b4");
-  const res = await ask(long);
+  assert.equal(res._status, 200);
   assert.equal(res._body.available, false);
-  for (const alt of res._body.suggestions) {
-    assert.ok(alt.length <= prefixCheck.MAX_PREFIX_LEN, `${alt} is ${alt.length} chars`);
-    assert.equal(keys.validatePrefix(alt).ok, true);
-  }
+  assert.equal(res._body.reason, "taken");
+  assert.deepEqual(Object.keys(res._body).sort(), ["available", "detail", "prefix", "reason"],
+    "taken answers carry the verdict and the asker's own prefix, nothing else");
+});
+
+test("PRIVACY: a free prefix answers only free — no suggestions", async () => {
+  seedIssuedKey("acme-", "b3");
+  const res = await ask("fresh-");
+  assert.equal(res._status, 200);
+  assert.equal(res._body.available, true);
+  assert.ok(!("suggestions" in res._body));
+});
+
+test("PRIVACY: the module no longer builds alternatives at all", () => {
+  assert.equal(prefixCheck.alternatives, undefined, "no alternatives builder is exported");
+  assert.equal(prefixCheck.ALT_SUFFIXES, undefined, "no alternative suffix list is exported");
 });
 
 // ---------------------------------------------------------------------
@@ -306,7 +284,7 @@ test("only GET/HEAD are accepted; a POST is 405 (this route reads, it never writ
   assert.equal(res._headers.allow, "GET, HEAD");
 });
 
-test("the shared per-IP limiter answers 429 with an honest body — and says the check is advisory", async () => {
+test("the per-address limiter answers 429 with an honest body — and says the check is advisory", async () => {
   const ip = "198.51.100.7";
   let last = null;
   for (let i = 0; i < 31; i++) last = await ask("burst-", { ip });
@@ -315,6 +293,31 @@ test("the shared per-IP limiter answers 429 with an honest body — and says the
   assert.ok(Number(last._headers["retry-after"]) > 0);
   assert.match(String(last._body.detail), /validated at mint time/,
     "a buyer who trips the limiter must be told the submit path still works");
+});
+
+test("RATE LIMIT: the limit is per address — a limited address does not refuse another one", async () => {
+  const ip = "198.51.100.8";
+  for (let i = 0; i < 31; i++) await ask("burst-", { ip });
+  assert.equal((await ask("burst-", { ip }))._status, 429);
+  assert.equal((await ask("burst-", { ip: "198.51.100.9" }))._status, 200);
+});
+
+test("RATE LIMIT: prefix checks have their own per-address bucket, apart from the public read bucket", async () => {
+  const ratelimit = require("../lib/_ratelimit.js");
+  // Spend the shared read bucket (what /api/verify draws on) for one address.
+  const ip = "198.51.100.10";
+  const readReq = { headers: { "x-forwarded-for": ip } };
+  for (let i = 0; i <= ratelimit.LIMIT; i++) ratelimit.check(readReq);
+  assert.equal(ratelimit.check(readReq).limited, true, "the read bucket is spent");
+  const res = await ask("own-bucket-", { ip });
+  assert.equal(res._status, 200, "prefix checks are counted in their own bucket");
+
+  // And the other way: spending the prefix-check bucket leaves reads alone.
+  const ip2 = "198.51.100.11";
+  for (let i = 0; i < 31; i++) await ask("burst-", { ip: ip2 });
+  assert.equal((await ask("burst-", { ip: ip2 }))._status, 429);
+  assert.equal(ratelimit.check({ headers: { "x-forwarded-for": ip2 } }).limited, false,
+    "a prefix-check burst does not spend the address's read budget");
 });
 
 // ---------------------------------------------------------------------

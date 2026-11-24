@@ -62,7 +62,7 @@ This is a hand-written Node port of
 [arcaeon-meter](https://github.com/Arcaeon-io/arcaeon-meter)'s behavior
 contract (same denial reasons, same header names, same fail-closed
 default) — arcaeon-meter itself is Python + SQLite and can't run inside a
-Vercel Node function, so `api/_meter.js` reimplements just the semantics
+Vercel Node function, so `lib/_meter.js` reimplements just the semantics
 natively. Usage counts live as one JSON file per key-hash per month in a
 **second, PRIVATE** GitHub repo,
 [`dan8433-user/arcaeon-witness-usage`](https://github.com/dan8433-user/arcaeon-witness-usage)
@@ -112,7 +112,7 @@ its source of truth gets named here, and not before.
   funded by the credit balance.
 
 Storage: same private `arcaeon-witness-usage` repo the meter already uses
-(`api/_balance.js`), same GitHub-contents-API CAS pattern, plus an
+(`lib/_balance.js`), same GitHub-contents-API CAS pattern, plus an
 append-only ledger (`ledger/<key_hash>/...`) for every grant and decrement —
 a balance you can't audit contradicts this repo's own honesty contract.
 Top-up idempotency (**corrected 2026-08-16** — this paragraph described a
@@ -494,7 +494,7 @@ read `is_current_head` before reading `cadence_status` on a hit.
 ### GET /api/status.json (no auth)
 
 Machine-readable twin of `GET /status` — same underlying data (both call
-`api/_status_data.js`'s `gatherStatusData()`, so they can't drift apart),
+`lib/_status_data.js`'s `gatherStatusData()`, so they can't drift apart),
 rendered as a stable JSON schema instead of an HTML table.
 
 ```bash
@@ -641,6 +641,36 @@ true, complete, or honestly produced; only that they were not fabricated after
 the fact. Each day's anchor covers all history through the previous day's
 anchor commits, forming a chain.
 
+### A second outside clock: DigiCert's free RFC 3161 server (tool ready, not scheduled)
+
+`tools/tsa_stamp.js` stamps one file (an anchor text) at DigiCert's free time
+stamp server, `http://timestamp.digicert.com`, and keeps the request (`.tsq`)
+and DigiCert's signed answer (`.tsr`) in a directory you name. It checks that
+the answer is for this file's sha256 and for this request's nonce, then has
+stock openssl check the signature and the certificate chain. No paid time
+stamp service is used: the tool refuses any other server.
+
+```bash
+node tools/tsa_stamp.js --file anchors/<date>-head.txt --out stamps/
+# check a kept answer later, with openssl alone:
+openssl ts -verify -data anchors/<date>-head.txt -in stamps/<date>-head.txt.tsr \
+  -CAfile /etc/ssl/certs/ca-certificates.crt
+```
+
+openssl's chain check alone says that some trusted root's authority signed;
+the tool also names the certificate the signature points to (issuer and serial
+number, matched byte for byte) and requires its subject to contain
+`--expect-signer`, `O = DigiCert` by default, so a token signed by anyone else
+is BROKEN even when openssl accepts it.
+
+It answers VERIFIED, BROKEN, or COULD NOT LOOK. Not done yet, said plainly:
+nothing runs it on a schedule. The daily Bitcoin anchor runs on the
+operator's machine, and moving either clock to hourly also needs the
+witness log's anchor rule (`lib/_logtree.js`, daily `anchors/<date>-head.txt`
+names only) to be changed by the owner. No live DigiCert answer has been
+made from the build machine yet; the tests use a local test authority made
+with stock `openssl ts`.
+
 ## Witness log
 
 One cumulative Merkle tree (RFC 9162 hashing) over every create-only record
@@ -676,6 +706,38 @@ and someone else were shown the same checkpoint (compare yours with other
 people's), anything about a record accepted but not yet checkpointed, or that
 anything recorded is true. Leaves logged at genesis were already in the repo:
 the log proves they have not changed since the genesis date, not before it.
+
+## Restore proof (a backup carries on where it left off)
+
+`tools/restore_proof.js` restores a backup of the pins repo (a clone, or an
+unpacked archive of one) onto a scratch copy and checks three things there:
+
+1. the chain in the backup is whole: for every namespace, records 1..N are
+   all present, each is JSON and names its own seq and namespace, rows never go
+   backward, and `latest.json` names record N;
+2. the next pin, made through the real `api/pin.js` handler with a throwaway
+   key, lands at seq N+1 and moves `latest.json` to N+1;
+3. the whole chain 1..N+1 reads back: the tool reads every record and asks
+   `api/verify.js` (the handler behind `GET /api/verify`) about each one.
+
+```bash
+git clone https://github.com/dan8433-user/arcaeon-witness-pins backup
+node tools/restore_proof.js --backup backup [--namespace <ns>] [--out scratch] [--json]
+```
+
+It answers PROVEN (exit 0) or FAILED (exit 2) with each finding named, and it
+can be run again on the same backup with the same answer. It never writes
+into the backup, never reaches the network (every fetch is answered by the
+scratch copy, anything else is refused and counted), and never reads a real
+key or token: it clears every `GITHUB_*` and `WITNESS_*` setting from its own
+environment first. `--out` writes the restored copy plus the new pin's files
+into a directory outside the backup, for an outside checker to read.
+
+What it does not prove: that the backup matches the live repo (compare a
+checkpoint with `tools/follow.js` for that), or that any pin is true.
+`api/verify.js` scans at most 50 records back from the head, so older records
+are read and checked by the tool itself and listed as beyond verify's bound,
+not counted as checked by it.
 
 ## Stage-0 limits
 
@@ -750,12 +812,45 @@ lib/_status_data.js shared data-gathering pass behind /status, /api/status.json,
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
 lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js and api/fulfill.js)
-lib/_cors.js, lib/_keys.js, lib/_page.js, lib/_ratelimit.js, lib/_status_json.js,
-lib/_welcome_email.js  supporting modules, not independently routed (this line
-                        added 2026-08-24 -- a prior version of this table omitted
-                        all six; regenerate this block from `ls api/ lib/` rather
-                        than hand-maintaining it, since that is exactly how it
-                        drifted the first time)
+lib/_cors.js          GET-only CORS for the public read endpoints
+lib/_keys.js          dynamically issued keys, Stripe fulfillment records, prefix validation and suggestions
+lib/_page.js          shared page template: brand shell, copy boxes, HTML escaping, JSON-vs-HTML negotiation
+lib/_ratelimit.js     per-address fixed-window limiter for public reads (scoped buckets: fulfill, prefix-check)
+lib/_status_json.js   GET /api/status.json, the machine-readable twin of /status
+lib/_welcome_email.js the welcome email template (rendered; no mail transport is wired)
+lib/_prefix_check.js  GET /api/prefix-available (a rewrite onto api/fulfill.js): taken or free, nothing more
+lib/_prefix_ui.js     the prefix picker's commands and browser script
+lib/_verdict.js       the verdict is a required argument: readers that fail closed on unreadable records
+lib/_merkle.js        batch Merkle trees and inclusion proofs (MERKLE_BATCHING_DESIGN.md)
+lib/_batch.js         accumulate accepted pins into one tree, commit one root, mint per-pin proofs
+lib/_pending.js       the pending batch between accept and seal (behind WITNESS_BATCH_SHADOW)
+lib/_sealer.js        the caller that seals a batch
+lib/_claim.js         the single-sealer claim
+lib/_logtree.js       the witness log: one cumulative RFC 9162 tree over every create-only record
+lib/_checkpoint.js    the witness log's checkpoint as a signed note (Ed25519)
+lib/_check_record.js  the signed check record: who checked, when, what, with which tool, what they found
+lib/_audit_state.js   a record's audit state derived from its check records
+lib/_audit_status.js  the /status page's audit-state column
+lib/_stamp.js         "stamp a file": api/verify.js dispatches ?op=stamp here
+lib/_stamp_store.js   the stamps log's own record repository and token
+lib/_test_ns.js       test namespaces and the supersede record (nothing is deleted)
+lib/_distill_core.js  byte-faithful port of arcaeon_distill's core, behind api/distill.js
+lib/_rfc3161.js       RFC 3161 time stamp request builder and response reader (tools/tsa_stamp.js)
+
+tools/follow.js             the stranger's checker: is an earlier checkpoint a prefix of a later one
+tools/check_and_sign.js     a stranger's signed check record per namespace, from verifier two's checks
+tools/publish_checkpoint.js build the witness log from a local clone and write a checkpoint (dry run by default)
+tools/logtree_keygen.js     mint the witness log's checkpoint signing key
+tools/seal_batch.js         the operator command that seals the open Merkle batch
+tools/reconcile_batches.js  check every batch root against its leaves
+tools/stamp_genesis.js      the witnessed birth of the stamps log
+tools/supersede_namespace.js supersede a test namespace (the replacement for deleting it)
+tools/ceiling_probe.js      measure GitHub's secondary rate limit for contents-API writes
+tools/restore_proof.js      restore a backup on a scratch copy and prove the next pin lands at N+1
+tools/tsa_stamp.js          stamp a file at DigiCert's free RFC 3161 server, checked with stock openssl
+
+(Every file in api/, lib/ and tools/ must appear in this block; test/readme_layout.test.js
+fails otherwise. It drifted twice when kept by hand.)
 ```
 
 This table was wrong in both directions at once: it named a file that has

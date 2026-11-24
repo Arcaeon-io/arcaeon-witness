@@ -58,7 +58,7 @@ Read-back: `GET /v9/projects/{id}/env?teamId=...` lists the variable by key, typ
 
 Env changes take effect on the NEXT deployment. Nothing in the deployed witness reads this variable yet (the daily job runs on the operator's machine, because `api/` is at its 12-function cap); it is there so that per-seal checkpoints (design A8) can sign server-side without a second key.
 
-Choosing `encrypted` and not `sensitive` is deliberate and has a cost: an `encrypted` value can be read back by anyone holding a Vercel token for the team (the dashboard and `vercel env pull` both decrypt it). A `sensitive` value cannot be read back at all, which is stronger, but then Vercel cannot serve as the recovery copy if the local file is lost. The owner's instruction named `encrypted`. If the local file is the recovery copy of record, `sensitive` is the better type; that is his call.
+Choosing `encrypted` and not `sensitive` is deliberate and has a cost: an `encrypted` value can be read back by anyone holding a Vercel token for the team (the dashboard and `vercel env pull` both decrypt it). A `sensitive` value cannot be read back at all, which is stronger, but then Vercel cannot serve as the recovery copy if the local file is lost. The owner's instruction named `encrypted`. If the local file is the recovery copy of record, `sensitive` is the better type; that is the owner's call.
 
 ## 3. The local copy the daily job uses
 

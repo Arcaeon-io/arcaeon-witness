@@ -42,15 +42,16 @@
 // PICKER + ceremony restyle:
 //   - HUMANS (HTML): the first visit no longer mints on GET. It renders a
 //     form — session already verified, nothing minted — with an editable
-//     namespace-prefix field pre-suggested from the buyer's email local part
-//     (or customer name). The form POSTs back; the MINT happens on the POST,
+//     namespace-prefix field pre-filled with a short RANDOM suggestion
+//     (never from the buyer's email or name: namespaces are public; changed
+//     2026-11-22). The form POSTs back; the MINT happens on the POST,
 //     after prefix validation (format + two-way-overlap availability, see
 //     lib/_keys.js validatePrefix/prefixConflicts). A bad prefix re-renders
 //     the form with a clear message; nothing is minted until it passes.
 //   - AGENTS (JSON): unchanged shape, no form roundtrip — a JSON request
 //     mints immediately. Optional ?prefix= (or body.prefix) picks a custom
-//     prefix (validated; 400/409 on failure). Without it the buyer's
-//     auto-suggested prefix is used when free, else the random wk-… mint —
+//     prefix (validated; 400/409 on failure). Without it the agent gets the
+//     random wk-… mint (until 2026-11-22 it got an email-derived prefix) —
 //     the response's `namespace` field IS the chosen prefix either way.
 //   - EXISTING fulfillments re-show the key exactly as before (any method,
 //     either format); the picker only exists at first-time minting, and a
@@ -68,8 +69,9 @@
 //     reached by a vercel.json rewrite onto `/api/fulfill?op=prefix-available`
 //     and dispatched to lib/_prefix_check.js at the very top of the handler,
 //     before the session_id gate. It is unauthenticated, takes no session,
-//     and MINTS NOTHING — it reads the prefix list and answers yes/no plus
-//     three verified-free alternatives. Same rewrite trick vercel.json already
+//     and MINTS NOTHING — it reads the prefix list and answers taken or free,
+//     nothing more (no alternatives since 2026-11-22), limited per address in
+//     its own bucket. Same rewrite trick vercel.json already
 //     uses for /api/status.json; api/ is at the 12-function cap.
 //   - The picker form checks availability LIVE while the buyer types
 //     (debounced, lib/_prefix_ui.js) and previews the namespace + first-pin
@@ -186,15 +188,21 @@ function sendWelcomeEmailStub(record, sessionId) {
   try {
     const html = welcome.renderWelcomeEmailHtml(record);
     const text = welcome.renderWelcomeEmailText(record);
+    // Never name the recipient: function logs are read by whoever operates
+    // the host, and the email stays on the fulfillment record for a later
+    // real sender. The line says a welcome was skipped, never to whom.
     console.log(
-      `[fulfill] TODO welcome-email: rendered "${welcome.WELCOME_SUBJECT}" ` +
-        `(${html.length}B html / ${text.length}B text) for ${record.email} ` +
+      `[fulfill] welcome-email skipped: rendered "${welcome.WELCOME_SUBJECT}" ` +
+        `(${html.length}B html / ${text.length}B text) ` +
         `session ${sessionId.slice(0, 24)}… — no mail mechanism wired yet; ` +
-        `buyer recovers via the Stripe receipt URL (this page, idempotent)`
+        `the user recovers via the Stripe receipt URL (this page, idempotent)`
     );
   } catch (err) {
     // Best-effort by contract — a template hiccup must never eat the key page.
-    console.error(`[fulfill] welcome-email render failed (non-fatal): ${err.message}`);
+    // The error text is not logged: a render error can quote the record it
+    // was rendering, email included. The error's type is enough to look.
+    const kind = (err && err.name) || "Error";
+    console.error(`[fulfill] welcome-email skipped: render failed (non-fatal, ${kind})`);
   }
 }
 
@@ -225,8 +233,8 @@ ${consentLine}`
 // The form POSTs back to this same endpoint; mint happens on the POST.
 //
 // Rev-2b: the field now answers while they type. #prefix-status carries the
-// free/taken/couldn't-check verdict, #prefix-alts the three free alternatives
-// on a taken pick, and #ns-preview / #curl-preview show what they will
+// free/taken/couldn't-check verdict (no alternatives on a taken pick since
+// 2026-11-22: they were built from other customers' prefixes), and #ns-preview / #curl-preview show what they will
 // actually run — all driven by prefixUi.pickerScript(). The submit button is
 // deliberately never disabled by the check: the POST re-validates server-side
 // (authoritatively), and a client check that is itself unsure must not be
@@ -243,7 +251,6 @@ ${errorBlock}
   <label for="prefix">Namespace prefix</label>
   <input type="text" id="prefix" name="prefix" value="${esc(prefill)}" spellcheck="false" autocomplete="off" autocapitalize="none" maxlength="48">
   <span id="prefix-status" class="pstat idle"></span>
-  <div id="prefix-alts"></div>
   <p class="muted">Lowercase letters, digits, and dashes; must end in a dash. You'll pin <code id="ns-preview">${esc(prefill)}main</code> and anything else starting with it. It cannot be changed after minting.</p>
   <label class="muted" style="font-weight:400"><input type="checkbox" name="consent" value="yes"> Email me occasional product updates (off by default — nothing is sent unless you tick this)</label>
   <button type="submit" class="mint">Mint my witness key</button>
@@ -579,20 +586,19 @@ module.exports = async (req, res) => {
       // FIRST-TIME MINT — rev-2 prefix picker (see header).
       const rawPrefix = q.prefix !== undefined ? q.prefix : body.prefix;
       const prefixProvided = rawPrefix !== undefined && rawPrefix !== null;
+      // The email is kept on the fulfillment record (for a later welcome
+      // sender). It is NEVER used to build a prefix: namespaces are public.
       const buyerEmail =
         (session.customer_details && session.customer_details.email) ||
         session.customer_email ||
         null;
-      const buyerName =
-        (session.customer_details && session.customer_details.name) || null;
-      const suggestion = keys.suggestPrefix(buyerEmail, buyerName);
       const isJson = wantsJson(req);
 
       if (!isJson && !prefixProvided) {
         // Human first visit: render the picker form — verified, NOT minted.
         // (Render is kept cheap: no availability round-trip here; the POST
         // validates and re-renders with a clear message if the pick is taken.)
-        const prefill = suggestion || keys.mintNamespacePrefix();
+        const prefill = keys.suggestPrefix();
         res.setHeader("content-type", "text/html; charset=utf-8");
         return res.status(200).send(pickerHtml(sid, pack, packDef, prefill, null));
       }
@@ -611,7 +617,7 @@ module.exports = async (req, res) => {
           res.setHeader("content-type", "text/html; charset=utf-8");
           return res.status(400).send(pickerHtml(
             sid, pack, packDef,
-            chosen || suggestion || keys.mintNamespacePrefix(),
+            chosen || keys.suggestPrefix(),
             `That prefix can't be used: ${v.detail}.`));
         }
         const existing = await keys.listPrefixes();
@@ -631,21 +637,14 @@ module.exports = async (req, res) => {
         nsPrefix = chosen;
         prefixSource = "custom";
       } else {
-        // JSON with no prefix param (the no-form agent path): use the
-        // auto-suggested prefix when it is free, else fall back to the random
-        // wk-… mint. This path must never FAIL on availability — only fall
-        // back — so the pre-picker JSON contract (request in, key out) holds.
-        if (suggestion) {
-          const existing = await keys.listPrefixes();
-          if (!keys.prefixConflicts(suggestion, existing)) {
-            nsPrefix = suggestion;
-            prefixSource = "suggested";
-          }
-        }
-        if (!nsPrefix) {
-          nsPrefix = keys.mintNamespacePrefix();
-          prefixSource = "random";
-        }
+        // JSON with no prefix param (the no-form agent path): the agent did
+        // not choose, so it gets the random wk-… mint, derived from nothing.
+        // Nothing the buyer gave Stripe (email, name) ever becomes a public
+        // namespace without the user typing it. This path never fails on
+        // availability, so the pre-picker JSON contract (request in, key out)
+        // holds.
+        nsPrefix = keys.mintNamespacePrefix();
+        prefixSource = "random";
       }
 
       const key = keys.mintKey();
@@ -657,7 +656,9 @@ module.exports = async (req, res) => {
         key,
         key_hash: keys.keyHash(key),
         namespace_prefix: nsPrefix,
-        prefix_source: prefixSource, // "custom" | "suggested" | "random"
+        // "custom" | "random". Records written before 2026-11-22 may also
+        // say "suggested" (email-derived); those namespaces stay as they are.
+        prefix_source: prefixSource,
         pack,
         pack_source: resolved.source,
         credits: packDef.pins,

@@ -78,7 +78,16 @@ function sha256(...parts) {
   return h.digest();
 }
 const nodeHash = (l, r) => sha256(Buffer.from([0x01]), l, r);
-const lsb = (x) => (x & 1) === 1;
+// Plain division, never bitwise operators: those cut a number to 32 bits, so
+// sizes past 2^31 - 1 were walked wrongly and an old size of 2^32 looped
+// forever. Exact for every safe integer, and every size must be one.
+const lsb = (x) => x % 2 === 1;
+const half = (x) => Math.floor(x / 2);
+function isPowerOfTwo(x) {
+  if (!(x >= 1)) return false;
+  while (x % 2 === 0) x /= 2;
+  return x === 1;
+}
 
 function decodeRoot(s) {
   if (typeof s !== "string" || !/^[A-Za-z0-9+/]{43}=$/.test(s)) return null;
@@ -146,7 +155,7 @@ function checkSignature(parsed, key) {
 
 // ---- RFC 9162 §2.1.4.2, from the text ----
 function verifyConsistency(first, second, firstHash, secondHash, pathHex) {
-  if (!Number.isInteger(first) || !Number.isInteger(second) || !Array.isArray(pathHex)) return { ok: false, reason: "malformed_proof" };
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(second) || !Array.isArray(pathHex)) return { ok: false, reason: "malformed_proof" };
   const path = [];
   for (const p of pathHex) {
     if (typeof p !== "string" || !HEX64.test(p)) return { ok: false, reason: "malformed_hash" };
@@ -159,10 +168,10 @@ function verifyConsistency(first, second, firstHash, secondHash, pathHex) {
     return firstHash.equals(secondHash) ? { ok: true, reason: "consistent" } : { ok: false, reason: "equal_sizes_root_mismatch" };
   }
   if (path.length === 0) return { ok: false, reason: "empty_path" }; // step 1
-  const cp = (first & (first - 1)) === 0 ? [firstHash, ...path] : path; // step 2
+  const cp = isPowerOfTwo(first) ? [firstHash, ...path] : path; // step 2
   let fn = first - 1; // step 3
   let sn = second - 1;
-  while (lsb(fn)) { fn >>= 1; sn >>= 1; } // step 4
+  while (lsb(fn)) { fn = half(fn); sn = half(sn); } // step 4
   let fr = cp[0]; // step 5
   let sr = cp[0];
   for (let i = 1; i < cp.length; i++) { // step 6
@@ -171,11 +180,11 @@ function verifyConsistency(first, second, firstHash, secondHash, pathHex) {
     if (lsb(fn) || fn === sn) {
       fr = nodeHash(c, fr);
       sr = nodeHash(c, sr);
-      if (!lsb(fn)) while (!(lsb(fn) || fn === 0)) { fn >>= 1; sn >>= 1; }
+      if (!lsb(fn)) while (!(lsb(fn) || fn === 0)) { fn = half(fn); sn = half(sn); }
     } else {
       sr = nodeHash(sr, c);
     }
-    fn >>= 1; sn >>= 1;
+    fn = half(fn); sn = half(sn);
   }
   if (sn !== 0) return { ok: false, reason: "path_too_short" }; // step 7
   if (!fr.equals(firstHash)) return { ok: false, reason: "old_root_mismatch" };

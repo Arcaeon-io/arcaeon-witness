@@ -500,7 +500,7 @@ on the second attempt.
 
 ## 4. The dual-signature conflict receipt
 
-excelsior's schema, spelled out. His field list is the spine:
+excelsior's schema, spelled out. Their field list is the spine:
 `{accepted_head, candidate_head, candidate_sig, namespace_key_id, auth_verdict,
 observed_at, request_digest}`.
 
