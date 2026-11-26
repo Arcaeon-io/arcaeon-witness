@@ -146,6 +146,30 @@ function deny(req, res, status, jsonBody, humanTitle, humanDetail) {
   return respond(req, res, status, jsonBody, () => errorHtml(humanTitle, humanDetail));
 }
 
+// A paid checkout for a key whose pack moved to another witness. Nothing is
+// credited (lib/_balance.js grantCredits refuses and records the checkout
+// under ledger/<hash>/after-move-*), nothing is forwarded, and the buyer is
+// told plainly that the payment is due back.
+function refuseMoved(req, res, sid, grant) {
+  console.error(
+    `[fulfill] PAID session for a moved key, NOT credited, refund due: ${sid.slice(0, 24)}… ` +
+      `key=${String(grant.key_hash || "").slice(0, 12)} moved_to=${grant.moved_to}`
+  );
+  const words = balance.movedMessage(grant.moved_to);
+  return deny(req, res, 409,
+    {
+      error: words,
+      reason: "pack_moved",
+      field: "key",
+      moved_to: grant.moved_to,
+      credited: false,
+      note: "this purchase was not credited to the key; it is recorded for a refund. Email support with your receipt.",
+      support: SUPPORT_EMAIL,
+    },
+    "Payment verified: this key's pack moved",
+    `${words}. This purchase was not credited here and is recorded for a refund. Email ${SUPPORT_EMAIL} with your receipt.`);
+}
+
 // ---- account service forward ----
 // After a grant (a new key or a top up), send the checkout to the account
 // service with the pack and the pins from the grant's ledger record, exactly
@@ -531,6 +555,7 @@ module.exports = async (req, res) => {
     const cref = String(session.client_reference_id || "").trim().toLowerCase();
     if (/^[0-9a-f]{64}$/.test(cref)) {
       const result = await balance.creditPack(cref, pack, sid, "stripe-fulfill-topup");
+      if (!result.ok && result.reason === "pack_moved") return refuseMoved(req, res, sid, result);
       if (result.ledger_write_failed) {
         // Same gap as api/pin.js's meterAndCharge / api/stripe-webhook.js
         // (2026-09-05 audit): the balance already moved correctly; only the
@@ -711,6 +736,7 @@ module.exports = async (req, res) => {
       created_at: record.created_at,
     });
     const grant = await balance.creditPack(record.key_hash, record.pack, sid, "stripe-fulfill");
+    if (!grant.ok && grant.reason === "pack_moved") return refuseMoved(req, res, sid, grant);
     if (grant.ledger_write_failed) {
       // Same gap as api/pin.js's meterAndCharge / api/stripe-webhook.js
       // (2026-09-05 audit): the balance already moved correctly; only the

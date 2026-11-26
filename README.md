@@ -811,6 +811,7 @@ lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not ro
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
+lib/_move.js         POST /api/v1/move (a rewrite onto api/credit.js): the signed pack move ask, mark and answer (docs/pack-move-route.md)
 lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js and api/fulfill.js)
 lib/_cors.js          GET-only CORS for the public read endpoints
 lib/_keys.js          dynamically issued keys, Stripe fulfillment records, prefix validation and suggestions
