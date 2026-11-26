@@ -838,6 +838,7 @@ lib/_test_ns.js       test namespaces and the supersede record (nothing is delet
 lib/_distill_core.js  byte-faithful port of arcaeon_distill's core, behind api/distill.js
 lib/_rfc3161.js       RFC 3161 time stamp request builder and response reader (tools/tsa_stamp.js)
 
+tools/move_vectors.js       builds docs/move-vectors.json, the fixed pack move examples both sides carry
 tools/follow.js             the stranger's checker: is an earlier checkpoint a prefix of a later one
 tools/check_and_sign.js     a stranger's signed check record per namespace, from verifier two's checks
 tools/publish_checkpoint.js build the witness log from a local clone and write a checkpoint (dry run by default)

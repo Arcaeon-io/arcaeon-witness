@@ -274,7 +274,10 @@ async function refundFailedWrite(key, chargeSource, namespace, seq, cause) {
     const r = await balance.grantCredits(hash, 1, "refund", refundId, "pin-write-failure-refund");
     if (!r.ok) {
       // The key's pack moved between the charge and this refund. The pin
-      // is recorded for refund by hand (ledger/<hash>/after-move-*).
+      // is recorded as owed, for the operator (ledger/<hash>/after-move-*).
+      if (r.reason === "pack_moved") {
+        await balance.recordRefusedAfterMove(hash, refundId, "refund", 1, "pin-write-failure-refund", r.moved_to);
+      }
       console.error(
         `[pin] REFUND REFUSED after write failure, the pack moved: ns=${namespace} seq=${seq} ` +
           `key=${hash.slice(0, 12)} reason=${r.reason}`

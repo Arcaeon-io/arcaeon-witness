@@ -324,17 +324,18 @@ module.exports = async (req, res) => {
     const idempotencyKey = (session && session.id) ? String(session.id) : event.id;
     const result = await balance.creditPack(hash, pack, idempotencyKey, "stripe-webhook");
     if (!result.ok && result.reason === "pack_moved") {
-      // The key's pack moved to another witness. Not credited, not
-      // forwarded; the checkout is recorded for a refund by hand
-      // (ledger/<hash>/after-move-*). 200 so the provider does not retry a
-      // delivery whose answer cannot change.
+      // The key's pack moved to another witness, which will never ask about
+      // it again, so no pin may land on it. Not credited and not forwarded
+      // here: /api/fulfill (the buyer's success page and receipt link) gives
+      // this checkout a NEW key with the pack on it. 200 so the provider
+      // does not retry a delivery whose answer cannot change.
       console.error(
-        `[webhook] paid session for a moved key, NOT credited, refund due: evt=${event.id} ` +
+        `[webhook] paid session for a moved key, not credited here, /api/fulfill gives it a new key: evt=${event.id} ` +
           `session=${session && session.id} key=${hash.slice(0, 12)} moved_to=${result.moved_to}`
       );
       return res.status(200).json({
         ok: true,
-        skipped: `${balance.movedMessage(result.moved_to)}; not credited, recorded for a refund`,
+        skipped: `${balance.movedMessage(result.moved_to)}; not credited to that key, /api/fulfill gives this checkout a new key`,
         reason: "pack_moved",
         credited: false,
         event_id: event.id,
