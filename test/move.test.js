@@ -234,13 +234,25 @@ test("MOVE: the same key asked again answers the same credits, sales and moved_a
   assert.equal(gh.putLog.length, writes, "a repeat writes nothing");
 });
 
-test("MOVE: a balance frozen at 0 is answered moved with credits 0", async () => {
-  const key = "buyer-spent";
+test("OWNER: a pack with nothing left in it is refused, not moved, and nothing is marked; its free pins stay here", async () => {
+  const key = "movekeyA";
   const hash = await sell(key, "cs_test_spent0001");
   await balance.debitCredits(key, 200, "all of it");
-  const answer = readAnswer(await ask(signedAsk({ key_hash: hash })));
-  assert.equal(answer.status, "moved");
-  assert.equal(answer.credits, 0);
+  const writes = writesTo(balPath(hash));
+  const res = await ask(signedAsk({ key_hash: hash }));
+  assert.equal(res._status, 409);
+  assert.match(res._body.error, /pack_empty/);
+  assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+  assert.equal(writesTo(balPath(hash)), writes, "nothing written");
+  // Less than one whole pin left (a stamp's fraction) is empty too.
+  const frac = await sell("buyer-fraction", "cs_test_fraction1");
+  await balance.debitCredits("buyer-fraction", 199.5, "all but half a pin");
+  assert.equal((await ask(signedAsk({ key_hash: frac })))._status, 409);
+  assert.equal(gh.read(USAGE, balPath(frac)).moved, undefined);
+  // The key still pins on its free pins here.
+  const pinRes = makeRes();
+  await pinHandler(makeReq({ method: "POST", headers: { authorization: `Bearer ${key}` }, body: { namespace: "mv-empty", rows: 1, chain: "aa11bb22" } }), pinRes);
+  assert.equal(pinRes._status, 201);
 });
 
 test("MOVE: a fraction of a pin left by stamps is not moved; credits is the whole pins", async () => {
@@ -359,7 +371,7 @@ test("MOVE: with the answer key setting missing or malformed, the route answers 
     if (key !== undefined) env.WITNESS_MOVE_ANSWER_KEY = key;
     const res = await ask(signedAsk({ key_hash: hash }), { env });
     await assertRefusedUnmarked(res, hash, 503);
-    assert.equal(res._body.field, "answer_key");
+    assert.deepEqual(res._body, move.UNAVAILABLE);
     assert.ok(!JSON.stringify(res._body).includes(SELLER_KEYS.seed));
   }
 });
@@ -376,7 +388,7 @@ test("MOVE: through /api/credit?op=move, the pinned signing witness key decides;
       assert.equal(res._status, 401);
     } else {
       assert.equal(res._status, 503);
-      assert.equal(res._body.field, "key_id");
+      assert.deepEqual(res._body, move.UNAVAILABLE);
     }
     assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
     const get = makeRes();
@@ -477,7 +489,7 @@ test("REVIEW 7: a size not on WITNESS_MOVE_PACK_SIZES is refused before the mark
     if (bad !== undefined) env.WITNESS_MOVE_PACK_SIZES = bad;
     const res = await ask(signedAsk({ key_hash: hash }), { env });
     assert.equal(res._status, 503, String(bad));
-    assert.equal(res._body.field, "pack_sizes");
+    assert.deepEqual(res._body, move.UNAVAILABLE);
   }
   assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
   // With the full list the same key moves.
@@ -650,6 +662,22 @@ test("REVIEW 1: the webhook puts nothing on a moved key and leaves the checkout 
   assert.match(res._body.skipped, /new key/);
   assert.equal(gh.read(USAGE, balPath(hash)).balance, 200);
   assert.equal(gh.read(USAGE, balPath(hash)).applied_events.includes("cs_test_whafter02"), false);
+  // FINDING 6: the money is taken and no pins exist until /api/fulfill runs,
+  // so the webhook writes the checkout as owed at once.
+  const owed = gh.read(USAGE, balance.ledgerAfterMovePath(hash, "cs_test_whafter02"));
+  assert.ok(owed, "the owed record is written by the webhook");
+  assert.equal(owed.pins, 200);
+  assert.equal(owed.pack, "pins_200");
+  assert.equal(owed.source, "stripe-webhook");
+  assert.equal(owed.refund_due, true);
+  assert.equal(owed.moved_to, ORIGIN);
+  assert.match(owed.settled_when, /^fulfillments\/cs_test_whafter02\.json exists/);
+  // A provider retry of the same delivery writes nothing new.
+  const writes = gh.putLog.length;
+  const again = makeRes();
+  await webhook(makeRawReq({ headers: { "stripe-signature": stripeSigHeader(process.env.WITNESS_STRIPE_WEBHOOK_SECRET, raw) }, rawBody: raw }), again);
+  assert.equal(again._status, 200);
+  assert.equal(gh.putLog.length, writes);
 });
 
 function withStripe(session, fn) {
@@ -868,7 +896,8 @@ test("REVIEW 8: replacing WITNESS_MOVE_ANSWER_KEY signs the next answer with the
   // The only 64 hex values lib/_move.js may hold are the signing witness's
   // public key and key id in ASKER: public values, never a private key.
   const src = require("fs").readFileSync(require("path").join(__dirname, "..", "lib", "_move.js"), "utf8");
-  const hexes = (src.match(/[0-9a-f]{64,}/g) || []).filter((h) => h !== move.ASKER.public_key && h !== move.ASKER.key_id);
+  const allowed = new Set([move.ASKER.public_key, move.ASKER.key_id, ...move.PUBLISHED_TEST_PUBLIC_KEYS]);
+  const hexes = (src.match(/[0-9a-f]{64,}/g) || []).filter((h) => !allowed.has(h));
   assert.deepEqual(hexes, [], "no key is written into lib/_move.js");
 });
 
@@ -920,7 +949,7 @@ test("REVIEW 6: the route itself answers each example ask with exactly the examp
     const body = JSON.parse(c.ask.text);
     const now = move.parseTime(body.asked_at);
     const res = makeRes();
-    await move.handle(makeReq({ method: "POST", body }), res, { env, asker, now: () => now });
+    await move.handle(makeReq({ method: "POST", body }), res, { env, asker, now: () => now, allowPublishedTestKeys: true });
     assert.equal(res._status, 200, `${c.name}: ${JSON.stringify(res._body)}`);
     assert.equal(res._body.toString("hex"), c.answer.hex, `${c.name}: the route's bytes are the example's`);
   }
@@ -947,6 +976,237 @@ test("AFTER MOVE: the admin credit path refuses a moved key with 409 and credits
   } finally {
     delete process.env.WITNESS_ADMIN_KEY;
   }
+});
+
+// ---------------------------------------------------------------------
+// FINDINGS of the third review
+// ---------------------------------------------------------------------
+
+test("FINDING 1: the off switch is unsetting WITNESS_MOVE_ANSWER_KEY: asks get 503, the freeze stays", async () => {
+  const key = "off-switch-key";
+  const hash = await moveKey(key, "cs_test_offswitch");
+  const mark = gh.read(USAGE, balPath(hash)).moved;
+  const off = { WITNESS_MOVE_PACK_SIZES: SIZES };
+  const res = await ask(signedAsk({ key_hash: hash }), { env: off });
+  assert.equal(res._status, 503);
+  assert.deepEqual(res._body, move.UNAVAILABLE);
+  const d = await balance.debitCredits(key, 1, "after switch off");
+  assert.equal(d.reason, "pack_moved", "spending stays refused");
+  const g = await balance.creditPack(hash, "pins_200", "cs_test_offswitch2", "stripe-webhook");
+  assert.equal(g.reason, "pack_moved", "granting stays refused");
+  assert.deepEqual(gh.read(USAGE, balPath(hash)).moved, mark, "the mark stays as it was");
+  assert.equal(gh.read(USAGE, balPath(hash)).balance, 200);
+});
+
+test("FINDING 1: docs/pack-move-route.md has the roll back and switch off section", () => {
+  const doc = require("fs").readFileSync(require("path").join(__dirname, "..", "docs", "pack-move-route.md"), "utf8");
+  const at = doc.indexOf("## Roll back and switch off");
+  assert.ok(at >= 0);
+  const section = doc.slice(at, doc.indexOf("\n## ", at + 1));
+  assert.match(section, /never deploy a build older than this one/i);
+  assert.match(section, /unset `WITNESS_MOVE_ANSWER_KEY`/);
+});
+
+test("FINDING 2: a mark write that lands while the store reports failure answers 502 'it may be marked, ask again'; the next ask answers from the mark", async () => {
+  const hash = await sell("buyer-lost-answer", "cs_test_lostans01");
+  const real = gh.handleFetch.bind(gh);
+  let failed = false;
+  gh.handleFetch = async (url, opts) => {
+    const r = await real(url, opts);
+    if (!failed && opts && opts.method === "PUT" && String(url).includes(`/contents/${balPath(hash)}`)) {
+      failed = true;
+      return { status: 500, ok: false, json: async () => ({}), text: async () => "mock: landed, then reported failure" };
+    }
+    return r;
+  };
+  let res;
+  try {
+    res = await ask(signedAsk({ key_hash: hash }));
+  } finally {
+    gh.handleFetch = real;
+  }
+  assert.equal(res._status, 502);
+  assert.equal(res._body.error, "the usage store reported a failure; it may be marked, ask again");
+  assert.doesNotMatch(res._body.error, /nothing was marked/);
+  const stored = gh.read(USAGE, balPath(hash)).moved;
+  assert.ok(stored, "the write landed: the key is marked and frozen here");
+  const later = NOW + 30_000;
+  const again = readAnswer(await ask(signedAsk({ key_hash: hash, asked_at: move.formatTime(later) }), { now: later }));
+  assert.equal(again.status, "moved");
+  assert.equal(again.credits, stored.credits);
+  assert.equal(again.moved_at, stored.moved_at);
+});
+
+test("FINDING 2: a first ask reads the balance file and every grant record, then writes once (2, 6 and 21 reads for 1, 5 and 20 sales)", async () => {
+  for (const n of [1, 5, 20]) {
+    const hash = balance.keyHash(`buyer-reads-${n}`);
+    for (let i = 0; i < n; i++) await balance.creditPack(hash, "pins_200", `cs_test_reads${n}x${String(i).padStart(3, "0")}`, "stripe-webhook");
+    const reads = gh.getLog.length;
+    const writes = gh.putLog.length;
+    readAnswer(await ask(signedAsk({ key_hash: hash })));
+    assert.equal(gh.getLog.length - reads, n + 1, `${n} sales`);
+    assert.equal(gh.putLog.length - writes, 1);
+  }
+});
+
+test("FINDING 3: a hand grant whose event id starts with refund- is read and refused; it is never skipped by its name", async () => {
+  const key = "buyer-refund-named";
+  const hash = await sell(key, "cs_test_refnamed1");
+  await balance.debitCredits(key, 200, "spent to 0");
+  process.env.WITNESS_ADMIN_KEY = "admin-test-only";
+  try {
+    const res = makeRes();
+    await credit(makeReq({ method: "POST", headers: { authorization: "Bearer admin-test-only" }, body: { key_hash: hash, pack: "pins_200", event_id: "refund-goodwill-1" } }), res);
+    assert.equal(res._status, 200);
+  } finally {
+    delete process.env.WITNESS_ADMIN_KEY;
+  }
+  assert.equal(gh.read(USAGE, balPath(hash)).balance, 200);
+  const r = await ask(signedAsk({ key_hash: hash }));
+  assert.equal(r._status, 409);
+  assert.match(r._body.error, /hand_grant/);
+  assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+});
+
+test("FINDING 3: a real pin refund before the mark is read, is not a hand grant, and the key moves", async () => {
+  const key = "buyer-real-refund";
+  const hash = await sell(key, "cs_test_realrefnd");
+  await balance.debitCredits(key, 1, "a pin");
+  await balance.grantCredits(hash, 1, "refund", "refund-write-failure-mv-1-x", "pin-write-failure-refund");
+  const reads = gh.getLog.length;
+  const answer = readAnswer(await ask(signedAsk({ key_hash: hash })));
+  assert.ok(gh.getLog.slice(reads).includes(balance.ledgerGrantPath(hash, "refund-write-failure-mv-1-x")), "the refund's record was read");
+  assert.equal(answer.credits, 200);
+  assert.equal(answer.sales.length, 1);
+});
+
+test("FINDING 4: a balance above the sales is refused and nothing is marked", async () => {
+  const hash = await sell("buyer-over", "cs_test_over00001");
+  gh.seed(USAGE, balPath(hash), { ...gh.read(USAGE, balPath(hash)), balance: 201 });
+  const writes = writesTo(balPath(hash));
+  const r = await ask(signedAsk({ key_hash: hash }));
+  assert.equal(r._status, 409);
+  assert.match(r._body.error, /credits_exceed_sales/);
+  assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+  assert.equal(writesTo(balPath(hash)), writes);
+});
+
+test("FINDING 4: an ASKER whose key_id is not the SHA-256 of its public key answers 503 and marks nothing", async () => {
+  const hash = await sell("buyer-askerhash", "cs_test_askerhash");
+  const other = move.generateKeyHex();
+  for (const asker of [{ ...ASKER, key_id: other.key_id }, { ...ASKER, key_id: ASKER.key_id.toUpperCase() }, { ...ASKER, public_key: "" }]) {
+    const r = await ask(signedAsk({ key_hash: hash }), { asker });
+    assert.equal(r._status, 503);
+    assert.deepEqual(r._body, move.UNAVAILABLE);
+  }
+  assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+});
+
+test("FINDING 4: a damaged mark to this origin is not answered (503) and is not rewritten", async () => {
+  const hash = await sell("buyer-damaged", "cs_test_damaged01");
+  const damaged = [
+    { to: ORIGIN, moved_at: NOW_TEXT, credits: -1, sales: [{ checkout: "cs_test_damaged01", credits: 200, pack: "pins_200" }] },
+    { to: ORIGIN, moved_at: "yesterday", credits: 200, sales: [{ checkout: "cs_test_damaged01", credits: 200, pack: "pins_200" }] },
+    { to: ORIGIN, moved_at: NOW_TEXT, credits: 200, sales: [] },
+    { to: ORIGIN, moved_at: NOW_TEXT, credits: 300, sales: [{ checkout: "cs_test_damaged01", credits: 200, pack: "pins_200" }] },
+  ];
+  for (const moved of damaged) {
+    gh.seed(USAGE, balPath(hash), { ...gh.read(USAGE, balPath(hash)), moved });
+    const writes = writesTo(balPath(hash));
+    const r = await ask(signedAsk({ key_hash: hash }));
+    assert.equal(r._status, 503, JSON.stringify(moved));
+    assert.notEqual(r._body.field, "unavailable", "a damaged mark is its own answer, not the switched off one");
+    assert.deepEqual(gh.read(USAGE, balPath(hash)).moved, moved);
+    assert.equal(writesTo(balPath(hash)), writes);
+  }
+});
+
+test("FINDING 4: a balance file with no sales (no grants, or only pin refunds) answers not_sold and marks nothing", async () => {
+  const empty = balance.keyHash("buyer-nosales");
+  gh.seed(USAGE, balPath(empty), { key_id: empty.slice(0, 12), key_hash: empty, balance: 0, seq: 1, applied_events: [], updated_at: NOW_TEXT });
+  const refundOnly = balance.keyHash("buyer-refundonly");
+  await balance.grantCredits(refundOnly, 1, "refund", "refund-write-failure-x-1-y", "pin-write-failure-refund");
+  for (const hash of [empty, refundOnly]) {
+    const writes = writesTo(balPath(hash));
+    const answer = readAnswer(await ask(signedAsk({ key_hash: hash })));
+    assert.equal(answer.status, "not_sold");
+    assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+    assert.equal(writesTo(balPath(hash)), writes);
+  }
+});
+
+test("FINDING 5: the published RFC 8032 test keys are refused as the answer key and as ASKER", async () => {
+  const v = JSON.parse(require("fs").readFileSync(vectors.OUT, "utf8"));
+  const hash = await sell("buyer-testkeys", "cs_test_testkeys1");
+  for (const seed of [v.asker.seed, v.seller.seed]) {
+    assert.equal(move.loadAnswerKey({ WITNESS_MOVE_ANSWER_KEY: seed }).ok, false);
+    const r = await ask(signedAsk({ key_hash: hash }), { env: { ...ENV, WITNESS_MOVE_ANSWER_KEY: seed } });
+    assert.equal(r._status, 503);
+  }
+  const testAsker = { origin: ORIGIN, public_key: v.asker.public_key, key_id: v.asker.key_id };
+  assert.equal(move.askerReady(testAsker), false);
+  const r = await ask(signedAsk({ key_hash: hash, key_id: v.asker.key_id }, v.asker.seed), { asker: testAsker });
+  assert.equal(r._status, 503);
+  assert.equal(gh.read(USAGE, balPath(hash)).moved, undefined);
+  // With both as test keys, as the review measured: still 503.
+  const both = await ask(signedAsk({ key_hash: hash, key_id: v.asker.key_id }, v.asker.seed),
+    { asker: testAsker, env: { ...ENV, WITNESS_MOVE_ANSWER_KEY: v.seller.seed } });
+  assert.equal(both._status, 503);
+  // The route's own dispatch passes no test option.
+  const src = require("fs").readFileSync(require("path").join(__dirname, "..", "api", "credit.js"), "utf8");
+  assert.ok(src.includes("return move.handle(req, res);"));
+  assert.ok(!src.includes("allowPublishedTestKeys"));
+});
+
+test("FINDING 7: a sale whose ledger record is missing is refused until the record is written by hand, then the key moves", async () => {
+  const key = "buyer-repair";
+  const hash = await sell(key, "cs_test_repair001", "pins_1000", "stripe-fulfill");
+  const recPath = balance.ledgerGrantPath(hash, "cs_test_repair001");
+  gh._repoMap(USAGE).delete(recPath);
+  const r = await ask(signedAsk({ key_hash: hash }));
+  assert.equal(r._status, 409);
+  assert.match(r._body.error, /sale_record_missing/);
+  assert.equal((await balance.debitCredits(key, 1, "still spendable here")).ok, true, "no loss: the pack stays spendable here");
+  // The hand repair from docs/pack-move-route.md: the record as the grant writes it.
+  gh.seed(USAGE, recPath, { event_id: "cs_test_repair001", key_hash: hash, pack: "pins_1000", pins: 1000, source: "stripe-fulfill", applied: true, repaired_by_hand: true });
+  const answer = readAnswer(await ask(signedAsk({ key_hash: hash })));
+  assert.equal(answer.status, "moved");
+  assert.equal(answer.credits, 999);
+  assert.deepEqual(answer.sales, [{ checkout: "cs_test_repair001", credits: 1000, pack: "pins_1000" }]);
+});
+
+test("FINDING 8: every switched off 503 has one generic body naming no setting; each reason is logged once, not once per ask", async () => {
+  move._resetLogOnceForTests();
+  const hash = await sell("buyer-generic", "cs_test_generic01");
+  const lines = [];
+  const savedErr = console.error;
+  console.error = (...a) => lines.push(a.join(" "));
+  const bodies = [];
+  try {
+    const cases = [
+      { env: { WITNESS_MOVE_PACK_SIZES: SIZES } },
+      { env: { WITNESS_MOVE_ANSWER_KEY: SELLER_KEYS.seed } },
+      { asker: { ...ASKER, public_key: "", key_id: "" } },
+    ];
+    for (const c of cases) {
+      for (let i = 0; i < 3; i++) {
+        const r = await ask(signedAsk({ key_hash: hash }), c);
+        assert.equal(r._status, 503);
+        bodies.push(JSON.stringify(r._body));
+      }
+    }
+  } finally {
+    console.error = savedErr;
+  }
+  assert.equal(new Set(bodies).size, 1, "one body for every reason");
+  for (const word of ["WITNESS_", "ASKER", "answer_key", "pack_sizes", "key_id", "lib/"]) {
+    assert.ok(!bodies[0].includes(word), `the body names ${word}`);
+  }
+  const mine = lines.filter((l) => l.startsWith("[move]"));
+  assert.equal(mine.length, 3, `one line per reason: ${JSON.stringify(mine)}`);
+  assert.ok(mine.some((l) => l.includes("WITNESS_MOVE_ANSWER_KEY")));
+  assert.ok(mine.some((l) => l.includes("WITNESS_MOVE_PACK_SIZES")));
+  assert.ok(mine.some((l) => l.includes("ASKER")));
 });
 
 // ---------------------------------------------------------------------

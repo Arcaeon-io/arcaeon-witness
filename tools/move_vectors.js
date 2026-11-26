@@ -36,7 +36,9 @@ const OUT = path.join(__dirname, "..", "docs", "move-vectors.json");
 const sha256 = (text) => crypto.createHash("sha256").update(text, "utf8").digest("hex");
 
 function keysOf(seed) {
-  const k = move.loadAnswerKey({ [move.ANSWER_KEY_ENV]: seed });
+  // The route refuses these published keys; only this tool and the tests
+  // take them, to sign examples everyone can check.
+  const k = move.loadAnswerKey({ [move.ANSWER_KEY_ENV]: seed }, { allowPublishedTestKeys: true });
   if (!k.ok) throw new Error(k.reason);
   return k;
 }

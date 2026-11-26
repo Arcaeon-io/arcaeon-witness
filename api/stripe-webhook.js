@@ -327,8 +327,14 @@ module.exports = async (req, res) => {
       // The key's pack moved to another witness, which will never ask about
       // it again, so no pin may land on it. Not credited and not forwarded
       // here: /api/fulfill (the buyer's success page and receipt link) gives
-      // this checkout a NEW key with the pack on it. 200 so the provider
-      // does not retry a delivery whose answer cannot change.
+      // this checkout a NEW key with the pack on it. Until the buyer opens
+      // it, the money is taken and no pins exist, so the checkout is written
+      // as owed now (ledger/<hash>/after-move-<checkout>.json). It is settled
+      // when fulfillments/<checkout>.json exists. 200 so the provider does
+      // not retry a delivery whose answer cannot change.
+      await balance.recordRefusedAfterMove(hash, idempotencyKey, pack, balance.lookupPack(pack).pins, "stripe-webhook", result.moved_to, {
+        settled_when: `fulfillments/${idempotencyKey}.json exists (/api/fulfill gives this checkout a new key)`,
+      });
       console.error(
         `[webhook] paid session for a moved key, not credited here, /api/fulfill gives it a new key: evt=${event.id} ` +
           `session=${session && session.id} key=${hash.slice(0, 12)} moved_to=${result.moved_to}`
