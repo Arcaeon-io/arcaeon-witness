@@ -146,6 +146,34 @@ function deny(req, res, status, jsonBody, humanTitle, humanDetail) {
   return respond(req, res, status, jsonBody, () => errorHtml(humanTitle, humanDetail));
 }
 
+// A key this page just minted for a checkout is already marked moved. A new
+// key is moved only after it is shown and pinned elsewhere, and a revisit of
+// its checkout finds the checkout already applied, so this needs a key that
+// moved between the mint and its first credit. Nothing is credited, the
+// checkout is recorded as owed (ledger/<hash>/after-move-*), and the buyer is
+// told to write to support. A top up onto a moved key never comes here: it
+// gets a new key (see the top up branch).
+async function refuseMoved(req, res, sid, grant, pack, pins) {
+  await balance.recordRefusedAfterMove(grant.key_hash, sid, pack, pins, "stripe-fulfill", grant.moved_to);
+  console.error(
+    `[fulfill] PAID session for a moved key, NOT credited, refund due: ${sid.slice(0, 24)}… ` +
+      `key=${String(grant.key_hash || "").slice(0, 12)} moved_to=${grant.moved_to}`
+  );
+  const words = balance.movedMessage(grant.moved_to);
+  return deny(req, res, 409,
+    {
+      error: words,
+      reason: "pack_moved",
+      field: "key",
+      moved_to: grant.moved_to,
+      credited: false,
+      note: "this purchase was not credited to the key; it is recorded for a refund. Email support with your receipt.",
+      support: SUPPORT_EMAIL,
+    },
+    "Payment verified: this key's pack moved",
+    `${words}. This purchase was not credited here and is recorded for a refund. Email ${SUPPORT_EMAIL} with your receipt.`);
+}
+
 // ---- account service forward ----
 // After a grant (a new key or a top up), send the checkout to the account
 // service with the pack and the pins from the grant's ledger record, exactly
@@ -215,6 +243,7 @@ function successHtml(record, creditBalance, consentStored) {
   return pageShell(
     "Your Arcaeon witness key",
     `<h1>Payment verified — your witness key</h1>
+${record.topup_of_moved_key ? `<p class="warn">${esc(MOVED_TOPUP_NOTE)}</p>` : ""}
 ${copyBox("key", record.key)}
 <p><b>${esc(String(record.credits))} prepaid pins</b> are on your balance (plus the free tier: ${esc(String(meter.PLAN_CAPS.free))} pins/month). Your key pins any namespace starting with <code>${esc(ns)}</code>.</p>
 <p class="muted">Check your balance any time at <a href="${esc(BASE_URL)}/api/balance">${esc(BASE_URL)}/api/balance</a> — you paste the key on the page; the link itself carries nothing.</p>
@@ -239,8 +268,14 @@ ${consentLine}`
 // deliberately never disabled by the check: the POST re-validates server-side
 // (authoritatively), and a client check that is itself unsure must not be
 // able to lock a paying buyer out of their key.
-function pickerHtml(sid, pack, packDef, prefill, errorMsg) {
-  const errorBlock = errorMsg ? `<p class="error">${esc(errorMsg)}</p>` : "";
+// The line a top up onto a moved key carries: this purchase makes a new key.
+const MOVED_TOPUP_NOTE =
+  "The key this purchase named has moved its pack to https://arcaeon.io/witness/v1, " +
+  "so no pins can be added to it here. This purchase makes a NEW key with the pack on it.";
+
+function pickerHtml(sid, pack, packDef, prefill, errorMsg, movedFrom = null) {
+  const errorBlock = (movedFrom ? `<p class="warn">${esc(MOVED_TOPUP_NOTE)}</p>` : "") +
+    (errorMsg ? `<p class="error">${esc(errorMsg)}</p>` : "");
   return pageShell(
     "Choose your namespace prefix",
     `<h1>Payment verified — one choice before your key is minted</h1>
@@ -529,8 +564,23 @@ module.exports = async (req, res) => {
     // client_reference_id = sha256(existing key) means "credit that key";
     // normalized exactly like the webhook (trim + lowercase, H3).
     const cref = String(session.client_reference_id || "").trim().toLowerCase();
-    if (/^[0-9a-f]{64}$/.test(cref)) {
-      const result = await balance.creditPack(cref, pack, sid, "stripe-fulfill-topup");
+    // A top up onto a key whose pack moved cannot be credited to it (the
+    // witness it moved to never asks about it again, so the pins would reach
+    // no one). It falls through to the mint below and gets a NEW key, bound
+    // to this session like any first purchase. A revisit takes the same path
+    // and re-shows that key.
+    let movedFrom = null;
+    const topup = /^[0-9a-f]{64}$/.test(cref)
+      ? await balance.creditPack(cref, pack, sid, "stripe-fulfill-topup")
+      : null;
+    if (topup && !topup.ok && topup.reason === "pack_moved") {
+      movedFrom = cref;
+      console.error(
+        `[fulfill] top up named a moved key, a new key is minted instead: ${sid.slice(0, 24)}… ` +
+          `key=${cref.slice(0, 12)} moved_to=${topup.moved_to}`
+      );
+    } else if (topup) {
+      const result = topup;
       if (result.ledger_write_failed) {
         // Same gap as api/pin.js's meterAndCharge / api/stripe-webhook.js
         // (2026-09-05 audit): the balance already moved correctly; only the
@@ -600,7 +650,7 @@ module.exports = async (req, res) => {
         // validates and re-renders with a clear message if the pick is taken.)
         const prefill = keys.suggestPrefix();
         res.setHeader("content-type", "text/html; charset=utf-8");
-        return res.status(200).send(pickerHtml(sid, pack, packDef, prefill, null));
+        return res.status(200).send(pickerHtml(sid, pack, packDef, prefill, null, movedFrom));
       }
 
       let nsPrefix = null;
@@ -618,7 +668,7 @@ module.exports = async (req, res) => {
           return res.status(400).send(pickerHtml(
             sid, pack, packDef,
             chosen || keys.suggestPrefix(),
-            `That prefix can't be used: ${v.detail}.`));
+            `That prefix can't be used: ${v.detail}.`, movedFrom));
         }
         const existing = await keys.listPrefixes();
         if (keys.prefixConflicts(chosen, existing)) {
@@ -632,7 +682,7 @@ module.exports = async (req, res) => {
           res.setHeader("content-type", "text/html; charset=utf-8");
           return res.status(409).send(pickerHtml(
             sid, pack, packDef, chosen,
-            "That prefix is taken — it matches, contains, or is contained by an existing prefix. Pick another."));
+            "That prefix is taken — it matches, contains, or is contained by an existing prefix. Pick another.", movedFrom));
         }
         nsPrefix = chosen;
         prefixSource = "custom";
@@ -674,6 +724,8 @@ module.exports = async (req, res) => {
         currency,
         created_at: new Date().toISOString(),
       };
+      // A top up whose key had moved: the key it named, for support.
+      if (movedFrom) record.topup_of_moved_key = movedFrom;
       const created = await keys.createFulfillment(sid, record);
       // If a concurrent visit won the create-only race, serve the WINNER's
       // key and discard ours — one session, one key, ever.
@@ -711,6 +763,7 @@ module.exports = async (req, res) => {
       created_at: record.created_at,
     });
     const grant = await balance.creditPack(record.key_hash, record.pack, sid, "stripe-fulfill");
+    if (!grant.ok && grant.reason === "pack_moved") return refuseMoved(req, res, sid, grant, record.pack, record.credits);
     if (grant.ledger_write_failed) {
       // Same gap as api/pin.js's meterAndCharge / api/stripe-webhook.js
       // (2026-09-05 audit): the balance already moved correctly; only the
@@ -762,6 +815,7 @@ module.exports = async (req, res) => {
       credit_balance: grant.balance_after,
       free_tier_monthly_cap: meter.PLAN_CAPS.free,
       already_fulfilled: !firstVisit,
+      ...(record.topup_of_moved_key ? { new_key_because_moved: true, note: MOVED_TOPUP_NOTE } : {}),
       ...(grant.ledger_write_failed ? { ledger_write_failed: true } : {}),
       consent_product_updates: consentStored,
       support: SUPPORT_EMAIL,

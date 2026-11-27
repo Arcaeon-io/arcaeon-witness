@@ -177,6 +177,18 @@ async function meterAndCharge(key) {
       }
       return { ok: true, source: "credit", headers };
     }
+    if (c.reason === "pack_moved") {
+      // The bought pins moved to another witness: refused, nothing spent.
+      // The month's free pins (meter.check above) are not moved and were
+      // already tried first.
+      return {
+        deny: {
+          status: 403,
+          body: { error: balance.movedMessage(c.moved_to), reason: "pack_moved", field: "key", moved_to: c.moved_to },
+        },
+        headers,
+      };
+    }
     if (c.ever_purchased) {
       return {
         deny: {
@@ -260,6 +272,18 @@ async function refundFailedWrite(key, chargeSource, namespace, seq, cause) {
   const refundId = `refund-write-failure-${namespace}-${seq}-${crypto.randomUUID()}`;
   try {
     const r = await balance.grantCredits(hash, 1, "refund", refundId, "pin-write-failure-refund");
+    if (!r.ok) {
+      // The key's pack moved between the charge and this refund. The pin
+      // is recorded as owed, for the operator (ledger/<hash>/after-move-*).
+      if (r.reason === "pack_moved") {
+        await balance.recordRefusedAfterMove(hash, refundId, "refund", 1, "pin-write-failure-refund", r.moved_to);
+      }
+      console.error(
+        `[pin] REFUND REFUSED after write failure, the pack moved: ns=${namespace} seq=${seq} ` +
+          `key=${hash.slice(0, 12)} reason=${r.reason}`
+      );
+      return;
+    }
     console.error(
       `[pin] refunded 1 credit after write failure: ns=${namespace} seq=${seq} ` +
         `key=${hash.slice(0, 12)} already=${!!r.already_credited} cause=${cause && cause.message}`

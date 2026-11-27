@@ -811,6 +811,7 @@ lib/_store.js   shared GitHub-contents-API store for the PUBLIC pin repo (not ro
 lib/_status_data.js shared data-gathering pass behind /status, /api/status.json, and /api/badge (not routed); carries its own deliberately-independent cadence reimplementation, see its module comment
 lib/_meter.js   per-key monthly usage caps against the PRIVATE usage repo (not routed)
 lib/_balance.js per-key decrementing credit balance + ledger against the PRIVATE usage repo (not routed)
+lib/_move.js         POST /api/v1/move (a rewrite onto api/credit.js): the signed pack move ask, mark and answer (docs/pack-move-route.md)
 lib/_accounts_forward.js the account service forward behind WITNESS_ACCOUNTS_FORWARD (not routed; called by api/stripe-webhook.js and api/fulfill.js)
 lib/_cors.js          GET-only CORS for the public read endpoints
 lib/_keys.js          dynamically issued keys, Stripe fulfillment records, prefix validation and suggestions
@@ -837,6 +838,7 @@ lib/_test_ns.js       test namespaces and the supersede record (nothing is delet
 lib/_distill_core.js  byte-faithful port of arcaeon_distill's core, behind api/distill.js
 lib/_rfc3161.js       RFC 3161 time stamp request builder and response reader (tools/tsa_stamp.js)
 
+tools/move_vectors.js       builds docs/move-vectors.json, the fixed pack move examples both sides carry
 tools/follow.js             the stranger's checker: is an earlier checkpoint a prefix of a later one
 tools/check_and_sign.js     a stranger's signed check record per namespace, from verifier two's checks
 tools/publish_checkpoint.js build the witness log from a local clone and write a checkpoint (dry run by default)

@@ -96,6 +96,18 @@ async function meterAndCharge(key) {
       headers["X-Meter-Source"] = "credit";
       return { ok: true, source: "credit", headers };
     }
+    if (c.reason === "pack_moved") {
+      // The bought pins moved to another witness: refused, nothing spent.
+      // The month's free pins (meter.check above) are not moved and were
+      // already tried first.
+      return {
+        deny: {
+          status: 403,
+          body: { error: balance.movedMessage(c.moved_to), reason: "pack_moved", field: "key", moved_to: c.moved_to },
+        },
+        headers,
+      };
+    }
     if (c.ever_purchased) {
       return {
         deny: {

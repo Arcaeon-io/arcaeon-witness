@@ -23,6 +23,10 @@
     {
       "source": "/api/stamp",
       "destination": "/api/verify?op=stamp"
+    },
+    {
+      "source": "/api/v1/move",
+      "destination": "/api/credit?op=move"
     }
   ],
   "functions": {

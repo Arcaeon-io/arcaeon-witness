@@ -19,6 +19,9 @@
 
 const crypto = require("crypto");
 const balance = require("../lib/_balance.js");
+// POST /api/v1/move is rewritten here (vercel.json) as ?op=move: api/ is at
+// the host's limit of 12 functions. lib/_move.js has the whole route.
+const move = require("../lib/_move.js");
 
 const HASH_RE = /^[0-9a-f]{64}$/;
 
@@ -30,6 +33,10 @@ function timingSafeStringEqual(a, b) {
 }
 
 module.exports = async (req, res) => {
+  // Dispatched first: the move route has its own signed check and never
+  // reads the admin key.
+  if (String((req.query || {}).op || "") === "move") return move.handle(req, res);
+
   if (req.method !== "POST") {
     res.setHeader("allow", "POST");
     return res.status(405).json({ error: "POST only" });
@@ -71,6 +78,9 @@ module.exports = async (req, res) => {
 
   try {
     const result = await balance.creditPack(hash, body.pack, body.event_id.trim(), "internal-admin");
+    if (!result.ok && result.reason === "pack_moved") {
+      return res.status(409).json({ error: balance.movedMessage(result.moved_to), reason: "pack_moved", field: "key", moved_to: result.moved_to, credited: false });
+    }
     if (!result.ok) {
       return res.status(400).json({ error: result.reason, ...result });
     }

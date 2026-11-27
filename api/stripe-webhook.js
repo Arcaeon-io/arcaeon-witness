@@ -323,6 +323,31 @@ module.exports = async (req, res) => {
     // always have one).
     const idempotencyKey = (session && session.id) ? String(session.id) : event.id;
     const result = await balance.creditPack(hash, pack, idempotencyKey, "stripe-webhook");
+    if (!result.ok && result.reason === "pack_moved") {
+      // The key's pack moved to another witness, which will never ask about
+      // it again, so no pin may land on it. Not credited and not forwarded
+      // here: /api/fulfill (the buyer's success page and receipt link) gives
+      // this checkout a NEW key with the pack on it. Until the buyer opens
+      // it, the money is taken and no pins exist, so the checkout is written
+      // as owed now (ledger/<hash>/after-move-<checkout>.json). It is settled
+      // when fulfillments/<checkout>.json exists. 200 so the provider does
+      // not retry a delivery whose answer cannot change.
+      await balance.recordRefusedAfterMove(hash, idempotencyKey, pack, balance.lookupPack(pack).pins, "stripe-webhook", result.moved_to, {
+        settled_when: `fulfillments/${idempotencyKey}.json exists (/api/fulfill gives this checkout a new key)`,
+      });
+      console.error(
+        `[webhook] paid session for a moved key, not credited here, /api/fulfill gives it a new key: evt=${event.id} ` +
+          `session=${session && session.id} key=${hash.slice(0, 12)} moved_to=${result.moved_to}`
+      );
+      return res.status(200).json({
+        ok: true,
+        skipped: `${balance.movedMessage(result.moved_to)}; not credited to that key, /api/fulfill gives this checkout a new key`,
+        reason: "pack_moved",
+        credited: false,
+        event_id: event.id,
+        session_id: session && session.id,
+      });
+    }
     if (result.ledger_write_failed) {
       // Same gap as api/pin.js's meterAndCharge (2026-09-05 audit): the
       // balance already moved correctly; only the audit-trail ledger file
